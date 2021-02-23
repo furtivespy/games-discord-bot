@@ -72,9 +72,9 @@ class BazaarFormatter {
     static colorToCircle(colorVal){
         switch(colorVal){
             case bazaarData.colors.BLUE:
-                return ":green_circle:"
-            case bazaarData.colors.GREEN:
                 return ":blue_circle:"
+            case bazaarData.colors.GREEN:
+                return ":green_circle:"
             case bazaarData.colors.RED:
                 return ":red_circle:"
             case bazaarData.colors.WHITE:

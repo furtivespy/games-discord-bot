@@ -49,7 +49,7 @@ class Action extends Command {
                 
                 if (collected.first().emoji.name == '🎲') {
                     let dieroll = _.sample(["🔵","🟢","🔴","⚪","🟡","🌈"])
-
+                    
                     if (dieroll == "🌈") {
                         const bazaarEmbed2 = new Discord.MessageEmbed().setColor(386945).setTitle("You Rolled a Wild!").setTimestamp()
                         bazaarEmbed2.addField("Pick a color", "Choose which color you'd like")
@@ -72,10 +72,6 @@ class Action extends Command {
                         dieroll = collected2.first().emoji.name
                     }
 
-                    msg.edit(`You Rolled ${dieroll}`)
-                    msg.suppressEmbeds(true)
-                    msg.reactions.removeAll()
-
                     switch(dieroll){
                         case "🔵":
                             gameData.players.find(p => p.order == gameData.turn).hand.push(bazaarData.colors.BLUE)
@@ -93,8 +89,12 @@ class Action extends Command {
                             gameData.players.find(p => p.order == gameData.turn).hand.push(bazaarData.colors.YELLOW)
                             break;
                     }
-
+                    
                     this.client.setGameData(`bazaar-${message.channel.id}`, gameData)
+                    await msg.edit(`You Rolled ${dieroll}`)
+                    msg.suppressEmbeds(true)
+                    msg.reactions.removeAll()
+                    
                     this.client.TryExecuteCommand("bazaar-game", message, [])
                 }
                 if (collected.first().emoji.name == '⭐') {
