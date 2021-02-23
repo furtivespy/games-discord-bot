@@ -9,7 +9,7 @@ class Game extends Command {
             category: "Bazaar",
             usage: "use this command to see the status of the current game",
             enabled: true,
-            guildOnly: false,
+            guildOnly: true,
             allMessages: false,
             showHelp: true,
             aliases: ["bazaar-viewgame"],
