@@ -6,7 +6,7 @@ const InisFormatter = require('../../modules/InisFormatter.js')
 class Card extends Command {
     constructor(client){
         super(client, {
-            name: "card",
+            name: "inis-card",
             description: "Display a card - see its info",
             category: "Inis",
             usage: "use this command to see image and text of a card",
@@ -14,7 +14,7 @@ class Card extends Command {
             guildOnly: false,
             allMessages: false,
             showHelp: true,
-            aliases: ["cardinfo"],
+            aliases: ["inis-cardinfo"],
             permLevel: "User"
           })
     }

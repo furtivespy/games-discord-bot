@@ -6,7 +6,7 @@ const InisFormatter = require('../../modules/InisFormatter.js')
 class Brenn extends Command {
     constructor(client){
         super(client, {
-            name: "brenn",
+            name: "inis-brenn",
             description: "assign a new brenn",
             category: "Inis",
             usage: "use this command to assign the brenn",

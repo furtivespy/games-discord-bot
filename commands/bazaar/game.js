@@ -1,27 +1,31 @@
 const Command = require('../../base/Command.js')
-const InisFormatter = require('../../modules/InisFormatter.js')
+const BazaarFormatter = require('../../modules/BazaarFormatter.js')
 
 class Game extends Command {
     constructor(client){
         super(client, {
-            name: "inis-game",
+            name: "bazaar-game",
             description: "view the current game",
-            category: "Inis",
+            category: "Bazaar",
             usage: "use this command to see the status of the current game",
             enabled: true,
             guildOnly: false,
             allMessages: false,
             showHelp: true,
-            aliases: ["inis-viewgame"],
+            aliases: ["bazaar-viewgame"],
             permLevel: "User"
           })
     }
 
     async run (message, args, level) {
         try {
-            var gameData = this.client.getGameData("INIS")
-            await message.channel.send(await InisFormatter.gameStatus(this.client, gameData))
-
+            var gameData = this.client.getGameData(`bazaar-${message.channel.id}`)
+            if (gameData.players === undefined) {
+                await message.channel.send(`No Game Happening in this Channel`)
+            } else {
+                await message.channel.send(await BazaarFormatter.gameStatus(this.client, gameData))
+            }
+            
         } catch (e) {
             this.client.logger.log(e,'error')
         }

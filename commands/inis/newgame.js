@@ -23,7 +23,7 @@ const defautPlayer = {
 class NewGame extends Command {
     constructor(client){
         super(client, {
-            name: "newgame",
+            name: "inis-newgame",
             description: "Start New Game",
             category: "Inis",
             usage: "use this command to start new game with new players and shuffle everything",
@@ -31,7 +31,7 @@ class NewGame extends Command {
             guildOnly: true,
             allMessages: false,
             showHelp: true,
-            aliases: ["startgame"],
+            aliases: ["inis-startgame"],
             permLevel: "User"
           })
     }

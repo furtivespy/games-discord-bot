@@ -6,7 +6,7 @@ const InisFormatter = require('../../modules/InisFormatter.js')
 class Crows extends Command {
     constructor(client){
         super(client, {
-            name: "crows",
+            name: "inis-crows",
             description: "Flip the flock of crows token",
             category: "Inis",
             usage: "use this command to flip the flock of crows",
@@ -14,7 +14,7 @@ class Crows extends Command {
             guildOnly: true,
             allMessages: false,
             showHelp: true,
-            aliases: ["flipcrows","flock"],
+            aliases: ["inis-flipcrows","inis-flock"],
             permLevel: "User"
           })
     }

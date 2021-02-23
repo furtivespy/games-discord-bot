@@ -6,7 +6,7 @@ const InisFormatter = require('../../modules/InisFormatter.js')
 class NewSeason extends Command {
     constructor(client){
         super(client, {
-            name: "newseason",
+            name: "inis-newseason",
             description: "Start New Season",
             category: "Inis",
             usage: "use this command to start new season and DM the first set of cards to pass",
@@ -14,7 +14,7 @@ class NewSeason extends Command {
             guildOnly: true,
             allMessages: false,
             showHelp: true,
-            aliases: ["startseason"],
+            aliases: ["inis-startseason"],
             permLevel: "User"
           })
     }

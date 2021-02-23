@@ -6,7 +6,7 @@ const InisFormatter = require('../../modules/InisFormatter.js')
 class ViewDiscard extends Command {
     constructor(client){
         super(client, {
-            name: "viewdiscard",
+            name: "inis-viewdiscard",
             description: "view the set aside season card",
             category: "Inis",
             usage: "use this command to see the set aside season card",
@@ -14,7 +14,7 @@ class ViewDiscard extends Command {
             guildOnly: true,
             allMessages: false,
             showHelp: true,
-            aliases: ["viewaside","viewsetaside","seediscard","seesetaside"],
+            aliases: ["inis-viewaside","inis-viewsetaside","inis-seediscard","inis-seesetaside"],
             permLevel: "User"
           })
     }
