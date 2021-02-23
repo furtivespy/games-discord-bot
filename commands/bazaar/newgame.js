@@ -10,7 +10,8 @@ const defaultGame = {
     objectiveB: [],
     objectiveC: [],
     objectiveD: [],
-    theBazaar: []
+    theBazaar: [],
+    turn: 1
 }
 
 const defautPlayer = {

@@ -15,11 +15,13 @@ class BazaarFormatter {
 :regional_indicator_c::arrow_right:  ${this.objectiveFormat(gameData.objectiveC[0])} (${gameData.objectiveC.length})
 :regional_indicator_d::arrow_right:  ${this.objectiveFormat(gameData.objectiveD[0])} (${gameData.objectiveD.length})`)
 
+        let playerlist = "";
         await Promise.all(_.orderBy(gameData.players, 'order').map(async (player) => {
             var user = await guild.members.fetch(player.userId)
-            statusEmbed.addField(`${user.displayName}`, `is playing...`)
+            playerlist += `${user.displayName} (${player.score} points) : ${playerHandFormat(player)}\n`
         }))
-
+        statusEmbed.addField(`Players`,playerlist)
+        statusEmbed.addField(`Turn`, `It is ${gameData.turn}'s turn - use "&bazaar action" to play`)
         return statusEmbed
     }
 
@@ -27,6 +29,14 @@ class BazaarFormatter {
         let stringValue = `${this.colorToCircle(objective.goal[0])} ${this.colorToCircle(objective.goal[1])} ${this.colorToCircle(objective.goal[2])} ${this.colorToCircle(objective.goal[3])} ${this.colorToCircle(objective.goal[4])} `
         for (let i = 0; i < objective.stars; i++) {
             stringValue += ":star: "            
+        }
+        return stringValue
+    }
+
+    static playerHandFormat(player){
+        let stringValue = ""
+        for (let i = 0; i < player.hand.length; i++) {
+            stringValue += this.colorToCircle(player.hand[i])
         }
         return stringValue
     }
