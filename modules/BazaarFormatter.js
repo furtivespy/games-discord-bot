@@ -18,7 +18,7 @@ class BazaarFormatter {
         let playerlist = "";
         await Promise.all(_.orderBy(gameData.players, 'order').map(async (player) => {
             var user = await guild.members.fetch(player.userId)
-            playerlist += `${user.displayName} (${player.score} points) : ${playerHandFormat(player)}\n`
+            playerlist += `${user.displayName} (${player.score} points) : ${this.objectivesplayerHandFormat(player)}\n`
         }))
         statusEmbed.addField(`Players`,playerlist)
         statusEmbed.addField(`Turn`, `It is ${gameData.turn}'s turn - use "&bazaar action" to play`)
