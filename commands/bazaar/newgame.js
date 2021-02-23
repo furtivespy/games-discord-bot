@@ -44,13 +44,13 @@ class NewGame extends Command {
             let newGameData = {}
             let shuffledPlayers = _.shuffle([...args])
             let shuffledObjectives = _.shuffle([...bazaarData.objectives])
-            //let shuffledBazaars = _.shuffle([...bazaarData.bazaars])
+            let shuffledBazaars = _.shuffle([...bazaarData.bazaars])
             newGameData = Object.assign({}, _.cloneDeep(defaultGame), {
                 objectiveA: shuffledObjectives.slice(0,5),
                 objectiveB: shuffledObjectives.slice(5,10),
                 objectiveC: shuffledObjectives.slice(10,15),
                 objectiveD: shuffledObjectives.slice(15,20),
-                theBazaar: [bazaarData.bazaars[0]]
+                theBazaar: shuffledBazaars
             })
 
             let player1 = this.getUserFromMention(shuffledPlayers[0])
@@ -64,6 +64,7 @@ class NewGame extends Command {
             if (player4) newGameData.players.push(Object.assign({}, defautPlayer, { order:4, guildId: message.guild.id, userId: player4.id  }))
 
             this.client.setGameData(`bazaar-${message.channel.id}`, newGameData)
+            await message.channel.send(BazaarFormatter.bazaarEmbed(newGameData))
             await message.channel.send(await BazaarFormatter.gameStatus(this.client, newGameData))
 
         } catch (e) {

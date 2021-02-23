@@ -21,8 +21,36 @@ class BazaarFormatter {
             playerlist += `${user.displayName} (${player.score} points) : ${this.playerHandFormat(player)}\n`
         }))
         statusEmbed.addField(`Players`,playerlist)
-        statusEmbed.addField(`Turn`, `It is ${gameData.turn}'s turn - use "&bazaar action" to play`)
+        var activePlayer = await guild.members.fetch(gameData.players.find(p => p.order == gameData.turn).userId)
+        statusEmbed.addField(`Turn`, `It is ${activePlayer.displayName}'s turn - use "&bazaar action" to play`)
         return statusEmbed
+    }
+
+    static bazaarEmbed(gameData){
+        const statusEmbed = new Discord.MessageEmbed().setColor(2770926).setTitle("The Bazaar").setTimestamp()
+        statusEmbed.addField(`Exchanges`, this.bazaarFormat([...gameData.theBazaar[0].trades,...gameData.theBazaar[1].trades]))
+        statusEmbed.addField('Debug', `Bazaar Ids: ${gameData.theBazaar[0].marketId} and ${gameData.theBazaar[1].marketId}`)
+        return statusEmbed
+    }
+
+
+    static bazaarFormat(bazaars){
+        let stringValue = ``
+        for (let i = 0; i < bazaars.length; i++) {
+            stringValue += `${this.numberToEmoji(i+1)} - `
+            for (let j = 0; j < bazaars[i].left.length; j++) {
+                stringValue += this.colorToCircle(bazaars[i].left[j])
+            }
+            stringValue += ` :left_right_arrow: `
+            for (let j = 0; j < bazaars[i].right.length; j++) {
+                stringValue += this.colorToCircle(bazaars[i].right[j])
+            }
+            stringValue += `\n`     
+            if (i==4) {
+                stringValue += `\n` 
+            }    
+        }
+        return stringValue
     }
 
     static objectiveFormat(objective){
@@ -30,7 +58,7 @@ class BazaarFormatter {
         for (let i = 0; i < objective.stars; i++) {
             stringValue += ":star: "            
         }
-        return stringValue
+        return stringValue 
     }
 
     static playerHandFormat(player){
@@ -58,22 +86,33 @@ class BazaarFormatter {
         }
     }
 
-    static createCardEmbed(cardData, title){
-        const cardEmbed = new Discord.MessageEmbed().setTitle(cardData.name).setDescription(cardData.text).setAuthor(title)
-        // switch (cardData.type) {
-        //     case "season":
-        //         cardEmbed.setColor(4289797)
-        //         break;
-        //     case "epic":
-        //         cardEmbed.setColor(15140128)
-        //         break;
-        //     default:
-        //         cardEmbed.setColor(13220907)
-        // }
-        // cardEmbed.setImage(cardData.fileName)
-        // cardEmbed.setTimestamp()
-
-        return cardEmbed
+    static numberToEmoji(numberVal){
+        switch(numberVal){
+            case 0:
+                return ":zero:"
+            case 1:
+                return ":one:"
+            case 2: 
+                return ":two:"
+            case 3:
+                return ":three:"
+            case 4: 
+                return ":four:"
+            case 5:
+                return ":five:"
+            case 6: 
+                return ":six:"
+            case 7:
+                return ":seven:"
+            case 8: 
+                return ":eight:"
+            case 9:
+                return ":nine:"
+            case 10:
+                return ":keycap_ten:"
+            default: 
+                return ":1234:"     
+        }
     }
 
 }
