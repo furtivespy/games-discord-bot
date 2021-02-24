@@ -26,8 +26,14 @@ class Bazaar extends Command {
                 const newCmd = args.shift()
                 this.client.TryExecuteCommand("bazaar-" + newCmd, message, args)
             } else {
-                const bazaarEmbed = new Discord.MessageEmbed().setColor(386945).setTitle("Bazaar Game Help").setTimestamp()
-                bazaarEmbed.addField(`Commands`, `--`)
+                const bazaarEmbed = new Discord.MessageEmbed().setColor(2770926).setTitle("Bazaar Game Help").setTimestamp()
+                bazaarEmbed.addField(`Commands`, `
+                **Game**  - Current Game Status
+                **NewGame**  - Start a new game. Will overwrite current game in the channel. Needs players. e.g. \`&bazaar newgame @furtivespy\`
+                **Rules** - Displays the rules of Bazaar
+                **Market** - Shows the current exchange market
+                **Action** - When it's your turn, use action to take turn`)
+                bazaarEmbed.addField(`Reminder`, `All commands for bazaar game start with &bazaar`)
                 await message.channel.send(bazaarEmbed);
             }
         } catch (e) {
