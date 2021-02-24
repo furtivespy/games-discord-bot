@@ -30,6 +30,7 @@ class Action extends Command {
                 let currentPlayer = gameData.players.find(p => p.order == gameData.turn).userId
                 if (currentPlayer != message.author.id) {
                     await message.reply(`It is not your turn`)
+                    return;
                 }
                 const bazaarEmbed = new Discord.MessageEmbed().setColor(386945).setTitle("What do you want to do?").setTimestamp()
                 bazaarEmbed.addField(`Actions`, `:game_die: - Roll the die\n:star: - Claim objective\n:shopping_bags: - Make an exchange`)
