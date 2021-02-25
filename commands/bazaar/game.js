@@ -12,7 +12,7 @@ class Game extends Command {
             guildOnly: true,
             allMessages: false,
             showHelp: true,
-            aliases: ["bazaar-viewgame"],
+            aliases: ["bazaar-viewgame","bazaar-g"],
             permLevel: "User"
           })
     }
