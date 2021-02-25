@@ -52,10 +52,10 @@ class NewGame extends Command {
                 // objectiveB: shuffledObjectives.slice(5,10),
                 // objectiveC: shuffledObjectives.slice(10,15),
                 // objectiveD: shuffledObjectives.slice(15,20),
-                objectiveA: shuffledObjectives.slice(0,1),
-                objectiveB: shuffledObjectives.slice(5,6),
-                objectiveC: shuffledObjectives.slice(10,11),
-                objectiveD: shuffledObjectives.slice(15,16),
+                objectiveA: shuffledObjectives.slice(0,2),
+                objectiveB: shuffledObjectives.slice(5,7),
+                objectiveC: shuffledObjectives.slice(10,12),
+                objectiveD: shuffledObjectives.slice(15,17),
                 theBazaar: shuffledBazaars.slice(0,2)
             })
 
