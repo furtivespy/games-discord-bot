@@ -44,9 +44,9 @@ class Action extends Command {
                         && (reaction.emoji.name == '🎲' || reaction.emoji.name == '⭐' || reaction.emoji.name == '🛍'),
                         { max: 1, time: 30000 })
                 } catch {
-                    msg.edit('No reaction after 30 seconds, turn attempt canceled - try again when ready');
-                    msg.suppressEmbeds(true)
-                    msg.reactions.removeAll()
+                    await msg.edit('No reaction after 30 seconds, turn attempt canceled - try again when ready');
+                    await msg.suppressEmbeds(true)
+                    await msg.reactions.removeAll()
                     return
                 }
                 
@@ -56,9 +56,9 @@ class Action extends Command {
                     if (dieroll == "🌈") {
                         const bazaarEmbed2 = new Discord.MessageEmbed().setColor(386945).setTitle("You Rolled a Wild!").setTimestamp()
                         bazaarEmbed2.addField("Pick a color", "Choose which color you'd like")
-                        msg.suppressEmbeds(true)
-                        msg.reactions.removeAll()
-                        msg.edit(bazaarEmbed2)
+                        await msg.suppressEmbeds(true)
+                        await msg.reactions.removeAll()
+                        await msg.edit(bazaarEmbed2)
                         msg.react("🔵").then(r => msg.react("🟢").then(r => msg.react("🔴").then(r => msg.react("⚪").then(r => msg.react("🟡")))))
 
                         try {
@@ -66,9 +66,9 @@ class Action extends Command {
                                 && (reaction.emoji.name == '🔵' || reaction.emoji.name == '🟢' || reaction.emoji.name == '🔴' || reaction.emoji.name == '⚪' || reaction.emoji.name == '🟡'),
                                 { max: 1, time: 30000 })
                         } catch {
-                            msg.edit('No reaction after 30 seconds, turn attempt canceled - try again when ready');
-                            msg.suppressEmbeds(true)
-                            msg.reactions.removeAll()
+                            await msg.edit('No reaction after 30 seconds, turn attempt canceled - try again when ready');
+                            await msg.suppressEmbeds(true)
+                            await msg.reactions.removeAll()
                             return
                         }
 
@@ -79,8 +79,8 @@ class Action extends Command {
 
                     this.client.setGameData(`bazaar-${message.channel.id}`, gameData)
                     await msg.edit(`You Rolled ${dieroll}`)
-                    msg.suppressEmbeds(true)
-                    msg.reactions.removeAll()
+                    await msg.suppressEmbeds(true)
+                    await msg.reactions.removeAll()
                     
                     this.client.TryExecuteCommand("bazaar-game", message, [])
                 }
@@ -101,9 +101,9 @@ class Action extends Command {
                             && (reaction.emoji.name == '🇦' || reaction.emoji.name == '🇧' || reaction.emoji.name == '🇨' || reaction.emoji.name == '🇩'),
                             { max: 1, time: 30000 })
                     } catch {
-                        msg.edit('No reaction after 30 seconds, turn attempt canceled - try again when ready');
-                        msg.suppressEmbeds(true)
-                        msg.reactions.removeAll()
+                        await msg.edit('No reaction after 30 seconds, turn attempt canceled - try again when ready');
+                        await msg.suppressEmbeds(true)
+                        await msg.reactions.removeAll()
                         return
                     }
 
@@ -114,11 +114,11 @@ class Action extends Command {
                         await msg.edit(`You claimed the Objective and scored ${claimedScore} points`)
                         this.client.setGameData(`bazaar-${message.channel.id}`, gameData)
                     } else {
-                        msg.edit('You are not able to claim that objective');
+                        await msg.edit('You are not able to claim that objective');
                     }
 
-                    msg.suppressEmbeds(true)
-                    msg.reactions.removeAll()
+                    await msg.suppressEmbeds(true)
+                    await msg.reactions.removeAll()
                     this.client.TryExecuteCommand("bazaar-game", message, [])
                 }
                 if (collected.first().emoji.name == '🛍') {
@@ -137,9 +137,9 @@ class Action extends Command {
                              || reaction.emoji.name == '6️⃣' || reaction.emoji.name == '7️⃣' || reaction.emoji.name == '8️⃣' || reaction.emoji.name == '9️⃣' || reaction.emoji.name == '🔟'),
                             { max: 1, time: 60000 })
                     } catch {
-                        msg.edit('No reaction after 60 seconds, turn attempt canceled - try again when ready');
-                        msg.suppressEmbeds(true)
-                        msg.reactions.removeAll()
+                        await msg.edit('No reaction after 60 seconds, turn attempt canceled - try again when ready');
+                        await msg.suppressEmbeds(true)
+                        await msg.reactions.removeAll()
                         return
                     }
 
@@ -155,21 +155,21 @@ class Action extends Command {
                             && (reaction.emoji.name == '📤' || reaction.emoji.name == '📥'),
                             { max: 1, time: 30000 })
                     } catch {
-                        msg.edit('No reaction after 30 seconds, turn attempt canceled - try again when ready');
-                        msg.suppressEmbeds(true)
-                        msg.reactions.removeAll()
+                        await msg.edit('No reaction after 30 seconds, turn attempt canceled - try again when ready');
+                        await msg.suppressEmbeds(true)
+                        await msg.reactions.removeAll()
                         return
                     }
                     
                     if (Action.ClaimExchange(gameData, selectedBazaar, collectedDirection.first().emoji.name) < 0) {
-                        msg.edit('You were not able to make the exchange');
+                        await msg.edit('You were not able to make the exchange');
                     } else {
                         await msg.edit('Thanks for shopping at the Bazaar!');
                         this.client.setGameData(`bazaar-${message.channel.id}`, gameData)
                     }
 
-                    msg.suppressEmbeds(true)
-                    msg.reactions.removeAll()
+                    await msg.suppressEmbeds(true)
+                    await msg.reactions.removeAll()
                     this.client.TryExecuteCommand("bazaar-game", message, [])
                 }
 
