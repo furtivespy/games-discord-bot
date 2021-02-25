@@ -12,7 +12,7 @@ class Market extends Command {
             guildOnly: true,
             allMessages: false,
             showHelp: true,
-            aliases: ["bazaar-viewmarket"],
+            aliases: ["bazaar-viewmarket", "bazaar-bazaar"],
             permLevel: "User"
           })
     }
@@ -20,7 +20,7 @@ class Market extends Command {
     async run (message, args, level) {
         try {
             var gameData = this.client.getGameData(`bazaar-${message.channel.id}`)
-            if (gameData.players === undefined) {
+            if (gameData.players === undefined || gameData.gameOver) {
                 await message.channel.send(`No Game Happening in this Channel`)
             } else {
                 await message.channel.send(BazaarFormatter.bazaarEmbed(gameData))

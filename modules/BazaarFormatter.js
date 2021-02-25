@@ -26,6 +26,18 @@ class BazaarFormatter {
         return statusEmbed
     }
 
+    static async gameOver(client, gameData){
+        const guild = await client.guilds.fetch(gameData.players[0].guildId)
+        const statusEmbed = new Discord.MessageEmbed().setColor(2770926).setTitle("Game Over!").setTimestamp()
+        let playerlist = "";
+        await Promise.all(_.orderBy(gameData.players, 'score', 'desc').map(async (player) => {
+            var user = await guild.members.fetch(player.userId)
+            playerlist += `${user.displayName} (${player.score} points) : ${this.playerHandFormat(player)}\n`
+        }))
+        statusEmbed.addField(`Congratulations`,playerlist)
+        return statusEmbed
+    }
+
     static bazaarEmbed(gameData){
         const statusEmbed = new Discord.MessageEmbed().setColor(2770926).setTitle("The Bazaar").setTimestamp()
         statusEmbed.addField(`Exchanges`, this.bazaarFormat([...gameData.theBazaar[0].trades,...gameData.theBazaar[1].trades]))
@@ -53,7 +65,31 @@ class BazaarFormatter {
         return stringValue
     }
 
+    static bazaarLeftRightFormat(bazaar){
+        let stringValue = `📤 - `
+        for (let j = 0; j < bazaar.left.length; j++) {
+            stringValue += this.colorToCircle(bazaar.left[j])
+        }
+        stringValue += ` ➡ `
+        for (let j = 0; j < bazaar.right.length; j++) {
+            stringValue += this.colorToCircle(bazaar.right[j])
+        }
+        stringValue += `\n\n`   
+        stringValue += `📥 - `
+        for (let j = 0; j < bazaar.right.length; j++) {
+            stringValue += this.colorToCircle(bazaar.right[j])
+        }
+        stringValue += ` ➡ `
+        for (let j = 0; j < bazaar.left.length; j++) {
+            stringValue += this.colorToCircle(bazaar.left[j])
+        }
+        stringValue += `\n`  
+
+        return stringValue
+    }
+
     static objectiveFormat(objective){
+        if (objective === undefined) return ""
         let stringValue = `${this.colorToCircle(objective.goal[0])} ${this.colorToCircle(objective.goal[1])} ${this.colorToCircle(objective.goal[2])} ${this.colorToCircle(objective.goal[3])} ${this.colorToCircle(objective.goal[4])} `
         for (let i = 0; i < objective.stars; i++) {
             stringValue += ":star: "            

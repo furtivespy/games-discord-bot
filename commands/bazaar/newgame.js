@@ -11,7 +11,8 @@ const defaultGame = {
     objectiveC: [],
     objectiveD: [],
     theBazaar: [],
-    turn: 1
+    turn: 1,
+    gameOver: false
 }
 
 const defautPlayer = {
@@ -19,6 +20,7 @@ const defautPlayer = {
     userId: "1",
     order: 1,
     score: 0,
+    objectives: 0,
     hand: []
 }
 
@@ -46,11 +48,15 @@ class NewGame extends Command {
             let shuffledObjectives = _.shuffle([...bazaarData.objectives])
             let shuffledBazaars = _.shuffle([...bazaarData.bazaars])
             newGameData = Object.assign({}, _.cloneDeep(defaultGame), {
-                objectiveA: shuffledObjectives.slice(0,5),
-                objectiveB: shuffledObjectives.slice(5,10),
-                objectiveC: shuffledObjectives.slice(10,15),
-                objectiveD: shuffledObjectives.slice(15,20),
-                theBazaar: shuffledBazaars
+                // objectiveA: shuffledObjectives.slice(0,5),
+                // objectiveB: shuffledObjectives.slice(5,10),
+                // objectiveC: shuffledObjectives.slice(10,15),
+                // objectiveD: shuffledObjectives.slice(15,20),
+                objectiveA: shuffledObjectives.slice(0,1),
+                objectiveB: shuffledObjectives.slice(5,6),
+                objectiveC: shuffledObjectives.slice(10,11),
+                objectiveD: shuffledObjectives.slice(15,16),
+                theBazaar: shuffledBazaars.slice(0,2)
             })
 
             let player1 = this.getUserFromMention(shuffledPlayers[0])
@@ -58,11 +64,15 @@ class NewGame extends Command {
             let player3 = this.getUserFromMention(shuffledPlayers[2])
             let player4 = this.getUserFromMention(shuffledPlayers[3])
 
-            if (player1) newGameData.players.push(Object.assign({}, defautPlayer, { order:1, guildId: message.guild.id, userId: player1.id  }))
-            if (player2) newGameData.players.push(Object.assign({}, defautPlayer, { order:2, guildId: message.guild.id, userId: player2.id  }))
-            if (player3) newGameData.players.push(Object.assign({}, defautPlayer, { order:3, guildId: message.guild.id, userId: player3.id  }))
-            if (player4) newGameData.players.push(Object.assign({}, defautPlayer, { order:4, guildId: message.guild.id, userId: player4.id  }))
+            if (player1) newGameData.players.push(Object.assign({},  _.cloneDeep(defautPlayer), { order:1, guildId: message.guild.id, userId: player1.id  }))
+            if (player2) newGameData.players.push(Object.assign({},  _.cloneDeep(defautPlayer), { order:2, guildId: message.guild.id, userId: player2.id  }))
+            if (player3) newGameData.players.push(Object.assign({},  _.cloneDeep(defautPlayer), { order:3, guildId: message.guild.id, userId: player3.id  }))
+            if (player4) newGameData.players.push(Object.assign({},  _.cloneDeep(defautPlayer), { order:4, guildId: message.guild.id, userId: player4.id  }))
 
+            if (newGameData.players.length < 1) {
+                await message.reply("Please mention users to start game with them")
+                return
+            }
             this.client.setGameData(`bazaar-${message.channel.id}`, newGameData)
             await message.channel.send(BazaarFormatter.bazaarEmbed(newGameData))
             await message.channel.send(await BazaarFormatter.gameStatus(this.client, newGameData))

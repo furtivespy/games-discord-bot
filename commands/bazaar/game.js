@@ -22,6 +22,8 @@ class Game extends Command {
             var gameData = this.client.getGameData(`bazaar-${message.channel.id}`)
             if (gameData.players === undefined) {
                 await message.channel.send(`No Game Happening in this Channel`)
+            } else if (gameData.gameOver) {
+                await message.channel.send(await BazaarFormatter.gameOver(this.client, gameData))
             } else {
                 await message.channel.send(await BazaarFormatter.gameStatus(this.client, gameData))
             }
