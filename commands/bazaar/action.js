@@ -17,7 +17,7 @@ class Action extends Command {
             guildOnly: true,
             allMessages: false,
             showHelp: true,
-            aliases: [],
+            aliases: ["bazaar-a"],
             permLevel: "User"
           })
     }

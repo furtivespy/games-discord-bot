@@ -12,7 +12,7 @@ class Market extends Command {
             guildOnly: true,
             allMessages: false,
             showHelp: true,
-            aliases: ["bazaar-viewmarket", "bazaar-bazaar"],
+            aliases: ["bazaar-viewmarket", "bazaar-bazaar", "bazaar-m"],
             permLevel: "User"
           })
     }
