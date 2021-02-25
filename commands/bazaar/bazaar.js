@@ -15,7 +15,7 @@ class Bazaar extends Command {
             guildOnly: false,
             allMessages: false,
             showHelp: true,
-            aliases: ["bazaar-help"],
+            aliases: ["bazaar-help", "b"],
             permLevel: "User"
           })
     }
