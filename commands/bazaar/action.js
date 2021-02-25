@@ -82,7 +82,7 @@ class Action extends Command {
                     await msg.suppressEmbeds(true)
                     await msg.reactions.removeAll()
                     
-                    this.client.TryExecuteCommand("bazaar-game", message, [])
+                    this.client.TryExecuteCommand("bazaar-game", message, ["true"])
                 }
                 if (collected.first().emoji.name == '⭐') {
                     const objectiveEmbed = new Discord.MessageEmbed().setColor(386945).setTitle("Which Objective Are You Claiming").setTimestamp()
@@ -119,7 +119,7 @@ class Action extends Command {
 
                     await msg.suppressEmbeds(true)
                     await msg.reactions.removeAll()
-                    this.client.TryExecuteCommand("bazaar-game", message, [])
+                    this.client.TryExecuteCommand("bazaar-game", message, ["true"])
                 }
                 if (collected.first().emoji.name == '🛍') {
 
@@ -163,6 +163,7 @@ class Action extends Command {
                     
                     if (Action.ClaimExchange(gameData, selectedBazaar, collectedDirection.first().emoji.name) < 0) {
                         await msg.edit('You were not able to make the exchange');
+                        return
                     } else {
                         await msg.edit('Thanks for shopping at the Bazaar!');
                         this.client.setGameData(`bazaar-${message.channel.id}`, gameData)
@@ -170,7 +171,7 @@ class Action extends Command {
 
                     await msg.suppressEmbeds(true)
                     await msg.reactions.removeAll()
-                    this.client.TryExecuteCommand("bazaar-game", message, [])
+                    this.client.TryExecuteCommand("bazaar-game", message, ["true"])
                 }
 
                 

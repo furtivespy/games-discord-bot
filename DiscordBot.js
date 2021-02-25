@@ -254,7 +254,7 @@ const init = async () => {
       if (!client.config.defaultSettings) throw new Error("defaultSettings not preset in config.js or settings database. Bot cannot load.");
       client.settings.set("default", client.config.defaultSettings);
     }
-    client.user.setAvatar('https://www.lulu-berlu.com/upload/image/robot----jumbo-board-game--1960-s----questions---answers-p-image-388724-grande.jpg')
+    //client.user.setAvatar('')
     client.logger.log(`Bot has started, in ${client.guilds.cache.size} guilds.`, 'ready');
   })
 

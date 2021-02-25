@@ -26,6 +26,11 @@ class Game extends Command {
                 await message.channel.send(await BazaarFormatter.gameOver(this.client, gameData))
             } else {
                 await message.channel.send(await BazaarFormatter.gameStatus(this.client, gameData))
+                if (args.length > 0){
+                    const guild = await this.client.guilds.fetch(gameData.players[0].guildId)
+                    const currentPlayer = await guild.members.fetch(gameData.players.find(p => p.order == gameData.turn).userId)
+                    await message.channel.send(`${currentPlayer} it is your turn`)
+                }
             }
             
         } catch (e) {
