@@ -37,7 +37,7 @@ class Bazaar extends Command {
                 await message.channel.send(bazaarEmbed);
             }
         } catch (e) {
-            this.client.logger.log(e,'error')
+            this.client.logger.error(e, __filename.slice(__dirname.length + 1))
         }
     }
 

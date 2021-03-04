@@ -28,9 +28,10 @@ class Test extends Command {
 
     async run (message, args, level) {
         try {           
-            var gamed = this.client.getGameData("INIS")
-            console.log(gamed)
-            console.log(gamed.players)
+            var gameData = this.client.getGameData(`bazaar-${message.channel.id}`)
+            await message.reply(`\`\`\`javacript
+            ${JSON.stringify(gameData)}
+            \`\`\``)
         } catch (e) {
            this.client.logger.log(e,'error')
            message.channel.send(clean(e))

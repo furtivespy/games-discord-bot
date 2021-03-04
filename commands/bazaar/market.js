@@ -27,7 +27,7 @@ class Market extends Command {
             }
             
         } catch (e) {
-            this.client.logger.log(e,'error')
+            this.client.logger.error(e, __filename.slice(__dirname.length + 1))
         }
     }
 }

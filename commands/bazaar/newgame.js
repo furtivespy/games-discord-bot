@@ -12,6 +12,8 @@ const defaultGame = {
     objectiveD: [],
     theBazaar: [],
     turn: 1,
+    history: undefined,
+    turnClaim: false,
     gameOver: false
 }
 
@@ -78,7 +80,7 @@ class NewGame extends Command {
             await message.channel.send(await BazaarFormatter.gameStatus(this.client, newGameData))
 
         } catch (e) {
-            this.client.logger.log(e,'error')
+            this.client.logger.error(e, __filename.slice(__dirname.length + 1))
         }
     }
 

@@ -34,13 +34,13 @@ class Rules extends Command {
             scoring += "```"
             const bazaarEmbed = new Discord.MessageEmbed().setColor(386945).setTitle("Bazaar Game Rules").setTimestamp()
             bazaarEmbed.addField(`Objective`, `Through skillful trading and re-trading, be the player with the most points by the end of the game!`)
-            bazaarEmbed.addField(`Play`, `On a player's turn they can either roll the die for a new token or make an exchange for either tokens at the excange or an objective for points`)
+            bazaarEmbed.addField(`Play`, `On a player's turn they can either roll the die for a new token or make an exchange for either tokens at the excange market. After that, they may, if they qualify, echange tokens for an objective and points:`)
             bazaarEmbed.addField(`Scoring`, scoring)
             bazaarEmbed.addField(`Game End`, `When all objectives from 2 stalls are gone, the game ends. (The count of objectives in the stall is in parentheses - at the start of the game it is 5 in each)`)
             await message.channel.send(bazaarEmbed);
             
         } catch (e) {
-            this.client.logger.log(e,'error')
+            this.client.logger.error(e, __filename.slice(__dirname.length + 1))
         }
     }
 

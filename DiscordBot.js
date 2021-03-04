@@ -396,8 +396,8 @@ init();
 
 client.on("disconnect", () => client.logger.warn("Bot is disconnecting..."))
   .on("reconnecting", () => client.logger.log("Bot reconnecting...", "log"))
-  .on("error", e => client.logger.error(e))
-  .on("warn", info => client.logger.warn(info));
+  .on("error", e => client.logger.error(e, __filename.slice(__dirname.length + 1)))
+  .on("warn", info => client.logger.warn(info, __filename.slice(__dirname.length + 1)));
 
 process.on("uncaughtException", (err) => {
   const errorMsg = err.stack.replace(new RegExp(`${__dirname}/`, "g"), "./");
