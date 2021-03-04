@@ -54,7 +54,7 @@ class BazaarFormatter {
     static bazaarEmbed(gameData){
         const statusEmbed = new Discord.MessageEmbed().setColor(2770926).setTitle("The Bazaar").setTimestamp()
         statusEmbed.addField(`Exchanges`, this.bazaarFormat([...gameData.theBazaar[0].trades,...gameData.theBazaar[1].trades]))
-        statusEmbed.addField('Debug', `Bazaar Ids: ${gameData.theBazaar[0].marketId} and ${gameData.theBazaar[1].marketId}`)
+        //statusEmbed.addField('Debug', `Bazaar Ids: ${gameData.theBazaar[0].marketId} and ${gameData.theBazaar[1].marketId}`)
         return statusEmbed
     }
 
