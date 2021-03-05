@@ -79,12 +79,12 @@ class Action extends Command {
                             try {
                                 var collectedObjective = await objmsg.awaitReactions((reaction, user) => user.id == currentPlayer 
                                     && (reaction.emoji.name == '🇦' || reaction.emoji.name == '🇧' || reaction.emoji.name == '🇨' || reaction.emoji.name == '🇩' || reaction.emoji.name == '🚫'),
-                                    { max: 1, time: 30000 })
+                                    { max: 1, time: 60000 })
                             } catch {
                                 collectedObjective = {}
                             }
                             if (!collectedObjective.first()){
-                                await objmsg.edit('No reaction after 30 seconds, Claim Attempt canceled - try again when ready');
+                                await objmsg.edit('No reaction after 60 seconds, Claim Attempt canceled - try again when ready');
                                 await objmsg.suppressEmbeds(true)
                                 await objmsg.reactions.removeAll()
                                 this.client.TryExecuteCommand("bazaar-game", message, ["true"])
@@ -130,12 +130,12 @@ class Action extends Command {
                 try {
                     var collected = await msg.awaitReactions((reaction, user) => user.id == currentPlayer 
                         && (reaction.emoji.name == '🎲' || reaction.emoji.name == '🛍'),
-                        { max: 1, time: 30000 })
+                        { max: 1, time: 60000 })
                 } catch {
                     collected = {}
                 }
                 if (!collected.first()){
-                    await msg.edit('No reaction after 30 seconds, turn attempt canceled - try again when ready');
+                    await msg.edit('No reaction after 60 seconds, turn attempt canceled - try again when ready');
                     await msg.suppressEmbeds(true)
                     await msg.reactions.removeAll()
                     return
@@ -155,12 +155,12 @@ class Action extends Command {
                         try {
                             var collected2 = await msg.awaitReactions((reaction, user) => user.id == currentPlayer 
                                 && (reaction.emoji.name == '🔵' || reaction.emoji.name == '🟢' || reaction.emoji.name == '🔴' || reaction.emoji.name == '⚪' || reaction.emoji.name == '🟡'),
-                                { max: 1, time: 30000 })
+                                { max: 1, time: 60000 })
                         } catch {
                             collected2 = {}
                         }
                         if (!collected2.first()){
-                            await msg.edit('No reaction after 30 seconds, turn attempt canceled - try again when ready');
+                            await msg.edit('No reaction after 60 seconds, turn attempt canceled - try again when ready');
                             await msg.suppressEmbeds(true)
                             await msg.reactions.removeAll()
                             return
@@ -214,12 +214,12 @@ class Action extends Command {
                     try {
                         var collectedDirection = await msg.awaitReactions((reaction, user) => user.id == currentPlayer 
                             && (reaction.emoji.name == '📤' || reaction.emoji.name == '📥'),
-                            { max: 1, time: 30000 })
+                            { max: 1, time: 60000 })
                     } catch {
                         collectedDirection = {}
                     }
                     if (!collectedDirection.first()){
-                        await msg.edit('No reaction after 30 seconds, turn attempt canceled - try again when ready');
+                        await msg.edit('No reaction after 60 seconds, turn attempt canceled - try again when ready');
                         await msg.suppressEmbeds(true)
                         await msg.reactions.removeAll()
                         return
