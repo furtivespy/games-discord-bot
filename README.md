@@ -10,6 +10,7 @@ Just messing around trying to make a bot help with playing some game remotely
 
 Games: 
  Inis helper - helps with remote play of Inis
+ 
  Bazaar - a basic implementation of Bazaar
  
 Check out the commands folder for a list of commands
