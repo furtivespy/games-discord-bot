@@ -4,10 +4,10 @@ var qs = require( 'querystring' )
 const Roller = require('roll')
 const Sample = require('lodash/sample')
 
-class Roll extends Command {
+class GMRoll extends Command {
     constructor(client){
         super(client, {
-            name: "roll",
+            name: "gmroll",
             description: "Roll Some Dice",
             category: "Games",
             usage: "use commnad roll followed by dice to roll including modifiers, e.g. '!roll 1d20+5' ",
@@ -15,7 +15,7 @@ class Roll extends Command {
             guildOnly: false,
             allMessages: false,
             showHelp: false,
-            aliases: ["r", "dice"],
+            aliases: ["gmr", "gmdice"],
             permLevel: "User"
           })
     }
@@ -37,16 +37,17 @@ class Roll extends Command {
                         },
                     }
                 var query = qs.stringify({key: this.client.config.pixabayKey, q: "number " + rolling.result})
-                fetch ("https://pixabay.com/api/?" + query).then(res => res.json()).then(pictures => {
-                    if (pictures.totalHits > 0){
-                        var thumb = Sample(pictures.hits)
-                        embedItem.thumbnail = {
-                            "url": thumb.previewURL
-                        }
+                let res = await fetch ("https://pixabay.com/api/?" + query)
+                let pictures = await res.json()
+                if (pictures.totalHits > 0){
+                    var thumb = Sample(pictures.hits)
+                    embedItem.thumbnail = {
+                        "url": thumb.previewURL
                     }
-                    //message.delete().catch(O_o=>{})
-                    message.channel.send({embed: embedItem})
-                })
+                }
+                
+                await message.author.send({embed: embedItem})
+                await message.react('🎲')
             } else {
                 message.react('🚫')
                 message.react('🎲')
@@ -59,4 +60,4 @@ class Roll extends Command {
     }
 }
 
-module.exports = Roll
+module.exports = GMRoll
