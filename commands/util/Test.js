@@ -28,7 +28,10 @@ class Test extends Command {
 
     async run (message, args, level) {
         try {           
-            var gameData = this.client.getGameData(`bazaar-${message.channel.id}`)
+            if (args[0] == "reset") {
+                this.client.setGameData(`cards-${message.channel.id}`, {})
+            }
+            var gameData = this.client.getGameData(`cards-${message.channel.id}`)
             await message.reply(`\`\`\`javacript
             ${JSON.stringify(gameData)}
             \`\`\``)

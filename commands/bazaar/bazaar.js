@@ -24,7 +24,7 @@ class Bazaar extends Command {
         try {
             if (args[0]) {
                 const newCmd = args.shift()
-                this.client.TryExecuteCommand("bazaar-" + newCmd, message, args)
+                this.client.TryExecuteCommand("bazaar-" + newCmd.toLowerCase(), message, args)
             } else {
                 const bazaarEmbed = new Discord.MessageEmbed().setColor(2770926).setTitle("Bazaar Game Help").setTimestamp()
                 bazaarEmbed.addField(`Commands`, `

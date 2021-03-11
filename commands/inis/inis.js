@@ -24,7 +24,7 @@ class Inis extends Command {
         try {
             if (args[0]) {
                 const newCmd = args.shift()
-                this.client.TryExecuteCommand("inis-" + newCmd, message, args)
+                this.client.TryExecuteCommand("inis-" + newCmd.toLowerCase(), message, args)
             } else {
                 const inisEmbed = new Discord.MessageEmbed().setColor(386945).setTitle("Inis Game Help").setTimestamp()
                 inisEmbed.addField(`Commands`, `
