@@ -24,7 +24,7 @@ class Flip extends Command {
             let gameData = Object.assign({}, _.cloneDeep(CardDB.defaultGameData), this.client.getGameData(`cards-${message.channel.id}`))
             if (!args[0]) {
                 if (gameData.decks.length == 1) {
-                    Flip.FlipCard(message, gameData.decks[0])
+                    await Flip.FlipCard(message, gameData.decks[0])
                     this.client.setGameData(`cards-${message.channel.id}`, gameData)
                 } else {
                     await message.reply("please include the name of the deck to flip a card from")
@@ -34,7 +34,7 @@ class Flip extends Command {
                     'name': args[0]
                 })
                 if (deck) {
-                    Flip.FlipCard(message, deck)
+                    await Flip.FlipCard(message, deck, args[1])
                     this.client.setGameData(`cards-${message.channel.id}`, gameData)
                 } else {
                     await message.reply(`unable to find a deck named ${args[0]}`)
@@ -46,12 +46,24 @@ class Flip extends Command {
         }
     }
 
-    static async FlipCard(message, deck) {
+    static async FlipCard(message, deck, count = 1) {
         if (deck.currentDeck.length > 0) {
-            const card = deck.currentDeck.shift()
-            deck.discard.push(card)
-            await message.channel.send("You Flipped:")
-            await message.channel.send(`${card}`)
+            let member = await message.guild.members.fetch(message.author.id)
+            const cardsEmbed = new Discord.MessageEmbed().setColor(13928716).setTitle(`${member.displayName} Flips from ${deck.name}`)
+            let flipped = ""
+            for (let i = 0; i < count; i++) {
+                const card = deck.currentDeck.shift()
+                if (!card) {
+                    cardsEmbed.setFooter(`deck is now empty`)
+                    break
+                }
+                deck.discard.push(card)
+                flipped += `${card} `
+            }
+            
+            cardsEmbed.setDescription(flipped)
+            //cardsEmbed.addField(deck.name, flipped)
+            await message.channel.send(cardsEmbed)
         } else {
             message.reply(`${deck.name} is empty, maybe you should shuffle?`)
         }
