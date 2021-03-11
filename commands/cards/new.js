@@ -2,6 +2,7 @@ const Command = require('../../base/Command.js')
 const CardDB = require('../../db/carddecks.js')
 const Discord = require('discord.js')
 const _ = require('lodash')
+const { split } = require('lodash')
 
 class New extends Command {
     constructor(client){
@@ -14,7 +15,7 @@ class New extends Command {
             guildOnly: false,
             allMessages: false,
             showHelp: true,
-            aliases: ["card-new"],
+            aliases: ["card-new", "card-add", "cards-add"],
             permLevel: "User"
           })
     }
@@ -35,14 +36,22 @@ class New extends Command {
                 await message.channel.send(cardsEmbed)
 
             } else {
-                if (CardDB[args[1]]) {
-                    if (_.find(gameData.decks, {'name': args[0]})) {
-                        await message.reply(`A deck named ${args[0]} already exists in this channel`)
+                let newName = args.shift()
+                if (CardDB[args[0]]) {
+                    if (_.find(gameData.decks, {'name': newName})) {
+                        await message.reply(`A deck named ${newName} already exists in this channel`)
                     } else {
-                        gameData.decks.push({name: args[0], allCards: [...CardDB[args[1]]], currentDeck: [...CardDB[args[1]]], discard: []})
+                        gameData.decks.push({name: newName, allCards: [...CardDB[args[0]]], currentDeck: [...CardDB[args[0]]], discard: []})
                         
                         this.client.setGameData(`cards-${message.channel.id}`, gameData)
-                        await message.reply(`added ${args[0]} to this channels cards`)
+                        await message.reply(`added ${newName} to this channels cards`)
+                    }
+                } else {
+                    let newDeck = _.split(args.join(" "), `,`)
+                    if (newDeck.length > 1) {
+                        gameData.decks.push({name: newName, allCards: [...newDeck], currentDeck: [...newDeck], discard: []})
+                        this.client.setGameData(`cards-${message.channel.id}`, gameData)
+                        await message.reply(`added ${newName} to this channels cards`)
                     }
                 }
             }
