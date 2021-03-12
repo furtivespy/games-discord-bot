@@ -14,7 +14,7 @@ class Remove extends Command {
             guildOnly: true,
             allMessages: false,
             showHelp: true,
-            aliases: ["card-remove"],
+            aliases: ["card-remove", "crem", "cremove"],
             permLevel: "User"
           })
     }

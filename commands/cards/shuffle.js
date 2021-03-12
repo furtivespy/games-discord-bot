@@ -14,7 +14,7 @@ class Shuffle extends Command {
             guildOnly: true,
             allMessages: false,
             showHelp: true,
-            aliases: ["card-shuffle"],
+            aliases: ["card-shuffle", "cshuff", "cshuffle"],
             permLevel: "User"
           })
     }

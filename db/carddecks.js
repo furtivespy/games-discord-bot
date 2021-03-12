@@ -1,7 +1,7 @@
+const Discord = require('discord.js')
+
 const playingCards = ["A♣","K♣","Q♣","J♣","2♣","3♣","4♣","5♣","6♣","7♣","8♣","9♣","10♣","A♦","K♦","Q♦","J♦","2♦","3♦","4♦","5♦","6♦","7♦","8♦","9♦","10♦","A♥","K♥","Q♥","J♥","2♥","3♥","4♥","5♥","6♥","7♥","8♥","9♥","10♥","A♠","K♠","Q♠","J♠","2♠","3♠","4♠","5♠","6♠","7♠","8♠","9♠","10♠"]
 const pairCards = [":one:",":two:",":two:",":three:",":three:",":three:",":four:",":four:",":four:",":four:",":five:",":five:",":five:",":five:",":five:",":six:",":six:",":six:",":six:",":six:",":six:",":seven:",":seven:",":seven:",":seven:",":seven:",":seven:",":seven:",":eight:",":eight:",":eight:",":eight:",":eight:",":eight:",":eight:",":eight:",":nine:",":nine:",":nine:",":nine:",":nine:",":nine:",":nine:",":nine:",":nine:",":keycap_ten:",":keycap_ten:",":keycap_ten:",":keycap_ten:",":keycap_ten:",":keycap_ten:",":keycap_ten:",":keycap_ten:",":keycap_ten:",":keycap_ten:"]
-
-
 
 class CardDatabase {
     constructor(){
@@ -44,7 +44,13 @@ class CardDatabase {
         cards: []
     }
 
-
+    handEmbed(playerData, guildName, channelName) {
+        const cardsEmbed = new Discord.MessageEmbed().setColor(13928716).setTitle(`All cards in hand in #${channelName} at ${guildName}`).setTimestamp()
+        playerData.hands.forEach(element => {
+            cardsEmbed.addField(`From ${element.deck} deck`, element.cards.join("  "))                
+        }); 
+        return cardsEmbed
+    }
 }
 
 

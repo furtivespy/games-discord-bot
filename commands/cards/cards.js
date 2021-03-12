@@ -13,7 +13,7 @@ class Cards extends Command {
             guildOnly: true,
             allMessages: false,
             showHelp: true,
-            aliases: ["cards-help", "card"],
+            aliases: ["card", "c"],
             permLevel: "User"
           })
     }
