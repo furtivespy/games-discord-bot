@@ -34,6 +34,7 @@ class Help extends Command {
             cardsEmbed.addField(`Shuffle`, `Shuffles a deck (newly added decks will not be shuffled at first)\n \`&cards shuffle deckname\``, true)
             cardsEmbed.addField(`Flip`, `Flips the top card(s) off the deck\n \`&cards flip deckname [number]\``, true)
             cardsEmbed.addField(`Draw`, `Draw a card from a deck into your hand\n \`&cards draw deckname\``, true)
+            cardsEmbed.addField(`Hand`, `Let's you see the cards in your hand\n \`&cards hand\``, true)
             cardsEmbed.addField(`Discard`, `Discard a card\n \`&cards discard\``, true)
             //cardsEmbed.addField(`Deal`, `Nothing Yet\n \`&cards\``, true)
             cardsEmbed.addField(`Reminder`, `All commands for card game start with \`&cards\` or \`&c\``)
