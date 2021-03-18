@@ -42,6 +42,9 @@ class BazaarFormatter {
     static async gameOver(client, gameData){
         const guild = await client.guilds.fetch(gameData.players[0].guildId)
         const statusEmbed = new Discord.MessageEmbed().setColor(2770926).setTitle("Game Over!").setTimestamp()
+        if (gameData.history){
+            statusEmbed.addField(`Previous Move`, this.previousMoveFormat(gameData.history))
+        }
         let playerlist = "";
         await Promise.all(_.orderBy(gameData.players, 'score', 'desc').map(async (player) => {
             var user = await guild.members.fetch(player.userId)
