@@ -22,11 +22,12 @@ class Scavenge extends Command {
 
     async run (message, args, level) {
         try {
-            await message.channel.send(`
-Round #1: || ${Scavenge.getDie()} & ${Scavenge.getDie()} ||
-Round #2: || ${Scavenge.getDie()} & ${Scavenge.getDie()} ||
-Round #3: || ${Scavenge.getDie()} & ${Scavenge.getDie()} ||
+            let msg = await message.channel.send(`
+Scavenge #1: || ${Scavenge.getDie()} & ${Scavenge.getDie()} ||
+Scavenge #2: || ${Scavenge.getDie()} & ${Scavenge.getDie()} ||
+Scavenge #3: || ${Scavenge.getDie()} & ${Scavenge.getDie()} ||
             `)
+            await msg.react('🐀')
         } catch (e) {
             this.client.logger.error(e, __filename.slice(__dirname.length + 1))
         }
