@@ -5,7 +5,7 @@ const _ = require('lodash')
 const diceSides = ["<:die1:790027072998342666>","<:die2:790028311756668960>","<:die3:790028312167841803>","<:die4:790028312348065842>","<:die5:790028312386076713>","<:die6:790028312495128616>"]
 
 const data = {
-    1: {emoji: "<:die1:790027072998342666>", name: "Coctail Swords"},
+    1: {emoji: "<:die1:790027072998342666>", name: "Cocktail Swords"},
     2: {emoji: "<:die2:790028311756668960>", name: "Baubles"},
     3: {emoji: "<:die3:790028312167841803>", name: "Straw"},
     4: {emoji: "<:die4:790028312348065842>", name: "Crumbs"},
