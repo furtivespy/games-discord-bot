@@ -1,8 +1,17 @@
 const Command = require('../../base/Command.js')
 const Discord = require('discord.js')
 const Roller = require('roll')
-const Sample = require('lodash/sample')
+const _ = require('lodash')
 const diceSides = ["<:die1:790027072998342666>","<:die2:790028311756668960>","<:die3:790028312167841803>","<:die4:790028312348065842>","<:die5:790028312386076713>","<:die6:790028312495128616>"]
+
+const data = {
+    1: {emoji: "<:die1:790027072998342666>", name: "Coctail Swords"},
+    2: {emoji: "<:die2:790028311756668960>", name: "Baubles"},
+    3: {emoji: "<:die3:790028312167841803>", name: "Straw"},
+    4: {emoji: "<:die4:790028312348065842>", name: "Crumbs"},
+    5: {emoji: "<:die5:790028312386076713>", name: "Rags"},
+    6: {emoji: "<:die6:790028312495128616>", name: "Flowers"}
+}
 
 class Scavenge extends Command {
     constructor(client){
@@ -22,19 +31,46 @@ class Scavenge extends Command {
 
     async run (message, args, level) {
         try {
-            let msg = await message.channel.send(`
-Scavenge #1: || ${Scavenge.getDie()} & ${Scavenge.getDie()} ||
-Scavenge #2: || ${Scavenge.getDie()} & ${Scavenge.getDie()} ||
-Scavenge #3: || ${Scavenge.getDie()} & ${Scavenge.getDie()} ||
-            `)
+            const ratsEmbed = new Discord.MessageEmbed().setColor(5582350).setTitle("Another Round of Scavenging").setTimestamp()
+
+            ratsEmbed.addField(`Scavenge #1`, `|| ${Scavenge.getScavenge()} ${Scavenge.randomPadding()} ||`)
+            ratsEmbed.addField(`Scavenge #2`, `|| ${Scavenge.getScavenge()} ${Scavenge.randomPadding()} ||`)
+            ratsEmbed.addField(`Scavenge #3`, `|| ${Scavenge.getScavenge()} ${Scavenge.randomPadding()} ||`)
+
+            ratsEmbed.setFooter(`React with 🐀 when done scavenging`)
+
+            
+            let msg = await message.channel.send(ratsEmbed)
             await msg.react('🐀')
         } catch (e) {
             this.client.logger.error(e, __filename.slice(__dirname.length + 1))
         }
     }
 
+    static getScavenge() {
+        const die1 = _.random(1,6)
+        const die2 = _.random(1,6)
+        const results = `${data[die1].emoji} & ${data[die2].emoji}`
+        let details = ""
+        if (die1 == die2) {
+            details = `${die1} of any one party supply`
+        } else {
+            details = `${die1} of ${data[die2].name} or ${die2} of ${data[die1].name}`
+        }
+        return `${results}\n${details}`
+    }
+
+    static randomPadding(){
+        const len = _.random(5,50)
+        let dots = ""
+        for (let i = 0; i < len; i++) {
+            dots += "."
+        }
+        return dots
+    }
+
     static getDie() {
-        return Sample([...diceSides])
+        return _.sample([...diceSides])
     }
 
 }

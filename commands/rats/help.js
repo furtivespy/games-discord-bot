@@ -31,7 +31,7 @@ class Help extends Command {
             //ratsEmbed.addField(`Hand`, `Let's you see the rats in your hand\n \`&rats hand\``, true)
             //ratsEmbed.addField(`Discard`, `Discard a card\n \`&rats discard\``, true)
             //ratsEmbed.addField(`Deal`, `Nothing Yet\n \`&rats\``, true)
-            ratsEmbed.addField(`Reminder`, `All commands for this game start with \`&rats\` or \`&rat\``)
+            ratsEmbed.addField(`Reminder`, `All commands for this game start with \`&rats\` or \`&rat\`. If you need rules or to print a character sheet visit https://www.shutupandsitdown.com/rats/`)
             await message.channel.send(ratsEmbed);
         } catch (e) {
             this.client.logger.error(e, __filename.slice(__dirname.length + 1))
