@@ -36,6 +36,7 @@ class Help extends Command {
             cardsEmbed.addField(`Draw`, `Draw a card from a deck into your hand\n \`&cards draw deckname\``, true)
             cardsEmbed.addField(`Hand`, `Let's you see the cards in your hand\n \`&cards hand\``, true)
             cardsEmbed.addField(`Discard`, `Discard a card\n \`&cards discard\``, true)
+            cardsEmbed.addField(`Play`, `play a card (same as discard, but shown to everyone)\n \`&cards play\``, true)
             //cardsEmbed.addField(`Deal`, `Nothing Yet\n \`&cards\``, true)
             cardsEmbed.addField(`Reminder`, `All commands for card game start with \`&cards\` or \`&c\``)
             await message.channel.send(cardsEmbed);
