@@ -22,36 +22,49 @@ class Draw extends Command {
     async run (message, args, level) {
         try {
             let gameData = Object.assign({}, _.cloneDeep(CardDB.defaultGameData), this.client.getGameData(`cards-${message.channel.id}`))
-            if (!args[0]) {
+            let count = 1
+            let deckName = ""
+            if (!args[0]){
                 if (gameData.decks.length == 1) {
-                    Draw.AddPlayerAndHand(gameData, gameData.decks[0], message)
-                    let card = Draw.DrawFrom(gameData, gameData.decks[0], message.author.id)
-                    this.client.setGameData(`cards-${message.channel.id}`, gameData)
-                    if (card) {
-                        message.react("🃏")
-                        const cardEmbed = new Discord.MessageEmbed().setColor(13928716).setTitle(`You Drew:`).setDescription(card)
-                        message.author.send(cardEmbed)
-                        this.client.TryExecuteCommand("cards-hand", message, [])
-                    }
+                    deckName = gameData.decks[0].name
                 } else {
                     await message.reply("please include the name of the deck to draw from")
+                    this.client.TryExecuteCommand("cards", message, [])
+                    return
                 }
             } else {
-                let deck = _.find(gameData.decks, {'name': args[0]})
-                if (deck){
-                    Draw.AddPlayerAndHand(gameData, deck, message)
-                    let card = Draw.DrawFrom(gameData, deck, message.author.id)
+                deckName = args[0]
+            }
+
+            if (args[1]) {
+                count = super.TryParseInt(args[1], 1)
+            }
+            
+            let deck = _.find(gameData.decks, {'name': deckName})
+            if (deck){
+                Draw.AddPlayerAndHand(gameData, deck, message)
+                const drawnCards = []
+                let card = null
+                for (let i = 0; i < count; i++) {
+                    card = Draw.DrawFrom(gameData, deck, message.author.id)
                     this.client.setGameData(`cards-${message.channel.id}`, gameData)
                     if (card) {
-                        message.react("🃏")
-                        const cardEmbed = new Discord.MessageEmbed().setColor(13928716).setTitle(`You Drew:`).setDescription(card)
-                        message.author.send(cardEmbed)
-                        this.client.TryExecuteCommand("cards-hand", message, [])
+                        drawnCards.push(card)
+                    } else {
+                        break
                     }
-                } else {
-                    await message.reply(`unable to find a deck named ${args[0]}`)
+                    card = null
                 }
+                if (drawnCards.length > 0) {
+                    message.reply(`you drew ${drawnCards.length} ${drawnCards.length > 1 ? "cards" : "card"}`)
+                    const cardEmbed = new Discord.MessageEmbed().setColor(13928716).setTitle(`You Drew:`).setDescription(drawnCards.join('\n'))
+                    message.author.send(cardEmbed)
+                    this.client.TryExecuteCommand("cards-hand", message, [])
+                }
+            } else {
+                await message.reply(`unable to find a deck named ${args[0]}`)
             }
+            
             this.client.TryExecuteCommand("cards", message, [])
         } catch (e) {
             this.client.logger.error(e, __filename.slice(__dirname.length + 1))
@@ -64,6 +77,7 @@ class Draw extends Command {
             const hand = _.find(player.hands, {deck: deck.name})
             const card = deck.currentDeck.shift()
             hand.cards.push(card)
+            hand.cards.sort()
             return card
         } else {
             message.reply(`${deck.name} is empty, maybe you should shuffle?`)

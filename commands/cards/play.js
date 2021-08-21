@@ -57,7 +57,7 @@ class Play extends Command {
 
     async ChooseDeck(player, message){
         if (player.hands.length == 0) return player.hands[0]
-        const handEmbed = new Discord.MessageEmbed().setColor(13928716).setTitle(`Select a Deck To Discard From`)
+        const handEmbed = new Discord.MessageEmbed().setColor(13928716).setTitle(`Select a Deck To Play From`)
         let decks = ""
         for (let i = 0; i < player.hands.length && i < 10; i++) {
             decks += `${super.indexToEmoji(i)}:arrow_right:  ${player.hands[i].deck}\n`
@@ -76,15 +76,15 @@ class Play extends Command {
         }
 
         if (!deckReaction.first()){
-            await msg.edit('No reaction after 60 seconds, discard canceled - try again when ready');
+            await msg.edit('No reaction after 60 seconds, play canceled - try again when ready');
             await msg.suppressEmbeds(true)
             return undefined
         }
         return player.hands[super.emojiToIndex(deckReaction.first().emoji.name)]
     }
 
-    async ChooseCard(player, hand, message){
-        const handEmbed = new Discord.MessageEmbed().setColor(13928716).setTitle(`Select a Card To Discard from ${hand.deck}`)
+    async ChooseCard(player, hand, message, startIndex = 0){
+        const handEmbed = new Discord.MessageEmbed().setColor(13928716).setTitle(`Select a Card To Play from ${hand.deck}`)
         let cards = ""
         for (let i = 0; i < hand.cards.length && i < 10; i++) {
             cards += `${super.indexToEmoji(i)}:arrow_right:  ${hand.cards[i]}\n`
@@ -103,7 +103,7 @@ class Play extends Command {
         }
 
         if (!deckReaction.first()){
-            await msg.edit('No reaction after 60 seconds, discard canceled - try again when ready');
+            await msg.edit('No reaction after 60 seconds, play canceled - try again when ready');
             await msg.suppressEmbeds(true)
             return undefined
         }
