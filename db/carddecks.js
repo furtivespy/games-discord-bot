@@ -47,7 +47,12 @@ class CardDatabase {
     handEmbed(playerData, guildName, channelName) {
         const cardsEmbed = new Discord.MessageEmbed().setColor(13928716).setTitle(`All cards in hand in #${channelName} at ${guildName}`).setTimestamp()
         playerData.hands.forEach(element => {
-            cardsEmbed.addField(`From ${element.deck} deck`, element.cards.sort().join("\n"))                
+            if (element.cards.length > 0) {
+                cardsEmbed.addField(`From ${element.deck} deck`, element.cards.sort().join("\n"))                
+            } else {
+                cardsEmbed.addField(`From ${element.deck} deck`, "No cards")    
+            }
+
         }); 
         return cardsEmbed
     }
