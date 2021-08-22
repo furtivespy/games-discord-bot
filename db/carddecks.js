@@ -22,14 +22,15 @@ class CardDatabase {
 
     defaultGameData = {
         decks: [],
-        players: []
+        players: [],
+        name: "",
     }
     
     defaultDeck = {
         name: "",
         allCards: [],
         currentDeck: [],
-        discard: []
+        discard: [],
     }
     
     defaultPlayer = {
@@ -37,12 +38,12 @@ class CardDatabase {
         userId: "1",
         order: 1,
         score: "",
-        hands: []
+        hands: [],
     }
     
     defaultHand = {
         deck: "",
-        cards: []
+        cards: [],
     }
 
     handEmbed(playerData, guildName, channelName) {
