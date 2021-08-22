@@ -36,6 +36,7 @@ class CardDatabase {
         guildId: "1",
         userId: "1",
         order: 1,
+        score: "",
         hands: []
     }
     
