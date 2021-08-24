@@ -13,7 +13,7 @@ class Help extends Command {
             guildOnly: false,
             allMessages: false,
             showHelp: true,
-            aliases: ["game-help", "ghelp"],
+            aliases: ["gamehelp", "ghelp"],
             permLevel: "User"
           })
     }

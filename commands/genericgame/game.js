@@ -31,7 +31,7 @@ class Game extends Command {
                     await message.channel.send(await Formatter.GameStatus(gameData, message))
 
                 } else {
-                    this.client.TryExecuteCommand("cards-help", message, args)
+                    this.client.TryExecuteCommand("game-help", message, args)
                 }                
                 
             }

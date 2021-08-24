@@ -38,6 +38,7 @@ class CardDatabase {
         userId: "1",
         order: 1,
         score: "",
+        name: null,
         hands: [],
     }
     

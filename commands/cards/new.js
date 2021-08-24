@@ -44,14 +44,14 @@ class New extends Command {
                         gameData.decks.push({name: newName, allCards: [...CardDB[args[0]]], currentDeck: [...CardDB[args[0]]], discard: []})
                         
                         this.client.setGameData(`cards-${message.channel.id}`, gameData)
-                        await message.reply(`added ${newName} to this channels cards`)
+                        await message.reply(`added ${newName} to this channels cards. Remember to shuffle!`)
                     }
                 } else {
                     let newDeck = _.split(args.join(" "), `,`)
                     if (newDeck.length > 1) {
                         gameData.decks.push({name: newName, allCards: [...newDeck], currentDeck: [...newDeck], discard: []})
                         this.client.setGameData(`cards-${message.channel.id}`, gameData)
-                        await message.reply(`added ${newName} to this channels cards`)
+                        await message.reply(`added ${newName} to this channels cards. Remember to shuffle!`)
                     }
                 }
             }

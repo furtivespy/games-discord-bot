@@ -95,7 +95,7 @@ class Draw extends Command {
     static AddPlayerAndHand(gameData, deck, message){
         let player = _.find(gameData.players, {userId: message.author.id})
         if (!player){
-            player = Object.assign({}, _.cloneDeep(CardDB.defaultPlayer), {userId: message.author.id, guildId: message.guild.id, order: gameData.players.length + 1})
+            player = Object.assign({}, _.cloneDeep(CardDB.defaultPlayer), {userId: message.author.id, guildId: message.guild.id, name: message.author.username, order: gameData.players.length + 1})
             gameData.players.push(player)
         }
         Draw.AddHand(player, deck)
