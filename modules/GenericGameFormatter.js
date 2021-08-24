@@ -11,7 +11,10 @@ class GameFormatter {
         table.setHeading("Player", "Score", "Cards in Hand")
         gameData.players.forEach(play => {
             const cards = GameFormatter.CountCards(play)
-            const name = message.guild.members.cache.get(play.userId)?.displayName
+            let name = ""
+            if (message.guild.members.cache.get(play.userId)) {
+                name = message.guild.members.cache.get(play.userId).displayName
+            }
             table.addRow(name ?? play.userId, play.score, cards)
         });
         newEmbed.setDescription(`\`\`\`\n${table.toString()}\n\`\`\``)
