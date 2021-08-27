@@ -6,8 +6,8 @@ class Help extends Command {
     constructor(client){
         super(client, {
             name: "rats-help",
-            description: "RATS Game Helper",
-            category: "rats",
+            description: "Help for all the Rats game commands",
+            category: "Rats",
             usage: "use this command to get rats Help",
             enabled: true,
             guildOnly: false,

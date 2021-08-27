@@ -12,7 +12,7 @@ class Deal extends Command {
             enabled: true,
             guildOnly: true,
             allMessages: false,
-            showHelp: true,
+            showHelp: false,
             aliases: ["card-deal", "cdeal"],
             permLevel: "User"
           })

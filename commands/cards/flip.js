@@ -13,7 +13,7 @@ class Flip extends Command {
             enabled: true,
             guildOnly: true,
             allMessages: false,
-            showHelp: true,
+            showHelp: false,
             aliases: ["card-flip", "cflip"],
             permLevel: "User"
         })

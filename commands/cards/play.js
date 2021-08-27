@@ -14,7 +14,7 @@ class Play extends Command {
             enabled: true,
             guildOnly: true,
             allMessages: false,
-            showHelp: true,
+            showHelp: false,
             aliases: ["card-play", "cplay"],
             permLevel: "User"
           })

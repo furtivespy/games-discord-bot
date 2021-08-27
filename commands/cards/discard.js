@@ -14,7 +14,7 @@ class Discard extends Command {
             enabled: true,
             guildOnly: true,
             allMessages: false,
-            showHelp: true,
+            showHelp: false,
             aliases: ["card-discard", "cdiscard"],
             permLevel: "User"
           })

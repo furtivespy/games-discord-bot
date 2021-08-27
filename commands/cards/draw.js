@@ -13,7 +13,7 @@ class Draw extends Command {
             enabled: true,
             guildOnly: true,
             allMessages: false,
-            showHelp: true,
+            showHelp: false,
             aliases: ["card-draw", "cdraw"],
             permLevel: "User"
           })

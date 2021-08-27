@@ -6,7 +6,7 @@ class Help extends Command {
     constructor(client){
         super(client, {
             name: "cards-help",
-            description: "Card Game Helper",
+            description: "Card Game Help - Shows all commands for Card games",
             category: "Cards",
             usage: "use this command to get Cards Help",
             enabled: true,

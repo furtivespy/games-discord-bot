@@ -23,7 +23,7 @@ class Scavenge extends Command {
             enabled: true,
             guildOnly: true,
             allMessages: false,
-            showHelp: true,
+            showHelp: false,
             aliases: ["rat-scavenge" , "ratsscavenge", "ratscavenge", "rats-scav", "rat-scav", "rat-s"],
             permLevel: "User"
           })

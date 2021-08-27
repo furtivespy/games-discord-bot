@@ -14,7 +14,7 @@ class New extends Command {
             enabled: true,
             guildOnly: false,
             allMessages: false,
-            showHelp: true,
+            showHelp: false,
             aliases: ["card-new", "card-add", "cards-add", "cnew", "cadd"],
             permLevel: "User"
           })

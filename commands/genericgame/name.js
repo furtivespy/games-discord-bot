@@ -14,7 +14,7 @@ class GameName extends Command {
             enabled: true,
             guildOnly: true,
             allMessages: false,
-            showHelp: true,
+            showHelp: false,
             aliases: ["gamename", "gname"],
             permLevel: "User"
           })
