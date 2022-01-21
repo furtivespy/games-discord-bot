@@ -30,7 +30,7 @@ class Help extends Command {
             cardsEmbed.addField(`Cards`, `Cards are part of a generic game\n \`&cards help\``, true)
             //cardsEmbed.addField(`Deal`, `Nothing Yet\n \`&cards\``, true)
             //cardsEmbed.addField(`Reminder`, `All commands for card game start with \`&cards\` or \`&c\``)
-            await message.channel.send(cardsEmbed);
+            await message.channel.send({embeds: [cardsEmbed]});
         } catch (e) {
             this.client.logger.error(e, __filename.slice(__dirname.length + 1))
         }

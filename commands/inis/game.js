@@ -20,7 +20,7 @@ class Game extends Command {
     async run (message, args, level) {
         try {
             var gameData = this.client.getGameData("INIS")
-            await message.channel.send(await InisFormatter.gameStatus(this.client, gameData))
+            await message.channel.send({embeds: [await InisFormatter.gameStatus(this.client, gameData)]})
 
         } catch (e) {
             this.client.logger.log(e,'error')

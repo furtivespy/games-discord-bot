@@ -1,4 +1,6 @@
-const { Client, Collection } = require("discord.js");
+const { Client, Collection, Intents } = require("discord.js");
+const { REST } = require('@discordjs/rest');
+const { Routes } = require('discord-api-types/v9');
 const Enmap = require("enmap");
 const klaw = require("klaw");
 const path = require("path");
@@ -14,6 +16,7 @@ class DiscordBot extends Client {
       this.gamedata = new Enmap({ name: "gamedata", cloneLevel: "deep", fetchAll: false, autoFetch: true });
 
       this.commands = new Collection();
+      this.slashcommands = new Collection();
       this.aliases = new Collection();
       this.messageEvents = new Collection();
       this.guildDBs = {};
@@ -53,6 +56,17 @@ class DiscordBot extends Client {
         props.conf.aliases.forEach(alias => {
           this.aliases.set(alias, props.help.name);
         });
+        return false;
+      } catch (e) {
+        return `Unable to load command ${commandName}: ${e}`;
+      }
+    }
+
+    loadSlashCommand (commandPath, commandName) {
+      try {
+        const props = new (require(`${commandPath}${path.sep}${commandName}`))(this);
+        this.logger.log(`Loading Slash Command: ${props.help.name}. 👌`, "log");
+        this.slashcommands.set(props.help.name, props);
         return false;
       } catch (e) {
         return `Unable to load command ${commandName}: ${e}`;
@@ -207,7 +221,7 @@ class DiscordBot extends Client {
   }
 }
 
-const client = new DiscordBot({ partials: ['MESSAGE', 'CHANNEL', 'REACTION'] });
+const client = new DiscordBot({ partials: ['MESSAGE', 'CHANNEL', 'REACTION'], intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MEMBERS, Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.GUILD_MESSAGE_REACTIONS] });
 const init = async () => {
   klaw("./commands").on("data", (item) => {
       const cmdFile = path.parse(item.path);
@@ -221,7 +235,14 @@ const init = async () => {
     if (!cmdFile.ext || cmdFile.ext !== ".js") return;
     const response = client.loadEvent(cmdFile.dir, `${cmdFile.name}${cmdFile.ext}`);
     if (response) client.logger.error(response);
-});
+  });
+
+  klaw("./slashcommands").on("data", (item) => {
+    const cmdFile = path.parse(item.path);
+    if (!cmdFile.ext || cmdFile.ext !== ".js") return;
+    const response = client.loadSlashCommand(cmdFile.dir, `${cmdFile.name}${cmdFile.ext}`);
+    if (response) client.logger.error(response);
+  });
   
   // Then we load events, which will include our message and ready event.
   // const evtFiles = await readdir("./events/");
@@ -246,9 +267,9 @@ const init = async () => {
     await client.wait(1000);
     
     client.user.setActivity(client.config.activity, {type: client.config.activityType});
-    client.appInfo = await client.fetchApplication();
+    client.appInfo = await client.application.fetch();
     setInterval( async () => {
-      client.appInfo = await client.fetchApplication();
+      client.appInfo = await client.application.fetch();
     }, 60000);
     if (!client.settings.has("default")) {
       if (!client.config.defaultSettings) throw new Error("defaultSettings not preset in config.js or settings database. Bot cannot load.");
@@ -256,9 +277,33 @@ const init = async () => {
     }
     //client.user.setAvatar('')
     client.logger.log(`Bot has started, in ${client.guilds.cache.size} guilds.`, 'ready');
+
+    client.guilds.cache.forEach(async (gld) => {
+      await gld.members.fetch()
+    })
+    client.logger.log(`guild members cached`)
+
+    //Register Slash Commands
+    const cmds = client.slashcommands.map(sc => sc.data.toJSON())
+    const rest = new REST({ version: '9' }).setToken(client.config.token);
+
+    
+    if (client.config.clientId == '548570412959662080') {
+      //Test Server
+      rest.put(Routes.applicationGuildCommands(client.config.clientId, '545109131330191371'), { body: cmds })
+      .then(() => client.logger.log('Successfully registered application commands.'))
+      .catch(error => client.logger.error(error));
+    } else {
+      //Prod Server
+      rest.put(
+        Routes.applicationCommands(client.config.clientId),
+        { body: cmds },
+      ).then(() => client.logger.log('Successfully registered application commands.'))
+      .catch(error => client.logger.error(error));
+    }
   })
 
-  client.on("message", async message => {
+  client.on("messageCreate", async message => {
     if (message.author.bot) return;
 
     // If message in in a server, see if bot can send to that channel, otherwise bot will ignore the messages
@@ -298,7 +343,7 @@ const init = async () => {
 };
 
 //run every message commands
-client.on("message", async message => {
+client.on("messageCreate", async message => {
   if (message.author.bot) return;
   if (!message.guild) {
     return;
@@ -389,6 +434,21 @@ client.on('messageReactionRemove', async (reaction, user) => {
     client.logger.log(`ran Event ${cmd.help.name}`, "cmd");
     cmd.run(reaction, user);
   })
+});
+
+client.on('interactionCreate', async interaction => {
+  client.logger.log(`Slash Command ${interaction.commandName}`)
+	if (!interaction.isCommand()) return;
+	const command = client.slashcommands.get(interaction.commandName);
+
+	if (!command) return;
+
+	try {
+		await command.execute(interaction);
+	} catch (error) {
+		console.error(error);
+		return interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+	}
 });
 
   

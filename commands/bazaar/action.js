@@ -73,7 +73,7 @@ class Action extends Command {
 
                         objEmbed.addField(`Players`, await BazaarFormatter.playerList(this.client, gameData))
 
-                        let objmsg = await message.channel.send(objEmbed)
+                        let objmsg = await message.channel.send({embeds: [objEmbed]})
                         objmsg.react("🇦").then(r => objmsg.react("🇧").then(r => objmsg.react("🇨").then(r => objmsg.react("🇩").then(r => objmsg.react("🚫")))))
 
                             try {
@@ -124,7 +124,7 @@ class Action extends Command {
                 
                 const bazaarEmbed = new Discord.MessageEmbed().setColor(386945).setTitle("What do you want to do?").setTimestamp()
                 bazaarEmbed.addField(`Actions`, `:game_die: - Roll the die\n:shopping_bags: - Make an exchange`)
-                let msg = await message.channel.send(bazaarEmbed)
+                let msg = await message.channel.send({embeds: [bazaarEmbed]})
                 msg.react("🎲").then(r => msg.react("🛍"))
                 
                 try {

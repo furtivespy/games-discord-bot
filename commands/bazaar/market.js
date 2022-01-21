@@ -23,7 +23,7 @@ class Market extends Command {
             if (gameData.players === undefined || gameData.gameOver) {
                 await message.channel.send(`No Game Happening in this Channel`)
             } else {
-                await message.channel.send(BazaarFormatter.bazaarEmbed(gameData))
+                await message.channel.send({embeds: [BazaarFormatter.bazaarEmbed(gameData)]})
             }
             
         } catch (e) {

@@ -1,4 +1,5 @@
 const Command = require('../../base/Command.js')
+const { codeBlock } = require("@discordjs/builders");
 
 class SetCMD extends Command {
     constructor(client){
@@ -82,7 +83,7 @@ class SetCMD extends Command {
           Object.entries(settings).forEach(([key, value]) => {
             array.push(`${key}${" ".repeat(20 - key.length)}::  ${value}`); 
           });
-          await message.channel.send(`= Current Guild Settings =\n${array.join("\n")}`, {code: "asciidoc"});
+          await message.channel.send(codeBlock("asciidoc", `= Current Guild Settings =\n${array.join("\n")}`));
         }
       }
     }

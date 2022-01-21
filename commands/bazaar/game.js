@@ -23,9 +23,9 @@ class Game extends Command {
             if (gameData.players === undefined) {
                 await message.channel.send(`No Game Happening in this Channel`)
             } else if (gameData.gameOver) {
-                await message.channel.send(await BazaarFormatter.gameOver(this.client, gameData))
+                await message.channel.send({embeds: [await BazaarFormatter.gameOver(this.client, gameData)]})
             } else {
-                await message.channel.send(await BazaarFormatter.gameStatus(this.client, gameData))
+                await message.channel.send({embeds: [await BazaarFormatter.gameStatus(this.client, gameData)]})
                 if (args.length > 0){
                     const guild = await this.client.guilds.fetch(gameData.players[0].guildId)
                     const currentPlayer = await guild.members.fetch(gameData.players.find(p => p.order == gameData.turn).userId)

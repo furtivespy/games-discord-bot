@@ -63,7 +63,7 @@ class Flip extends Command {
             
             cardsEmbed.setDescription(flipped)
             //cardsEmbed.addField(deck.name, flipped)
-            await message.channel.send(cardsEmbed)
+            await message.channel.send({embeds: [cardsEmbed]})
         } else {
             message.reply(`${deck.name} is empty, maybe you should shuffle?`)
         }

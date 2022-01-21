@@ -37,7 +37,7 @@ class NewSeason extends Command {
                 await message.channel.send(`Crows continue to flock ${gameData.order} :bird:`)
             }
 
-            await message.channel.send(await InisFormatter.gameStatus(this.client, gameData))
+            await message.channel.send({embeds: [await InisFormatter.gameStatus(this.client, gameData)]})
             var msg = await message.channel.send(`DMing players the Cards...`)
             var guild = await this.client.guilds.fetch(gameData.players[0].guildId)
 

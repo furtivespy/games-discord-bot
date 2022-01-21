@@ -39,10 +39,10 @@ class GameScore extends Command {
                 } else {
                     await message.react("❓")
                 }
-                await message.channel.send(await Formatter.GameStatus(gameData, message))
+                await message.channel.send({embeds: [await Formatter.GameStatus(gameData, message)]})
                 
             } else {
-                await message.channel.send(await Formatter.GameStatus(gameData, message))
+                await message.channel.send({embeds: [await Formatter.GameStatus(gameData, message)]})
             }
         } catch (e) {
             this.client.logger.error(e, __filename.slice(__dirname.length + 1))

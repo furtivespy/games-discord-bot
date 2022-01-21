@@ -33,7 +33,7 @@ class New extends Command {
                 cardsEmbed.addField(`Instructions`, `To add a deck use command in form of &cards new local-name deck_name
                 e.g. \`&cards new MyDeck playing_cards\``)
 
-                await message.channel.send(cardsEmbed)
+                await message.channel.send({embeds: [cardsEmbed]})
 
             } else {
                 let newName = args.shift()

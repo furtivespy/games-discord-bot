@@ -32,7 +32,7 @@ class Cards extends Command {
                         cardsEmbed.addField(gameData.decks[i].name, `${gameData.decks[i].currentDeck.length} cards remaining (${gameData.decks[i].discard.length} discards)`)
                     }
 
-                    await message.channel.send(cardsEmbed);
+                    await message.channel.send({embeds: [cardsEmbed]});
                 } else {
                     this.client.TryExecuteCommand("cards-help", message, args)
                 }                

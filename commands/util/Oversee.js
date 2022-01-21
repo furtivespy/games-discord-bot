@@ -2,6 +2,7 @@ const Command = require('../../base/Command.js')
 const Pull = require('lodash/pull')
 var AsciiTable = require('ascii-table')
 var wrap = require('word-wrap')
+const { codeBlock } = require("@discordjs/builders");
 
 class Oversee extends Command {
     constructor(client){
@@ -51,7 +52,7 @@ class Oversee extends Command {
 
             sorted.forEach(acommand => {
                 if(table.toString().length > 1600){
-                    message.channel.send(table.toString(), {code:"css"})
+                    message.channel.send(codeBlock("css", table.toString()))
                     table.clear()   
                 }
                 table.addRow(
@@ -62,7 +63,7 @@ class Oversee extends Command {
                     wrap(acommand.help.description, {width: 25})
                 )
             })
-            message.channel.send(table.toString(), {code:"css"})
+            message.channel.send(codeBlock("css", table.toString()))
         }
       }
     }

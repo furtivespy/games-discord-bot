@@ -38,7 +38,7 @@ class AddPlayer extends Command {
                     this.client.setGameData(`cards-${message.channel.id}`, gameData)
                 }
 
-                await message.channel.send(await Formatter.GameStatus(gameData, message))
+                await message.channel.send({embeds: [await Formatter.GameStatus(gameData, message)]})
 
             } else {
                 message.reply("Please incude a player to add")

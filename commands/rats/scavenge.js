@@ -40,7 +40,7 @@ class Scavenge extends Command {
             ratsEmbed.setFooter(`React with 🐀 when done scavenging`)
 
             
-            let msg = await message.channel.send(ratsEmbed)
+            let msg = await message.channel.send({embeds: [ratsEmbed]})
             await msg.react('🐀')
         } catch (e) {
             this.client.logger.error(e, __filename.slice(__dirname.length + 1))

@@ -34,7 +34,7 @@ class Bazaar extends Command {
                 **Market** - Shows the current exchange market
                 **Action** - When it's your turn, use action to take turn`)
                 bazaarEmbed.addField(`Reminder`, `All commands for bazaar game start with &bazaar`)
-                await message.channel.send(bazaarEmbed);
+                await message.channel.send({embeds: [bazaarEmbed]});
             }
         } catch (e) {
             this.client.logger.error(e, __filename.slice(__dirname.length + 1))

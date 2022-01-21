@@ -31,7 +31,7 @@ class Brenn extends Command {
             })
             if (!gameData.players.find(p => p.isBrenn)) return
             this.client.setGameData("INIS", gameData)
-            await message.channel.send(await InisFormatter.gameStatus(this.client, gameData))
+            await message.channel.send({embeds: [await InisFormatter.gameStatus(this.client, gameData)]})
         } catch (e) {
             this.client.logger.log(e,'error')
         }

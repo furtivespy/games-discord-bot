@@ -90,7 +90,7 @@ class Summoner extends Command {
             Runes: ${runeTotal}
             `)
             statusEmbed.setFooter(`dice: ${debug}`)
-            message.channel.send(statusEmbed)
+            message.channel.send({embeds: [statusEmbed]})
 
         } catch (e) {
             this.client.logger.log(e,'error')

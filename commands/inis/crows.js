@@ -25,7 +25,7 @@ class Crows extends Command {
             gameData.isClockwise = !gameData.isClockwise
             gameData.order = (gameData.isClockwise) ? "Clockwise" : "Counterclockwise"
             this.client.setGameData("INIS", gameData)
-            await message.channel.send(await InisFormatter.gameStatus(this.client, gameData))
+            await message.channel.send({embeds: [await InisFormatter.gameStatus(this.client, gameData)]})
         } catch (e) {
             this.client.logger.log(e,'error')
         }

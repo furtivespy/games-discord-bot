@@ -28,7 +28,7 @@ class Game extends Command {
                 let gameData = this.client.getGameData(`cards-${message.channel.id}`)
                 if ((gameData.decks && gameData.decks.length > 0) || (gameData.players && gameData.players.length > 0)) {
                     
-                    await message.channel.send(await Formatter.GameStatus(gameData, message))
+                    await message.channel.send({embeds: [await Formatter.GameStatus(gameData, message)]})
 
                 } else {
                     this.client.TryExecuteCommand("game-help", message, args)

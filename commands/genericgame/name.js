@@ -26,7 +26,7 @@ class GameName extends Command {
                 let gameData = Object.assign({}, _.cloneDeep(CardDB.defaultGameData), this.client.getGameData(`cards-${message.channel.id}`))
                 gameData.name = args.join(" ")
                 this.client.setGameData(`cards-${message.channel.id}`, gameData)
-                await message.channel.send(await Formatter.GameStatus(gameData, message))
+                await message.channel.send({embeds: [await Formatter.GameStatus(gameData, message)]})
             } else {
                 message.reply("Please incude the new name")
             }

@@ -64,7 +64,7 @@ class NewGame extends Command {
             }
             
             this.client.setGameData("INIS", newGameData)
-            await message.channel.send(await InisFormatter.gameStatus(this.client, newGameData))
+            await message.channel.send({embeds: [await InisFormatter.gameStatus(this.client, newGameData)]})
 
         } catch (e) {
             this.client.logger.log(e,'error')

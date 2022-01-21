@@ -76,8 +76,8 @@ class NewGame extends Command {
                 return
             }
             this.client.setGameData(`bazaar-${message.channel.id}`, newGameData)
-            await message.channel.send(BazaarFormatter.bazaarEmbed(newGameData))
-            await message.channel.send(await BazaarFormatter.gameStatus(this.client, newGameData))
+            await message.channel.send({embeds: [BazaarFormatter.bazaarEmbed(newGameData)]})
+            await message.channel.send({embeds: [await BazaarFormatter.gameStatus(this.client, newGameData)]})
 
         } catch (e) {
             this.client.logger.error(e, __filename.slice(__dirname.length + 1))

@@ -46,7 +46,7 @@ class GMRoll extends Command {
                     }
                 }
                 
-                await message.author.send({embed: embedItem})
+                await message.author.send({embeds: [embedItem]})
                 await message.react('🎲')
             } else {
                 message.react('🚫')

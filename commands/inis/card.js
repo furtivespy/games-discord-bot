@@ -25,7 +25,7 @@ class Card extends Command {
             if (!search) {
                 message.reply("No matching card found")
             } else {
-                message.channel.send(search)
+                message.channel.send({embeds: [search]})
             }
         } catch (e) {
             this.client.logger.log(e,'error')
