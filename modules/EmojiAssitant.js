@@ -1,5 +1,3 @@
-const _ = require('lodash')
-
 class EmojiAssistant {
     static IndexToEmoji(number) {
         switch (number) {
