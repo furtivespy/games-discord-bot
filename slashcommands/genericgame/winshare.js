@@ -1,8 +1,8 @@
 const SlashCommand = require('../../base/SlashCommand.js')
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const fetch = require('node-fetch')
-const Roller = require('roll')
-const Sample = require('lodash/sample')
+const { cloneDeep } = require('lodash')
+const GameDB = require('../../db/anygame.js')
+const Formatter = require('../../modules/GameFormatter')
 
 class WinShare extends SlashCommand {
     constructor(client){
@@ -26,7 +26,7 @@ class WinShare extends SlashCommand {
             let gameData = Object.assign(
                 {},
                 cloneDeep(GameDB.defaultGameData), 
-                client.getGameData(`game-${theChan.id}`)
+                this.client.getGameData(`game-${theChan.id}`)
             )
 
             if (gameData.winner && gameData.winner != null){
@@ -34,7 +34,6 @@ class WinShare extends SlashCommand {
                 const winEmbed = await Formatter.GameWinner(gameData, interaction.guild)
 
                 await interaction.reply({ 
-                    content: content,
                     embeds: [winEmbed]
                 })
 

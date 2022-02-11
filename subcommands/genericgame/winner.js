@@ -26,7 +26,6 @@ class NewGame {
                 winEmbed.setFooter({text: `use /winshare to tell another channel about the win!`})
 
                 await interaction.reply({ 
-                    content: content,
                     embeds: [winEmbed]
                 })
             } else {

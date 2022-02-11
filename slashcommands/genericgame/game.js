@@ -4,6 +4,7 @@ const GameDB = require('../../db/anygame.js')
 const NewGame = require(`../../subcommands/genericgame/newgame`)
 const Delete = require(`../../subcommands/genericgame/delete`)
 const Status = require(`../../subcommands/genericgame/status`)
+const Winner = require(`../../subcommands/genericgame/winner`)
 
 class Game extends SlashCommand {
     constructor(client){
@@ -43,7 +44,7 @@ class Game extends SlashCommand {
                 subcommand
                     .setName("winner")
                     .setDescription("mark someone as game winner")
-                    .addStringOption(option => option.setName('who').setDescription('The winner of this channel\'s game!').setRequired(true))
+                    .addUserOption(option => option.setName('who').setDescription('The winner of this channel\'s game!').setRequired(true))
                 )
     }
 
@@ -58,6 +59,9 @@ class Game extends SlashCommand {
                     break
                 case "status":
                     await Status.execute(interaction, this.client)
+                    break
+                case "winner":
+                    await Winner.execute(interaction, this.client)
                     break
                 default:
                     await interaction.reply({ content: "Something Went Wrong!?!?!?", ephemeral: true })
