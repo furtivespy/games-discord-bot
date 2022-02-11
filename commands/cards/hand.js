@@ -27,7 +27,7 @@ class Hand extends Command {
                 await message.reply('You have no cards')
             } else {
                 let handE = CardDB.handEmbed(player, message.guild.name, message.channel.name)
-                message.author.send(handE)
+                message.author.send({embeds: [handE]})
             }
 
         } catch (e) {

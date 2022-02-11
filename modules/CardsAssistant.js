@@ -12,7 +12,7 @@ class CardsAssistant {
             decks += `${Emoji.IndexToEmoji(i)}:arrow_right:  ${player.hands[i].deck}\n`
         }
         handEmbed.setDescription(decks)
-        let msg = await message.author.send(handEmbed)
+        let msg = await message.author.send({embeds: [handEmbed]})
         CardsAssistant.AddReactions(player.hands.length, msg)
         
         try {
@@ -45,7 +45,7 @@ class CardsAssistant {
             cards += `⏭️:arrow_right: (Next Page)\n` 
         }
         handEmbed.setDescription(cards)
-        let msg = await message.author.send(handEmbed)
+        let msg = await message.author.send({embeds: [handEmbed]})
         if (page > 0){
             await msg.react("⏮️")
         }

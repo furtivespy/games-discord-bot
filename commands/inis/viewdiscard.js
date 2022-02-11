@@ -24,7 +24,7 @@ class ViewDiscard extends Command {
             var gameData = this.client.getGameData("INIS")
             message.reply(`DM sent with set aside card`)
 
-            message.author.send(InisFormatter.createCardEmbed(gameData.greenDeck.slice(-1)[0], "Set Aside Card"))
+            message.author.send({embeds: [InisFormatter.createCardEmbed(gameData.greenDeck.slice(-1)[0], "Set Aside Card")]})
 
         } catch (e) {
             this.client.logger.log(e,'error')

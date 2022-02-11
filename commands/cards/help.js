@@ -39,7 +39,7 @@ class Help extends Command {
             cardsEmbed.addField(`Play`, `play a card (same as discard, but shown to everyone)\n \`&cards play\``, true)
             //cardsEmbed.addField(`Deal`, `Nothing Yet\n \`&cards\``, true)
             cardsEmbed.addField(`Reminder`, `All commands for card game start with \`&cards\` or \`&c\``)
-            await message.channel.send(cardsEmbed);
+            await message.channel.send({embeds: [cardsEmbed]});
         } catch (e) {
             this.client.logger.error(e, __filename.slice(__dirname.length + 1))
         }

@@ -35,7 +35,7 @@ class Inis extends Command {
                 **NewGame** - Starts a new game
                 **NewSeason** - States a new season
                 **ViewDiscard** - Views the seasons's set aside card`)
-                await message.channel.send(inisEmbed);
+                await message.channel.send({embeds: [inisEmbed]});
             }
         } catch (e) {
             this.client.logger.log(e,'error')

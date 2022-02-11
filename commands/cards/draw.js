@@ -58,7 +58,7 @@ class Draw extends Command {
                 if (drawnCards.length > 0) {
                     message.reply(`you drew ${drawnCards.length} ${drawnCards.length > 1 ? "cards" : "card"}`)
                     const cardEmbed = new Discord.MessageEmbed().setColor(13928716).setTitle(`You Drew:`).setDescription(drawnCards.join('\n'))
-                    message.author.send(cardEmbed)
+                    message.author.send({embeds: [cardEmbed]})
                     this.client.TryExecuteCommand("cards-hand", message, [])
                 }
             } else {
