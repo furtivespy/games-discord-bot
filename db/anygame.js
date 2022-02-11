@@ -9,7 +9,8 @@ class GameDatabase {
         decks: [],
         players: [],
         name: "",
-        isdeleted: true
+        isdeleted: true,
+        winner: null
     }
     
     defaultSecretData = {

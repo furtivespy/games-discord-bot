@@ -32,7 +32,7 @@ class Secret extends SlashCommand {
                 subcommand
                     .setName("reveal")
                     .setDescription("Reveals all the secrets")
-                    .addStringOption(option => option.setName('reveal').setDescription('Type "reveal" to confirm secrets reveal').setRequired(true))
+                    .addStringOption(option => option.setName('confirm').setDescription('Type "reveal" to confirm secrets reveal').setRequired(true))
                 )
     }
 

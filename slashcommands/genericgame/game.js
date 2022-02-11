@@ -25,6 +25,8 @@ class Game extends SlashCommand {
                     .addUserOption(option => option.setName("player2").setDescription("second player to add"))
                     .addUserOption(option => option.setName("player3").setDescription("third player to add"))
                     .addUserOption(option => option.setName("player4").setDescription("fourth player to add"))
+                    .addUserOption(option => option.setName("player5").setDescription("fifth player to add"))
+                    .addUserOption(option => option.setName("player6").setDescription("sixth player to add"))
                 )
             .addSubcommand(subcommand =>
                 subcommand
@@ -35,7 +37,13 @@ class Game extends SlashCommand {
                 subcommand
                     .setName("delete")
                     .setDescription("Remove this channels current game")
-                    .addStringOption(option => option.setName('delete').setDescription('Type "delete" to confirm delete - cannot be undone').setRequired(true))
+                    .addStringOption(option => option.setName('confirm').setDescription('Type "delete" to confirm delete - cannot be undone').setRequired(true))
+                )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("winner")
+                    .setDescription("mark someone as game winner")
+                    .addStringOption(option => option.setName('who').setDescription('The winner of this channel\'s game!').setRequired(true))
                 )
     }
 

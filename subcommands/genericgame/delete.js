@@ -4,7 +4,7 @@ const { cloneDeep } = require('lodash')
 class Delete {
     async execute(interaction, client) {
 
-        if (interaction.options.getString('delete') == 'delete') {
+        if (interaction.options.getString('confirm') == 'delete') {
             let gameData = Object.assign(
                 {},
                 cloneDeep(GameDB.defaultGameData), 

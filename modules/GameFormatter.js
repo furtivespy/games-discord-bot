@@ -36,6 +36,17 @@ class GameFormatter {
         return newEmbed;
     }
 
+    static async GameWinner(gameData, guild){
+        const winnerName = guild.members.cache.get(gameData.winner)?.displayName
+
+        const newEmbed = new Discord.MessageEmbed()
+            .setColor(0xfff200)
+            .setTitle(`👑 Congratulations ${winnerName} 👑`)
+            .setDescription(`For winning ${gameData.name}`)
+            
+        return newEmbed
+    }
+
     static async SecretStatus(secretData, guild){
         const newEmbed = new Discord.MessageEmbed()
             .setColor(0x360280)

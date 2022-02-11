@@ -5,7 +5,7 @@ const Formatter = require('../../modules/GameFormatter')
 class Reveal {
     async execute(interaction, client) {
 
-        if (interaction.options.getString('reveal') == 'reveal') {
+        if (interaction.options.getString('confirm') == 'reveal') {
             let secretData = Object.assign(
                 {},
                 cloneDeep(GameDB.defaultSecretData), 
