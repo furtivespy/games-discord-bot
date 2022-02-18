@@ -437,12 +437,12 @@ client.on('messageReactionRemove', async (reaction, user) => {
 });
 
 client.on('interactionCreate', async interaction => {
-  client.logger.log(`Slash Command ${interaction.commandName}`)
-	if (!interaction.isCommand()) return;
+  
+	if (!interaction.isCommand() && !interaction.isAutocomplete()) return;
 	const command = client.slashcommands.get(interaction.commandName);
 
 	if (!command) return;
-
+  client.logger.log(`Slash Command ${interaction.commandName}`)
 	try {
 		await command.execute(interaction);
 	} catch (error) {
