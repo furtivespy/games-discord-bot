@@ -77,9 +77,9 @@ class Action extends Command {
                         objmsg.react("🇦").then(r => objmsg.react("🇧").then(r => objmsg.react("🇨").then(r => objmsg.react("🇩").then(r => objmsg.react("🚫")))))
 
                             try {
-                                var collectedObjective = await objmsg.awaitReactions((reaction, user) => user.id == currentPlayer 
+                                var collectedObjective = await objmsg.awaitReactions({filter: (reaction, user) => user.id == currentPlayer 
                                     && (reaction.emoji.name == '🇦' || reaction.emoji.name == '🇧' || reaction.emoji.name == '🇨' || reaction.emoji.name == '🇩' || reaction.emoji.name == '🚫'),
-                                    { max: 1, time: 60000 })
+                                    max: 1, time: 60000 })
                             } catch {
                                 collectedObjective = {}
                             }
@@ -128,9 +128,9 @@ class Action extends Command {
                 msg.react("🎲").then(r => msg.react("🛍"))
                 
                 try {
-                    var collected = await msg.awaitReactions((reaction, user) => user.id == currentPlayer 
+                    var collected = await msg.awaitReactions({filter: (reaction, user) => user.id == currentPlayer 
                         && (reaction.emoji.name == '🎲' || reaction.emoji.name == '🛍'),
-                        { max: 1, time: 60000 })
+                        max: 1, time: 60000 })
                 } catch {
                     collected = {}
                 }
@@ -153,9 +153,9 @@ class Action extends Command {
                         msg.react("🔵").then(r => msg.react("🟢").then(r => msg.react("🔴").then(r => msg.react("⚪").then(r => msg.react("🟡")))))
 
                         try {
-                            var collected2 = await msg.awaitReactions((reaction, user) => user.id == currentPlayer 
+                            var collected2 = await msg.awaitReactions({filter: (reaction, user) => user.id == currentPlayer 
                                 && (reaction.emoji.name == '🔵' || reaction.emoji.name == '🟢' || reaction.emoji.name == '🔴' || reaction.emoji.name == '⚪' || reaction.emoji.name == '🟡'),
-                                { max: 1, time: 60000 })
+                                max: 1, time: 60000 })
                         } catch {
                             collected2 = {}
                         }
@@ -189,10 +189,10 @@ class Action extends Command {
                     .then(r => msg.react("6️⃣").then(r => msg.react("7️⃣").then(r => msg.react("8️⃣").then(r => msg.react("9️⃣").then(r => msg.react("🔟"))))))))))
 
                     try {
-                        var collectedSwap = await msg.awaitReactions((reaction, user) => user.id == currentPlayer 
+                        var collectedSwap = await msg.awaitReactions({filter: (reaction, user) => user.id == currentPlayer 
                             && (reaction.emoji.name == '1️⃣' || reaction.emoji.name == '2️⃣' || reaction.emoji.name == '3️⃣' || reaction.emoji.name == '4️⃣' || reaction.emoji.name == '5️⃣'
                              || reaction.emoji.name == '6️⃣' || reaction.emoji.name == '7️⃣' || reaction.emoji.name == '8️⃣' || reaction.emoji.name == '9️⃣' || reaction.emoji.name == '🔟'),
-                            { max: 1, time: 60000 })
+                            max: 1, time: 60000 })
                     } catch {
                         collectedSwap = {}
                     }
@@ -212,9 +212,9 @@ class Action extends Command {
                     await msg.edit(exchangeEmbed2)
                     msg.react("📤").then(r => msg.react("📥"))
                     try {
-                        var collectedDirection = await msg.awaitReactions((reaction, user) => user.id == currentPlayer 
+                        var collectedDirection = await msg.awaitReactions({filter: (reaction, user) => user.id == currentPlayer 
                             && (reaction.emoji.name == '📤' || reaction.emoji.name == '📥'),
-                            { max: 1, time: 60000 })
+                            max: 1, time: 60000 })
                     } catch {
                         collectedDirection = {}
                     }

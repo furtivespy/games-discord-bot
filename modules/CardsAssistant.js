@@ -16,10 +16,11 @@ class CardsAssistant {
         CardsAssistant.AddReactions(player.hands.length, msg)
         
         try {
-            var deckReaction = await msg.awaitReactions((reaction, user) => user.id == player.userId 
+            var deckReaction = await msg.awaitReactions(
+                {filter: (reaction, user) => user.id == player.userId 
                 && (reaction.emoji.name == '1️⃣' || reaction.emoji.name == '2️⃣' || reaction.emoji.name == '3️⃣' || reaction.emoji.name == '4️⃣' || reaction.emoji.name == '5️⃣'
                  || reaction.emoji.name == '6️⃣' || reaction.emoji.name == '7️⃣' || reaction.emoji.name == '8️⃣' || reaction.emoji.name == '9️⃣' || reaction.emoji.name == '🔟'),
-                { max: 1, time: 60000 })
+                max: 1, time: 60000 })
         } catch {
             deckReaction = {}
         }
@@ -54,11 +55,11 @@ class CardsAssistant {
             await msg.react("⏭️") 
         }
         try {
-            var deckReaction = await msg.awaitReactions((reaction, user) => user.id == player.userId 
+            var deckReaction = await msg.awaitReactions({filter: (reaction, user) => user.id == player.userId 
                 && (reaction.emoji.name == '1️⃣' || reaction.emoji.name == '2️⃣' || reaction.emoji.name == '3️⃣' || reaction.emoji.name == '4️⃣' || reaction.emoji.name == '5️⃣'
                  || reaction.emoji.name == '6️⃣' || reaction.emoji.name == '7️⃣' || reaction.emoji.name == '8️⃣' || reaction.emoji.name == '9️⃣' || reaction.emoji.name == '🔟')
                  || reaction.emoji.name == '⏭️' || reaction.emoji.name == '⏮️',
-                { max: 1, time: 60000 })
+                max: 1, time: 60000 })
         } catch {
             deckReaction = {}
         }

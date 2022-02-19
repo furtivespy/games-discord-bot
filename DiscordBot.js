@@ -221,7 +221,18 @@ class DiscordBot extends Client {
   }
 }
 
-const client = new DiscordBot({ partials: ['MESSAGE', 'CHANNEL', 'REACTION'], intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MEMBERS, Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.GUILD_MESSAGE_REACTIONS] });
+const client = new DiscordBot(
+  { 
+    partials: ['MESSAGE', 'CHANNEL', 'REACTION'], 
+    intents: [
+      Intents.FLAGS.GUILDS, 
+      Intents.FLAGS.GUILD_MEMBERS, 
+      Intents.FLAGS.GUILD_MESSAGES, 
+      Intents.FLAGS.GUILD_MESSAGE_REACTIONS, 
+      Intents.FLAGS.DIRECT_MESSAGES,
+      Intents.FLAGS.DIRECT_MESSAGE_REACTIONS
+    ] 
+  });
 const init = async () => {
   klaw("./commands").on("data", (item) => {
       const cmdFile = path.parse(item.path);
