@@ -11,25 +11,15 @@ class Show {
             client.getGameData(`game-${interaction.channel.id}`)
         )
 
-        if (interaction.isAutocomplete()) {
-
-            await interaction.respond([
-                { name: "Fake Card 1", value: "one" },
-                { name: "Fake Card 2", value: "two" }
-            ])
-
+        await interaction.reply({ content: "Not Ready Yet!?!?!?", ephemeral: true })
+        /*
+        if (gameData.isdeleted) {
+            //await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
         } else {
-
-            await interaction.reply({ content: "Not Ready Yet!?!?!?", ephemeral: true })
-            /*
-            if (gameData.isdeleted) {
-                //await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
-            } else {
-                
-                
-            }
-            */
+            
+            
         }
+        */
     }
 }
 

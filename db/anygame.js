@@ -21,8 +21,10 @@ class GameDatabase {
     defaultDeck = {
         name: "",
         allCards: [],
-        currentDeck: [],
-        discard: [],
+        piles: {
+            draw: [],
+            discard: [],
+        }
     }
     
     defaultPlayer = {
