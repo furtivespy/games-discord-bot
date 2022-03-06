@@ -12,12 +12,11 @@ class Shuffle {
         )
 
         if (interaction.isAutocomplete()) {
-
-            await interaction.respond([
-                { name: "Fake Deck 1", value: "one" },
-                { name: "Fake Deck 2", value: "two" }
-            ])
-
+            if (gameData.isdeleted || gameData.decks.length < 1){
+                await interaction.respond([])
+                return
+            }
+            await interaction.respond(gameData.decks.map(d => ({name: d.name, value: d.name})))
         } else {
 
             await interaction.reply({ content: "Not Ready Yet!?!?!?", ephemeral: true })

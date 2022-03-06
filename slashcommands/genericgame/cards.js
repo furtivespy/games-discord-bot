@@ -1,5 +1,6 @@
 const SlashCommand = require('../../base/SlashCommand.js')
 const { SlashCommandBuilder } = require('@discordjs/builders');
+const GameDB = require('../../db/anygame.js')
 const Discard = require(`../../subcommands/cards/discard`)
 const Draw = require(`../../subcommands/cards/draw`)
 const Flip = require(`../../subcommands/cards/flip`)
@@ -8,6 +9,7 @@ const Play = require(`../../subcommands/cards/play`)
 const Reveal = require(`../../subcommands/cards/reveal`)
 const Show = require(`../../subcommands/cards/show`)
 const Shuffle = require(`../../subcommands/cards/shuffle`)
+const Help = require(`../../subcommands/cards/help`)
 
 class Cards extends SlashCommand {
     constructor(client){
@@ -21,6 +23,11 @@ class Cards extends SlashCommand {
 		  this.data = new SlashCommandBuilder()
             .setName(this.help.name)
             .setDescription("Card Stuff")
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("help")
+                    .setDescription("Quick reference for all the /cards commands")
+                )
             .addSubcommandGroup(group => 
                 group.setName("deck").setDescription("Manage decks of cards")
                 .addSubcommand(subcommand =>
@@ -31,9 +38,9 @@ class Cards extends SlashCommand {
                         .addStringOption(option => option.setName('cardset').setDescription('What set of cards to use').setRequired(true)
                             .addChoices(
                                 [
-                                    [ "Standard 52 Card Poker Deck", "standard" ],
-                                    [ "Pear/Triangle (one 1, two 2s ... ten 10s)", "pear" ],
-                                    [ "Custom", "custom" ]
+                                    ...GameDB.CurrentCardList,
+                                    //[ "Custom from list", "custom" ],
+                                    //[ "Custom Empty", "customempty" ]
                                 ]
                             ))
                         .addStringOption(option => option.setName('customlist').setDescription('list of cards for the new custom deck. separate with commas'))
@@ -43,6 +50,12 @@ class Cards extends SlashCommand {
                         .setName("draw")
                         .setDescription("Draw a card")
                         .addStringOption(option => option.setName('deck').setDescription('Deck to draw from').setAutocomplete(true))
+                    ) 
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("configure")
+                        .setDescription("Configure a deck (rules etc.)")
+                        .addStringOption(option => option.setName('deck').setDescription('Deck to configure').setAutocomplete(true))
                     ) 
                 .addSubcommand(subcommand =>
                     subcommand
@@ -88,6 +101,9 @@ class Cards extends SlashCommand {
     async execute(interaction) {
         try {
             switch (interaction.options.getSubcommand()) {
+                case "help":
+                    await Help.execute(interaction, this.client)
+                    break
                 case "discard":
                     await Discard.execute(interaction, this.client)
                     break

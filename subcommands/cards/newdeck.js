@@ -1,5 +1,5 @@
 const GameDB = require('../../db/anygame.js')
-const { cloneDeep } = require('lodash')
+const { cloneDeep, find, shuffle } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
 class NewDeck {
@@ -11,67 +11,56 @@ class NewDeck {
             client.getGameData(`game-${interaction.channel.id}`)
         )
 
+        if (gameData.isdeleted){
+            await interaction.reply(
+                { content: `Please use "/game newgame" command to create a game. I need a game in this channel to attach the deck to.`, 
+                  ephemeral: true })
+            return
+        }
+
         const inputName = interaction.options.getString('name')
         const inputSet = interaction.options.getString('cardset')
         const inputCustom = interaction.options.getString('customlist')
-/*
-        if (gameData.decks.)
 
-
-
-
-
-        if (!args[0] || !args[1]) {
-            const cardsEmbed = new Discord.MessageEmbed().setColor(13928716).setTitle("Add Deck for Use in Channel").setTimestamp()
-            let deckList = ""
-            for (let i = 0; i < CardDB.deckList.length; i++) {
-                deckList += `**${CardDB.deckList[i].name}** - ${CardDB.deckList[i].description}\n`
-            }
-            cardsEmbed.addField(`Avaialble Decks`, deckList)
-            cardsEmbed.addField(`Instructions`, `To add a deck use command in form of &cards new local-name deck_name
-            e.g. \`&cards new MyDeck playing_cards\``)
-
-            await message.channel.send({embeds: [cardsEmbed]})
-
-        } else {
-            let newName = args.shift()
-            if (CardDB[args[0]]) {
-                if (_.find(gameData.decks, {'name': newName})) {
-                    await message.reply(`A deck named ${newName} already exists in this channel`)
-                } else {
-                    gameData.decks.push({name: newName, allCards: [...CardDB[args[0]]], currentDeck: [...CardDB[args[0]]], discard: []})
-                    
-                    this.client.setGameData(`cards-${message.channel.id}`, gameData)
-                    await message.reply(`added ${newName} to this channels cards. Remember to shuffle!`)
-                }
-            } else {
-                let newDeck = _.split(args.join(" "), `,`)
-                if (newDeck.length > 1) {
-                    gameData.decks.push({name: newName, allCards: [...newDeck], currentDeck: [...newDeck], discard: []})
-                    this.client.setGameData(`cards-${message.channel.id}`, gameData)
-                    await message.reply(`added ${newName} to this channels cards. Remember to shuffle!`)
-                }
-            }
+        if (find(gameData.decks, {'name': inputName})) {
+            await interaction.reply({ content: `There is already a deck with that name...`, ephemeral: true })
+            return
+        } 
+        if (inputSet == 'custom' && (!inputCustom || inputCustom.length == 0)) {
+            await interaction.reply({ content: `When choosing a custom deck, please include the "customlist" of cards`, ephemeral: true })
+            return
         }
 
-*/
+        let newdeck = Object.assign(
+            {},
+            cloneDeep(GameDB.defaultDeck),
+            {name: inputName}
+        )
 
-
-
-
-
-
-
-
-        await interaction.reply({ content: "Not Ready Yet!?!?!?", ephemeral: true })
-        /*
-        if (gameData.isdeleted) {
-            //await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
+        if (inputSet != 'custom' && inputSet != 'customempty'){
+            newdeck.allCards = GameDB.MakeSpecificDeck(inputName, inputSet)
         } else {
-            
-            
+            await interaction.reply({ content: `Custom decks are not ready yet...`, ephemeral: true })
+            return
         }
-        */
+
+        newdeck.piles.draw.cards = cloneDeep(shuffle(newdeck.allCards))
+        gameData.decks.push(newdeck)
+
+        client.setGameData(`game-${interaction.channel.id}`, gameData)
+        let deckEmbeds = []
+        gameData.decks.forEach(deck => {
+            deckEmbeds.push(Formatter.deckStatus(deck))
+        })
+
+        await interaction.reply({ 
+            content: `Added and shuffled the new deck: ${inputName}`,
+            embeds: [
+                await Formatter.GameStatus(gameData, interaction.guild),
+                ...deckEmbeds
+            ]
+        })
+
     }
 }
 

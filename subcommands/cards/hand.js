@@ -2,7 +2,7 @@ const GameDB = require('../../db/anygame.js')
 const { cloneDeep } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
-class Status {
+class Hand {
     async execute(interaction, client) {
 
         let gameData = Object.assign(
@@ -13,19 +13,23 @@ class Status {
 
         if (gameData.isdeleted) {
             await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
-        } else {
-            let deckEmbeds = []
-            gameData.decks.forEach(deck => {
-                deckEmbeds.push(Formatter.deckStatus(deck))
-            })
-            await interaction.reply({ 
-            embeds: [await Formatter.GameStatus(gameData, interaction.guild),
-                ...deckEmbeds
-            ]
-            })
+            return
         }
+
+        let player = find(gameData.players, {userId: interaction.user.id})
+        if (!player){
+            await interaction.reply({ content: "I don't think you're playing this game...", ephemeral: true })
+            return
+        }
+
+        await interaction.reply({ 
+            embeds: [
+                Formatter.playerSecretHand(gameData, player)
+            ],
+            ephemeral: true
+        })        
     }
 }
 
 
-module.exports = new Status()
+module.exports = new Hand()

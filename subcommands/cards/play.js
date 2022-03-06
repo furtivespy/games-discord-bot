@@ -1,5 +1,5 @@
 const GameDB = require('../../db/anygame.js')
-const { cloneDeep } = require('lodash')
+const { cloneDeep, sortBy, find, filter, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
 class Play {
@@ -12,23 +12,56 @@ class Play {
         )
 
         if (interaction.isAutocomplete()) {
+            if (gameData.isdeleted) { return }
+            let ddplayer = find(gameData.players, {userId: interaction.user.id})
+            if (!ddplayer) { return }
 
-            await interaction.respond([
-                { name: "Fake Card 1", value: "one" },
-                { name: "Fake Card 2", value: "two" }
-            ])
+            await interaction.respond(
+                sortBy(
+                    filter(ddplayer.hands.main, 
+                        crd => Formatter.cardShortName(crd).toLowerCase()
+                            .includes(interaction.options.getString('card').toLowerCase())
+                        ),  ['suit', 'value', 'name']).map(crd => 
+                    ({name: Formatter.cardShortName(crd), value: crd.id}))
+            )
 
         } else {
 
-            await interaction.reply({ content: "Not Ready Yet!?!?!?", ephemeral: true })
-            /*
             if (gameData.isdeleted) {
-                //await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
-            } else {
-                
-                
+                await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
+                return
             }
-            */
+
+            const cardid = interaction.options.getString('card')
+            let player = find(gameData.players, {userId: interaction.user.id})
+            if (!player){
+                await interaction.reply({ content: "Something is broken!?", ephemeral: true })
+                return
+            }
+            let card = find(player.hands.main, {id: cardid})
+            let deck = find(gameData.decks, {name: card.origin})
+
+            player.hands.main.splice(findIndex(player.hands.main, {id: card.id}), 1)
+            deck.piles.discard.cards.push(card)
+
+            let deckEmbeds = []
+            gameData.decks.forEach(deck => {
+                deckEmbeds.push(Formatter.deckStatus(deck))
+            })
+
+            client.setGameData(`game-${interaction.channel.id}`, gameData)
+            await interaction.reply({ content: "Played a card:",
+            embeds: [
+                Formatter.oneCard(card),
+                ...deckEmbeds
+            ]})
+            await interaction.followUp({ 
+                embeds: [
+                    Formatter.playerSecretHand(gameData, player)
+                ],
+                ephemeral: true
+            })
+
         }
     }
 }

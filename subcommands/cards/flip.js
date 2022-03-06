@@ -1,5 +1,5 @@
 const GameDB = require('../../db/anygame.js')
-const { cloneDeep } = require('lodash')
+const { cloneDeep, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
 class Flip {
@@ -12,23 +12,28 @@ class Flip {
         )
 
         if (interaction.isAutocomplete()) {
-
-            await interaction.respond([
-                { name: "Fake Deck 1", value: "one" },
-                { name: "Fake Deck 2", value: "two" }
-            ])
-
-        } else {
-
-            await interaction.reply({ content: "Not Ready Yet!?!?!?", ephemeral: true })
-            /*
-            if (gameData.isdeleted) {
-                //await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
-            } else {
-                
-                
+            if (gameData.isdeleted || gameData.decks.length < 1){
+                await interaction.respond([])
+                return
             }
-            */
+            await interaction.respond(gameData.decks.map(d => ({name: d.name, value: d.name})))
+        } else {
+            const inputDeck = interaction.options.getString('deck')
+            const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
+
+            if (!deck || deck.piles.draw.length < 0){
+                await interaction.reply({ content: "No cards in draw pile", ephemeral: true })
+                return
+            } 
+
+            const theCard = deck.piles.draw.cards.shift()
+            deck.piles.discard.cards.push(theCard)
+            client.setGameData(`game-${interaction.channel.id}`, gameData)
+
+            await interaction.reply({ 
+                content: `Flipped from the top of ${deck.name}`, 
+                embeds: [Formatter.oneCard(theCard)]
+            })
         }
     }
 }

@@ -36,6 +36,23 @@ class GameFormatter {
         return newEmbed;
     }
 
+    static playerSecretHand(gameData, player){
+        
+        const newEmbed = new Discord.MessageEmbed()
+            .setColor(13502711)
+            .setTitle(`Your Current Information`)
+            .setDescription(`**Current Game:** ${gameData.name}\n`)
+
+        if (player.hands.main.length > 0){
+            let cardList = ""
+            this.cardSort(player.hands.main).forEach(card => {
+                cardList += `${this.cardLongName(card)}\n`
+            })
+            newEmbed.addField("Cards in Hand", cardList)
+        }
+        return newEmbed
+    }
+
     static async GameWinner(gameData, guild){
         const winnerName = guild.members.cache.get(gameData.winner)?.displayName
 
@@ -61,13 +78,77 @@ class GameFormatter {
         return newEmbed
     }
 
+    static deckStatus(deckData){
+        const newEmbed = new Discord.MessageEmbed()
+            .setColor(13502711)
+            .setTitle(`${deckData.name} deck`)
+            .setDescription(`*started with ${deckData.allCards.length} cards*`)
+
+        for (const pile in deckData.piles){
+            newEmbed.addField(`${pile} pile`, `${deckData.piles[pile].cards.length} cards`, true)
+        }
+        
+        return newEmbed
+    }
+
+    static cardSort(cardArry){
+        return sortBy(cardArry, ['suit', 'value', 'name'])
+    }
+
+    static cardShortName(cardObj){
+        let cardStr = cardObj.name
+        if (cardObj.type.length > 0) { 
+            switch (cardObj.format){
+                case "B":
+                    cardStr = `${cardObj.type}: ${cardStr}`
+                    break;
+                default:
+                    cardStr += ` of ${cardObj.type}`
+                    break;
+            }
+        }
+        return cardStr
+    }
+
+    static cardLongName(cardObj){
+        let cardStr = this.cardShortName(cardObj)
+        if (cardObj.description.length > 0) {
+            cardStr += ` (${cardObj.description})`
+        }
+        return cardStr
+    }
+
+    static oneCard(cardObj){
+        let cardStr = this.cardShortName(cardObj)
+
+        const newEmbed = new Discord.MessageEmbed()
+            .setColor(13502711)
+            .setTitle(cardStr)
+
+        if (cardObj.description.length > 0) { newEmbed.setDescription(cardObj.description) }
+        
+        if (cardObj.url) { newEmbed.setImage(cardObj.url) }
+
+        return newEmbed        
+    }
+
+    static handEmbed(playerData, guildName, channelName) {
+        const cardsEmbed = new Discord.MessageEmbed().setColor(13928716).setTitle(`All cards in hand in #${channelName} at ${guildName}`).setTimestamp()
+        playerData.hands.forEach(element => {
+            if (element.cards.length > 0) {
+                cardsEmbed.addField(`From ${element.deck} deck`, element.cards.sort().join("\n"))                
+            } else {
+                cardsEmbed.addField(`From ${element.deck} deck`, "No cards")    
+            }
+
+        }); 
+        return cardsEmbed
+    }
+
     static CountCards(player){
         let cards = 0
         if(!player) return 0
-        player.hands.forEach(hand => {
-            cards += hand.cards.length
-        });
-        return cards
+        return player.hands.main.length
     }
 }
 
