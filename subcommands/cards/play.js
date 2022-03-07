@@ -34,14 +34,14 @@ class Play {
 
             const cardid = interaction.options.getString('card')
             let player = find(gameData.players, {userId: interaction.user.id})
-            if (!player){
+            if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
                 await interaction.reply({ content: "Something is broken!?", ephemeral: true })
                 return
             }
+            
             let card = find(player.hands.main, {id: cardid})
             let deck = find(gameData.decks, {name: card.origin})
-
-            player.hands.main.splice(findIndex(player.hands.main, {id: card.id}), 1)
+            player.hands.main.splice(findIndex(player.hands.main, {id: cardid}), 1)
             deck.piles.discard.cards.push(card)
 
             let deckEmbeds = []
