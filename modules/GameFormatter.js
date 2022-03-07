@@ -46,7 +46,13 @@ class GameFormatter {
         if (player.hands.main.length > 0){
             let cardList = ""
             this.cardSort(player.hands.main).forEach(card => {
-                cardList += `${this.cardLongName(card)}\n`
+                if (card.url){
+                    cardList += `• ${this.cardLongName(card)} [image](${card.url})\n`
+                } else {
+                    cardList += `• ${this.cardLongName(card)}\n`
+                }
+                
+                
             })
             newEmbed.addField("Cards in Hand", cardList)
         }
