@@ -2,7 +2,7 @@ const GameDB = require('../../db/anygame.js')
 const { cloneDeep, sortBy, find, filter, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
-class Discard {
+class Rturn {
     async execute(interaction, client) {
 
         let gameData = Object.assign(
@@ -42,7 +42,7 @@ class Discard {
             let card = find(player.hands.main, {id: cardid})
             let deck = find(gameData.decks, {name: card.origin})
             player.hands.main.splice(findIndex(player.hands.main, {id: cardid}), 1)
-            deck.piles.discard.cards.push(card)
+            deck.piles.draw.cards.unshift(card)
 
             let deckEmbeds = []
             gameData.decks.forEach(deck => {
@@ -50,12 +50,12 @@ class Discard {
             })
 
             client.setGameData(`game-${interaction.channel.id}`, gameData)
-            await interaction.reply({ content: "Discarded a card:",
+            await interaction.reply({ content: "Returned a card:",
             embeds: [
                 await Formatter.GameStatus(gameData, interaction.guild),
                 ...deckEmbeds
             ]})
-            await interaction.followUp({ content: `You discarded ${Formatter.cardShortName(card)}`,
+            await interaction.followUp({ content: `You returned ${Formatter.cardShortName(card)}`,
                 embeds: [
                     Formatter.playerSecretHand(gameData, player)
                 ],
@@ -67,4 +67,4 @@ class Discard {
 }
 
 
-module.exports = new Discard()
+module.exports = new Rturn()

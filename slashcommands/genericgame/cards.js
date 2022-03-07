@@ -7,6 +7,7 @@ const Flip = require(`../../subcommands/cards/flip`)
 const NewDeck = require(`../../subcommands/cards/newdeck`)
 const Play = require(`../../subcommands/cards/play`)
 const Reveal = require(`../../subcommands/cards/reveal`)
+const Rturn = require(`../../subcommands/cards/return`)
 const Show = require(`../../subcommands/cards/show`)
 const Shuffle = require(`../../subcommands/cards/shuffle`)
 const Help = require(`../../subcommands/cards/help`)
@@ -95,6 +96,13 @@ class Cards extends SlashCommand {
                         .setDescription("reveal a card from your hand")
                         .addStringOption(option => option.setName('card').setDescription('Card to play').setAutocomplete(true).setRequired(true))
                     ) 
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("return")
+                        .setDescription("return a card from your hand to the top of the draw pile")
+                        .addStringOption(option => option.setName('card').setDescription('Card to play').setAutocomplete(true).setRequired(true))
+                    ) 
+                
             )                    
     }
 
@@ -124,6 +132,9 @@ class Cards extends SlashCommand {
                     break
                 case "reveal":
                     await Reveal.execute(interaction, this.client)
+                    break
+                case "return":
+                    await Rturn.execute(interaction, this.client)
                     break
                 case "shuffle":
                     await Shuffle.execute(interaction, this.client)

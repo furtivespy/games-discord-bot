@@ -16,8 +16,9 @@ class Help {
 • **cards deck configure** - To add special rules to a deck. *Not Avaialbe Yet*
 • **cards deck flipcard** - Flips and shows the top card of the deck. It is then added to the discard pile
 • **cards deck shuffle** - Shuffle the draw and discard piles together into a new draw pile. *Not Avaialbe Yet*
-• **cards hand discard** - Puts a card from your hand into the deck's discard pile. Card is not show to other players. *Not Avaialbe Yet*
+• **cards hand discard** - Puts a card from your hand into the deck's discard pile. Card is not show to other players. 
 • **cards hand play** - Plays a card from your hand into the deck's discard pile. Card is shows to everyone as played.
+• **cards hand return** - Returns a card to the top of the draw pile. Not shown to others. *Not Avaialbe Yet*
 • **cards hand reveal** - Reveals a card in your hand to other players, but card stays in your hand. *Not Avaialbe Yet*
 • **cards hand show** - Shows you what cards you have in your hand.
 
