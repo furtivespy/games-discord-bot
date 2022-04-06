@@ -88,7 +88,7 @@ class GameFormatter {
         const newEmbed = new Discord.MessageEmbed()
             .setColor(13502711)
             .setTitle(`${deckData.name} deck`)
-            .setDescription(`*started with ${deckData.allCards.length} cards*`)
+            .setDescription(`*started with ${deckData.allCards.length} cards*\nShuffle style: ${deckData.shuffleStyle}`)
 
         for (const pile in deckData.piles){
             newEmbed.addField(`${pile} pile`, `${deckData.piles[pile].cards.length} cards`, true)

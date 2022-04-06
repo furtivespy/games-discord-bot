@@ -27,6 +27,7 @@ class GameDatabase {
     defaultDeck = {
         name: "",
         allCards: [],
+        shuffleStyle: "standard",
         piles: {
             draw: { cards: [], viewable: false },
             discard: { cards: [], viewable: true },
