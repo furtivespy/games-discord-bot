@@ -1,8 +1,8 @@
 const Discord = require('discord.js')
 const Emoji = require('./EmojiAssitant')
-const { sortBy } = require('lodash')
+const { sortBy, floor } = require('lodash')
 var AsciiTable = require('ascii-table')
-
+const { createCanvas, Image, loadImage } = require('canvas');
 
 class GameFormatter {
     static async GameStatus(gameData, guild){
@@ -15,13 +15,25 @@ class GameFormatter {
         if (gameData.decks.length > 0) { //With Cards
             let handName = "Cards in Hand"
             if (gameData.decks.length == 1) {
-                handName = `${gameData.decks[0].name} Cards`
+                handName = `${gameData.decks[0].name} Hand`
             }
-            table.setHeading("Player", "Score", handName)
+            let draftCards = 0
+            gameData.players.forEach(player => {
+                draftCards += player.hands.draft.length
+            })
+            if (draftCards > 0){
+                table.setHeading("Player", "Score", handName, "Draft")
+            } else {
+                table.setHeading("Player", "Score", handName)
+            }
             sortBy(gameData.players, ['order']) .forEach(play => {
                 const cards = GameFormatter.CountCards(play)
                 const name = guild.members.cache.get(play.userId)?.displayName
-                table.addRow(`${Emoji.IndexToEmoji(play.order)}${name ?? play.name ?? play.userId}`, play.score, cards)
+                if (draftCards > 0){
+                    table.addRow(`${Emoji.IndexToEmoji(play.order)}${name ?? play.name ?? play.userId}`, play.score, cards, play.hands.draft.length)
+                } else {
+                    table.addRow(`${Emoji.IndexToEmoji(play.order)}${name ?? play.name ?? play.userId}`, play.score, cards)
+                }
             });
         } else { //No Cards
             table.setHeading("Player", "Score")
@@ -57,6 +69,102 @@ class GameFormatter {
             newEmbed.addField("Cards in Hand", cardList)
         }
         return newEmbed
+    }
+
+    static async playerSecretHandAndImages(gameData, player){
+        
+        let results = {
+            embeds: [],
+            attachments: []
+        }
+
+        //Player Hand
+        const newEmbed = new Discord.MessageEmbed()
+            .setColor(13502711)
+            .setTitle(`Your Current Information`)
+            .setDescription(`**Current Game:** ${gameData.name}\n`)
+        const mainHand = await this.genericHand(player, newEmbed, "main", "Cards in Hand")
+        if (mainHand){
+            results.attachments.push(mainHand)
+        }
+        results.embeds.push(newEmbed)
+        
+        //Draft Hand
+        if (player.hands.draft && player.hands.draft.length > 0){
+            const draftEmbed = new Discord.MessageEmbed()
+            .setColor(13502711)
+            .setTitle(`Draft Cards`)
+            .setDescription(`*These are the cards you can draft from*`)
+            const draftHand = await this.genericHand(player, draftEmbed, "draft", "Cards to Draft From")
+            if (draftHand){
+                results.attachments.push(draftHand)
+            }
+            results.embeds.push(draftEmbed)
+        }
+
+        return results
+    }
+
+    static async genericHand(player, embed, handName, fieldTitle){
+        let hasImages = false;
+
+        if (player.hands[handName].length > 0){
+            let cardList = ""
+            this.cardSort(player.hands[handName]).forEach(card => {
+                let newcardinfo = ""
+                if (card.url){
+                    hasImages = true
+                    newcardinfo = `• ${this.cardLongName(card)} [image](${card.url})\n`
+                } else {
+                    newcardinfo = `• ${this.cardLongName(card)}\n`
+                }
+                
+                if (cardList.length + newcardinfo.length > 1020){
+                    embed.addField(fieldTitle, cardList)
+                    cardList = ""
+                }
+                cardList += newcardinfo
+            })
+            embed.addField(fieldTitle, cardList)
+        }
+        if (hasImages){
+            const newAttach = new Discord.MessageAttachment(await this.playerHandImage(player, handName), `${handName}Hand.png`)
+            embed.setImage(`attachment://${handName}Hand.png`)
+            return newAttach
+        }
+        return null
+    }
+
+    static async playerHandImage(player, handName){
+        const imgList = []
+        this.cardSort(player.hands[handName]).forEach(card => {
+            if (card.url){
+                imgList.push(card.url)
+            } 
+        })
+        let canvas = createCanvas(1200, 200);
+        let ctx = canvas.getContext('2d');    
+        const cardWidth = 200
+        let rowstart = 0
+        let rowend = 0
+        for(let i = 0; i < imgList.length; i++){
+            const cardImage = await loadImage(imgList[i])
+            const cardHeight = (cardWidth / cardImage.width) * cardImage.height
+            const spot = i % 6
+            if (spot == 0){
+                rowstart = rowend
+            }
+            const totalHeight = rowstart + cardHeight
+            if (totalHeight > canvas.height){
+                rowend = totalHeight
+                const oldCanvas = canvas
+                canvas = createCanvas(oldCanvas.width, totalHeight)
+                ctx = canvas.getContext('2d')
+                ctx.drawImage(oldCanvas, 0, 0)
+            }
+            ctx.drawImage(cardImage, (i%6) * cardWidth, rowstart, cardWidth, cardHeight);
+        }
+        return canvas.toBuffer()
     }
 
     static async GameWinner(gameData, guild){

@@ -65,13 +65,21 @@ class Draw {
                     ...deckEmbeds
                 ]
             })
-            await interaction.followUp({ 
-                content: `You drew:`, 
-                embeds: [Formatter.oneCard(theCard), 
-                    Formatter.playerSecretHand(gameData, player)
-                ],
-                ephemeral: true
-            })
+            var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
+            if (handInfo.attachments.length >0){
+                await interaction.followUp({ 
+                    content: `You drew:`, 
+                    embeds: [Formatter.oneCard(theCard), ...handInfo.embeds],
+                    files: [...handInfo.attachments],
+                    ephemeral: true
+                })  
+            } else {
+                await interaction.followUp({ 
+                    content: `You drew:`, 
+                    embeds: [Formatter.oneCard(theCard), ...handInfo.embeds],
+                    ephemeral: true
+                })  
+            }
         }
     }
 }

@@ -52,10 +52,6 @@ class Deal {
 
             client.setGameData(`game-${interaction.channel.id}`, gameData)
 
-            let deckEmbeds = []
-            gameData.decks.forEach(deck => {
-                deckEmbeds.push(Formatter.deckStatus(deck))
-            })
             await interaction.reply({ 
                 content: `Dealt out a total of ${dealCount} cards.`,
                 embeds: [

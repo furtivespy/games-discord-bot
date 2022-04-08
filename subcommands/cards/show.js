@@ -22,12 +22,27 @@ class Show {
             return
         }
 
-        await interaction.reply({ 
-            embeds: [
-                Formatter.playerSecretHand(gameData, player)
-            ],
-            ephemeral: true
-        })   
+        interaction.deferReply({ephemeral: true});
+
+        var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
+
+        if (handInfo.attachments.length >0){
+            await interaction.editReply({ 
+                embeds: [
+                    ...handInfo.embeds
+                ],
+                files: [...handInfo.attachments],
+                ephemeral: true
+            })  
+        } else {
+            await interaction.editReply({ 
+                embeds: [
+                    ...handInfo.embeds
+                ],
+                ephemeral: true
+            })  
+        }
+         
     }
 }
 

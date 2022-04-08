@@ -4,6 +4,9 @@ const GameDB = require('../../db/anygame.js')
 const Configure = require('../../subcommands/cards/configuredeck')
 const Deal = require('../../subcommands/cards/deal')
 const Discard = require(`../../subcommands/cards/discard`)
+const DraftDeal = require(`../../subcommands/cards/draftdeal`)
+const DraftPass = require(`../../subcommands/cards/draftpass`)
+const DraftTake = require(`../../subcommands/cards/drafttake`)
 const Draw = require(`../../subcommands/cards/draw`)
 const Flip = require(`../../subcommands/cards/flip`)
 const NewDeck = require(`../../subcommands/cards/newdeck`)
@@ -120,7 +123,7 @@ class Cards extends SlashCommand {
                     subcommand
                         .setName("deal")
                         .setDescription("deal cards to the draft")
-                        .addIntegerOption(option => option.setName('number').setDescription('Number of cards to deal').setRequired(true))
+                        .addIntegerOption(option => option.setName('count').setDescription('Number of cards to deal each player to draft from').setRequired(true))
                         .addStringOption(option => option.setName('deck').setDescription('Deck to deal from').setAutocomplete(true))
                 )
                 .addSubcommand(subcommand =>
@@ -133,53 +136,86 @@ class Cards extends SlashCommand {
                     subcommand
                         .setName("pass")
                         .setDescription("pass the draft cards to the next player (for all players!!)")
-                        .addStringOption(option => option.setName('deck').setDescription('Deck to deal from').setAutocomplete(true))
+                        .addStringOption(option => option.setName('direction').setDescription('Which direction to pass ALL cards for ALL players').setRequired(true)
+                        .addChoices([["Clockwise (in turn order)", "asc"], ["Counterclockwise (reverse turn order)", "desc"]]))
                 )
             )                
     }
 
     async execute(interaction) {
         try {
-            switch (interaction.options.getSubcommand()) {
-                case "help":
-                    await Help.execute(interaction, this.client)
+            switch (interaction.options.getSubcommandGroup()) {
+                case "deck":
+                    switch (interaction.options.getSubcommand()) {
+                        case "configure":
+                            await Configure.execute(interaction, this.client)
+                            break
+                        case "deal":
+                            await Deal.execute(interaction, this.client)
+                            break
+                        case "draw":
+                            await Draw.execute(interaction, this.client)
+                            break
+                        case "flipcard":
+                            await Flip.execute(interaction, this.client)
+                            break
+                        case "new":
+                            await NewDeck.execute(interaction, this.client)
+                            break
+                        case "shuffle":
+                            await Shuffle.execute(interaction, this.client)
+                            break
+                        default:
+                            await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
+                    }
                     break
-                case "configure":
-                    await Configure.execute(interaction, this.client)
+                case "draft":
+                    switch (interaction.options.getSubcommand()) {
+                        case "deal":
+                            await DraftDeal.execute(interaction, this.client)
+                            break
+                        case "pass":
+                            await DraftPass.execute(interaction, this.client)
+                            break
+                        case "take":
+                            await DraftTake.execute(interaction, this.client)
+                            break
+                        default:
+                            await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
+                    }
                     break
-                case "deal":
-                    await Deal.execute(interaction, this.client)
-                    break
-                case "discard":
-                    await Discard.execute(interaction, this.client)
-                    break
-                case "draw":
-                    await Draw.execute(interaction, this.client)
-                    break
-                case "flipcard":
-                    await Flip.execute(interaction, this.client)
-                    break
-                case "show":
-                    await Show.execute(interaction, this.client)
-                    break
-                case "new":
-                    await NewDeck.execute(interaction, this.client)
-                    break
-                case "play":
-                    await Play.execute(interaction, this.client)
-                    break
-                case "reveal":
-                    await Reveal.execute(interaction, this.client)
-                    break
-                case "return":
-                    await Rturn.execute(interaction, this.client)
-                    break
-                case "shuffle":
-                    await Shuffle.execute(interaction, this.client)
+                case "hand":
+                    switch (interaction.options.getSubcommand()) {
+                        case "discard":
+                            await Discard.execute(interaction, this.client)
+                            break
+                        case "show":
+                            await Show.execute(interaction, this.client)
+                            break
+                        case "play":
+                            await Play.execute(interaction, this.client)
+                            break
+                        case "reveal":
+                            await Reveal.execute(interaction, this.client)
+                            break
+                        case "return":
+                            await Rturn.execute(interaction, this.client)
+                            break
+                        default:
+                            await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
+                    }
                     break
                 default:
-                    await interaction.reply({ content: "Not Ready Yet!?!?!?", ephemeral: true })
+                    switch (interaction.options.getSubcommand()) {
+                        case "help":
+                            await Help.execute(interaction, this.client)
+                            break
+                        default:
+                            await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
+                    }
+                    break
             }
+
         } catch (e) {
             this.client.logger.log(e,'error')
         }

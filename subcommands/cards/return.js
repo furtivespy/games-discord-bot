@@ -55,13 +55,21 @@ class Rturn {
                 await Formatter.GameStatus(gameData, interaction.guild),
                 ...deckEmbeds
             ]})
-            await interaction.followUp({ content: `You returned ${Formatter.cardShortName(card)}`,
-                embeds: [
-                    Formatter.playerSecretHand(gameData, player)
-                ],
-                ephemeral: true
-            })
-
+            var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
+            if (handInfo.attachments.length >0){
+                await interaction.followUp({ 
+                    content: `You returned ${Formatter.cardShortName(card)}`,
+                    embeds: [...handInfo.embeds],
+                    files: [...handInfo.attachments],
+                    ephemeral: true
+                })  
+            } else {
+                await interaction.followUp({ 
+                    content: `You returned ${Formatter.cardShortName(card)}`,
+                    embeds: [...handInfo.embeds],
+                    ephemeral: true
+                })  
+            }
         }
     }
 }
