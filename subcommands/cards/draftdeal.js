@@ -56,7 +56,7 @@ class Deal {
 
             await interaction.reply({ 
                 content: `Dealt out a total of ${dealCount} cards.`,
-                embeds: [
+                embeds: [ Formatter.draftHelpNotes(),
                     await Formatter.GameStatus(gameData, interaction.guild),
                     Formatter.deckStatus(deck)
                 ]

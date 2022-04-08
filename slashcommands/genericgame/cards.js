@@ -11,6 +11,7 @@ const Draw = require(`../../subcommands/cards/draw`)
 const Flip = require(`../../subcommands/cards/flip`)
 const NewDeck = require(`../../subcommands/cards/newdeck`)
 const Play = require(`../../subcommands/cards/play`)
+const Recall = require(`../../subcommands/cards/recall`)
 const Reveal = require(`../../subcommands/cards/reveal`)
 const Rturn = require(`../../subcommands/cards/return`)
 const Show = require(`../../subcommands/cards/show`)
@@ -77,6 +78,12 @@ class Cards extends SlashCommand {
                         .setDescription("Deal cards to all players")
                         .addIntegerOption(option => option.setName('count').setDescription('Number of cards to deal each player').setRequired(true))
                         .addStringOption(option => option.setName('deck').setDescription('Deck to deal from').setAutocomplete(true))
+                    )
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("recall")
+                        .setDescription("Recall all cards from this deck to start anew")
+                        .addStringOption(option => option.setName('deck').setDescription('Deck to recall').setAutocomplete(true))
                     )
                 .addSubcommand(subcommand =>
                     subcommand
@@ -161,6 +168,9 @@ class Cards extends SlashCommand {
                             break
                         case "new":
                             await NewDeck.execute(interaction, this.client)
+                            break
+                        case "recall":
+                            await Recall.execute(interaction, this.client)
                             break
                         case "shuffle":
                             await Shuffle.execute(interaction, this.client)

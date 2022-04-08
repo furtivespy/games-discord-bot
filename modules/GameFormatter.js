@@ -48,6 +48,18 @@ class GameFormatter {
         return newEmbed;
     }
 
+    static draftHelpNotes(){
+        const newEmbed = new Discord.MessageEmbed()
+            .setColor(13502711)
+            .setTitle(`Drafting Help`)
+            .setDescription(`You now have draft cards in your hand. \n` + 
+             `\`/cards hand show\`- Shows the cards in your hand. (as well as what you can draft) \n` +
+             `\`/cards draft take\` - Take a card from the draft. \n` +
+             `\`/cards draft pass\` - Passes all draft cards around the table (for all players)`)
+            
+        return newEmbed;
+    }
+
     static playerSecretHand(gameData, player){
         
         const newEmbed = new Discord.MessageEmbed()
