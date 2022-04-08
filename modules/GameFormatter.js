@@ -19,7 +19,9 @@ class GameFormatter {
             }
             let draftCards = 0
             gameData.players.forEach(player => {
-                draftCards += player.hands.draft.length
+                if (player.hands.draft && player.hands.draft.length > 0){
+                    draftCards += player.hands.draft.length
+                }
             })
             if (draftCards > 0){
                 table.setHeading("Player", "Score", handName, "Draft")
