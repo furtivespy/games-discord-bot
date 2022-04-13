@@ -14,15 +14,20 @@ class Status {
         if (gameData.isdeleted) {
             await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
         } else {
+            const data = await Formatter.GameStatusV2(gameData, interaction.guild)
+
             let deckEmbeds = []
             gameData.decks.forEach(deck => {
                 deckEmbeds.push(Formatter.deckStatus(deck))
             })
             await interaction.reply({ 
-            embeds: [await Formatter.GameStatus(gameData, interaction.guild),
-                ...deckEmbeds
-            ]
-            })
+                embeds: [
+                    ...deckEmbeds
+                ],
+                files: [...data],
+            })  
+            
+
         }
     }
 }

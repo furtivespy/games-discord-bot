@@ -50,7 +50,7 @@ class Play {
             })
 
             client.setGameData(`game-${interaction.channel.id}`, gameData)
-            await interaction.reply({ content: "Played a card:",
+            await interaction.reply({ content: `${interaction.member.displayName} has Played:`,
             embeds: [
                 Formatter.oneCard(card),
                 ...deckEmbeds

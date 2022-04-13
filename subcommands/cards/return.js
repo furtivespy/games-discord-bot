@@ -50,11 +50,14 @@ class Rturn {
             })
 
             client.setGameData(`game-${interaction.channel.id}`, gameData)
-            await interaction.reply({ content: "Returned a card:",
-            embeds: [
-                await Formatter.GameStatus(gameData, interaction.guild),
-                ...deckEmbeds
-            ]})
+            const data = await Formatter.GameStatusV2(gameData, interaction.guild)
+            await interaction.reply({ 
+                content: `${interaction.member.displayName} returned a card`,
+                embeds: [
+                    ...deckEmbeds
+                ],
+                files: [...data]
+            })
             var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
             if (handInfo.attachments.length >0){
                 await interaction.followUp({ 

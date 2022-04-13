@@ -44,10 +44,8 @@ class Take {
             player.hands.main.push(theCard)
             
             client.setGameData(`game-${interaction.channel.id}`, gameData)
-            await interaction.reply({ content: "Drafted a card!",
-            embeds: [
-                await Formatter.GameStatus(gameData, interaction.guild),
-            ]})
+            await interaction.reply({ content: `${interaction.member.displayName} has drafted a card!`})
+
             var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
             if (handInfo.attachments.length >0){
                 await interaction.followUp({ 

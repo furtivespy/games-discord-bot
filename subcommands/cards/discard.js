@@ -48,13 +48,14 @@ class Discard {
             gameData.decks.forEach(deck => {
                 deckEmbeds.push(Formatter.deckStatus(deck))
             })
+            const data = await Formatter.GameStatusV2(gameData, interaction.guild)
 
             client.setGameData(`game-${interaction.channel.id}`, gameData)
-            await interaction.reply({ content: "Discarded a card:",
+            await interaction.reply({ content: `${interaction.member.displayName} has Discarded a card`,
             embeds: [
-                await Formatter.GameStatus(gameData, interaction.guild),
                 ...deckEmbeds
-            ]})
+            ],
+            files: [...data]})
             var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
             if (handInfo.attachments.length >0){
                 await interaction.followUp({ 

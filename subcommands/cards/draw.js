@@ -53,17 +53,17 @@ class Draw {
 
             player.hands.main.push(theCard)
             client.setGameData(`game-${interaction.channel.id}`, gameData)
-
+            const data = await Formatter.GameStatusV2(gameData, interaction.guild)
             let deckEmbeds = []
             gameData.decks.forEach(deck => {
                 deckEmbeds.push(Formatter.deckStatus(deck))
             })
             await interaction.reply({ 
-                content: `Drew a card from ${deck.name}`,
+                content: `${interaction.member.displayName} drew a card from ${deck.name}`,
                 embeds: [
-                    await Formatter.GameStatus(gameData, interaction.guild),
                     ...deckEmbeds
-                ]
+                ],
+                files: [...data]
             })
             var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
             if (handInfo.attachments.length >0){

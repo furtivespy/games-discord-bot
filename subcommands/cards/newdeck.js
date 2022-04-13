@@ -52,13 +52,13 @@ class NewDeck {
         gameData.decks.forEach(deck => {
             deckEmbeds.push(Formatter.deckStatus(deck))
         })
-
+        const data = await Formatter.GameStatusV2(gameData, interaction.guild)
         await interaction.reply({ 
             content: `Added and shuffled the new deck: ${inputName}`,
             embeds: [
-                await Formatter.GameStatus(gameData, interaction.guild),
                 ...deckEmbeds
-            ]
+            ],
+            files: [...data]
         })
 
     }

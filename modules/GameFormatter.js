@@ -3,6 +3,7 @@ const Emoji = require('./EmojiAssitant')
 const { sortBy, floor } = require('lodash')
 var AsciiTable = require('ascii-table')
 const { createCanvas, Image, loadImage } = require('canvas');
+const { CanvasTable, CTColumn } = require("canvas-table")
 
 class GameFormatter {
     static async GameStatus(gameData, guild){
@@ -49,6 +50,69 @@ class GameFormatter {
 
         return newEmbed;
     }
+
+    static async GameStatusV2(gameData, guild){
+    
+        const columns = [
+            {title: "Player"},
+            {title: "Score", options: { textAlign: "right" }},
+        ]
+        const options = {
+            borders: {
+              table: { color: "#aaa", width: 1 }
+            },
+            fit: true,
+            title: {
+              text: `${gameData.name} Status`,
+              fontSize: 24
+            },
+            cell: {
+              fontSize: 18
+            },
+            header: {
+              fontSize: 18
+            }
+          }
+        const data = []
+
+        if (gameData.decks.length > 0) { //With Cards
+            columns.push({title: "Cards in Hand", options: { textAlign: "right" }})
+
+            let draftCards = 0
+            gameData.players.forEach(player => {
+                if (player.hands.draft && player.hands.draft.length > 0){
+                    draftCards += player.hands.draft.length
+                }
+            })
+
+            if (draftCards > 0){
+                columns.push({title: "Draftable Cards", options: { textAlign: "right" }})
+            } 
+
+            sortBy(gameData.players, ['order']) .forEach(play => {
+                const cards = GameFormatter.CountCards(play).toString()
+                const name = guild.members.cache.get(play.userId)?.displayName
+                if (draftCards > 0){
+                    data.push([`${Emoji.IndexToEmoji(play.order)}${name ?? play.name ?? play.userId}`, play.score, cards, play.hands.draft.length.toString()])
+                } else {
+                    data.push([`${Emoji.IndexToEmoji(play.order)}${name ?? play.name ?? play.userId}`, play.score, cards])
+                }
+            });
+        } else { //No Cards
+            sortBy(gameData.players, ['order']) .forEach(play => {
+                const name2 = guild.members.cache.get(play.userId)?.displayName
+                data.push([`${Emoji.IndexToEmoji(play.order)}${name2 ?? play.name ?? play.userId}`, play.score])
+            });
+        }
+        const canvas = createCanvas(800, 100 + (35 * gameData.players.length))
+        const config = { columns, data, options }
+        const ct = new CanvasTable(canvas, config)
+        await ct.generateTable()
+    
+        return [new Discord.MessageAttachment(await ct.renderToBuffer(), `status-table.png`)]
+    
+    }
+
 
     static draftHelpNotes(){
         const newEmbed = new Discord.MessageEmbed()

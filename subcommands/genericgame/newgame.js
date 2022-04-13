@@ -48,11 +48,11 @@ class NewGame {
             }
 
             client.setGameData(`game-${interaction.channel.id}`, gameData)
-            
+            const data = await Formatter.GameStatusV2(gameData, interaction.guild)
 
             await interaction.reply({ 
                 content: content,
-                embeds: [await Formatter.GameStatus(gameData, interaction.guild)]
+                files: [...data]
             })
         }
     }

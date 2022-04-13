@@ -52,12 +52,14 @@ class Deal {
 
             client.setGameData(`game-${interaction.channel.id}`, gameData)
 
+            const data = await Formatter.GameStatusV2(gameData, interaction.guild)
+
             await interaction.reply({ 
                 content: `Dealt out a total of ${dealCount} cards.`,
                 embeds: [
-                    await Formatter.GameStatus(gameData, interaction.guild),
                     Formatter.deckStatus(deck)
-                ]
+                ],
+                files: [...data]
             })
         }
     }

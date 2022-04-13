@@ -63,13 +63,14 @@ class Configure {
         deck.shuffleStyle = val
         client.setGameData(`game-${interaction.channel.id}`, gameData)
 
+        const data = await Formatter.GameStatusV2(gameData, interaction.guild)
         
         await newInteraction.reply({ 
             content: `Configured ${deck.name} to ${val}`,
             embeds: [
-                await Formatter.GameStatus(gameData, interaction.guild),
                 Formatter.deckStatus(deck)
-            ]
+            ],
+            files: [...data],
         })
         
     }

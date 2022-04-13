@@ -24,6 +24,7 @@
     "ascii-table": "git+https://github.com/belph/ascii-table.git",
     "better-sqlite3": "^7.1.1",
     "canvas": "^2.9.1",
+    "canvas-table": "0.1.0",
     "chalk": "^2.4.2",
     "cheerio": "^1.0.0-rc.3",
     "discord.js": "13.6.0",

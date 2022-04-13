@@ -41,12 +41,14 @@ class Recall {
             deck.piles.draw.cards = cloneDeep(shuffle(deck.allCards))
 
             client.setGameData(`game-${interaction.channel.id}`, gameData)
-
-            await interaction.reply({ content: `All cards recalled to ${deck.name}`,
-            embeds: [
-                await Formatter.GameStatus(gameData, interaction.guild),
-                Formatter.deckStatus(deck)
-            ]})
+            const data = await Formatter.GameStatusV2(gameData, interaction.guild)
+            await interaction.reply({ 
+                content: `All cards recalled to ${deck.name}`,
+                embeds: [
+                    Formatter.deckStatus(deck)
+                ],
+                files: [...data]
+            })
         }
     }
 }
