@@ -45,7 +45,23 @@ class Take {
             
             client.setGameData(`game-${interaction.channel.id}`, gameData)
             await interaction.reply({ content: `${interaction.member.displayName} has drafted a card!`})
-
+            let cardsLeft = gameData.players[0].hands.draft.length
+            if (cardsLeft > 0){
+                let shouldPass = true
+                for (let i = 1; i < gameData.players.length; i++){
+                    if (gameData.players[i].hands.draft.length != cardsLeft){
+                        shouldPass = false
+                        break
+                    }
+                }
+                if (shouldPass){
+                    const data = await Formatter.GameStatusV2(gameData, interaction.guild)
+                    await interaction.followUp({ 
+                        content: `It's probably time to pass!`,
+                        files: [...data]})
+                }
+            }
+            
             var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
             if (handInfo.attachments.length >0){
                 await interaction.followUp({ 
