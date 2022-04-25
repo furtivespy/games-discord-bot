@@ -10,6 +10,7 @@ class GameDatabase {
         [ "Dune Imperium (Base)", "imperium"],
         [ "Dune Imperium - Rise of Ix", "dune-ix"],
         [ "Brian Boru Action Cards", "brian-boru"],
+        [ "King is Dead - Cunning", "cunning"],
     ]
 
     defaultGameData = {
@@ -136,6 +137,8 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "B", [...duneImperium, ...duneIx])
             case "brian-boru":
                 return this.createCardFromObjList(deckName, "A", brianBoru)
+            case "cunning":
+                return this.createCardFromObjList(deckName, "B", cunningKing)
             default:
                 return []
         }
@@ -308,4 +311,18 @@ const brianBoru = [
     {name: "25", type: "🔵", suit: "none", value: 25, url: "https://furtivespy.com/images/brian/bb25.png"},
 ]
 
+const cunningKing = [
+    {name: "Spy", type: "Cunning", suit: "none", description: "Resolve the effect of an action card that is face up on top of another player’s discard pile", url: "https://furtivespy.com/images/king/spy.png"},
+    {name: "Aid", type: "Cunning", suit: "none", description: "Find the faction with the most followers in the supply. Place two followers of that faction into any region.", url: "https://furtivespy.com/images/king/aid.png"},
+    {name: "Ambush", type: "Cunning", suit: "none", description: "Place two Scottish followers from the supply into a region, then return a follower from that region to the supply.", url: "https://furtivespy.com/images/king/ambush.png"},
+    {name: "Influence", type: "Cunning", suit: "none", description: "Swap one English follower in any region with two non-English followers in another region. ", url: "https://furtivespy.com/images/king/influence.png"},
+    {name: "March", type: "Cunning", suit: "none", description: "Move two followers from a single region to a single bordering region.", url: "https://furtivespy.com/images/king/march.png"},
+    {name: "Dispute", type: "Cunning", suit: "none", description: "Swap a Welsh follower in any region with a non-Welsh follower in another region.", url: "https://furtivespy.com/images/king/dispute.png"},
+    {name: "Plot", type: "Cunning", suit: "none", description: "You cannot take this action during the game. When deciding the winner of the game, reveal this card. It counts as a follower of a faction of your choice.", url: "https://furtivespy.com/images/king/plot.png"},
+    {name: "Edict", type: "Cunning", suit: "none", description: "Swap two Scottish followers in any region with two non-Scottish followers in a bordering region.", url: "https://furtivespy.com/images/king/edict.png"},
+    {name: "Resist", type: "Cunning", suit: "none", description: "Place two non-Scottish followers from the supply into any region that borders a region controlled by the Scots. If there is no control or instability disc in Moray, you may instead place the followers into a region bordering Moray", url: "https://furtivespy.com/images/king/resist.png"},
+    {name: "Muster", type: "Cunning", suit: "none", description: "Return a Scottish follower to the supply from any region that borders a region controlled by the Scots. Then place two followers from the supply into that region. If there is no control or instability disc in Moray, you may instead carry out this action in a region bordering Moray.", url: "https://furtivespy.com/images/king/muster.png"}, 
+    {name: "Quell", type: "Cunning", suit: "none", description: "Return a Welsh follower to the supply from any region that borders a region controlled by the Welsh. Then place two followers from the supply into that region. If there is no control or instability disc in Gwynedd, you may instead carry out this action in a region bordering Gwynedd.", url: "https://furtivespy.com/images/king/quell.png"},
+    {name: "Suppress", type: "Cunning", suit: "none", description: "Return an English follower to the supply from any region that borders a region controlled by the English. Then return another follower to the supply from that region. Then place a follower from the supply into that region. If there is no control or instability disc in Essex, you may instea", url: "https://furtivespy.com/images/king/suppress.png"},
+]
 module.exports = new GameDatabase();
