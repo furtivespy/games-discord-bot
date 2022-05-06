@@ -8,6 +8,7 @@ const DraftDeal = require(`../../subcommands/cards/draftdeal`)
 const DraftPass = require(`../../subcommands/cards/draftpass`)
 const DraftTake = require(`../../subcommands/cards/drafttake`)
 const Draw = require(`../../subcommands/cards/draw`)
+const DrawMulti = require(`../../subcommands/cards/drawmulti`)
 const Flip = require(`../../subcommands/cards/flip`)
 const NewDeck = require(`../../subcommands/cards/newdeck`)
 const Play = require(`../../subcommands/cards/play`)
@@ -56,6 +57,13 @@ class Cards extends SlashCommand {
                     subcommand
                         .setName("draw")
                         .setDescription("Draw a card")
+                        .addStringOption(option => option.setName('deck').setDescription('Deck to draw from').setAutocomplete(true))
+                    ) 
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("drawmultiple")
+                        .setDescription("Draw a number of cards")
+                        .addIntegerOption(option => option.setName('count').setDescription('Number of cards to draw').setRequired(true))
                         .addStringOption(option => option.setName('deck').setDescription('Deck to draw from').setAutocomplete(true))
                     ) 
                 .addSubcommand(subcommand =>
@@ -162,6 +170,9 @@ class Cards extends SlashCommand {
                             break
                         case "draw":
                             await Draw.execute(interaction, this.client)
+                            break
+                        case "drawmultiple":
+                            await DrawMulti.execute(interaction, this.client)
                             break
                         case "flipcard":
                             await Flip.execute(interaction, this.client)
