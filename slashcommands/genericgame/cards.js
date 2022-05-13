@@ -17,6 +17,7 @@ const Reveal = require(`../../subcommands/cards/reveal`)
 const Rturn = require(`../../subcommands/cards/return`)
 const Show = require(`../../subcommands/cards/show`)
 const Shuffle = require(`../../subcommands/cards/shuffle`)
+const Steal = require(`../../subcommands/cards/steal`)
 const Help = require(`../../subcommands/cards/help`)
 
 class Cards extends SlashCommand {
@@ -133,6 +134,15 @@ class Cards extends SlashCommand {
                     )    
             )
             .addSubcommandGroup(group =>
+                group.setName("player").setDescription("Manage cards of other players")
+                .addSubcommand(subcommand => 
+                    subcommand
+                        .setName("steal")
+                        .setDescription("Steal a random card from another player")
+                        .addUserOption(option => option.setName('target').setDescription('Target Player of your steal').setRequired(true))
+                    )    
+            )
+            .addSubcommandGroup(group =>
                 group.setName("draft").setDescription("Manage a card draft")           
                 .addSubcommand(subcommand =>
                     subcommand
@@ -221,6 +231,15 @@ class Cards extends SlashCommand {
                             break
                         case "return":
                             await Rturn.execute(interaction, this.client)
+                            break
+                        default:
+                            await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
+                    }
+                    break
+                case "player":
+                    switch (interaction.options.getSubcommand()) {
+                        case "steal":
+                            await Steal.execute(interaction, this.client)
                             break
                         default:
                             await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })

@@ -1,5 +1,5 @@
 const Discord = require('discord.js')
-const { cloneDeep } = require('lodash')
+const { cloneDeep, forEach } = require('lodash')
 const { nanoid } = require('nanoid')
 
 class GameDatabase {
@@ -99,7 +99,7 @@ class GameDatabase {
 
     createCardFromObjList(deck, format, list){
         let results = []
-        list.forEach(item => {
+        forEach(list, item => {
             results.push(cloneDeep(this.createCardFromObj(deck, format, item)))
         })
         return results
@@ -107,7 +107,7 @@ class GameDatabase {
 
     createCardFromStrList(deck, list){
         let results = []
-        list.forEach(item => {
+        forEach(list, item => {
             results.push(cloneDeep(this.createCard(deck, item)))
         })
         return results
