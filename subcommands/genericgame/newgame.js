@@ -26,6 +26,8 @@ class NewGame {
             if (interaction.options.getUser('player4')) players.push(interaction.options.getUser('player4'))
             if (interaction.options.getUser('player5')) players.push(interaction.options.getUser('player5'))
             if (interaction.options.getUser('player6')) players.push(interaction.options.getUser('player6'))
+            if (interaction.options.getUser('player7')) players.push(interaction.options.getUser('player7'))
+            if (interaction.options.getUser('player8')) players.push(interaction.options.getUser('player8'))
 
             let content = `New Game Created.\nPlayer Order Randomized!\n`
             gameData.isdeleted = false

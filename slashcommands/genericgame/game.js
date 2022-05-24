@@ -29,6 +29,8 @@ class Game extends SlashCommand {
                     .addUserOption(option => option.setName("player4").setDescription("fourth player to add"))
                     .addUserOption(option => option.setName("player5").setDescription("fifth player to add"))
                     .addUserOption(option => option.setName("player6").setDescription("sixth player to add"))
+                    .addUserOption(option => option.setName("player7").setDescription("seventh player to add"))
+                    .addUserOption(option => option.setName("player8").setDescription("eighth player to add"))
                 )
             .addSubcommand(subcommand =>
                 subcommand
