@@ -44,16 +44,11 @@ class Play {
             player.hands.main.splice(findIndex(player.hands.main, {id: cardid}), 1)
             deck.piles.discard.cards.push(card)
 
-            let deckEmbeds = []
-            gameData.decks.forEach(deck => {
-                deckEmbeds.push(Formatter.deckStatus(deck))
-            })
-
             client.setGameData(`game-${interaction.channel.id}`, gameData)
             await interaction.reply({ content: `${interaction.member.displayName} has Played:`,
             embeds: [
                 Formatter.oneCard(card),
-                ...deckEmbeds
+                ...Formatter.deckStatus2(gameData)
             ]})
             var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
             if (handInfo.attachments.length >0){

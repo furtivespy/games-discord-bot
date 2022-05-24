@@ -29,20 +29,17 @@ class Steal {
             return
         }
 
-        let stolen = targetPlayer.hands.main.splice(random(0,targetPlayer.hands.main.length), 1)
+        let stolen = targetPlayer.hands.main.splice(random(0,targetPlayer.hands.main.length - 1), 1)
         player.hands.main.push(stolen[0])
 
         client.setGameData(`game-${interaction.channel.id}`, gameData)
         
         const data = await Formatter.GameStatusV2(gameData, interaction.guild)
-        let deckEmbeds = []
-        gameData.decks.forEach(deck => {
-            deckEmbeds.push(Formatter.deckStatus(deck))
-        })
+
         await interaction.reply({ 
             content: `${interaction.member.displayName} stole a card from ${interaction.guild.members.cache.get(targetPlayer.userId)?.displayName}`,
             embeds: [
-                ...deckEmbeds
+                ...Formatter.deckStatus2(gameData)
             ],
             files: [...data]
         })

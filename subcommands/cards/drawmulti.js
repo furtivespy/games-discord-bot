@@ -69,14 +69,11 @@ class DrawMulti {
             client.setGameData(`game-${interaction.channel.id}`, gameData)
 
             const data = await Formatter.GameStatusV2(gameData, interaction.guild)
-            let deckEmbeds = []
-            gameData.decks.forEach(deck => {
-                deckEmbeds.push(Formatter.deckStatus(deck))
-            })
+            
             await interaction.reply({ 
                 content: `${interaction.member.displayName} drew ${dealCount} cards from ${deck.name}`,
                 embeds: [
-                    ...deckEmbeds
+                    ...Formatter.deckStatus2(gameData)
                 ],
                 files: [...data]
             })

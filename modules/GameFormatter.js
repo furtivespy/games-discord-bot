@@ -283,6 +283,31 @@ class GameFormatter {
         return newEmbed
     }
 
+    static deckStatus2(gameData){
+        if (!gameData.decks || gameData.decks.length == 0){
+            return []
+        }
+        if (gameData.decks.length == 1){
+            return [this.deckStatus(gameData.decks[0])]
+        } 
+
+        let deckData = ""
+        gameData.decks.forEach(deck => {
+            deckData += `• **${deck.name}** - `
+            for (const pile in deck.piles){
+                deckData += `${pile} pile: ${deck.piles[pile].cards.length} cards, `
+            }
+            deckData += `\n`
+        })
+        
+        const newEmbed = new Discord.MessageEmbed()
+            .setColor(13502711)
+            .setTitle(`${gameData.name} decks`)
+            .setDescription(deckData)
+
+        return [newEmbed]
+    }
+
     static cardSort(cardArry){
         return sortBy(cardArry, ['suit', 'value', 'name'])
     }

@@ -48,15 +48,12 @@ class NewDeck {
         gameData.decks.push(newdeck)
 
         client.setGameData(`game-${interaction.channel.id}`, gameData)
-        let deckEmbeds = []
-        gameData.decks.forEach(deck => {
-            deckEmbeds.push(Formatter.deckStatus(deck))
-        })
+        
         const data = await Formatter.GameStatusV2(gameData, interaction.guild)
         await interaction.reply({ 
             content: `Added and shuffled the new deck: ${inputName}`,
             embeds: [
-                ...deckEmbeds
+                ...Formatter.deckStatus2(gameData)
             ],
             files: [...data]
         })

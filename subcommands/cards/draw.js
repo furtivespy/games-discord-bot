@@ -54,14 +54,11 @@ class Draw {
             player.hands.main.push(theCard)
             client.setGameData(`game-${interaction.channel.id}`, gameData)
             const data = await Formatter.GameStatusV2(gameData, interaction.guild)
-            let deckEmbeds = []
-            gameData.decks.forEach(deck => {
-                deckEmbeds.push(Formatter.deckStatus(deck))
-            })
+            
             await interaction.reply({ 
                 content: `${interaction.member.displayName} drew a card from ${deck.name}`,
                 embeds: [
-                    ...deckEmbeds
+                    ...Formatter.deckStatus2(gameData)
                 ],
                 files: [...data]
             })

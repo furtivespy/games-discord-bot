@@ -5,6 +5,7 @@ const NewGame = require(`../../subcommands/genericgame/newgame`)
 const Delete = require(`../../subcommands/genericgame/delete`)
 const Status = require(`../../subcommands/genericgame/status`)
 const Winner = require(`../../subcommands/genericgame/winner`)
+const Test = require(`../../subcommands/genericgame/test`)
 
 class Game extends SlashCommand {
     constructor(client){
@@ -46,6 +47,13 @@ class Game extends SlashCommand {
                     .setDescription("mark someone as game winner")
                     .addUserOption(option => option.setName('who').setDescription('The winner of this channel\'s game!').setRequired(true))
                 )
+                /*
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("test")        
+                    .setDescription("Testing Bot - Writes Data to Logs")
+                )
+                */
     }
 
     async execute(interaction) {
@@ -62,6 +70,9 @@ class Game extends SlashCommand {
                     break
                 case "winner":
                     await Winner.execute(interaction, this.client)
+                    break
+                case "test":    
+                    await Test.execute(interaction, this.client)
                     break
                 default:
                     await interaction.reply({ content: "Something Went Wrong!?!?!?", ephemeral: true })

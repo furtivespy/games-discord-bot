@@ -44,16 +44,12 @@ class Discard {
             player.hands.main.splice(findIndex(player.hands.main, {id: cardid}), 1)
             deck.piles.discard.cards.push(card)
 
-            let deckEmbeds = []
-            gameData.decks.forEach(deck => {
-                deckEmbeds.push(Formatter.deckStatus(deck))
-            })
             const data = await Formatter.GameStatusV2(gameData, interaction.guild)
 
             client.setGameData(`game-${interaction.channel.id}`, gameData)
             await interaction.reply({ content: `${interaction.member.displayName} has Discarded a card`,
             embeds: [
-                ...deckEmbeds
+                ...Formatter.deckStatus2(gameData)
             ],
             files: [...data]})
             var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
