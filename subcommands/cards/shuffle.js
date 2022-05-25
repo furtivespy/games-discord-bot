@@ -1,5 +1,5 @@
 const GameDB = require('../../db/anygame.js')
-const { cloneDeep, shuffle } = require('lodash')
+const { cloneDeep, shuffle, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
 class Shuffle {
