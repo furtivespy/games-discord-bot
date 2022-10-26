@@ -1,5 +1,5 @@
 const SlashCommand = require('../../base/SlashCommand.js')
-const { SlashCommandBuilder } = require('@discordjs/builders');
+const { SlashCommandBuilder } = require('discord.js');
 const GameDB = require('../../db/anygame.js')
 const Configure = require('../../subcommands/cards/configuredeck')
 const Deal = require('../../subcommands/cards/deal')
@@ -46,11 +46,10 @@ class Cards extends SlashCommand {
                         .addStringOption(option => option.setName('name').setDescription('Name of the deck').setRequired(true))
                         .addStringOption(option => option.setName('cardset').setDescription('What set of cards to use').setRequired(true)
                             .addChoices(
-                                [
-                                    ...GameDB.CurrentCardList,
+                                    ...GameDB.CurrentCardList.map(cl => ({name: cl[0], value: cl[1]}))
                                     //[ "Custom from list", "custom" ],
                                     //[ "Custom Empty", "customempty" ]
-                                ]
+                                
                             ))
                         .addStringOption(option => option.setName('customlist').setDescription('list of cards for the new custom deck. separate with commas'))
                     ) 
@@ -72,7 +71,7 @@ class Cards extends SlashCommand {
                         .setName("configure")
                         .setDescription("Configure a deck (rules etc.)")
                         .addStringOption(option => option.setName('config').setDescription('Option to configure').setRequired(true)
-                            .addChoices([["Deck Shuffle Style", "shufflestyle"]]))
+                            .addChoices( {name: "Deck Shuffle Style", value: "shufflestyle"}))
                         .addStringOption(option => option.setName('deck').setDescription('Deck to configure').setAutocomplete(true))
                     ) 
                 .addSubcommand(subcommand =>
@@ -162,7 +161,7 @@ class Cards extends SlashCommand {
                         .setName("pass")
                         .setDescription("pass the draft cards to the next player (for all players!!)")
                         .addStringOption(option => option.setName('direction').setDescription('Which direction to pass ALL cards for ALL players').setRequired(true)
-                        .addChoices([["Clockwise (in turn order)", "asc"], ["Counterclockwise (reverse turn order)", "desc"]]))
+                        .addChoices({name: "Clockwise (in turn order)", value: "asc"},{name: "Counterclockwise (reverse turn order)", value: "desc"}))
                 )
             )                
     }
