@@ -43,7 +43,7 @@ class DiscordBot extends Client {
     this.guildDBs = {};
 
     //requiring the Logger class for easy console logging
-    this.logger = require("./modules/bugsnagLogger.js")(this.config.bugsnagKey);
+    this.logger = require("./modules/BugsnagLogger.js")(this.config.bugsnagKey);
 
     // Basically just an async shortcut to using a setTimeout. Nothing fancy!
     this.wait = require("util").promisify(setTimeout);
