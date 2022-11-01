@@ -66,6 +66,14 @@ class BGG extends SlashCommand {
           }))
         );
       } else {
+        if (isNaN(search)){
+          await interaction.reply({
+            content: `Please choose from the available options`,
+            ephemeral: true
+          })
+          return
+        }
+
         await interaction.deferReply();
         let turndownForWhat = new TurndownService();
         let gameInfoResp = await fetch(
@@ -90,6 +98,7 @@ class BGG extends SlashCommand {
         //Embed 1 - Image
         let imageEmbed = new EmbedBuilder()
           .setTitle(he.decode(gameName))
+          .setURL(`https://boardgamegeek.com/boardgame/${search}`)
           .setImage(gameInfo.image);
         allEmbeds.push(imageEmbed);
 
