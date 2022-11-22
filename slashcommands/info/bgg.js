@@ -1,10 +1,11 @@
 const SlashCommand = require("../../base/SlashCommand.js");
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require("discord.js");
 const fetch = require("node-fetch");
 const { parse } = require("fast-xml-parser");
 const { find } = require("lodash");
 const he = require("he");
 const TurndownService = require("turndown");
+const { createCanvas, Image, loadImage } = require("canvas");
 
 class BGG extends SlashCommand {
   constructor(client) {
@@ -96,10 +97,19 @@ class BGG extends SlashCommand {
 
         let allEmbeds = [];
         //Embed 1 - Image
+        const gameImage = await loadImage(gameInfo.image);
+        let canvas = createCanvas(gameImage.width, gameImage.height);
+        let ctx = canvas.getContext("2d");
+        ctx.drawImage(gameImage, 0, 0);
+        const imageAttach = new AttachmentBuilder(
+          canvas.toBuffer(),
+          {name: `gameImage.png`}
+        );
+
         let imageEmbed = new EmbedBuilder()
           .setTitle(he.decode(gameName))
           .setURL(`https://boardgamegeek.com/boardgame/${search}`)
-          .setImage(gameInfo.image);
+          .setImage(`attachment://gameImage.png`);
         allEmbeds.push(imageEmbed);
 
         //Embed 2 - Stats and Details
@@ -150,6 +160,7 @@ class BGG extends SlashCommand {
 
         await interaction.editReply({
           embeds: allEmbeds,
+          files: [imageAttach],
         });
       }
     } catch (e) {
