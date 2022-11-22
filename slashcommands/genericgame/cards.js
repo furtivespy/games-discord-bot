@@ -7,6 +7,7 @@ const Discard = require(`../../subcommands/cards/discard`)
 const DraftDeal = require(`../../subcommands/cards/draftdeal`)
 const DraftPass = require(`../../subcommands/cards/draftpass`)
 const DraftTake = require(`../../subcommands/cards/drafttake`)
+const DraftReturn = require(`../../subcommands/cards/draftreturn`)
 const Draw = require(`../../subcommands/cards/draw`)
 const DrawMulti = require(`../../subcommands/cards/drawmulti`)
 const Flip = require(`../../subcommands/cards/flip`)
@@ -163,6 +164,12 @@ class Cards extends SlashCommand {
                         .addStringOption(option => option.setName('direction').setDescription('Which direction to pass ALL cards for ALL players').setRequired(true)
                         .addChoices({name: "Clockwise (in turn order)", value: "asc"},{name: "Counterclockwise (reverse turn order)", value: "desc"}))
                 )
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("return")
+                        .setDescription("return a card to the draft (aka un-draft a card)")
+                        .addStringOption(option => option.setName('card').setDescription('Card to un-draft').setAutocomplete(true).setRequired(true))
+                )
             )                
     }
 
@@ -209,6 +216,9 @@ class Cards extends SlashCommand {
                             break
                         case "take":
                             await DraftTake.execute(interaction, this.client)
+                            break
+                        case "return":
+                            await DraftReturn.execute(interaction, this.client)
                             break
                         default:
                             await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
