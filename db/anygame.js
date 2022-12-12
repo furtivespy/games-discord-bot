@@ -7,8 +7,10 @@ class GameDatabase {
     CurrentCardList = [
         [ "Standard 52 Card Poker Deck", "standard" ],
         [ "Pear/Triangle (one 1, two 2s ... ten 10s)", "pear" ],
-        [ "Dune Imperium (Base)", "imperium"],
-        [ "Dune Imperium - Rise of Ix", "dune-ix"],
+        [ "Dune Imperium Intrigue (Base)", "imperium"],
+        [ "Dune Imperium Intrigue - Base + Rise of Ix", "dune-ix"],
+        [ "Dune Imperium Intrigue - Base + Immortality", "dune-immortality"],
+        [ "Dune Imperium Intrigue - Base + Rise of Ix + Immortality", "dune-ix-immortality"],
         [ "Brian Boru Action Cards", "brian-boru"],
         [ "King is Dead - Cunning", "cunning"],
         [ "King is Dead - Player Hand", "king-player"],
@@ -138,6 +140,10 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "B", duneImperium)
             case "dune-ix":
                 return this.createCardFromObjList(deckName, "B", [...duneImperium, ...duneIx])
+            case "dune-immortality":
+                return this.createCardFromObjList(deckName, "B", [...duneImperium, ...duneImortal])
+            case "dune-ix-immortality":
+                return this.createCardFromObjList(deckName, "B", [...duneImperium, ...duneIx, ...duneImortal])
             case "brian-boru":
                 return this.createCardFromObjList(deckName, "A", brianBoru)
             case "cunning":
@@ -290,6 +296,20 @@ const duneIx = [
     {name: "Cull", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune/cull.jpg", description: "1 Solari for Trash a card"},
     {name: "Advanced Weaponry", type: "Plot/Combat", suit: "combat-plot", url: "https://furtivespy.com/images/dune/advanced.jpg", description: "Plot: 3 Solari for Dreadnaught OR Combat: If you ahve three or more Tech tiles: 4 Swords"},
     {name: "Strongarm", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune/strongarm.jpg", description: "Lose a troop for Gain one Influence with a Faction whose board space you sent an Agent to this turn"},
+]
+
+const duneImortal = [
+    {name: "Breakthrough", type: "Plot", suit:"plot", url: "https://furtivespy.com/images/dune/breakthrough.png", description: "Research"},
+    {name: "Counterattack", type: "Plot/Combat", suit: "combat-plot", url: "https://furtivespy.com/images/dune/counterattack.png", description: "Deploy up to two troops from your garrison to the conflict OR If an opponent played a Combat Intrigue card in this Conflict: 4 Swords"},
+    {name: "Disguised Bureaucrat", type: "Plot", suit:"plot", url: "https://furtivespy.com/images/dune/disguised.png", description: "1 Genetic Marker: Gain Spice, 2 Genetic Markers: Gain 1 Influence in any faction"},
+    {name: "Economic Positioning", type: "Combat/Endgame", suit: "endgame-combat", url: "https://furtivespy.com/images/dune/economic.png", description: "Retreat two of your troops => gain 3 Solari OR If you have 10 or more Solari: Gain 1 Victory Point"},
+    {name: "Gruesome Sacrifice", type: "Combat", suit: "combat", url: "https://furtivespy.com/images/dune/gruesome.png", description: "Lose two if your troops in the conflict => Advance 1 on Tleilaxu track and add 2 Specimen"},
+    {name: "Harvest Cells", type: "Combat", suit: "combat", url: "https://furtivespy.com/images/dune/harvest.png", description: "When you lose at least three troops at the end of a Conflict: 2 Specimen. You may also acquire a Tleilaxu card (paying its normal cost)"},
+    {name: "Illicit Dealings", type: "Plot", suit:"plot", url: "https://furtivespy.com/images/dune/illicit.png", description: "Advance 1 on Tleilaxu track"},
+    {name: "Shadowy Bargain", type: "Plot/Endgame", suit: "endgame-plot", url: "https://furtivespy.com/images/dune/shadowy.png", description: "1 Specimen OR Advance 1 on Tleilaxu track"},
+    {name: "Study Melange", type: "Plot/Endgame", suit: "endgame-plot", url: "https://furtivespy.com/images/dune/study.png", description: "Gain 1 Spice OR If you have 3 or more Spice: 2 Genetic Markers: 1 Victory Point"},
+    {name: "Tleilaxu Puppet", type: "Plot/Endgame", suit: "endgame-plot", url: "https://furtivespy.com/images/dune/tleilaxu.png", description: "Gain 1 Persuasion during your Reveal turn this round"},
+    {name: "Vicious Talents", type: "Combat", suit: "combat", url: "https://furtivespy.com/images/dune/vicious.png", description: "2 Swords, 1 Genetic Marker: + 2 Swords, 2 Genetic Markers: + 2 Swords"},
 ]
 
 const brianBoru = [
