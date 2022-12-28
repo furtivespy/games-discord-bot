@@ -98,9 +98,10 @@ class BGG extends SlashCommand {
         let allEmbeds = [];
         //Embed 1 - Image
         const gameImage = await loadImage(gameInfo.image);
-        let canvas = createCanvas(gameImage.width, gameImage.height);
+        const scaledWidth = 600;
+        let canvas = createCanvas(scaledWidth, (scaledWidth / gameImage.width) * gameImage.height);
         let ctx = canvas.getContext("2d");
-        ctx.drawImage(gameImage, 0, 0);
+        ctx.drawImage(gameImage, 0, 0, scaledWidth, (scaledWidth / gameImage.width) * gameImage.height);
         const imageAttach = new AttachmentBuilder(
           canvas.toBuffer(),
           {name: `gameImage.png`}
