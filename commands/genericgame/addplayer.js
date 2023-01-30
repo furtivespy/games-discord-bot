@@ -23,7 +23,7 @@ class AddPlayer extends Command {
     async run (message, args, level) {
         try {
             if (args[0]) {
-                let gameData = Object.assign({}, _.cloneDeep(CardDB.defaultGameData), this.client.getGameData(`cards-${message.channel.id}`))
+                let gameData = Object.assign({}, _.cloneDeep(CardDB.defaultGameData), await this.client.getGameData(`cards-${message.channel.id}`))
                 
                 const newUser = this.getUserFromMention(args[0])
                 let player = _.find(gameData.players, {userId: newUser.id})

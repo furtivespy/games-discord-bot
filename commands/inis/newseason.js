@@ -21,7 +21,7 @@ class NewSeason extends Command {
 
     async run (message, args, level) {
         try {
-            var gameData = this.client.getGameData("INIS")
+            var gameData = await this.client.getGameData("INIS")
             gameData.greenDeck = _.shuffle([...gameData.greenDeck])
 
             gameData.players.forEach((p, ix) => {

@@ -21,7 +21,7 @@ class ViewDiscard extends Command {
 
     async run (message, args, level) {
         try {
-            var gameData = this.client.getGameData("INIS")
+            var gameData = await this.client.getGameData("INIS")
             message.reply(`DM sent with set aside card`)
 
             message.author.send({embeds: [InisFormatter.createCardEmbed(gameData.greenDeck.slice(-1)[0], "Set Aside Card")]})

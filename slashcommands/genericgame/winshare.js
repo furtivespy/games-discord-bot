@@ -26,7 +26,7 @@ class WinShare extends SlashCommand {
             let gameData = Object.assign(
                 {},
                 cloneDeep(GameDB.defaultGameData), 
-                this.client.getGameData(`game-${theChan.id}`)
+                await this.client.getGameData(`game-${theChan.id}`)
             )
 
             if (gameData.winner && gameData.winner != null){

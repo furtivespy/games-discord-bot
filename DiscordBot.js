@@ -11,6 +11,7 @@ const Enmap = require("enmap");
 const klaw = require("klaw");
 const path = require("path");
 const database = require("./db/db.js");
+const mongoDb = require("./db/mongoDb.js");
 
 class DiscordBot extends Client {
   constructor(options) {
@@ -45,6 +46,13 @@ class DiscordBot extends Client {
     //requiring the Logger class for easy console logging
     this.logger = require("./modules/BugsnagLogger.js")(this.config.bugsnagKey);
 
+    /* Mongo DB is a work in progress...
+    this.db = new mongoDb({
+      uri: this.config.mongoConnectionString, 
+      logger: this.logger
+    });
+    */
+   
     // Basically just an async shortcut to using a setTimeout. Nothing fancy!
     this.wait = require("util").promisify(setTimeout);
   }
@@ -193,11 +201,13 @@ class DiscordBot extends Client {
   setExclusions(guild, exclusionList) {
     this.exclusions.set(guild.id, exclusionList);
   }
-  getGameData(gameName) {
+  async getGameData(gameName) {
+    //await this.db.testConnection();
     const guildData = this.gamedata.get(gameName) || {};
     return guildData;
   }
   setGameData(gameName, updatedData) {
+    //this.db.testConnection();
     this.gamedata.set(gameName, updatedData);
   }
   /*

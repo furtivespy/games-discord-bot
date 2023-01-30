@@ -31,7 +31,7 @@ class Test extends Command {
             if (args[0] == "reset") {
                 this.client.setGameData(`cards-${message.channel.id}`, {})
             }
-            var gameData = this.client.getGameData(`cards-${message.channel.id}`)
+            var gameData = await this.client.getGameData(`cards-${message.channel.id}`)
             console.log(JSON.stringify(gameData))
             await message.reply(`\`\`\`javacript
             ${JSON.stringify(gameData)}

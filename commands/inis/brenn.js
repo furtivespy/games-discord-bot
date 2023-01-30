@@ -24,7 +24,7 @@ class Brenn extends Command {
             var newBrenn = this.getUserFromMention(args[0])
             if (!newBrenn) return
 
-            var gameData = this.client.getGameData("INIS")
+            var gameData = await this.client.getGameData("INIS")
 
             gameData.players.forEach(p => {
                 p.isBrenn = p.userId == newBrenn.id

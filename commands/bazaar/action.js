@@ -41,7 +41,7 @@ class Action extends Command {
 
   async run(message, args, level) {
     try {
-      var gameData = this.client.getGameData(`bazaar-${message.channel.id}`);
+      var gameData = await this.client.getGameData(`bazaar-${message.channel.id}`);
       if (args[0]) console.log(gameData);
       if (gameData.players === undefined || gameData.gameOver) {
         await message.channel.send(`No Game Happening in this Channel`);

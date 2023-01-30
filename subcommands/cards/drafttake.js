@@ -8,7 +8,7 @@ class Take {
         let gameData = Object.assign(
             {},
             cloneDeep(GameDB.defaultGameData), 
-            client.getGameData(`game-${interaction.channel.id}`)
+            await client.getGameData(`game-${interaction.channel.id}`)
         )
 
         if (interaction.isAutocomplete()) {

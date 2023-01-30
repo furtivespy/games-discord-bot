@@ -9,7 +9,7 @@ class Reveal {
             let secretData = Object.assign(
                 {},
                 cloneDeep(GameDB.defaultSecretData), 
-                client.getGameData(`secret-${interaction.channel.id}`)
+                await client.getGameData(`secret-${interaction.channel.id}`)
             )
             
             if (secretData.players.length > 0){

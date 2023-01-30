@@ -21,7 +21,7 @@ class Crows extends Command {
 
     async run (message, args, level) {
         try {
-            var gameData = this.client.getGameData("INIS")
+            var gameData = await this.client.getGameData("INIS")
             gameData.isClockwise = !gameData.isClockwise
             gameData.order = (gameData.isClockwise) ? "Clockwise" : "Counterclockwise"
             this.client.setGameData("INIS", gameData)
