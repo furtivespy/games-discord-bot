@@ -19,6 +19,8 @@ class GameDatabase {
         [ "Brass Birmingham - 2 Players", "brass-two"],
         [ "Brass Birmingham - 3 Players", "brass-three"],
         [ "Brass Birmingham - 4 Players", "brass-four"],
+        [ "Brass Birmingham - Wild Location", "brass-wild-location"],
+        [ "Brass Birmingham - Wild Industry", "brass-wild-industry"],
     ]
 
     defaultGameData = {
@@ -163,6 +165,10 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "B", brassThreePlayer)
             case "brass-four":
                 return this.createCardFromObjList(deckName, "B", brassFourPlayer)
+            case "brass-wild-location":
+                return this.createCardFromObjList(deckName, "B", [...brassWildLocation, ...brassWildLocation])
+            case "brass-wild-industry":
+                return this.createCardFromObjList(deckName, "B", [...brassWildIndustry, ...brassWildIndustry])
             default:
                 return []
         }
@@ -439,6 +445,9 @@ const brassBase = [
     {name: "Manufactured Goods / Cotton Mill", type: "Industry", suit: "f", url: "https://furtivespy.com/images/brass/goods-mill-1.png"},
     {name: "Pottery", type: "Industry", suit: "f", url: "https://furtivespy.com/images/brass/pottery.png"},
     {name: "Brewery", type: "Industry", suit: "f", url: "https://furtivespy.com/images/brass/brewery.png"},
+
+    {name: "Wild Location", type: "Location", suit: "g", url: "https://furtivespy.com/images/brass/wild-location.png"},
+    {name: "Wild Industry", type: "Industry", suit: "h", url: "https://furtivespy.com/images/brass/wild-industry.png"},    
 ]
 
 const brassTwoPlayer = [
@@ -606,5 +615,31 @@ const brassFourPlayer = [
     {name: "Brewery", type: "Industry", suit: "f", url: "https://furtivespy.com/images/brass/brewery.png"},
     {name: "Brewery", type: "Industry", suit: "f", url: "https://furtivespy.com/images/brass/brewery.png"},
     {name: "Brewery", type: "Industry", suit: "f", url: "https://furtivespy.com/images/brass/brewery.png"},
+]
+
+const brassWildLocation = [
+    {name: "Wild Location", type: "Location", suit: "g", url: "https://furtivespy.com/images/brass/wild-location.png"},
+    {name: "Wild Location", type: "Location", suit: "g", url: "https://furtivespy.com/images/brass/wild-location.png"},
+    {name: "Wild Location", type: "Location", suit: "g", url: "https://furtivespy.com/images/brass/wild-location.png"},
+    {name: "Wild Location", type: "Location", suit: "g", url: "https://furtivespy.com/images/brass/wild-location.png"},
+    {name: "Wild Location", type: "Location", suit: "g", url: "https://furtivespy.com/images/brass/wild-location.png"},
+    {name: "Wild Location", type: "Location", suit: "g", url: "https://furtivespy.com/images/brass/wild-location.png"},
+    {name: "Wild Location", type: "Location", suit: "g", url: "https://furtivespy.com/images/brass/wild-location.png"},
+    {name: "Wild Location", type: "Location", suit: "g", url: "https://furtivespy.com/images/brass/wild-location.png"},
+    {name: "Wild Location", type: "Location", suit: "g", url: "https://furtivespy.com/images/brass/wild-location.png"},
+    {name: "Wild Location", type: "Location", suit: "g", url: "https://furtivespy.com/images/brass/wild-location.png"},
+]
+
+const brassWildIndustry = [
+    {name: "Wild Industry", type: "Industry", suit: "h", url: "https://furtivespy.com/images/brass/wild-industry.png"},    
+    {name: "Wild Industry", type: "Industry", suit: "h", url: "https://furtivespy.com/images/brass/wild-industry.png"},    
+    {name: "Wild Industry", type: "Industry", suit: "h", url: "https://furtivespy.com/images/brass/wild-industry.png"},    
+    {name: "Wild Industry", type: "Industry", suit: "h", url: "https://furtivespy.com/images/brass/wild-industry.png"},    
+    {name: "Wild Industry", type: "Industry", suit: "h", url: "https://furtivespy.com/images/brass/wild-industry.png"},    
+    {name: "Wild Industry", type: "Industry", suit: "h", url: "https://furtivespy.com/images/brass/wild-industry.png"},    
+    {name: "Wild Industry", type: "Industry", suit: "h", url: "https://furtivespy.com/images/brass/wild-industry.png"},    
+    {name: "Wild Industry", type: "Industry", suit: "h", url: "https://furtivespy.com/images/brass/wild-industry.png"},    
+    {name: "Wild Industry", type: "Industry", suit: "h", url: "https://furtivespy.com/images/brass/wild-industry.png"},    
+    {name: "Wild Industry", type: "Industry", suit: "h", url: "https://furtivespy.com/images/brass/wild-industry.png"},    
 ]
 module.exports = new GameDatabase();
