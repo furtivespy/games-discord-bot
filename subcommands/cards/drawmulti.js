@@ -29,7 +29,7 @@ class DrawMulti {
             let dealCount = 0
             const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
 
-            if (!deck || deck.piles.draw.cards.length < 0){
+            if (!deck || deck.piles.draw.cards.length < 1){
                 await interaction.reply({ content: "No cards in draw pile", ephemeral: true })
                 return
             } 
