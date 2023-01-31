@@ -29,7 +29,7 @@ class DrawMulti {
             let dealCount = 0
             const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
 
-            if (!deck || deck.piles.draw.length < 0){
+            if (!deck || deck.piles.draw.cards.length < 0){
                 await interaction.reply({ content: "No cards in draw pile", ephemeral: true })
                 return
             } 
@@ -54,7 +54,7 @@ class DrawMulti {
 
             dealLoop:
             for (let i = 0; i < cardCount; i++) {
-                if (deck.piles.draw.length < 1){
+                if (deck.piles.draw.cards.length < 1){
                     await Shuffle.execute(interaction, client)
                 } 
 

@@ -37,7 +37,7 @@ class Deal {
             dealLoop:
             for (let i = 0; i < cardCount; i++) {
                 for (const player of gameData.players) {
-                    if (deck.piles.draw.length < 1){
+                    if (deck.piles.draw.cards.length < 1){
                         await Shuffle.execute(interaction, client)
                     } 
 

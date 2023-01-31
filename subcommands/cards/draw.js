@@ -26,11 +26,10 @@ class Draw {
             const inputDeck = interaction.options.getString('deck')
             const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
 
-            if (!deck || deck.piles.draw.length < 0){
+            if (!deck || deck.piles.draw.cards.length < 0){
                 await interaction.reply({ content: "No cards in draw pile", ephemeral: true })
                 return
             } 
-
             const theCard = deck.piles.draw.cards.shift()
 
             let player = find(gameData.players, {userId: interaction.user.id})
@@ -53,6 +52,8 @@ class Draw {
 
             player.hands.main.push(theCard)
             client.setGameData(`game-${interaction.channel.id}`, gameData)
+            //await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+            
             const data = await Formatter.GameStatusV2(gameData, interaction.guild)
             
             await interaction.reply({ 
