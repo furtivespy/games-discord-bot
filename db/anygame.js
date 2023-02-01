@@ -21,6 +21,7 @@ class GameDatabase {
         [ "Brass Birmingham - 4 Players", "brass-four"],
         [ "Brass Birmingham - Wild Location", "brass-wild-location"],
         [ "Brass Birmingham - Wild Industry", "brass-wild-industry"],
+        [ "Blue Moon City", "blue-moon-city"],
     ]
 
     defaultGameData = {
@@ -169,6 +170,8 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "B", [...brassWildLocation, ...brassWildLocation])
             case "brass-wild-industry":
                 return this.createCardFromObjList(deckName, "B", [...brassWildIndustry, ...brassWildIndustry])
+            case "blue-moon-city":
+                return this.createCardFromObjList(deckName, "A", blueMoonCity)
             default:
                 return []
         }
@@ -641,5 +644,95 @@ const brassWildIndustry = [
     {name: "Wild Industry", type: "Industry", suit: "h", url: "https://furtivespy.com/images/brass/wild-industry.png"},    
     {name: "Wild Industry", type: "Industry", suit: "h", url: "https://furtivespy.com/images/brass/wild-industry.png"},    
     {name: "Wild Industry", type: "Industry", suit: "h", url: "https://furtivespy.com/images/brass/wild-industry.png"},    
+]
+
+const blueMoonCity = [
+    {name: "2", type: "Aqua 🔵", suit: "aqua", value: 2, url: "https://furtivespy.com/images/bluemoon/aqua_0_0.png"},
+    {name: "1", type: "Aqua 🔵", suit: "aqua", value: 1, url: "https://furtivespy.com/images/bluemoon/aqua_0_1.png"},
+    {name: "1", type: "Aqua 🔵", suit: "aqua", value: 1, url: "https://furtivespy.com/images/bluemoon/aqua_0_2.png"},
+    {name: "1", type: "Aqua 🔵", suit: "aqua", value: 1, url: "https://furtivespy.com/images/bluemoon/aqua_0_3.png"},
+    {name: "1", type: "Aqua 🔵", suit: "aqua", value: 1, url: "https://furtivespy.com/images/bluemoon/aqua_0_4.png"},
+    {name: "3", type: "Aqua 🔵", suit: "aqua", value: 3, url: "https://furtivespy.com/images/bluemoon/aqua_1_0.png"},
+    {name: "3", type: "Aqua 🔵", suit: "aqua", value: 3, url: "https://furtivespy.com/images/bluemoon/aqua_1_1.png"},
+    {name: "2", type: "Aqua 🔵", suit: "aqua", value: 2, url: "https://furtivespy.com/images/bluemoon/aqua_1_2.png"},
+    {name: "2", type: "Aqua 🔵", suit: "aqua", value: 2, url: "https://furtivespy.com/images/bluemoon/aqua_1_3.png"},
+    {name: "2", type: "Aqua 🔵", suit: "aqua", value: 2, url: "https://furtivespy.com/images/bluemoon/aqua_1_4.png"},
+
+    {name: "2", type: "Flit 🥈", suit: "flit", value: 2, url: "https://furtivespy.com/images/bluemoon/flit_0_0.png"},
+    {name: "1", type: "Flit 🥈", suit: "flit", value: 1, url: "https://furtivespy.com/images/bluemoon/flit_0_1.png"},
+    {name: "1", type: "Flit 🥈", suit: "flit", value: 1, url: "https://furtivespy.com/images/bluemoon/flit_0_2.png"},
+    {name: "1", type: "Flit 🥈", suit: "flit", value: 1, url: "https://furtivespy.com/images/bluemoon/flit_0_3.png"},
+    {name: "1", type: "Flit 🥈", suit: "flit", value: 1, url: "https://furtivespy.com/images/bluemoon/flit_0_4.png"},
+    {name: "3", type: "Flit 🥈", suit: "flit", value: 3, url: "https://furtivespy.com/images/bluemoon/flit_1_0.png"},
+    {name: "3", type: "Flit 🥈", suit: "flit", value: 3, url: "https://furtivespy.com/images/bluemoon/flit_1_1.png"},
+    {name: "2", type: "Flit 🥈", suit: "flit", value: 2, url: "https://furtivespy.com/images/bluemoon/flit_1_2.png"},
+    {name: "2", type: "Flit 🥈", suit: "flit", value: 2, url: "https://furtivespy.com/images/bluemoon/flit_1_3.png"},
+    {name: "2", type: "Flit 🥈", suit: "flit", value: 2, url: "https://furtivespy.com/images/bluemoon/flit_1_4.png"},
+
+    {name: "2", type: "Hoax ⚪", suit: "hoax", value: 2, url: "https://furtivespy.com/images/bluemoon/hoax_0_0.png"},
+    {name: "1", type: "Hoax ⚪", suit: "hoax", value: 1, url: "https://furtivespy.com/images/bluemoon/hoax_0_1.png"},
+    {name: "1", type: "Hoax ⚪", suit: "hoax", value: 1, url: "https://furtivespy.com/images/bluemoon/hoax_0_2.png"},
+    {name: "1", type: "Hoax ⚪", suit: "hoax", value: 1, url: "https://furtivespy.com/images/bluemoon/hoax_0_3.png"},
+    {name: "1", type: "Hoax ⚪", suit: "hoax", value: 1, url: "https://furtivespy.com/images/bluemoon/hoax_0_4.png"},
+    {name: "3", type: "Hoax ⚪", suit: "hoax", value: 3, url: "https://furtivespy.com/images/bluemoon/hoax_1_0.png"},
+    {name: "3", type: "Hoax ⚪", suit: "hoax", value: 3, url: "https://furtivespy.com/images/bluemoon/hoax_1_1.png"},
+    {name: "2", type: "Hoax ⚪", suit: "hoax", value: 2, url: "https://furtivespy.com/images/bluemoon/hoax_1_2.png"},
+    {name: "2", type: "Hoax ⚪", suit: "hoax", value: 2, url: "https://furtivespy.com/images/bluemoon/hoax_1_3.png"},
+    {name: "2", type: "Hoax ⚪", suit: "hoax", value: 2, url: "https://furtivespy.com/images/bluemoon/hoax_1_4.png"},
+
+    {name: "2", type: "Mimix 🟤", suit: "mimix", value: 2, url: "https://furtivespy.com/images/bluemoon/mimix_0_0.png"},
+    {name: "1", type: "Mimix 🟤", suit: "mimix", value: 1, url: "https://furtivespy.com/images/bluemoon/mimix_0_1.png"},
+    {name: "1", type: "Mimix 🟤", suit: "mimix", value: 1, url: "https://furtivespy.com/images/bluemoon/mimix_0_2.png"},
+    {name: "1", type: "Mimix 🟤", suit: "mimix", value: 1, url: "https://furtivespy.com/images/bluemoon/mimix_0_3.png"},
+    {name: "1", type: "Mimix 🟤", suit: "mimix", value: 1, url: "https://furtivespy.com/images/bluemoon/mimix_0_4.png"},
+    {name: "3", type: "Mimix 🟤", suit: "mimix", value: 3, url: "https://furtivespy.com/images/bluemoon/mimix_1_0.png"},
+    {name: "3", type: "Mimix 🟤", suit: "mimix", value: 3, url: "https://furtivespy.com/images/bluemoon/mimix_1_1.png"},
+    {name: "2", type: "Mimix 🟤", suit: "mimix", value: 2, url: "https://furtivespy.com/images/bluemoon/mimix_1_2.png"},
+    {name: "2", type: "Mimix 🟤", suit: "mimix", value: 2, url: "https://furtivespy.com/images/bluemoon/mimix_1_3.png"},
+    {name: "2", type: "Mimix 🟤", suit: "mimix", value: 2, url: "https://furtivespy.com/images/bluemoon/mimix_1_4.png"},
+
+    {name: "2", type: "Pillar 🟡", suit: "pillar", value: 2, url: "https://furtivespy.com/images/bluemoon/pillar_0_0.png"},
+    {name: "1", type: "Pillar 🟡", suit: "pillar", value: 1, url: "https://furtivespy.com/images/bluemoon/pillar_0_1.png"},
+    {name: "1", type: "Pillar 🟡", suit: "pillar", value: 1, url: "https://furtivespy.com/images/bluemoon/pillar_0_2.png"},
+    {name: "1", type: "Pillar 🟡", suit: "pillar", value: 1, url: "https://furtivespy.com/images/bluemoon/pillar_0_3.png"},
+    {name: "1", type: "Pillar 🟡", suit: "pillar", value: 1, url: "https://furtivespy.com/images/bluemoon/pillar_0_4.png"},
+    {name: "3", type: "Pillar 🟡", suit: "pillar", value: 3, url: "https://furtivespy.com/images/bluemoon/pillar_1_0.png"},
+    {name: "3", type: "Pillar 🟡", suit: "pillar", value: 3, url: "https://furtivespy.com/images/bluemoon/pillar_1_1.png"},
+    {name: "2", type: "Pillar 🟡", suit: "pillar", value: 2, url: "https://furtivespy.com/images/bluemoon/pillar_1_2.png"},
+    {name: "2", type: "Pillar 🟡", suit: "pillar", value: 2, url: "https://furtivespy.com/images/bluemoon/pillar_1_3.png"},
+    {name: "2", type: "Pillar 🟡", suit: "pillar", value: 2, url: "https://furtivespy.com/images/bluemoon/pillar_1_4.png"},
+
+    {name: "2", type: "Terrah 🔴", suit: "terrah", value: 2, url: "https://furtivespy.com/images/bluemoon/terrah_0_0.png"},
+    {name: "1", type: "Terrah 🔴", suit: "terrah", value: 1, url: "https://furtivespy.com/images/bluemoon/terrah_0_1.png"},
+    {name: "1", type: "Terrah 🔴", suit: "terrah", value: 1, url: "https://furtivespy.com/images/bluemoon/terrah_0_2.png"},
+    {name: "1", type: "Terrah 🔴", suit: "terrah", value: 1, url: "https://furtivespy.com/images/bluemoon/terrah_0_3.png"},
+    {name: "1", type: "Terrah 🔴", suit: "terrah", value: 1, url: "https://furtivespy.com/images/bluemoon/terrah_0_4.png"},
+    {name: "3", type: "Terrah 🔴", suit: "terrah", value: 3, url: "https://furtivespy.com/images/bluemoon/terrah_1_0.png"},
+    {name: "3", type: "Terrah 🔴", suit: "terrah", value: 3, url: "https://furtivespy.com/images/bluemoon/terrah_1_1.png"},
+    {name: "2", type: "Terrah 🔴", suit: "terrah", value: 2, url: "https://furtivespy.com/images/bluemoon/terrah_1_2.png"},
+    {name: "2", type: "Terrah 🔴", suit: "terrah", value: 2, url: "https://furtivespy.com/images/bluemoon/terrah_1_3.png"},
+    {name: "2", type: "Terrah 🔴", suit: "terrah", value: 2, url: "https://furtivespy.com/images/bluemoon/terrah_1_4.png"},
+
+    {name: "2", type: "Vulca ⚫", suit: "vulca", value: 2, url: "https://furtivespy.com/images/bluemoon/vulca_0_0.png"},
+    {name: "1", type: "Vulca ⚫", suit: "vulca", value: 1, url: "https://furtivespy.com/images/bluemoon/vulca_0_1.png"},
+    {name: "1", type: "Vulca ⚫", suit: "vulca", value: 1, url: "https://furtivespy.com/images/bluemoon/vulca_0_2.png"},
+    {name: "1", type: "Vulca ⚫", suit: "vulca", value: 1, url: "https://furtivespy.com/images/bluemoon/vulca_0_3.png"},
+    {name: "1", type: "Vulca ⚫", suit: "vulca", value: 1, url: "https://furtivespy.com/images/bluemoon/vulca_0_4.png"},
+    {name: "3", type: "Vulca ⚫", suit: "vulca", value: 3, url: "https://furtivespy.com/images/bluemoon/vulca_1_0.png"},
+    {name: "3", type: "Vulca ⚫", suit: "vulca", value: 3, url: "https://furtivespy.com/images/bluemoon/vulca_1_1.png"},
+    {name: "2", type: "Vulca ⚫", suit: "vulca", value: 2, url: "https://furtivespy.com/images/bluemoon/vulca_1_2.png"},
+    {name: "2", type: "Vulca ⚫", suit: "vulca", value: 2, url: "https://furtivespy.com/images/bluemoon/vulca_1_3.png"},
+    {name: "2", type: "Vulca ⚫", suit: "vulca", value: 2, url: "https://furtivespy.com/images/bluemoon/vulca_1_4.png"},
+
+    {name: "1", type: "Khind 🟢", suit: "khind", value: 1, url: "https://furtivespy.com/images/bluemoon/khind_0_0.png"},
+    {name: "1", type: "Khind 🟢", suit: "khind", value: 1, url: "https://furtivespy.com/images/bluemoon/khind_0_1.png"},
+    {name: "1", type: "Khind 🟢", suit: "khind", value: 1, url: "https://furtivespy.com/images/bluemoon/khind_0_2.png"},
+    {name: "1", type: "Khind 🟢", suit: "khind", value: 1, url: "https://furtivespy.com/images/bluemoon/khind_0_3.png"},
+    {name: "1", type: "Khind 🟢", suit: "khind", value: 1, url: "https://furtivespy.com/images/bluemoon/khind_0_4.png"},
+    {name: "1", type: "Khind 🟢", suit: "khind", value: 1, url: "https://furtivespy.com/images/bluemoon/khind_1_0.png"},
+    {name: "1", type: "Khind 🟢", suit: "khind", value: 1, url: "https://furtivespy.com/images/bluemoon/khind_1_1.png"},
+    {name: "1", type: "Khind 🟢", suit: "khind", value: 1, url: "https://furtivespy.com/images/bluemoon/khind_1_2.png"},
+    {name: "1", type: "Khind 🟢", suit: "khind", value: 1, url: "https://furtivespy.com/images/bluemoon/khind_1_3.png"},
+    {name: "1", type: "Khind 🟢", suit: "khind", value: 1, url: "https://furtivespy.com/images/bluemoon/khind_1_4.png"},
 ]
 module.exports = new GameDatabase();
