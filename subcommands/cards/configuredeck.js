@@ -2,7 +2,7 @@ const GameDB = require('../../db/anygame.js')
 const { cloneDeep, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const Shuffle = require(`./shuffle`)
-const { MessageActionRow, MessageSelectMenu } = require('discord.js');
+const { ActionRowBuilder, SelectMenuBuilder } = require('discord.js');
 
 class Configure {
     async execute(interaction, client) {
@@ -31,9 +31,9 @@ class Configure {
         // Do this once there are multiple configTypes
         //switch (configType){
 
-        const row = new MessageActionRow()
+        const row = new ActionRowBuilder()
         .addComponents(
-            new MessageSelectMenu()
+            new SelectMenuBuilder()
                 .setCustomId('select')
                 .setPlaceholder('Nothing selected')
                 .addOptions([
