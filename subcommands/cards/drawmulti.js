@@ -51,14 +51,16 @@ class DrawMulti {
 
                 player = find(gameData.players, {userId: interaction.user.id})
             }
+            let wasShuffled = ""
 
             dealLoop:
             for (let i = 0; i < cardCount; i++) {
                 if (deck.piles.draw.cards.length < 1){
-                    await Shuffle.execute(interaction, client)
+                    wasShuffled = "\n**The deck was shuffled**"
+                    Shuffle.DoShuffle(deck)
                 } 
 
-                if (deck.piles.draw.cards.length + deck.piles.discard.cards.length < 1){
+                if (deck.piles.draw.cards.length < 1){
                     break dealLoop
                 }
                 const theCard = deck.piles.draw.cards.shift()
@@ -67,16 +69,15 @@ class DrawMulti {
             }
             
             client.setGameData(`game-${interaction.channel.id}`, gameData)
-
             const data = await Formatter.GameStatusV2(gameData, interaction.guild)
             
             await interaction.reply({ 
-                content: `${interaction.member.displayName} drew ${dealCount} cards from ${deck.name}`,
+                content: `${interaction.member.displayName} drew ${dealCount} cards from ${deck.name}${wasShuffled}`,
                 embeds: [
                     ...Formatter.deckStatus2(gameData)
                 ],
                 files: [...data]
-            })
+            })            
             var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
             if (handInfo.attachments.length >0){
                 await interaction.followUp({ 

@@ -30,18 +30,7 @@ class Shuffle {
                 return
             } 
 
-            let shuffleCards = [...deck.piles.discard.cards]
-            deck.piles.discard.cards = []
-
-            switch (deck.shuffleStyle){
-                case 'bag':
-                    shuffleCards = shuffleCards.concat(deck.piles.draw.cards)
-                    deck.piles.draw.cards = []
-                    break;
-            }
-            
-            shuffleCards = shuffle(shuffleCards)
-            deck.piles.draw.cards = deck.piles.draw.cards.concat(shuffleCards)
+            this.DoShuffle(deck)
 
             client.setGameData(`game-${interaction.channel.id}`, gameData)
 
@@ -53,6 +42,21 @@ class Shuffle {
             })
 
         }
+    }
+
+    DoShuffle(deck){
+        let shuffleCards = [...deck.piles.discard.cards]
+        deck.piles.discard.cards = []
+
+        switch (deck.shuffleStyle){
+            case 'bag':
+                shuffleCards = shuffleCards.concat(deck.piles.draw.cards)
+                deck.piles.draw.cards = []
+                break;
+        }
+        
+        shuffleCards = shuffle(shuffleCards)
+        deck.piles.draw.cards = deck.piles.draw.cards.concat(shuffleCards)
     }
 }
 
