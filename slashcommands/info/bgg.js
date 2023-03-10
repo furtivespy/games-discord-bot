@@ -120,10 +120,11 @@ class BGG extends SlashCommand {
         } else {
           ranks += `\n**${gameInfo.statistics.ratings.ranks.rank.friendlyname}:** ${gameInfo.statistics.ratings.ranks.rank.value}`
         }
+        let publisher = Array.isArray(gameInfo.boardgamepublisher) ? gameInfo.boardgamepublisher.map(d => d.text).join(", ") : gameInfo.boardgamepublisher.text
         let detailEmbed = new EmbedBuilder().setTitle(`Details`).addFields(
           {
             name: "Game Data",
-            value: `**Published:** ${gameInfo.yearpublished}\n**Players:** ${gameInfo.minplayers} - ${gameInfo.maxplayers}\n**Playing Time:** ${gameInfo.minplaytime} - ${gameInfo.maxplaytime}\n**Age:** ${gameInfo.age}+`,
+            value: `**Published:** ${gameInfo.yearpublished}\n**Publisher:** ${publisher}\n**Players:** ${gameInfo.minplayers} - ${gameInfo.maxplayers}\n**Playing Time:** ${gameInfo.minplaytime} - ${gameInfo.maxplaytime}\n**Age:** ${gameInfo.age}+`,
             inline: true,
           },
           {
