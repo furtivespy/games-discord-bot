@@ -273,7 +273,7 @@ class GameFormatter {
         imgList.push(card.url);
       }
     });
-    let canvas = createCanvas(1200, 200);
+    let canvas = createCanvas(1200, 1);
     let ctx = canvas.getContext("2d");
     const cardWidth = 200;
     let rowstart = 0;
@@ -285,11 +285,12 @@ class GameFormatter {
       if (spot == 0) {
         rowstart = rowend;
       }
-      const totalHeight = rowstart + cardHeight;
-      if (totalHeight > canvas.height) {
-        rowend = totalHeight;
+      if (rowstart + cardHeight > rowend) {
+        rowend = rowstart + cardHeight;
+      }
+      if (rowend > canvas.height) {
         const oldCanvas = canvas;
-        canvas = createCanvas(oldCanvas.width, totalHeight);
+        canvas = createCanvas(oldCanvas.width, rowend);
         ctx = canvas.getContext("2d");
         ctx.drawImage(oldCanvas, 0, 0);
       }
@@ -304,12 +305,14 @@ class GameFormatter {
     return canvas.toBuffer();
   }
 
-  static async GameWinner(gameData, guild) {
-    const winnerName = guild.members.cache.get(gameData.winner)?.displayName;
+  static winnerName(gameData, guild) {
+    return guild.members.cache.get(gameData.winner)?.displayName;
+  }
 
+  static async GameWinner(gameData, guild) {
     const newEmbed = new EmbedBuilder()
       .setColor(0xfff200)
-      .setTitle(`👑 Congratulations ${winnerName} 👑`)
+      .setTitle(`👑 Congratulations ${this.winnerName(gameData, guild)} 👑`)
       .setDescription(`For winning ${gameData.name}`);
 
     return newEmbed;

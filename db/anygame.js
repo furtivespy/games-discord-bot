@@ -26,6 +26,7 @@ class GameDatabase {
         [ "Quantitative Easing (QE) - Industry", "qe-industry"],
         [ "Quantitative Easing (QE) - Company 3-4 Players", "qe-company-3"],
         [ "Quantitative Easing (QE) - Company 5 Players", "qe-company-5"],
+        [ "Tigris & Euphrates", "tigris"],
     ]
 
     defaultGameData = {
@@ -33,7 +34,8 @@ class GameDatabase {
         players: [],
         name: "",
         isdeleted: true,
-        winner: null
+        winner: null,
+        bggGameId: null,
     }
     
     defaultSecretData = {
@@ -184,6 +186,12 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "B", qeCompany3)
             case "qe-company-5":
                 return this.createCardFromObjList(deckName, "B", qeCompany5)
+            case "tigris":
+                let deckArray = Array.from({length: 57}, () => ({...tigrisTiles[0]}))
+                deckArray.push(...Array.from({length: 36}, () => ({...tigrisTiles[1]})))
+                deckArray.push(...Array.from({length: 20}, () => ({...tigrisTiles[2]})))
+                deckArray.push(...Array.from({length: 20}, () => ({...tigrisTiles[3]})))
+                return this.createCardFromObjList(deckName, "B", deckArray)
             default:
                 return []
         }
@@ -803,5 +811,12 @@ const qeCompany5 = [
     {name: "Agriculture - 4", type: "US", suit: "US", url: "https://furtivespy.com/images/qe/US-a.jpg"},
     {name: "Finance - 2", type: "US", suit: "US", url: "https://furtivespy.com/images/qe/US-f.jpg"},
     {name: "Manufacturing - 3", type: "US", suit: "US", url: "https://furtivespy.com/images/qe/US-m.jpg"},
+]
+
+const tigrisTiles = [
+    {name: "Temple", type: "🟥", suit: "temple", url: "https://furtivespy.com/images/tigris/red.jpg"},
+    {name: "Farm", type: "🟦", suit: "farm", url: "https://furtivespy.com/images/tigris/blue.jpg"},
+    {name: "Settlement", type: "🔳", suit: "settlement", url: "https://furtivespy.com/images/tigris/black.jpg"},
+    {name: "Market", type: "🟩" , suit: "market", url: "https://furtivespy.com/images/tigris/green.jpg"},
 ]
 module.exports = new GameDatabase();
