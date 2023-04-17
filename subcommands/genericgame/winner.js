@@ -8,19 +8,25 @@ class NewGame {
         let gameData = Object.assign(
             {},
             cloneDeep(GameDB.defaultGameData), 
-            await client.getGameData(`game-${interaction.channel.id}`)
+            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
         )
 
         if (gameData.isdeleted) {
             await interaction.reply({ content: `No active game in this channel`, ephemeral: true })
         } else {
-            let winUser = interaction.options.getUser('who')
+            let players = [];
 
-            let exists = find(gameData.players, {'userId': winUser.id})
-
-            if (exists) {
-                gameData.winner = winUser.id
-                client.setGameData(`game-${interaction.channel.id}`, gameData)
+            for(let i=0; i<gameData.players.length; i++){
+                let variable = `player${i+1}`
+                if (interaction.options.getUser(variable) && find(gameData.players, {'userId': interaction.options.getUser(variable).id})){
+                    players.push(interaction.options.getUser(variable).id);
+                }
+            }            
+            console.log(players)
+            if (players.length > 0) {
+                gameData.winner = players
+                //client.setGameData(`game-${interaction.channel.id}`, gameData)
+                await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
                 const winEmbed = await Formatter.GameWinner(gameData, interaction.guild)
                 winEmbed.setFooter({text: `use /winshare to tell another channel about the win!`})
@@ -29,7 +35,7 @@ class NewGame {
                     embeds: [winEmbed]
                 })
             } else {
-                await interaction.reply({ content: `I can't seem to find that player in this game...`, ephemeral: true })
+                await interaction.reply({ content: `I can't seem to find any of those players in this game...`, ephemeral: true })
             }
 
         }

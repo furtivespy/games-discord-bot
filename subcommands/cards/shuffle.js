@@ -8,7 +8,7 @@ class Shuffle {
         let gameData = Object.assign(
             {},
             cloneDeep(GameDB.defaultGameData), 
-            await client.getGameData(`game-${interaction.channel.id}`)
+            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
         )
 
         if (interaction.isAutocomplete()) {
@@ -32,7 +32,8 @@ class Shuffle {
 
             this.DoShuffle(deck)
 
-            client.setGameData(`game-${interaction.channel.id}`, gameData)
+            //client.setGameData(`game-${interaction.channel.id}`, gameData)
+            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
             await interaction.reply({ 
                 content: `Shuffled ${deck.name}`,

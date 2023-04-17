@@ -7,7 +7,7 @@ class Check {
         let secretData = Object.assign(
             {},
             cloneDeep(GameDB.defaultSecretData), 
-            await client.getGameData(`secret-${interaction.channel.id}`)
+            await client.getGameDataV2(interaction.guildId, 'secret', interaction.channelId)
         )
         
         let myData = find(secretData.players, {'userId': interaction.user.id})

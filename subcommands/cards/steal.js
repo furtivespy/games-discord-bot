@@ -8,7 +8,7 @@ class Steal {
         let gameData = Object.assign(
             {},
             cloneDeep(GameDB.defaultGameData), 
-            await client.getGameData(`game-${interaction.channel.id}`)
+            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
         )
 
         if (gameData.isdeleted) {
@@ -32,7 +32,8 @@ class Steal {
         let stolen = targetPlayer.hands.main.splice(random(0,targetPlayer.hands.main.length - 1), 1)
         player.hands.main.push(stolen[0])
 
-        client.setGameData(`game-${interaction.channel.id}`, gameData)
+        //client.setGameData(`game-${interaction.channel.id}`, gameData)
+        await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         
         const data = await Formatter.GameStatusV2(gameData, interaction.guild)
 

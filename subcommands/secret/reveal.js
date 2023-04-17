@@ -9,12 +9,13 @@ class Reveal {
             let secretData = Object.assign(
                 {},
                 cloneDeep(GameDB.defaultSecretData), 
-                await client.getGameData(`secret-${interaction.channel.id}`)
+                await client.getGameDataV2(interaction.guildId, 'secret', interaction.channelId)
             )
             
             if (secretData.players.length > 0){
                 secretData.isrevealed = true
-                client.setGameData(`secret-${interaction.channel.id}`, secretData)
+                //client.setGameData(`secret-${interaction.channel.id}`, secretData)
+                await client.setGameDataV2(interaction.guildId, "secret", interaction.channelId, secretData)
 
                 await interaction.reply({ 
                     content: `Your Secrets!`,

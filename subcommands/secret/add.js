@@ -8,7 +8,7 @@ class Add {
         let secretData = Object.assign(
             {},
             cloneDeep(GameDB.defaultSecretData), 
-            await client.getGameData(`secret-${interaction.channel.id}`)
+            await client.getGameDataV2(interaction.guildId, 'secret', interaction.channelId)
         )
 
         if (secretData.isrevealed) { //All New Secrets
@@ -21,7 +21,7 @@ class Add {
             let gameData = Object.assign(
                 {},
                 cloneDeep(GameDB.defaultGameData), 
-                await client.getGameData(`game-${interaction.channel.id}`)
+                await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
             )
 
             if (gameData.players.length > 0 && !gameData.isdeleted) {
@@ -53,7 +53,8 @@ class Add {
 
         mySecret.hassecret = true
         mySecret.secret = interaction.options.getString('secret')
-        client.setGameData(`secret-${interaction.channel.id}`, secretData)
+        //client.setGameData(`secret-${interaction.channel.id}`, secretData)
+        await client.setGameDataV2(interaction.guildId, "secret", interaction.channelId, secretData)
 
 
         await interaction.reply({ 

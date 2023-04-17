@@ -8,7 +8,7 @@ class Discard {
         let gameData = Object.assign(
             {},
             cloneDeep(GameDB.defaultGameData), 
-            await client.getGameData(`game-${interaction.channel.id}`)
+            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
         )
 
         if (interaction.isAutocomplete()) {
@@ -46,7 +46,8 @@ class Discard {
 
             const data = await Formatter.GameStatusV2(gameData, interaction.guild)
 
-            client.setGameData(`game-${interaction.channel.id}`, gameData)
+            //client.setGameData(`game-${interaction.channel.id}`, gameData)
+            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
             await interaction.reply({ content: `${interaction.member.displayName} has Discarded a card`,
             embeds: [
                 ...Formatter.deckStatus2(gameData)

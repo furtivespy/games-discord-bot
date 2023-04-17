@@ -8,7 +8,7 @@ class Recall {
         let gameData = Object.assign(
             {},
             cloneDeep(GameDB.defaultGameData), 
-            await client.getGameData(`game-${interaction.channel.id}`)
+            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
         )
 
         if (interaction.isAutocomplete()) {
@@ -40,7 +40,8 @@ class Recall {
             deck.piles.discard.cards = []
             deck.piles.draw.cards = cloneDeep(shuffle(deck.allCards))
 
-            client.setGameData(`game-${interaction.channel.id}`, gameData)
+            //client.setGameData(`game-${interaction.channel.id}`, gameData)
+            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
             const data = await Formatter.GameStatusV2(gameData, interaction.guild)
             await interaction.reply({ 
                 content: `All cards recalled to ${deck.name}`,

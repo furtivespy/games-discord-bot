@@ -8,7 +8,7 @@ class Flip {
         let gameData = Object.assign(
             {},
             cloneDeep(GameDB.defaultGameData), 
-            await client.getGameData(`game-${interaction.channel.id}`)
+            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
         )
 
         if (interaction.isAutocomplete()) {
@@ -28,7 +28,8 @@ class Flip {
 
             const theCard = deck.piles.draw.cards.shift()
             deck.piles.discard.cards.push(theCard)
-            client.setGameData(`game-${interaction.channel.id}`, gameData)
+            //client.setGameData(`game-${interaction.channel.id}`, gameData)
+            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
             await interaction.reply({ 
                 content: `Flipped from the top of ${deck.name}`, 

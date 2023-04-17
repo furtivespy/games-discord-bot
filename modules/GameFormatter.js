@@ -1,6 +1,6 @@
 const { EmbedBuilder, AttachmentBuilder } = require("discord.js");
 const Emoji = require("./EmojiAssitant");
-const { sortBy, floor } = require("lodash");
+const { sortBy, floor, isArray } = require("lodash");
 var AsciiTable = require("ascii-table");
 const { createCanvas, Image, loadImage } = require("canvas");
 const { CanvasTable, CTColumn } = require("canvas-table");
@@ -306,7 +306,11 @@ class GameFormatter {
   }
 
   static winnerName(gameData, guild) {
-    return guild.members.cache.get(gameData.winner)?.displayName;
+    if (isArray(gameData.winner)){
+      return gameData.winner.map((id) => guild.members.cache.get(id)?.displayName).join(" & ");
+    } else {
+      return guild.members.cache.get(gameData.winner)?.displayName;
+    }
   }
 
   static async GameWinner(gameData, guild) {

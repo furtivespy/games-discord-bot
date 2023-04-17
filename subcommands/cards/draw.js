@@ -8,7 +8,7 @@ class Draw {
         let gameData = Object.assign(
             {},
             cloneDeep(GameDB.defaultGameData), 
-            await client.getGameData(`game-${interaction.channel.id}`)
+            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
         )
 
         if (interaction.isAutocomplete()) {
@@ -51,9 +51,9 @@ class Draw {
             }
 
             player.hands.main.push(theCard)
-            client.setGameData(`game-${interaction.channel.id}`, gameData)
-            //await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
-            
+            //client.setGameData(`game-${interaction.channel.id}`, gameData)
+            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+                        
             const data = await Formatter.GameStatusV2(gameData, interaction.guild)
             
             await interaction.reply({ 

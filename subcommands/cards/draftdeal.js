@@ -9,7 +9,7 @@ class Deal {
         let gameData = Object.assign(
             {},
             cloneDeep(GameDB.defaultGameData), 
-            await client.getGameData(`game-${interaction.channel.id}`)
+            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
         )
 
         if (interaction.isAutocomplete()) {
@@ -52,7 +52,8 @@ class Deal {
                 }
             }
 
-            client.setGameData(`game-${interaction.channel.id}`, gameData)
+            //client.setGameData(`game-${interaction.channel.id}`, gameData)
+            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
             const data = await Formatter.GameStatusV2(gameData, interaction.guild)
 
             await interaction.reply({ 

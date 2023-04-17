@@ -10,10 +10,9 @@ class Configure {
         let gameData = Object.assign(
             {},
             cloneDeep(GameDB.defaultGameData), 
-            await client.getGameData(`game-${interaction.channel.id}`)
+            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
         )
 
-       
         if (gameData.isdeleted) {
             await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
             return
@@ -61,7 +60,8 @@ class Configure {
         }
 
         deck.shuffleStyle = val
-        client.setGameData(`game-${interaction.channel.id}`, gameData)
+        //client.setGameData(`game-${interaction.channel.id}`, gameData)
+        await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
         const data = await Formatter.GameStatusV2(gameData, interaction.guild)
         

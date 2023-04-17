@@ -1,11 +1,7 @@
 const SlashCommand = require("../../base/SlashCommand.js");
 const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require("discord.js");
 const fetch = require("node-fetch");
-const { parse } = require("fast-xml-parser");
-const { find } = require("lodash");
-const he = require("he");
-const TurndownService = require("turndown");
-const { createCanvas, Image, loadImage } = require("canvas");
+const BoardGameGeek = require('../../modules/BoardGameGeek')
 
 class BGG extends SlashCommand {
   constructor(client) {
@@ -25,7 +21,19 @@ class BGG extends SlashCommand {
           .setDescription("The game to find")
           .setAutocomplete(true)
           .setRequired(true)
+      )
+      .addStringOption((option) =>
+        option
+          .setName("details")
+          .setDescription("Amount of details to show")
+          .addChoices(
+            {name: "All Details (default)", value: BoardGameGeek.DetailsEnum.ALL},
+            {name: "Only Description", value: BoardGameGeek.DetailsEnum.BASIC},
+            {name: "Only History", value: BoardGameGeek.DetailsEnum.HISTORY},
+            {name: "Only Awards", value: BoardGameGeek.DetailsEnum.AWARDS},
+          )
       );
+
   }
 
   async execute(interaction) {
@@ -76,93 +84,13 @@ class BGG extends SlashCommand {
         }
 
         await interaction.deferReply();
-        let turndownForWhat = new TurndownService();
-        let gameInfoResp = await fetch(
-          `https://api.geekdo.com/xmlapi/boardgame/${search}?stats=1`
-        );
-        let gameInfo = parse(await gameInfoResp.text(), {
-          attributeNamePrefix: "",
-          textNodeName: "text",
-          ignoreAttributes: false,
-          ignoreNameSpace: true,
-          allowBooleanAttributes: true,
-          // ignoreRootElement: true, // TODO: awaiting https://github.com/NaturalIntelligence/fast-xml-parser/issues/282
-        }).boardgames.boardgame;
-
-        //console.log(JSON.stringify(gameInfo));
-
-        const gameName = Array.isArray(gameInfo.name)
-          ? find(gameInfo.name, { primary: "true" }).text
-          : gameInfo.name.text;
-
-        let allEmbeds = [];
-        //Embed 1 - Image
-        const gameImage = await loadImage(gameInfo.image);
-        const scaledWidth = 600;
-        let canvas = createCanvas(scaledWidth, (scaledWidth / gameImage.width) * gameImage.height);
-        let ctx = canvas.getContext("2d");
-        ctx.drawImage(gameImage, 0, 0, scaledWidth, (scaledWidth / gameImage.width) * gameImage.height);
-        const imageAttach = new AttachmentBuilder(
-          canvas.toBuffer(),
-          {name: `gameImage.png`}
-        );
-
-        let imageEmbed = new EmbedBuilder()
-          .setTitle(he.decode(gameName))
-          .setURL(`https://boardgamegeek.com/boardgame/${search}`)
-          .setImage(`attachment://gameImage.png`);
-        allEmbeds.push(imageEmbed);
-
-        //Embed 2 - Stats and Details
-        let ranks = ""
-        if (Array.isArray(gameInfo.statistics.ratings.ranks.rank)) {
-          gameInfo.statistics.ratings.ranks.rank.forEach(r => {ranks += `\n**${r.friendlyname}:** ${r.value}`})
-        } else {
-          ranks += `\n**${gameInfo.statistics.ratings.ranks.rank.friendlyname}:** ${gameInfo.statistics.ratings.ranks.rank.value}`
-        }
-        let publisher = Array.isArray(gameInfo.boardgamepublisher) ? gameInfo.boardgamepublisher.map(d => d.text).join(", ") : gameInfo.boardgamepublisher.text
-        let detailEmbed = new EmbedBuilder().setTitle(`Details`).addFields(
-          {
-            name: "Game Data",
-            value: `**Published:** ${gameInfo.yearpublished}\n**Publisher:** ${publisher}\n**Players:** ${gameInfo.minplayers} - ${gameInfo.maxplayers}\n**Playing Time:** ${gameInfo.minplaytime} - ${gameInfo.maxplaytime}\n**Age:** ${gameInfo.age}+`,
-            inline: true,
-          },
-          {
-            name: `Ranks & Ratings`,
-            value: `**Average Rating:** ${gameInfo.statistics.ratings.average}\n**Weight:** ${gameInfo.statistics.ratings.averageweight}${ranks}`,
-            inline: true,
-          },
-          {
-            name: `Designer(s)`,
-            value: Array.isArray(gameInfo.boardgamedesigner) ? gameInfo.boardgamedesigner.map(d => d.text).join("\n") : gameInfo.boardgamedesigner.text,
-            inline: true
-          }
-        );
-        allEmbeds.push(detailEmbed);
-
-        //Embed 3 - Description
-        let descriptionEmbed = new EmbedBuilder()
-          .setTitle("Description")
-          .setDescription(
-            turndownForWhat.turndown(he.decode(gameInfo.description))
-          );
-        allEmbeds.push(descriptionEmbed);
-
-        //Embed 4 - awards and honors
-        if (gameInfo.boardgamehonor && Array.isArray(gameInfo.boardgamehonor)) {
-          let honors = "";
-          gameInfo.boardgamehonor.forEach((honor) => {
-            honors += `${he.decode(honor.text)}\n`;
-          });
-          let awardEmbed = new EmbedBuilder()
-            .setTitle(`Awards and Honors`)
-            .setDescription(honors);
-          allEmbeds.push(awardEmbed);
-        }
+       
+        let bgg = await BoardGameGeek.CreateAndLoad(search, this.client, interaction)
+        await bgg.LoadEmbeds(interaction.options.getString("details") || BoardGameGeek.DetailsEnum.ALL)
 
         await interaction.editReply({
-          embeds: allEmbeds,
-          files: [imageAttach],
+          embeds: bgg.embeds,
+          files: bgg.attachments,
         });
       }
     } catch (e) {

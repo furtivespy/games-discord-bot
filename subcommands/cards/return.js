@@ -8,7 +8,7 @@ class Rturn {
         let gameData = Object.assign(
             {},
             cloneDeep(GameDB.defaultGameData), 
-            await client.getGameData(`game-${interaction.channel.id}`)
+            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
         )
 
         if (interaction.isAutocomplete()) {
@@ -44,7 +44,8 @@ class Rturn {
             player.hands.main.splice(findIndex(player.hands.main, {id: cardid}), 1)
             deck.piles.draw.cards.unshift(card)
 
-            client.setGameData(`game-${interaction.channel.id}`, gameData)
+            //client.setGameData(`game-${interaction.channel.id}`, gameData)
+            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
             const data = await Formatter.GameStatusV2(gameData, interaction.guild)
             await interaction.reply({ 
                 content: `${interaction.member.displayName} returned a card`,

@@ -8,7 +8,7 @@ class Take {
         let gameData = Object.assign(
             {},
             cloneDeep(GameDB.defaultGameData), 
-            await client.getGameData(`game-${interaction.channel.id}`)
+            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
         )
 
         if (interaction.isAutocomplete()) {
@@ -43,7 +43,8 @@ class Take {
             player.hands.draft.splice(findIndex(player.hands.draft, {id: cardid}), 1)
             player.hands.main.push(theCard)
             
-            client.setGameData(`game-${interaction.channel.id}`, gameData)
+            //client.setGameData(`game-${interaction.channel.id}`, gameData)
+            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
             await interaction.reply({ content: `${interaction.member.displayName} has drafted a card!`})
             let cardsLeft = gameData.players[0].hands.draft.length
             if (cardsLeft > 0){

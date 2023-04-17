@@ -8,7 +8,7 @@ class Take {
         let gameData = Object.assign(
             {},
             cloneDeep(GameDB.defaultGameData), 
-            await client.getGameData(`game-${interaction.channel.id}`)
+            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
         )
 
         if (interaction.isAutocomplete()) {
@@ -43,7 +43,8 @@ class Take {
             player.hands.main.splice(findIndex(player.hands.main, {id: cardid}), 1)
             player.hands.draft.push(theCard)
             
-            client.setGameData(`game-${interaction.channel.id}`, gameData)
+            //client.setGameData(`game-${interaction.channel.id}`, gameData)
+            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
             await interaction.reply({ content: `${interaction.member.displayName} has un-drafted a card!`})
                         
             var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)

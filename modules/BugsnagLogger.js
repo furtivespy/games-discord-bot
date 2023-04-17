@@ -1,10 +1,9 @@
 const Bugsnag = require('@bugsnag/js')
 
 class BugsnagLogger {
-  constructor (apiKey) {
+  constructor (options) {
     this.logger = require("./Logger.js");
-    this.bugsnagClient = Bugsnag.start({apiKey: apiKey,  releaseStage: 'development' })
-    //this.bugsnagClient = Bugsnag.start({apiKey: apiKey })
+    this.bugsnagClient = Bugsnag.start(options);
   }
 
 
@@ -34,4 +33,4 @@ class BugsnagLogger {
   } 
 }
 
-module.exports = (key) => { return new BugsnagLogger(key) };
+module.exports = (options) => { return new BugsnagLogger(options) };

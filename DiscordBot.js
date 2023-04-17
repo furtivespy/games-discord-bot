@@ -12,6 +12,7 @@ const klaw = require("klaw");
 const path = require("path");
 const database = require("./db/db.js");
 const mongoDb = require("./db/mongoDb.js");
+const _ = require("lodash");
 
 class DiscordBot extends Client {
   constructor(options) {
@@ -44,15 +45,18 @@ class DiscordBot extends Client {
     this.guildDBs = {};
 
     //requiring the Logger class for easy console logging
-    this.logger = require("./modules/BugsnagLogger.js")(this.config.bugsnagKey);
+    this.logger = require("./modules/BugsnagLogger.js")({
+      apiKey: this.config.bugsnagKey,
+      releaseStage: this.config.environment,
+    });
 
-    /* Mongo DB is a work in progress...
+    /* Mongo DB is a work in progress... */
     this.db = new mongoDb({
       uri: this.config.mongoConnectionString, 
       logger: this.logger
     });
-    */
-   
+    
+
     // Basically just an async shortcut to using a setTimeout. Nothing fancy!
     this.wait = require("util").promisify(setTimeout);
   }
@@ -209,6 +213,23 @@ class DiscordBot extends Client {
   setGameData(gameName, updatedData) {
     //this.db.testConnection();
     this.gamedata.set(gameName, updatedData);
+  }
+  async setGameDataV2(serverId, gameName, channelId, updatedData) {
+    this.setGameData(`${gameName}-${channelId}`, updatedData); //keep this updated for now...
+    await this.db.upsertGameData(serverId, gameName, channelId, updatedData);
+  }
+  async getGameDataV2(serverId, gameName, channelId) {
+    let guildData = await this.db.getSpecificGameData(serverId, gameName, channelId);
+    if (!_.isEmpty(guildData)) {
+      //console.log("got data from db");
+      //console.log(guildData);
+      return guildData;
+    }
+    guildData = this.getGameData(`${gameName}-${channelId}`);
+    return guildData;
+  }
+  async queryGameData(serverId, gameName, query) {
+    return await this.db.queryGameData(serverId, gameName, query);
   }
   /*
     SINGLE-LINE AWAITMESSAGE
