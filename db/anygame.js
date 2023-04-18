@@ -831,11 +831,11 @@ const tigrisTiles = [
 ]
 
 const bloodRageAge1 = [
-    {name: `Frigga's Chosen`, type: `Mystic`, suit: `Mystic`, description: `Add 1 mystic to your reserve. Your mystics may retreat to an adjacent province instead of being destroyed.`, url: `https://furtivespy.com/images/bloodrage/age1_0_0.png`},
+    //{name: `Frigga's Chosen`, type: `Mystic`, suit: `Mystic`, description: `Add 1 mystic to your reserve. Your mystics may retreat to an adjacent province instead of being destroyed.`, url: `https://furtivespy.com/images/bloodrage/age1_0_0.png`},
     {name: `Thor's Glory`, type: `Clan`, suit: `Clan`, description: `Gain 2 glory whenever at least 2 enemy figures are destroyed in a battle you participate in.`, url: `https://furtivespy.com/images/bloodrage/age1_0_1.png`},
     {name: `Brothers In Arms`, type: `Warrior`, suit: `Warrior`, description: `*Each pair of your warriors in a province is 3 total STR.`, url: `https://furtivespy.com/images/bloodrage/age1_0_2.png`},
     {name: `Heimdall's Sight`, type: `Battle`, suit: `Battle`, description: `This card has the same value as the highest revealed enemy card.`, url: `https://furtivespy.com/images/bloodrage/age1_0_3.png`},
-    {name: `Frigga's Chosen`, type: `Mystic`, suit: `Mystic`, description: `Add 1 mystic to your reserve. Your mystics may retreat to an adjacent province instead of being destroyed.`, url: `https://furtivespy.com/images/bloodrage/age1_0_4.png`},
+    //{name: `Frigga's Chosen`, type: `Mystic`, suit: `Mystic`, description: `Add 1 mystic to your reserve. Your mystics may retreat to an adjacent province instead of being destroyed.`, url: `https://furtivespy.com/images/bloodrage/age1_0_4.png`},
     {name: `Dwarf Chieftain`, type: `Monster`, suit: `Monster`, description: `*Costs no rage to upgrade or invade`, url: `https://furtivespy.com/images/bloodrage/age1_0_5.png`},
     {name: `Thor's Hammer`, type: `Battle`, suit: `Battle`, description: `Gain 3 glory if you win this battle.`, url: `https://furtivespy.com/images/bloodrage/age1_0_9.png`},
     
@@ -896,7 +896,7 @@ const bloodRageAge2 = [
     {name: `Heimdall's Eye`, type: `Battle`, suit: `Battle`, description: `You may play this card (and add its STR) after all players' battle cards are revealed.`, url: `https://furtivespy.com/images/bloodrage/age2_0_8.png`},
     {name: `Yggdrasil`, type: `Quest`, suit: `Quest`, description: `Have the most STR in Yggdrasil. If completed, raise one of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age2_0_9.png`},
 
-    {name: `Odin's Chosen`, type: `Mystic`, suit: `Mystic`, description: `Add 1 mystic to your reserve. Your mystics may invade a village occupied by a warrior or mystic, destroying that figure.`, url: `https://furtivespy.com/images/bloodrage/age2_1_0.png`},
+    //{name: `Odin's Chosen`, type: `Mystic`, suit: `Mystic`, description: `Add 1 mystic to your reserve. Your mystics may invade a village occupied by a warrior or mystic, destroying that figure.`, url: `https://furtivespy.com/images/bloodrage/age2_1_0.png`},
     {name: `Fire Giant`, type: `Monster`, suit: `Monster`, description: `When this monster invades a province, destroy all enemy non-Monster figures in it.`, url: `https://furtivespy.com/images/bloodrage/age2_1_1.png`},
     {name: `Loki's Eminence`, type: `Clan`, suit: `Clan`, description: `Gain 2 glory for each figure you release from Valhalla.`, url: `https://furtivespy.com/images/bloodrage/age2_1_4.png`},
     {name: `Frigga's Protection`, type: `Clan`, suit: `Clan`, description: `You may pay 1 rage to prevent a figure of yours from being destroyed.`, url: `https://furtivespy.com/images/bloodrage/age2_1_5.png`},
@@ -910,7 +910,7 @@ const bloodRageAge2 = [
     {name: `Heimdall's Watch`, type: `Battle`, suit: `Battle`, description: `Discard all revealed cards. Gain glory equal to the total +STR revealed. Then play new cards.`, url: `https://furtivespy.com/images/bloodrage/age2_2_2.png`},
     {name: `Experts in Arms`, type: `Warrior`, suit: `Warrior`, description: `Your warriors are now 2 STR.`, url: `https://furtivespy.com/images/bloodrage/age2_2_3.png`},
     {name: `Glorious Death`, type: `Quest`, suit: `Quest`, description: `Have at least 4 figures in Valhalla (before Ragnarok). If completed, raise one of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age2_2_6.png`},
-    {name: `Odin's Chosen`, type: `Mystic`, suit: `Mystic`, description: `Add 1 mystic to your reserve. Your mystics may invade a village occupied by a warrior or mystic, destroying that figure.`, url: `https://furtivespy.com/images/bloodrage/age2_2_7.png`},
+    //{name: `Odin's Chosen`, type: `Mystic`, suit: `Mystic`, description: `Add 1 mystic to your reserve. Your mystics may invade a village occupied by a warrior or mystic, destroying that figure.`, url: `https://furtivespy.com/images/bloodrage/age2_2_7.png`},
     {name: `Odin's Tide`, type: `Battle`, suit: `Battle`, description: `Before comparing STR, each player chooses and destroys all but one of his figures in this battle.`, url: `https://furtivespy.com/images/bloodrage/age2_2_8.png`},
     {name: `Manheim`, type: `Quest`, suit: `Quest`, description: `Have the most STR in at least one Manheim (yellow) province. If completed, raise one of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age2_2_9.png`},
 
