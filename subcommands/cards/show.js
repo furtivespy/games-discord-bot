@@ -22,7 +22,7 @@ class Show {
             return
         }
 
-        interaction.deferReply({ephemeral: true});
+        await interaction.deferReply({ephemeral: true});
 
         var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
 
