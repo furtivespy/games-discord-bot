@@ -27,6 +27,7 @@ class GameDatabase {
         [ "Quantitative Easing (QE) - Company 3-4 Players", "qe-company-3"],
         [ "Quantitative Easing (QE) - Company 5 Players", "qe-company-5"],
         [ "Tigris & Euphrates", "tigris"],
+        [ "Blood Rage - Age 1", "blood-rage-1"],
     ]
 
     defaultGameData = {
@@ -36,6 +37,10 @@ class GameDatabase {
         isdeleted: true,
         winner: null,
         bggGameId: null,
+    }
+
+    defaultBGGGameData = {
+        links: [],
     }
     
     defaultSecretData = {
@@ -192,6 +197,8 @@ class GameDatabase {
                 deckArray.push(...Array.from({length: 20}, () => ({...tigrisTiles[2]})))
                 deckArray.push(...Array.from({length: 20}, () => ({...tigrisTiles[3]})))
                 return this.createCardFromObjList(deckName, "B", deckArray)
+            case "blood-rage-1":
+                return this.createCardFromObjList(deckName, "B", bloodRageAge1)
             default:
                 return []
         }
@@ -819,4 +826,60 @@ const tigrisTiles = [
     {name: "Settlement", type: "🔳", suit: "settlement", url: "https://furtivespy.com/images/tigris/black.jpg"},
     {name: "Market", type: "🟩" , suit: "market", url: "https://furtivespy.com/images/tigris/green.jpg"},
 ]
+
+const bloodRageAge1 = [
+    {name: `Frigga's Chosen`, type: `Mystic`, suit: `Mystic`, description: `Add 1 mystic to your reserve. Your mystics may retreat to an adjacent province instead of being destroyed.`, url: `https://furtivespy.com/images/bloodrage/age1_0_0.png`},
+    {name: `Thor's Glory`, type: `Clan`, suit: `Clan`, description: `Gain 2 glory whenever at least 2 enemy figures are destroyed in a battle you participate in.`, url: `https://furtivespy.com/images/bloodrage/age1_0_1.png`},
+    {name: `Brothers In Arms`, type: `Warrior`, suit: `Warrior`, description: `*Each pair of your warriors in a province is 3 total STR.`, url: `https://furtivespy.com/images/bloodrage/age1_0_2.png`},
+    {name: `Heimdall's Sight`, type: `Battle`, suit: `Battle`, description: `This card has the same value as the highest revealed enemy card.`, url: `https://furtivespy.com/images/bloodrage/age1_0_3.png`},
+    {name: `Frigga's Chosen`, type: `Mystic`, suit: `Mystic`, description: `Add 1 mystic to your reserve. Your mystics may retreat to an adjacent province instead of being destroyed.`, url: `https://furtivespy.com/images/bloodrage/age1_0_4.png`},
+    {name: `Dwarf Chieftain`, type: `Monster`, suit: `Monster`, description: `*Costs no rage to upgrade or invade`, url: `https://furtivespy.com/images/bloodrage/age1_0_5.png`},
+    {name: `Thor's Hammer`, type: `Battle`, suit: `Battle`, description: `Gain 3 glory if you win this battle.`, url: `https://furtivespy.com/images/bloodrage/age1_0_9.png`},
+    
+    {name: `Troll`, type: `Monster`, suit: `Monster`, description: `When this monster invades a province, destroy all enemy warriors in it.`, url: `https://furtivespy.com/images/bloodrage/age1_1_0.png`},
+    {name: `Frigga's Charm`, type: `Clan`, suit: `Clan`, description: `Upgrade cards cost you 1 less rage to play`, url: `https://furtivespy.com/images/bloodrage/age1_1_1.png`},
+    {name: `Tyr's Smite`, type: `Battle`, suit: `Battle`, description: `-`, url: `https://furtivespy.com/images/bloodrage/age1_1_2.png`},
+    {name: `Loki's Blessing`, type: `Clan`, suit: `Clan`, description: `If you lose a battle, you may invade that province with a warrior for free.`, url: `https://furtivespy.com/images/bloodrage/age1_1_3.png`},
+    {name: `Frigga's Succor`, type: `Clan`, suit: `Clan`, description: `When you invade with any figure, you may invade with an additional warrior in that province for free.`, url: `https://furtivespy.com/images/bloodrage/age1_1_4.png`},
+    {name: `Loki's Trickery`, type: `Battle`, suit: `Battle`, description: `If you lose, steal 1 rage from the winnign player.`, url: `https://furtivespy.com/images/bloodrage/age1_1_6.png`},
+    {name: `Manheim`, type: `Quest`, suit: `Quest`, description: `Have the most STR in at least one Manheim (yellow) province. If completed, raise one of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age1_1_7.png`},
+    {name: `Alfheim`, type: `Quest`, suit: `Quest`, description: `Have the most STR in at least one Alfheim (gray) province. If completed, raise one of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age1_1_8.png`},
+
+    {name: `Yggdrasil`, type: `Quest`, suit: `Quest`, description: `Have the most STR in Yggdrasil. If completed, raise one of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age1_2_1.png`},
+    {name: `Sea Serpent`, type: `Monster`, suit: `Monster`, description: `This monster counts as a ship.`, url: `https://furtivespy.com/images/bloodrage/age1_2_2.png`},
+    {name: `Frigga's Grace`, type: `Battle`, suit: `Battle`, description: `If you pillage successfully, raise another of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age1_2_3.png`},
+    {name: `Tyr's Smash`, type: `Battle`, suit: `Battle`, description: `-`, url: `https://furtivespy.com/images/bloodrage/age1_2_4.png`},
+    {name: `Tyr's Crush`, type: `Battle`, suit: `Battle`, description: `-`, url: `https://furtivespy.com/images/bloodrage/age1_2_5.png`},
+    {name: `Jotunheim`, type: `Quest`, suit: `Quest`, description: `Have the most STR in at least one Jotunheim (blue) province. If completed, raise one of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age1_2_7.png`},
+    {name: `Glorious Death`, type: `Quest`, suit: `Quest`, description: `Have at least 4 figures in Valhalla (before Ragnarok). If completed, raise one of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age1_2_8.png`},
+    {name: `Frigga's Grace`, type: `Battle`, suit: `Battle`, description: `If you pillage successfully, raise another of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age1_2_9.png`},
+
+    {name: `Tyr's Smash`, type: `Battle`, suit: `Battle`, description: `-`, url: `https://furtivespy.com/images/bloodrage/age1_3_1.png`},
+    {name: `Lord of Hammers`, type: `Leader`, suit: `Leader`, description: `If you successfully pillage with your leader, you may move him to an adjacent province.`, url: `https://furtivespy.com/images/bloodrage/age1_3_2.png`},
+    {name: `Jotunheim`, type: `Quest`, suit: `Quest`, description: `Have the most STR in at least one Jotunheim (blue) province. If completed, raise one of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age1_3_3.png`},
+    {name: `Tyr's Bash`, type: `Battle`, suit: `Battle`, description: `-`, url: `https://furtivespy.com/images/bloodrage/age1_3_4.png`},
+    {name: `Alfheim`, type: `Quest`, suit: `Quest`, description: `Have the most STR in at least one Alfheim (gray) province. If completed, raise one of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age1_3_5.png`},
+    {name: `Glorious Death`, type: `Quest`, suit: `Quest`, description: `Have at least 4 figures in Valhalla (before Ragnarok). If completed, raise one of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age1_3_6.png`},
+    {name: `Odin's Smite`, type: `Battle`, suit: `Battle`, description: `Destroy one warrior from each opponent in this province before comparing STR.`, url: `https://furtivespy.com/images/bloodrage/age1_3_7.png`},
+    {name: `Manheim`, type: `Quest`, suit: `Quest`, description: `Have the most STR in at least one Manheim (yellow) province. If completed, raise one of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age1_3_8.png`},
+    {name: `Tyr's Domain`, type: `Clan`, suit: `Clan`, description: `After you reveal a quest card in combat, you may treat it as a +3 battle card.`, url: `https://furtivespy.com/images/bloodrage/age1_3_9.png`},
+
+    {name: `Odin's Smite`, type: `Battle`, suit: `Battle`, description: `Destroy one warrior from each opponent in this province before comparing STR.`, url: `https://furtivespy.com/images/bloodrage/age1_4_0.png`},
+    {name: `Loki's Domain`, type: `Clan`, suit: `Clan`, description: `Gain 1 glory for each figure you release from Valhalla.`, url: `https://furtivespy.com/images/bloodrage/age1_4_1.png`},
+    {name: `Loki's Dragons`, type: `Ship`, suit: `Ship`, description: `Gain 4 glory when a ship of yours is destroyed.`, url: `https://furtivespy.com/images/bloodrage/age1_4_2.png`},
+    {name: `Loki's Trickery`, type: `Battle`, suit: `Battle`, description: `If you lose, steal 1 rage from the winnign player.`, url: `https://furtivespy.com/images/bloodrage/age1_4_3.png`},
+]    
+
+const bloodRageAge1_fivePlayer = [
+    {name: `Loki's Dragons`, type: `Ship`, suit: `Ship`, description: `Gain 4 glory when a ship of yours is destroyed.`, url: `https://furtivespy.com/images/bloodrage/age1_0_6.png`},
+    {name: `Lord of Hammers`, type: `Leader`, suit: `Leader`, description: `If you successfully pillage with your leader, you may move him to an adjacent province.`, url: `https://furtivespy.com/images/bloodrage/age1_0_7.png`},
+    {name: `Tyr's Smash`, type: `Battle`, suit: `Battle`, description: `-`, url: `https://furtivespy.com/images/bloodrage/age1_0_8.png`},
+    {name: `Tyr's Smite`, type: `Battle`, suit: `Battle`, description: `-`, url: `https://furtivespy.com/images/bloodrage/age1_1_5.png`},
+    {name: `Widespread`, type: `Quest`, suit: `Quest`, description: `Have the most STR in at least 2 different provinces. If completed, raise one of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age1_1_9.png`},
+    {name: `Brothers In Arms`, type: `Warrior`, suit: `Warrior`, description: `*Each pair of your warriors in a province is 3 total STR.`, url: `https://furtivespy.com/images/bloodrage/age1_2_0.png`},
+    {name: `Thor's Hammer`, type: `Battle`, suit: `Battle`, description: `Gain 3 glory if you win this battle.`, url: `https://furtivespy.com/images/bloodrage/age1_2_6.png`},
+    {name: `Glorious Death`, type: `Quest`, suit: `Quest`, description: `Have at least 4 figures in Valhalla (before Ragnarok). If completed, raise one of your clan stats by 1.`, url: `https://furtivespy.com/images/bloodrage/age1_3_0.png`},
+]
+    
+
 module.exports = new GameDatabase();
