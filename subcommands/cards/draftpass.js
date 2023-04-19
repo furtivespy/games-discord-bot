@@ -40,9 +40,10 @@ class Pass {
         //client.setGameData(`game-${interaction.channel.id}`, gameData)
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         const data = await Formatter.GameStatusV2(gameData, interaction.guild)
-
+        let content = `New Draft Round Has Started! Draft Round Passed ${inputDir == 'asc' ? 'Clockwise' : 'Counter-Clockwise'}\n`
+        gameData.players.forEach(play => { content += `<@${play.userId}> ` })
         await interaction.reply({ 
-            content: "New Draft Round Has Started!",
+            content: content,
             files: [...data],
         })
         
