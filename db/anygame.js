@@ -196,8 +196,8 @@ class GameDatabase {
             case "tigris":
                 let deckArray = Array.from({length: 47}, () => ({...tigrisTiles[0]}))
                 deckArray.push(...Array.from({length: 36}, () => ({...tigrisTiles[1]})))
-                deckArray.push(...Array.from({length: 20}, () => ({...tigrisTiles[2]})))
-                deckArray.push(...Array.from({length: 20}, () => ({...tigrisTiles[3]})))
+                deckArray.push(...Array.from({length: 30}, () => ({...tigrisTiles[2]})))
+                deckArray.push(...Array.from({length: 30}, () => ({...tigrisTiles[3]})))
                 return this.createCardFromObjList(deckName, "B", deckArray)
             case "blood-rage-1":
                 return this.createCardFromObjList(deckName, "B", bloodRageAge1)
