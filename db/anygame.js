@@ -54,6 +54,7 @@ class GameDatabase {
         name: "",
         allCards: [],
         shuffleStyle: "standard",
+        hiddenInfo: "visible",
         piles: {
             draw: { cards: [], viewable: false },
             discard: { cards: [], viewable: true },

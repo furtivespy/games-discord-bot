@@ -72,7 +72,11 @@ class Cards extends SlashCommand {
                         .setName("configure")
                         .setDescription("Configure a deck (rules etc.)")
                         .addStringOption(option => option.setName('config').setDescription('Option to configure').setRequired(true)
-                            .addChoices( {name: "Deck Shuffle Style", value: "shufflestyle"}))
+                            .addChoices( {name: "Deck Shuffle Style", value: "shufflestyle"},
+                                {name: "Display Card Counts", value: "displaycardcounts"},
+                            
+                            )   
+                        )
                         .addStringOption(option => option.setName('deck').setDescription('Deck to configure').setAutocomplete(true))
                     ) 
                 .addSubcommand(subcommand =>

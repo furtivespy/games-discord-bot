@@ -5,6 +5,13 @@ var AsciiTable = require("ascii-table");
 const { createCanvas, Image, loadImage } = require("canvas");
 const { CanvasTable, CTColumn } = require("canvas-table");
 
+const HiddenEnum = {
+  "visible": "All counts are visible",
+  "all": "All counts hidden",
+  "hand": "Hand size hidden",
+  "deck": "Deck size hidden",
+}
+
 class GameFormatter {
   static async GameStatus(gameData, guild) {
     const newEmbed = new EmbedBuilder()
@@ -31,7 +38,7 @@ class GameFormatter {
         table.setHeading("Player", "Score", handName);
       }
       sortBy(gameData.players, ["order"]).forEach((play) => {
-        const cards = GameFormatter.CountCards(play);
+        const cards = GameFormatter.CountCards(gameData, play);
         const name = guild.members.cache.get(play.userId)?.displayName;
         if (draftCards > 0) {
           table.addRow(
@@ -113,7 +120,7 @@ class GameFormatter {
       }
 
       sortBy(gameData.players, ["order"]).forEach((play) => {
-        const cards = GameFormatter.CountCards(play).toString();
+        const cards = GameFormatter.CountCards(gameData, play).toString();
         const name = guild.members.cache.get(play.userId)?.displayName;
         if (draftCards > 0) {
           data.push([
@@ -346,13 +353,18 @@ class GameFormatter {
       .setColor(13502711)
       .setTitle(`${deckData.name} deck`)
       .setDescription(
-        `*started with ${deckData.allCards.length} cards*\nShuffle style: ${deckData.shuffleStyle}`
+        `*started with ${deckData.allCards.length} cards*\n` + 
+        `Shuffle style: ${deckData.shuffleStyle}\n` + 
+        `Hidden info: ${HiddenEnum[deckData.hiddenInfo]}\n`
       );
 
+    
     for (const pile in deckData.piles) {
+      let noShow = (deckData.hiddenInfo == "all" || deckData.hiddenInfo == "deck") 
+        && deckData.piles[pile].cards.length > 1
       newEmbed.addFields({
         name: `${pile} pile`,
-        value: `${deckData.piles[pile].cards.length} cards`,
+        value: `${noShow ? '?' : deckData.piles[pile].cards.length} cards`,
         inline: true,
       });
     }
@@ -371,8 +383,11 @@ class GameFormatter {
     let deckData = "";
     gameData.decks.forEach((deck) => {
       deckData += `• **${deck.name}** - `;
+      
       for (const pile in deck.piles) {
-        deckData += `${pile} pile: ${deck.piles[pile].cards.length} cards, `;
+        let noShow = (deck.hiddenInfo == "all" || deck.hiddenInfo == "deck")
+          && deck.piles[pile].cards.length > 1
+        deckData += `${pile} pile: ${noShow ? '?' : deck.piles[pile].cards.length} cards, `;
       }
       deckData += `\n`;
     });
@@ -449,9 +464,10 @@ class GameFormatter {
     return cardsEmbed;
   }
 
-  static CountCards(player) {
-    let cards = 0;
+  static CountCards(game, player) {
     if (!player) return 0;
+    const noshow = game.decks.find((deck) => deck.hiddenInfo == "hand" || deck.hiddenInfo == "all")
+    if (noshow) return "?";
     return player.hands.main.length;
   }
 }
