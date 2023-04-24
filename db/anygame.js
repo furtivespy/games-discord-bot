@@ -194,7 +194,7 @@ class GameDatabase {
             case "qe-company-5":
                 return this.createCardFromObjList(deckName, "B", qeCompany5)
             case "tigris":
-                let deckArray = Array.from({length: 57}, () => ({...tigrisTiles[0]}))
+                let deckArray = Array.from({length: 47}, () => ({...tigrisTiles[0]}))
                 deckArray.push(...Array.from({length: 36}, () => ({...tigrisTiles[1]})))
                 deckArray.push(...Array.from({length: 20}, () => ({...tigrisTiles[2]})))
                 deckArray.push(...Array.from({length: 20}, () => ({...tigrisTiles[3]})))
