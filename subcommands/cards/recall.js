@@ -1,5 +1,5 @@
 const GameDB = require('../../db/anygame.js')
-const { cloneDeep, shuffle, remove } = require('lodash')
+const { cloneDeep, shuffle, remove, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
 class Recall {
