@@ -1,11 +1,12 @@
 const { EmbedBuilder, AttachmentBuilder } = require("discord.js");
 const fetch = require("node-fetch");
 const { parse } = require("fast-xml-parser");
-const { find } = require("lodash");
+const { find, cloneDeep } = require("lodash");
 const { createCanvas, Image, loadImage } = require("canvas");
 const he = require("he");
 const TurndownService = require("turndown");
 const Formatter = require('./GameFormatter')
+const GameDB = require('../db/anygame.js')
 
 class BoardGameGeek {
   constructor(gameId, discordClient, interaction) {
@@ -72,6 +73,7 @@ class BoardGameGeek {
         this.GetGameDescriptionEmbed()
         this.GetGameAwardsEmbed()
         await this.GetHistoryEmbed()
+        await this.GetUsefulLinksEmbed()
         break;
     }
   }
@@ -137,13 +139,17 @@ class BoardGameGeek {
         name: `Publisher(s)`,
         value: Array.isArray(this.gameInfo.boardgamepublisher) ? this.gameInfo.boardgamepublisher.map(d => d.text).join("\n") : this.gameInfo.boardgamepublisher.text,
         inline: true
-      },
-      {
-        name: `Mechanics`,
-        value: Array.isArray(this.gameInfo.boardgamemechanic) ? this.gameInfo.boardgamemechanic.map(d => d.text).join("\n") : this.gameInfo.boardgamemechanic.text,
-        inline: true
       }
     );
+    if (this.gameInfo.boardgamemechanic) {
+      detailEmbed.addFields(
+        {
+          name: `Mechanics`,
+          value: Array.isArray(this.gameInfo.boardgamemechanic) ? this.gameInfo.boardgamemechanic.map(d => d.text).join("\n") : this.gameInfo.boardgamemechanic.text,
+          inline: true
+        }
+      );
+    }
     if (this.gameInfo.boardgameexpansion) {
       detailEmbed.addFields(
         {
@@ -200,6 +206,25 @@ class BoardGameGeek {
         .setDescription(history)
       
       this.embeds.push(localEmbed)
+    }
+  }
+
+  async GetUsefulLinksEmbed() {
+    let linkData = Object.assign(
+      {},
+      cloneDeep(GameDB.defaultBGGGameData),
+      await this.discordClient.getGameDataV2(this.interaction.guildId, 'bgg', this.gameId)
+    );
+
+    if (linkData.links.length > 0) {
+      let links = "";
+      linkData.links.forEach((link) => {
+        links += `🔗 [${link.name}](${link.url})\n`;
+      });
+      let linkEmbed = new EmbedBuilder()
+        .setTitle(`Useful Links`)
+        .setDescription(links);
+      this.embeds.push(linkEmbed);
     }
   }
 }
