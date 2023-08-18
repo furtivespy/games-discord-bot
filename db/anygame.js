@@ -82,6 +82,7 @@ class GameDatabase {
         userId: "1",
         order: 1,
         score: "",
+        money: 0,
         name: null,
         hands: {
             main: [],
