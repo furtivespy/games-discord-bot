@@ -13,6 +13,7 @@ const DrawMulti = require(`../../subcommands/cards/drawmulti`)
 const Flip = require(`../../subcommands/cards/flip`)
 const NewDeck = require(`../../subcommands/cards/newdeck`)
 const Play = require(`../../subcommands/cards/play`)
+const PlayMulti = require(`../../subcommands/cards/playmulti`)
 const Recall = require(`../../subcommands/cards/recall`)
 const Reveal = require(`../../subcommands/cards/reveal`)
 const Rturn = require(`../../subcommands/cards/return`)
@@ -45,13 +46,13 @@ class Cards extends SlashCommand {
                         .setName("new")
                         .setDescription("Add a new deck of cards to the channel")
                         .addStringOption(option => option.setName('name').setDescription('Name of the deck').setRequired(true))
-                        .addStringOption(option => option.setName('cardset').setDescription('What set of cards to use').setRequired(true)
-                            .addChoices(
-                                    ...GameDB.CurrentCardList.map(cl => ({name: cl[0], value: cl[1]}))
-                                    //[ "Custom from list", "custom" ],
-                                    //[ "Custom Empty", "customempty" ]
+                        .addStringOption(option => option.setName('cardset').setDescription('What set of cards to use').setRequired(true).setAutocomplete(true))
+                            // .addChoices(
+                            //         ...GameDB.CurrentCardList.map(cl => ({name: cl[0], value: cl[1]}))
+                            //         //[ "Custom from list", "custom" ],
+                            //         //[ "Custom Empty", "customempty" ]
                                 
-                            ))
+                            // ))
                         .addStringOption(option => option.setName('customlist').setDescription('list of cards for the new custom deck. separate with commas'))
                     ) 
                 .addSubcommand(subcommand =>
@@ -124,6 +125,11 @@ class Cards extends SlashCommand {
                         .setDescription("play a card")
                         .addStringOption(option => option.setName('card').setDescription('Card to play').setAutocomplete(true).setRequired(true))
                     ) 
+                .addSubcommand(subcommand =>
+                    subcommand  
+                        .setName("playmultiple")
+                        .setDescription("play a number of cards")
+                    )
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName("reveal")
@@ -238,6 +244,9 @@ class Cards extends SlashCommand {
                             break
                         case "play":
                             await Play.execute(interaction, this.client)
+                            break
+                        case "playmultiple":
+                            await PlayMulti.execute(interaction, this.client)
                             break
                         case "reveal":
                             await Reveal.execute(interaction, this.client)

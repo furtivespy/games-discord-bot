@@ -30,6 +30,10 @@ class GameDatabase {
         [ "Blood Rage - Age 1", "blood-rage-1"],
         [ "Blood Rage - Age 2", "blood-rage-2"],
         [ "Blood Rage - Age 3", "blood-rage-3"],
+        [ "Money - $1", "money-1"],
+        [ "Money - $5", "money-5"],
+        [ "Money - $10", "money-10"],
+        [ "Money - $20", "money-20"],
     ]
 
     defaultGameData = {
@@ -206,6 +210,14 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "B", bloodRageAge2)
             case "blood-rage-3":
                 return this.createCardFromObjList(deckName, "B", bloodRageAge3)
+            case "money-1":
+                return this.createCardFromObjList(deckName, "B", Array.from({length: 200}, () => ({...money[0]})))
+            case "money-5":
+                return this.createCardFromObjList(deckName, "B", Array.from({length: 100}, () => ({...money[1]})))
+            case "money-10":
+                return this.createCardFromObjList(deckName, "B", Array.from({length: 100}, () => ({...money[2]})))
+            case "money-20":
+                return this.createCardFromObjList(deckName, "B", Array.from({length: 100}, () => ({...money[3]})))
             default:
                 return []
         }
@@ -997,4 +1009,12 @@ const bloodRageAge3_fivePlayer = [
     {name: `Tyr's Judgement`, type: `Battle`, suit: `Battle`, description: `-`, url: `https://furtivespy.com/images/bloodrage/age3_4_3.png`},
     
 ]
+
+const money = [
+    {name: `1`, value: -1, type: `$`, suit: `Money`, url: `https://furtivespy.com/images/money/one-dollar.jpg`},
+    {name: `5`, value: -5, type: `$`, suit: `Money`, url: `https://furtivespy.com/images/money/five-dollar.jpg`},
+    {name: `10`, value: -10, type: `$`, suit: `Money`, url: `https://furtivespy.com/images/money/ten-dollar.jpg`},
+    {name: `20`, value: -20, type: `$`, suit: `Money`, url: `https://furtivespy.com/images/money/twenty-dollar.jpg`},
+]
+
 module.exports = new GameDatabase();
