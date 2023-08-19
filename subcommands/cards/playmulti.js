@@ -1,5 +1,5 @@
 const GameDB = require('../../db/anygame.js')
-const { cloneDeep, find } = require('lodash')
+const { cloneDeep, find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js')
 
@@ -56,8 +56,21 @@ class PlayMulti {
         } else {
           await interaction.editReply({ content: 'Cards Played!', components: [] })
         }
-        await interaction.followUp({ content: `If this command worked, you would have played cards with these IDs: ${JSON.stringify(playedCards)}` })
-                
+
+        let playedCardsObjects = []
+        playedCards.forEach(crd => {
+          let card = find(player.hands.main, {id: crd})
+          if (!card) { return }
+          let deck = find(gameData.decks, {name: card.origin})
+          player.hands.main.splice(findIndex(player.hands.main, {id: crd}), 1)
+          deck.piles.discard.cards.push(card)
+          playedCardsObjects.push(card)
+        })
+
+        await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+
+        let followup = await Formatter.multiCard(playedCardsObjects, `Cards Played by ${interaction.member.displayName}`)
+        await interaction.followUp({ embeds: [followup[0]], files: [followup[1]] })                
     }
 }
 

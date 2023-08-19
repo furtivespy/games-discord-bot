@@ -280,6 +280,40 @@ class GameFormatter {
         imgList.push(card.url);
       }
     });
+    return await this.ImagefromUrlList(imgList);
+    // let canvas = createCanvas(1200, 1);
+    // let ctx = canvas.getContext("2d");
+    // const cardWidth = 200;
+    // let rowstart = 0;
+    // let rowend = 0;
+    // for (let i = 0; i < imgList.length; i++) {
+    //   const cardImage = await loadImage(imgList[i]);
+    //   const cardHeight = (cardWidth / cardImage.width) * cardImage.height;
+    //   const spot = i % 6;
+    //   if (spot == 0) {
+    //     rowstart = rowend;
+    //   }
+    //   if (rowstart + cardHeight > rowend) {
+    //     rowend = rowstart + cardHeight;
+    //   }
+    //   if (rowend > canvas.height) {
+    //     const oldCanvas = canvas;
+    //     canvas = createCanvas(oldCanvas.width, rowend);
+    //     ctx = canvas.getContext("2d");
+    //     ctx.drawImage(oldCanvas, 0, 0);
+    //   }
+    //   ctx.drawImage(
+    //     cardImage,
+    //     (i % 6) * cardWidth,
+    //     rowstart,
+    //     cardWidth,
+    //     cardHeight
+    //   );
+    // }
+    // return canvas.toBuffer();
+  }
+
+  static async ImagefromUrlList(imgList) {
     let canvas = createCanvas(1200, 1);
     let ctx = canvas.getContext("2d");
     const cardWidth = 200;
@@ -441,6 +475,34 @@ class GameFormatter {
     }
 
     return newEmbed;
+  }
+
+  static async multiCard(cardArry, title) {
+    const newEmbed = new EmbedBuilder().setColor(13502711).setTitle(title);
+    const imgList = [];
+    let description = "";
+
+    cardArry.forEach((card) => {
+      if (card.url) {
+        imgList.push(card.url);
+      } 
+      if (card.description.length > 0) {
+        description += `• ${this.cardLongName(card)} - ${card.description}\n`;
+      } else {
+        description += `• ${this.cardLongName(card)}\n`;
+      }
+    });
+
+    newEmbed.setDescription(`Played: \n${description}`);
+    if (imgList.length > 0) {
+      const newAttach = new AttachmentBuilder(
+        await this.ImagefromUrlList(imgList),
+        {name: `multiCard.png`}
+      );
+      newEmbed.setImage(`attachment://multiCard.png`);
+      return [newEmbed, newAttach];
+    }
+
   }
 
   static handEmbed(playerData, guildName, channelName) {
