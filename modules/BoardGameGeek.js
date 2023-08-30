@@ -1,7 +1,7 @@
 const { EmbedBuilder, AttachmentBuilder } = require("discord.js");
 const fetch = require("node-fetch");
 const { parse } = require("fast-xml-parser");
-const { find, cloneDeep } = require("lodash");
+const { find, cloneDeep, take } = require("lodash");
 const { createCanvas, Image, loadImage } = require("canvas");
 const he = require("he");
 const TurndownService = require("turndown");
@@ -154,7 +154,7 @@ class BoardGameGeek {
       detailEmbed.addFields(
         {
           name: `Expansions`,
-          value: Array.isArray(this.gameInfo.boardgameexpansion) ? this.gameInfo.boardgameexpansion.map(d => `[${d.text}](https://boardgamegeek.com/boardgame/${d.objectid})`).join("\n") : `[${this.gameInfo.boardgameexpansion.text}](https://boardgamegeek.com/boardgame/${this.gameInfo.boardgameexpansion.objectid})`,
+          value: Array.isArray(this.gameInfo.boardgameexpansion) ? take(this.gameInfo.boardgameexpansion,10).map(d => `[${d.text}](https://boardgamegeek.com/boardgame/${d.objectid})`).join("\n") : `[${this.gameInfo.boardgameexpansion.text}](https://boardgamegeek.com/boardgame/${this.gameInfo.boardgameexpansion.objectid})`,
           inline: true
         }
       )
@@ -190,7 +190,7 @@ class BoardGameGeek {
   async GetHistoryEmbed() {
     //Embed 5 - Local Data
     let local = await this.discordClient.queryGameData(this.interaction.guildId, 'game', {bggGameId: this.gameId})
-    if (local.length > 0) {
+    if (local && local.length > 0) {
       let history = ""
       local.forEach(game => {
         if (game.isdeleted) return

@@ -1,9 +1,9 @@
 const SlashCommand = require('../../base/SlashCommand.js')
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const GameDB = require('../../db/anygame.js')
-const NewGame = require(`../../subcommands/genericgame/newgame`)
+const AddLink = require(`../../subcommands/genericgame/addlink`)
 const NewGamePlus = require(`../../subcommands/genericgame/newgameplus`)
 const Delete = require(`../../subcommands/genericgame/delete`)
+const RemoveLink = require(`../../subcommands/genericgame/removelink`)
 const Status = require(`../../subcommands/genericgame/status`)
 const Winner = require(`../../subcommands/genericgame/winner`)
 const Test = require(`../../subcommands/genericgame/test`)
@@ -79,6 +79,32 @@ class Game extends SlashCommand {
                     .addUserOption(option => option.setName("player7").setDescription("Another Winner"))
                     .addUserOption(option => option.setName("player8").setDescription("Another Winner"))
                 )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("addlink")
+                    .setDescription("Add a useful link for a game - such as a rules file")
+                    .addStringOption((option) =>
+                        option
+                        .setName("game")
+                        .setDescription("The game being played")
+                        .setAutocomplete(true)
+                        .setRequired(true)
+                    )
+                    .addStringOption((option) => option.setName("name").setDescription("Name of the link").setRequired(true))
+                    .addStringOption((option) => option.setName("url").setDescription("URL for the link").setRequired(true))
+                )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("removelink")
+                    .setDescription("Remove a useful link for a game - such as a rules file")
+                    .addStringOption((option) =>
+                        option
+                        .setName("game")
+                        .setDescription("The game being played")
+                        .setAutocomplete(true)
+                        .setRequired(true)
+                    )
+                )
                 /*
             .addSubcommand(subcommand =>
                 subcommand
@@ -109,6 +135,12 @@ class Game extends SlashCommand {
                     break
                 case "test":    
                     await Test.execute(interaction, this.client)
+                    break
+                case "addlink":
+                    await AddLink.execute(interaction, this.client)
+                    break
+                case "removelink":
+                    await RemoveLink.execute(interaction, this.client)
                     break
                 default:
                     await interaction.reply({ content: "Something Went Wrong!?!?!?", ephemeral: true })

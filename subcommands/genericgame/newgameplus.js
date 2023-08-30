@@ -1,6 +1,7 @@
 const GameDB = require("../../db/anygame.js");
 const { cloneDeep, shuffle } = require("lodash");
 const Formatter = require("../../modules/GameFormatter");
+const BoardGameGeek = require('../../modules/BoardGameGeek')
 const fetch = require("node-fetch");
 
 class NewGame {
@@ -69,6 +70,8 @@ class NewGame {
           ephemeral: true,
         });
       } else {
+        await interaction.deferReply();
+
         gameData = Object.assign({}, cloneDeep(GameDB.defaultGameData));
         gameData.bggGameId = search;
         let players = [];
@@ -113,10 +116,17 @@ class NewGame {
           interaction.channelId,
           gameData
         );
+
+        let bgg = await BoardGameGeek.CreateAndLoad(search, client, interaction)
+        await bgg.LoadEmbeds(BoardGameGeek.DetailsEnum.ALL)
         const data = await Formatter.GameStatusV2(gameData, interaction.guild);
 
-        await interaction.reply({
+        await interaction.editReply({
           content: content,
+          embeds: bgg.embeds,
+          files: bgg.attachments,
+        });
+        await interaction.followUp({
           files: [...data],
         });
       }
