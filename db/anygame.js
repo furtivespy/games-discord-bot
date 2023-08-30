@@ -47,6 +47,7 @@ class GameDatabase {
 
     defaultBGGGameData = {
         links: [],
+        attachments: [],
     }
     
     defaultSecretData = {

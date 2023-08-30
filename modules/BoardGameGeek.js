@@ -15,6 +15,7 @@ class BoardGameGeek {
     this.interaction = interaction;
     this.embeds = [];
     this.attachments = [];
+    this.otherAttachments = [];
   }
 
   static async CreateAndLoad(gameId, discordClient, interaction) {
@@ -28,6 +29,8 @@ class BoardGameGeek {
     BASIC: 'basic',
     HISTORY: 'history',
     AWARDS: 'awards',
+    ALLPLUS: 'allplus',
+    LINKS: 'links',
   }
 
   async LoadBggData() {
@@ -66,6 +69,18 @@ class BoardGameGeek {
         await this.GetGameImageEmbed()
         this.GetGameAwardsEmbed()
         break;
+      case BoardGameGeek.DetailsEnum.LINKS:
+        await this.GetGameImageEmbed()
+        await this.GetUsefulLinksEmbed()
+        break;
+      case BoardGameGeek.DetailsEnum.ALLPLUS:
+        await this.GetGameImageEmbed()
+        this.GetGameDetailsEmbed()
+        this.GetGameDescriptionEmbed()
+        this.GetGameAwardsEmbed()
+        await this.GetHistoryEmbed()
+        await this.GetUsefulLinksEmbed()
+        break;
       case BoardGameGeek.DetailsEnum.ALL:
       default:
         await this.GetGameImageEmbed()
@@ -73,7 +88,6 @@ class BoardGameGeek {
         this.GetGameDescriptionEmbed()
         this.GetGameAwardsEmbed()
         await this.GetHistoryEmbed()
-        await this.GetUsefulLinksEmbed()
         break;
     }
   }
@@ -225,6 +239,12 @@ class BoardGameGeek {
         .setTitle(`Useful Links`)
         .setDescription(links);
       this.embeds.push(linkEmbed);
+    }
+
+    if (linkData.attachments.length > 0) {
+      linkData.attachments.forEach((attach) => {
+        this.otherAttachments.push(attach.url)
+      });
     }
   }
 }

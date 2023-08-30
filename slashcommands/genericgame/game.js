@@ -1,9 +1,11 @@
 const SlashCommand = require('../../base/SlashCommand.js')
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const AddLink = require(`../../subcommands/genericgame/addlink`)
+const AddImage = require(`../../subcommands/genericgame/addimage`)
 const NewGamePlus = require(`../../subcommands/genericgame/newgameplus`)
 const Delete = require(`../../subcommands/genericgame/delete`)
 const RemoveLink = require(`../../subcommands/genericgame/removelink`)
+const RemoveImage = require(`../../subcommands/genericgame/removeimage`)
 const Status = require(`../../subcommands/genericgame/status`)
 const Winner = require(`../../subcommands/genericgame/winner`)
 const Test = require(`../../subcommands/genericgame/test`)
@@ -95,8 +97,33 @@ class Game extends SlashCommand {
                 )
             .addSubcommand(subcommand =>
                 subcommand
+                    .setName("addimage")
+                    .setDescription("Add an image for a game - such as a helper chart or board")
+                    .addStringOption((option) =>
+                        option
+                        .setName("game")
+                        .setDescription("The game being played")
+                        .setAutocomplete(true)
+                        .setRequired(true)
+                    )
+                    .addStringOption((option) => option.setName("url").setDescription("URL for the image").setRequired(true))
+                )
+            .addSubcommand(subcommand =>
+                subcommand
                     .setName("removelink")
                     .setDescription("Remove a useful link for a game - such as a rules file")
+                    .addStringOption((option) =>
+                        option
+                        .setName("game")
+                        .setDescription("The game being played")
+                        .setAutocomplete(true)
+                        .setRequired(true)
+                    )
+                )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("removeimage")
+                    .setDescription("Remove an image for a game - such as a helper chart or board")
                     .addStringOption((option) =>
                         option
                         .setName("game")
@@ -139,8 +166,14 @@ class Game extends SlashCommand {
                 case "addlink":
                     await AddLink.execute(interaction, this.client)
                     break
+                case "addimage":
+                    await AddImage.execute(interaction, this.client)
+                    break
                 case "removelink":
                     await RemoveLink.execute(interaction, this.client)
+                    break
+                case "removeimage":
+                    await RemoveImage.execute(interaction, this.client)
                     break
                 default:
                     await interaction.reply({ content: "Something Went Wrong!?!?!?", ephemeral: true })

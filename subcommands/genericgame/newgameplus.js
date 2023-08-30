@@ -93,7 +93,7 @@ class NewGame {
         if (interaction.options.getUser("player8"))
           players.push(interaction.options.getUser("player8"));
 
-        let content = `New Game Created.\nPlayer Order Randomized!\n`;
+        let content = `Player Order Randomized!\n`;
         gameData.isdeleted = false;
         gameData.name = interaction.channel.name;
         players = shuffle(players);
@@ -122,13 +122,19 @@ class NewGame {
         const data = await Formatter.GameStatusV2(gameData, interaction.guild);
 
         await interaction.editReply({
-          content: content,
+          content: `New Game Created!`,
           embeds: bgg.embeds,
           files: bgg.attachments,
         });
         await interaction.followUp({
+          content: content,
           files: [...data],
         });
+        if (bgg.otherAttachments.length > 0){
+          await interaction.followUp({
+            files: bgg.otherAttachments,
+          });
+        }
       }
     }
   }

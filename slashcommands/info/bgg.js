@@ -28,9 +28,11 @@ class BGG extends SlashCommand {
           .setDescription("Amount of details to show")
           .addChoices(
             {name: "All Details (default)", value: BoardGameGeek.DetailsEnum.ALL},
+            {name: "All Details And Links/Attachments", value: BoardGameGeek.DetailsEnum.ALLPLUS},
             {name: "Only Description", value: BoardGameGeek.DetailsEnum.BASIC},
             {name: "Only History", value: BoardGameGeek.DetailsEnum.HISTORY},
             {name: "Only Awards", value: BoardGameGeek.DetailsEnum.AWARDS},
+            {name: "Only Links & Attachments", value: BoardGameGeek.DetailsEnum.LINKS},
           )
       );
 
@@ -92,6 +94,11 @@ class BGG extends SlashCommand {
           embeds: bgg.embeds,
           files: bgg.attachments,
         });
+        if (bgg.otherAttachments.length > 0){
+          await interaction.followUp({
+            files: bgg.otherAttachments,
+          });
+        }
       }
     } catch (e) {
       this.client.logger.log(e, "error");
