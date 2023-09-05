@@ -493,7 +493,7 @@ class GameFormatter {
       }
     });
 
-    newEmbed.setDescription(`Played: \n${description}`);
+    newEmbed.setDescription(`Cards: \n${description}`);
     if (imgList.length > 0) {
       const newAttach = new AttachmentBuilder(
         await this.ImagefromUrlList(imgList),

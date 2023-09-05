@@ -1,6 +1,7 @@
 const SlashCommand = require('../../base/SlashCommand.js')
 const { SlashCommandBuilder } = require('discord.js');
 const GameDB = require('../../db/anygame.js')
+const Check = require('../../subcommands/cards/check')
 const Configure = require('../../subcommands/cards/configuredeck')
 const Deal = require('../../subcommands/cards/deal')
 const Discard = require(`../../subcommands/cards/discard`)
@@ -16,6 +17,7 @@ const Play = require(`../../subcommands/cards/play`)
 const PlayMulti = require(`../../subcommands/cards/playmulti`)
 const Recall = require(`../../subcommands/cards/recall`)
 const Reveal = require(`../../subcommands/cards/reveal`)
+const Review = require(`../../subcommands/cards/review`)
 const Rturn = require(`../../subcommands/cards/return`)
 const Show = require(`../../subcommands/cards/show`)
 const Shuffle = require(`../../subcommands/cards/shuffle`)
@@ -55,6 +57,12 @@ class Cards extends SlashCommand {
                             // ))
                         .addStringOption(option => option.setName('customlist').setDescription('list of cards for the new custom deck. separate with commas'))
                     ) 
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("check")
+                        .setDescription("Check the cards in the discard pile")
+                        .addStringOption(option => option.setName('deck').setDescription('Deck to check').setAutocomplete(true))
+                    )
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName("draw")
@@ -105,6 +113,12 @@ class Cards extends SlashCommand {
                         .setDescription("Shuffle a deck")
                         .addStringOption(option => option.setName('deck').setDescription('Deck to shuffle').setAutocomplete(true))
                     ) 
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("review")
+                        .setDescription("Review all the cards available in a deck")
+                        .addStringOption(option => option.setName('deck').setDescription('Deck to review').setAutocomplete(true))
+                    )
             )
             .addSubcommandGroup(group => 
                 group.setName("hand").setDescription("Manage cards in your hand")
@@ -188,6 +202,9 @@ class Cards extends SlashCommand {
             switch (interaction.options.getSubcommandGroup()) {
                 case "deck":
                     switch (interaction.options.getSubcommand()) {
+                        case "check":
+                            await Check.execute(interaction, this.client)
+                            break
                         case "configure":
                             await Configure.execute(interaction, this.client)
                             break
@@ -208,6 +225,9 @@ class Cards extends SlashCommand {
                             break
                         case "recall":
                             await Recall.execute(interaction, this.client)
+                            break
+                        case "review":
+                            await Review.execute(interaction, this.client)
                             break
                         case "shuffle":
                             await Shuffle.execute(interaction, this.client)
