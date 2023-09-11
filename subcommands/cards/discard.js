@@ -1,30 +1,22 @@
 const GameDB = require('../../db/anygame.js')
+const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, sortBy, find, filter, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
 class Discard {
     async execute(interaction, client) {
 
-        let gameData = Object.assign(
-            {},
-            cloneDeep(GameDB.defaultGameData), 
-            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
-        )
+        let gameData = await GameHelper.getGameData(client, interaction)
+        let currentPlayer = find(gameData.players, {userId: interaction.user.id})
 
         if (interaction.isAutocomplete()) {
-            if (gameData.isdeleted) { return }
-            let ddplayer = find(gameData.players, {userId: interaction.user.id})
-            if (!ddplayer) { return }
-
-            await interaction.respond(
-                sortBy(
-                    filter(ddplayer.hands.main, 
-                        crd => Formatter.cardShortName(crd).toLowerCase()
-                            .includes(interaction.options.getString('card').toLowerCase())
-                        ),  ['suit', 'value', 'name']).map(crd => 
-                    ({name: Formatter.cardShortName(crd), value: crd.id}))
-            )
-
+            if (gameData.isdeleted || !currentPlayer){
+                await interaction.respond([])
+                return
+              }
+              await interaction.respond(
+                GameHelper.getCardsAutocomplete(interaction.options.getString('card'), currentPlayer.hands.main)
+              );
         } else {
 
             if (gameData.isdeleted) {

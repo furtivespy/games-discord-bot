@@ -17,7 +17,7 @@ class Check {
             }
 
             const inputDeck = interaction.options.getString('deck')
-            const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
+            const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
             if (!deck){
                 await interaction.reply({ content: `No deck found.`, ephemeral: true })
                 return

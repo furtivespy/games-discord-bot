@@ -1,4 +1,5 @@
 const GameDB = require('../../db/anygame.js')
+const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const Shuffle = require(`./shuffle`)
@@ -6,18 +7,10 @@ const Shuffle = require(`./shuffle`)
 class DrawMulti {
     async execute(interaction, client) {
 
-        let gameData = Object.assign(
-            {},
-            cloneDeep(GameDB.defaultGameData), 
-            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
-        )
+        let gameData = await GameHelper.getGameData(client, interaction)
 
         if (interaction.isAutocomplete()) {
-            if (gameData.isdeleted || gameData.decks.length < 1){
-                await interaction.respond([])
-                return
-            }
-            await interaction.respond(gameData.decks.map(d => ({name: d.name, value: d.name})))
+            await GameHelper.getDeckAutocomplete(gameData, interaction)
         } else {
             if (gameData.isdeleted) {
                 await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
@@ -27,7 +20,7 @@ class DrawMulti {
             const inputDeck = interaction.options.getString('deck')
             const cardCount = interaction.options.getInteger('count')
             let dealCount = 0
-            const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
+            const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
 
             if (!deck || deck.piles.draw.cards.length < 1){
                 await interaction.reply({ content: "No cards in draw pile", ephemeral: true })

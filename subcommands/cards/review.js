@@ -1,6 +1,6 @@
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
-const { cloneDeep, find } = require('lodash')
+const { find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
 class Review {
@@ -17,7 +17,7 @@ class Review {
             }
 
             const inputDeck = interaction.options.getString('deck')
-            const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
+            const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
             if (!deck){
                 await interaction.reply({ content: `No deck found.`, ephemeral: true })
                 return

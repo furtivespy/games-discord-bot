@@ -1,16 +1,11 @@
-const GameDB = require('../../db/anygame.js')
+const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, sortBy, find, filter, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
 class Play {
     async execute(interaction, client) {
 
-        let gameData = Object.assign(
-            {},
-            cloneDeep(GameDB.defaultGameData), 
-            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId) 
-            //await client.getGameData(`game-${interaction.channel.id}`)
-        )
+        let gameData = await GameHelper.getGameData(client, interaction)
 
         if (interaction.isAutocomplete()) {
             if (gameData.isdeleted) { return }

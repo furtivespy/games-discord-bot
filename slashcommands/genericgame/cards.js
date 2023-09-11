@@ -1,6 +1,9 @@
 const SlashCommand = require('../../base/SlashCommand.js')
 const { SlashCommandBuilder } = require('discord.js');
 const GameDB = require('../../db/anygame.js')
+const BuildNew = require('../../subcommands/cards/buildernew')
+const BuildAdd = require('../../subcommands/cards/builderadd')
+const BuildRemove = require('../../subcommands/cards/builderremove')
 const Check = require('../../subcommands/cards/check')
 const Configure = require('../../subcommands/cards/configuredeck')
 const Deal = require('../../subcommands/cards/deal')
@@ -194,7 +197,29 @@ class Cards extends SlashCommand {
                         .setDescription("return a card to the draft (aka un-draft a card)")
                         .addStringOption(option => option.setName('card').setDescription('Card to un-draft').setAutocomplete(true).setRequired(true))
                 )
-            )                
+            )
+            .addSubcommandGroup(group =>
+                group.setName("builder").setDescription("Manage a deckbuilder game") 
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("new")               
+                        .setDescription("Create decks for each player in a deckbuilder")
+                        .addStringOption(option => option.setName('basecardset').setDescription('Base set of cards for each player').setRequired(true).setAutocomplete(true))
+                        .addStringOption(option => option.setName('supplyset').setDescription('General set of cards for add/remove').setRequired(true).setAutocomplete(true))
+                )
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("add")
+                        .setDescription("Add a card to your deck")
+                        .addStringOption(option => option.setName('card').setDescription('Card to add').setAutocomplete(true).setRequired(true))
+                )
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("remove")
+                        .setDescription("Remove a card from your deck")
+                        .addStringOption(option => option.setName('card').setDescription('Card to remove').setAutocomplete(true).setRequired(true))
+                )
+            )
     }
 
     async execute(interaction) {
@@ -282,6 +307,21 @@ class Cards extends SlashCommand {
                     switch (interaction.options.getSubcommand()) {
                         case "steal":
                             await Steal.execute(interaction, this.client)
+                            break
+                        default:
+                            await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
+                    }
+                    break
+                case "builder":
+                    switch (interaction.options.getSubcommand()) {
+                        case "new":
+                            await BuildNew.execute(interaction, this.client)
+                            break
+                        case "add":
+                            await BuildAdd.execute(interaction, this.client)
+                            break
+                        case "remove":
+                            await BuildRemove.execute(interaction, this.client)
                             break
                         default:
                             await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })

@@ -1,31 +1,23 @@
 const GameDB = require('../../db/anygame.js')
+const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, sortBy, find, filter, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
 class Rturn {
     async execute(interaction, client) {
 
-        let gameData = Object.assign(
-            {},
-            cloneDeep(GameDB.defaultGameData), 
-            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
-        )
+        let gameData = await GameHelper.getGameData(client, interaction)
+        let player = find(gameData.players, {userId: interaction.user.id})
 
         if (interaction.isAutocomplete()) {
-            if (gameData.isdeleted) { return }
-            let ddplayer = find(gameData.players, {userId: interaction.user.id})
-            if (!ddplayer) { return }
-
+            if (gameData.isdeleted || !currentPlayer){
+              await interaction.respond([])
+              return
+            }
             await interaction.respond(
-                sortBy(
-                    filter(ddplayer.hands.main, 
-                        crd => Formatter.cardShortName(crd).toLowerCase()
-                            .includes(interaction.options.getString('card').toLowerCase())
-                        ),  ['suit', 'value', 'name']).map(crd => 
-                    ({name: Formatter.cardShortName(crd), value: crd.id}))
-            )
-
-        } else {
+              GameHelper.getCardsAutocomplete(interaction.options.getString('card'), player.hands.main)
+            );
+          } else {
 
             if (gameData.isdeleted) {
                 await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
@@ -33,7 +25,6 @@ class Rturn {
             }
 
             const cardid = interaction.options.getString('card')
-            let player = find(gameData.players, {userId: interaction.user.id})
             if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
                 await interaction.reply({ content: "Something is broken!?", ephemeral: true })
                 return

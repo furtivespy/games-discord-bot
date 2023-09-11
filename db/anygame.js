@@ -34,6 +34,8 @@ class GameDatabase {
         [ "Money - $5", "money-5"],
         [ "Money - $10", "money-10"],
         [ "Money - $20", "money-20"],
+        [ "Heat - Starting Hand", "heat-starting"],
+        [ "Heat - All Cards", "heat-all"],
     ]
 
     defaultGameData = {
@@ -57,6 +59,7 @@ class GameDatabase {
 
     defaultDeck = {
         name: "",
+        id: "",
         allCards: [],
         shuffleStyle: "standard",
         hiddenInfo: "visible",
@@ -220,6 +223,10 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "B", Array.from({length: 100}, () => ({...money[2]})))
             case "money-20":
                 return this.createCardFromObjList(deckName, "B", Array.from({length: 100}, () => ({...money[3]})))
+            case "heat-starting":
+                return this.createCardFromObjList(deckName, "B", heatBase)
+            case "heat-all":
+                return this.createCardFromObjList(deckName, "B", heatGeneric)
             default:
                 return []
         }
@@ -1017,6 +1024,36 @@ const money = [
     {name: `5`, value: -5, type: `$`, suit: `Money`, url: `https://furtivespy.com/images/money/five-dollar.jpg`},
     {name: `10`, value: -10, type: `$`, suit: `Money`, url: `https://furtivespy.com/images/money/ten-dollar.jpg`},
     {name: `20`, value: -20, type: `$`, suit: `Money`, url: `https://furtivespy.com/images/money/twenty-dollar.jpg`},
+]
+
+const heatBase = [
+    {name: `1`, value: 1, type: `Speed`, suit: `h`, url: `https://furtivespy.com/images/heat/heat_1.png`},
+    {name: `1`, value: 1, type: `Speed`, suit: `h`, url: `https://furtivespy.com/images/heat/heat_1.png`},
+    {name: `1`, value: 1, type: `Speed`, suit: `h`, url: `https://furtivespy.com/images/heat/heat_1.png`},
+    {name: `2`, value: 2, type: `Speed`, suit: `h`, url: `https://furtivespy.com/images/heat/heat_2.png`},
+    {name: `2`, value: 2, type: `Speed`, suit: `h`, url: `https://furtivespy.com/images/heat/heat_2.png`},
+    {name: `2`, value: 2, type: `Speed`, suit: `h`, url: `https://furtivespy.com/images/heat/heat_2.png`},
+    {name: `3`, value: 3, type: `Speed`, suit: `h`, url: `https://furtivespy.com/images/heat/heat_3.png`},
+    {name: `3`, value: 3, type: `Speed`, suit: `h`, url: `https://furtivespy.com/images/heat/heat_3.png`},
+    {name: `3`, value: 3, type: `Speed`, suit: `h`, url: `https://furtivespy.com/images/heat/heat_3.png`},
+    {name: `4`, value: 4, type: `Speed`, suit: `h`, url: `https://furtivespy.com/images/heat/heat_4.png`},
+    {name: `4`, value: 4, type: `Speed`, suit: `h`, url: `https://furtivespy.com/images/heat/heat_4.png`},
+    {name: `4`, value: 4, type: `Speed`, suit: `h`, url: `https://furtivespy.com/images/heat/heat_4.png`},
+    {name: `5`, value: 5, type: `Speed`, suit: `h`, url: `https://furtivespy.com/images/heat/heat_5.png`},
+    {name: `0`, value: 0, type: `Speed`, suit: `h`, url: `https://furtivespy.com/images/heat/heat_0.png`},
+    {name: `Heat`, value: 0, type: `Engine`, suit: `a`, url: `https://furtivespy.com/images/heat/heat_heat.png`},
+    {name: `Stress`, value: 1, type: `Engine`, suit: `b`, url: `https://furtivespy.com/images/heat/stress.png`},
+    {name: `Stress`, value: 1, type: `Engine`, suit: `b`, url: `https://furtivespy.com/images/heat/stress.png`},
+    {name: `Stress`, value: 1, type: `Engine`, suit: `b`, url: `https://furtivespy.com/images/heat/stress.png`},
+]
+
+const heatGeneric = [
+    {name: `Heat`, value: 0, type: `Engine`, suit: `a`, url: `https://furtivespy.com/images/heat/heat.png`},
+    {name: `Stress`, value: 1, type: `Engine`, suit: `b`, url: `https://furtivespy.com/images/heat/stress.png`},
+]
+
+const heatUpgrades = [
+
 ]
 
 module.exports = new GameDatabase();
