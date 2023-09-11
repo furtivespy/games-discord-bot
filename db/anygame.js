@@ -35,6 +35,7 @@ class GameDatabase {
         [ "Money - $10", "money-10"],
         [ "Money - $20", "money-20"],
         [ "Heat - Starting Hand", "heat-starting"],
+        [ "Heat - Upgrades", "heat-upgrades"],
         [ "Heat - All Cards", "heat-all"],
     ]
 
@@ -225,8 +226,10 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "B", Array.from({length: 100}, () => ({...money[3]})))
             case "heat-starting":
                 return this.createCardFromObjList(deckName, "B", heatBase)
+            case "heat-upgrades":
+                return this.createCardFromObjList(deckName, "B", heatUpgrades)
             case "heat-all":
-                return this.createCardFromObjList(deckName, "B", heatGeneric)
+                return this.createCardFromObjList(deckName, "B", [...heatGeneric, ...heatBase, ...heatUpgrades])
             default:
                 return []
         }
@@ -1053,7 +1056,52 @@ const heatGeneric = [
 ]
 
 const heatUpgrades = [
-
+    {name: `4 Wheel Drive`, value: 0, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/4wheeldrive+.png`},
+    {name: `4 Wheel Drive`, value: 1, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/4wheeldrive.png`},
+    {name: `4 Wheel Drive`, value: 4, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/4wheeldrive4.png`},
+    {name: `4 Wheel Drive`, value: 0, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/4wheeldrivecool.png`},
+    {name: `Body`, value: 1, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/body1.png`},
+    {name: `Body`, value: 2, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/body2.png`},
+    {name: `Body`, value: 2, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/body2b.png`},
+    {name: `Body`, value: 3, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/body3.png`},
+    {name: `Body`, value: 5, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/body5.png`},
+    {name: `Body`, value: 6, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/body6.png`},
+    {name: `Brakes`, value: 4, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/brakes1234.png`},
+    {name: `Brakes`, value: 3, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/brakes13.png`},
+    {name: `Brakes`, value: 5, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/brakes15.png`},
+    {name: `Brakes`, value: 4, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/brakes24.png`},
+    {name: `Cooling System`, value: 1, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/cooling1.png`},
+    {name: `Cooling System`, value: 3, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/cooling3.png`},
+    {name: `Cooling System`, value: 4, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/cooling4.png`},
+    {name: `Cooling System`, value: 6, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/cooling6.png`},
+    {name: `Fuel`, value: 0, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/fuel.png`},
+    {name: `Fuel`, value: 2, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/fuel2.png`},
+    {name: `Gas Pedal`, value: 1, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/gaspedal1+.png`},
+    {name: `Gas Pedal`, value: 1, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/gaspedal1.png`},
+    {name: `Gas Pedal`, value: 2, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/gaspedal2.png`},
+    {name: `Gas Pedal`, value: 3, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/gaspedal3.png`},
+    {name: `Gas Pedal`, value: 4, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/gaspedal4.png`},
+    {name: `R.P.M.`, value: 0, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/rpm+.png`},
+    {name: `R.P.M.`, value: 1, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/rpm1.png`},
+    {name: `R.P.M.`, value: 2, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/rpm12.png`},
+    {name: `R.P.M.`, value: 1, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/rpm1b.png`},
+    {name: `R.P.M.`, value: 2, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/rpm2.png`},
+    {name: `R.P.M.`, value: 3, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/rpm3.png`},
+    {name: `Suspension`, value: 1, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/suspension1.png`},
+    {name: `Suspension`, value: 2, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/suspension2.png`},
+    {name: `Suspension`, value: 2, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/suspension2b.png`},
+    {name: `Suspension`, value: 4, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/suspension4.png`},
+    {name: `Tires`, value: 0, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/tires+.png`},
+    {name: `Tires`, value: 1, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/tires.png`},
+    {name: `Tires`, value: 1, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/tires1.png`},
+    {name: `Tires`, value: 2, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/tires2.png`},
+    {name: `Tires`, value: 2, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/tires2b.png`},
+    {name: `Tires`, value: 3, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/tires3.png`},
+    {name: `Turbo Charger`, value: 8, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/turbo8.png`},
+    {name: `Turbo Charger`, value: 7, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/turby7.png`},
+    {name: `Wings`, value: 3, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/wings3.png`},
+    {name: `Wings`, value: 4, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/wings4.png`},
+    {name: `Wings`, value: 6, type: `Upgrade`, suit: `d`, url: `https://furtivespy.com/images/heat/wings6.png`},
 ]
 
 module.exports = new GameDatabase();
