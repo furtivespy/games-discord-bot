@@ -1,17 +1,12 @@
-const GameDB = require('../../db/anygame.js')
-const { cloneDeep, find, findIndex } = require('lodash')
+const GameHelper = require('../../modules/GlobalGameHelper')
+const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js')
 
 class PlayMulti {
     async execute(interaction, client) {
 
-        let gameData = Object.assign(
-            {},
-            cloneDeep(GameDB.defaultGameData), 
-            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId) 
-            //await client.getGameData(`game-${interaction.channel.id}`)
-        )
+      let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
             await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })

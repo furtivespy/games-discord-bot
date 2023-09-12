@@ -1,6 +1,5 @@
-const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
-const { cloneDeep, sortBy, find, filter, findIndex } = require('lodash')
+const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
 class Discard {

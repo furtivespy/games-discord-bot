@@ -16,6 +16,7 @@ const Draw = require(`../../subcommands/cards/draw`)
 const DrawMulti = require(`../../subcommands/cards/drawmulti`)
 const Flip = require(`../../subcommands/cards/flip`)
 const NewDeck = require(`../../subcommands/cards/newdeck`)
+const Pick = require(`../../subcommands/cards/pick`)
 const Play = require(`../../subcommands/cards/play`)
 const PlayMulti = require(`../../subcommands/cards/playmulti`)
 const Recall = require(`../../subcommands/cards/recall`)
@@ -122,6 +123,12 @@ class Cards extends SlashCommand {
                         .setDescription("Review all the cards available in a deck")
                         .addStringOption(option => option.setName('deck').setDescription('Deck to review').setAutocomplete(true))
                     )
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("pick")
+                        .setDescription("Pick a card (or cards) from the discard pile")
+                        .addStringOption(option => option.setName('deck').setDescription('Deck to pick from').setAutocomplete(true))
+                )
             )
             .addSubcommandGroup(group => 
                 group.setName("hand").setDescription("Manage cards in your hand")
@@ -247,6 +254,9 @@ class Cards extends SlashCommand {
                             break
                         case "new":
                             await NewDeck.execute(interaction, this.client)
+                            break
+                        case "pick":
+                            await Pick.execute(interaction, this.client)
                             break
                         case "recall":
                             await Recall.execute(interaction, this.client)
