@@ -3,6 +3,7 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const AddLink = require(`../../subcommands/genericgame/addlink`)
 const AddImage = require(`../../subcommands/genericgame/addimage`)
 const NewGamePlus = require(`../../subcommands/genericgame/newgameplus`)
+const Next = require(`../../subcommands/genericgame/next`)
 const Delete = require(`../../subcommands/genericgame/delete`)
 const RemoveLink = require(`../../subcommands/genericgame/removelink`)
 const RemoveImage = require(`../../subcommands/genericgame/removeimage`)
@@ -56,6 +57,11 @@ class Game extends SlashCommand {
                     .addUserOption(option => option.setName("player6").setDescription("sixth player to add"))
                     .addUserOption(option => option.setName("player7").setDescription("seventh player to add"))
                     .addUserOption(option => option.setName("player8").setDescription("eighth player to add"))
+                )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("next")
+                    .setDescription("Notify the next player in turn order")
                 )
             .addSubcommand(subcommand =>
                 subcommand
@@ -150,6 +156,9 @@ class Game extends SlashCommand {
                     break
                 case "newgameplus":
                     await NewGamePlus.execute(interaction, this.client)
+                    break
+                case "next":
+                    await Next.execute(interaction, this.client)
                     break
                 case "delete":
                     await Delete.execute(interaction, this.client)
