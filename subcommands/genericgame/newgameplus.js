@@ -41,10 +41,10 @@ class NewGame {
         }
       );
       let games = await results.json();
-      //console.log(JSON.stringify(games))
+      
       await interaction.respond(
         games.items.map((gameItem) => ({
-          name: `${gameItem.ordtitle} (${gameItem.yearpublished})`,
+          name: `${gameItem.name} (${gameItem.yearpublished})`,
           value: gameItem.objectid,
         }))
       );
