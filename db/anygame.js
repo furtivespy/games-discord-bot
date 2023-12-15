@@ -1193,5 +1193,6 @@ const elgrande = [
     {name: `10`, value: 10, type: `Power`, suit: `Power`, url: `https://furtivespy.com/images/elgrande/10.png`},
     {name: `11`, value: 11, type: `Power`, suit: `Power`, url: `https://furtivespy.com/images/elgrande/11.png`},
     {name: `12`, value: 12, type: `Power`, suit: `Power`, url: `https://furtivespy.com/images/elgrande/12.png`},
+    {name: `13`, value: 13, type: `Power`, suit: `Power`, url: `https://furtivespy.com/images/elgrande/13.png`},
 ]
 module.exports = new GameDatabase();
