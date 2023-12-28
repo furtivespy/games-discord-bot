@@ -12,6 +12,7 @@ const klaw = require("klaw");
 const path = require("path");
 const database = require("./db/db.js");
 const mongoDb = require("./db/mongoDb.js");
+const GoogleSearch = require("./modules/GoogleSearch.js");
 const _ = require("lodash");
 
 class DiscordBot extends Client {
@@ -56,6 +57,7 @@ class DiscordBot extends Client {
       logger: this.logger
     });
     
+    this.googleClient = new GoogleSearch({key: this.config.google_key, cx: this.config.google_cxid});
 
     // Basically just an async shortcut to using a setTimeout. Nothing fancy!
     this.wait = require("util").promisify(setTimeout);
