@@ -33,6 +33,8 @@ class BGG extends SlashCommand {
             {name: "Only History", value: BoardGameGeek.DetailsEnum.HISTORY},
             {name: "Only Awards", value: BoardGameGeek.DetailsEnum.AWARDS},
             {name: "Only Links & Attachments", value: BoardGameGeek.DetailsEnum.LINKS},
+            {name: "All Details (Ephemeral)", value: BoardGameGeek.DetailsEnum.ALLEPHEMERAL},
+            {name: "Only Links & Attachments (Ephemeral)", value: BoardGameGeek.DetailsEnum.LINKSEPHMERAL},
           )
       );
 
@@ -72,7 +74,7 @@ class BGG extends SlashCommand {
         //console.log(JSON.stringify(games))
         await interaction.respond(
           games.items.map((gameItem) => ({
-            name: `${gameItem.name} (${gameItem.yearpublished})`,
+            name: `${gameItem.name} (${gameItem.yearpublished})`.slice(0, 100),
             value: gameItem.objectid,
           }))
         );
@@ -85,7 +87,10 @@ class BGG extends SlashCommand {
           return
         }
 
-        await interaction.deferReply();
+        let ephemeral = BoardGameGeek.isEphemeral(interaction.options.getString("details"))
+        await interaction.deferReply({
+          ephemeral: ephemeral
+        });
        
         let bgg = await BoardGameGeek.CreateAndLoad(search, this.client, interaction)
         await bgg.LoadEmbeds(interaction.options.getString("details") || BoardGameGeek.DetailsEnum.ALL)
@@ -93,6 +98,7 @@ class BGG extends SlashCommand {
         await interaction.editReply({
           embeds: bgg.embeds,
           files: bgg.attachments,
+          ephemeral: ephemeral
         });
         if (bgg.otherAttachments.length > 0){
           await interaction.followUp({

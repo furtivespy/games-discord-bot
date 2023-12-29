@@ -31,9 +31,21 @@ class BoardGameGeek {
     AWARDS: 'awards',
     ALLPLUS: 'allplus',
     LINKS: 'links',
+    ALLEPHEMERAL: 'allephemeral',
+    LINKSEPHMERAL: 'linksephemeral',
+  }
+
+  static isEphemeral(detailsType) {
+    if (detailsType == BoardGameGeek.DetailsEnum.ALLEPHEMERAL ||
+        detailsType == BoardGameGeek.DetailsEnum.LINKSEPHMERAL) 
+    {
+      return true
+    }
+    return false
   }
 
   async LoadBggData() {
+    //console.log(`Loading BGG Data for ${this.gameId}`);
     let gameInfoResp = await fetch(
       `https://api.geekdo.com/xmlapi/boardgame/${this.gameId}?stats=1`
     );
@@ -70,10 +82,12 @@ class BoardGameGeek {
         this.GetGameAwardsEmbed()
         break;
       case BoardGameGeek.DetailsEnum.LINKS:
+      case BoardGameGeek.DetailsEnum.LINKSEPHMERAL:
         await this.GetGameImageEmbed()
         await this.GetUsefulLinksEmbed()
         break;
       case BoardGameGeek.DetailsEnum.ALLPLUS:
+      case BoardGameGeek.DetailsEnum.ALLEPHEMERAL:
         await this.GetGameImageEmbed()
         this.GetGameDetailsEmbed()
         this.GetGameDescriptionEmbed()
@@ -116,9 +130,9 @@ class BoardGameGeek {
     //Embed 2 - Stats and Details
     let ranks = ""
     if (Array.isArray(this.gameInfo.statistics.ratings.ranks.rank)) {
-      this.gameInfo.statistics.ratings.ranks.rank.forEach(r => {ranks += `\n**${r.friendlyname}:** ${r.value}`})
+      this.gameInfo.statistics.ratings.ranks.rank.forEach(r => {ranks += `\n**${he.decode(r.friendlyname)}:** ${r.value}`})
     } else {
-      ranks += `\n**${this.gameInfo.statistics.ratings.ranks.rank.friendlyname}:** ${this.gameInfo.statistics.ratings.ranks.rank.value}`
+      ranks += `\n**${he.decode(this.gameInfo.statistics.ratings.ranks.rank.friendlyname)}:** ${this.gameInfo.statistics.ratings.ranks.rank.value}`
     }
     //let publisher = Array.isArray(this.gameInfo.boardgamepublisher) ? this.gameInfo.boardgamepublisher.map(d => d.text).join(", ") : this.gameInfo.boardgamepublisher.text
     let suggestedPlayers = ""
@@ -146,7 +160,7 @@ class BoardGameGeek {
       },
       {
         name: `Designer(s)`,
-        value: Array.isArray(this.gameInfo.boardgamedesigner) ? this.gameInfo.boardgamedesigner.map(d => d.text).join("\n") : this.gameInfo.boardgamedesigner.text,
+        value: this.gameInfo.boardgamedesigner ? Array.isArray(this.gameInfo.boardgamedesigner) ? this.gameInfo.boardgamedesigner.map(d => d.text).join("\n") : this.gameInfo.boardgamedesigner.text : "N/A",
         inline: true
       },
       {
