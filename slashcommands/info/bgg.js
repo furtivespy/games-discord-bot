@@ -1,5 +1,5 @@
 const SlashCommand = require("../../base/SlashCommand.js");
-const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
 const fetch = require("node-fetch");
 const BoardGameGeek = require('../../modules/BoardGameGeek')
 
@@ -73,10 +73,12 @@ class BGG extends SlashCommand {
         let games = await results.json();
         //console.log(JSON.stringify(games))
         await interaction.respond(
-          games.items.map((gameItem) => ({
-            name: (`${gameItem.name} (${gameItem.yearpublished})`).slice(0, 100),
+          games.items.map((gameItem) => {
+            let gameName = `${gameItem.name} (${gameItem.yearpublished})`
+            return {
+            name: gameName.slice(0, 100),
             value: gameItem.objectid,
-          }))
+          }})
         );
       } else {
         if (isNaN(search)){
