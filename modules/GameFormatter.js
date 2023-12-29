@@ -154,6 +154,8 @@ class GameFormatter {
       });
     }
     const canvas = createCanvas(800, 100 + 35 * gameData.players.length);
+    let ctx = canvas.getContext("2d");
+    ctx.textDrawingMode = "glyph";
     const config = { columns, data, options };
     const ct = new CanvasTable(canvas, config);
     await ct.generateTable();
