@@ -74,7 +74,7 @@ class BGG extends SlashCommand {
         //console.log(JSON.stringify(games))
         await interaction.respond(
           games.items.map((gameItem) => ({
-            name: `${gameItem.name} (${gameItem.yearpublished})`.slice(0, 100),
+            name: (`${gameItem.name} (${gameItem.yearpublished})`).slice(0, 100),
             value: gameItem.objectid,
           }))
         );
