@@ -11,6 +11,8 @@ class GameDatabase {
         [ "Dune Imperium Intrigue - Base + Rise of Ix", "dune-ix"],
         [ "Dune Imperium Intrigue - Base + Immortality", "dune-immortality"],
         [ "Dune Imperium Intrigue - Base + Rise of Ix + Immortality", "dune-ix-immortality"],
+        [ "Dune Imperium Uprising Intrigue", "dune-uprising"],
+        [ "Dune Imperium Uprising Intrigue With CHOAM", "dune-uprising-choam"],
         [ "Brian Boru Action Cards", "brian-boru"],
         [ "King is Dead - Cunning", "cunning"],
         [ "King is Dead - Player Hand", "king-player"],
@@ -176,6 +178,10 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "B", [...duneImperium, ...duneImortal])
             case "dune-ix-immortality":
                 return this.createCardFromObjList(deckName, "B", [...duneImperium, ...duneIx, ...duneImortal])
+            case "dune-uprising":
+                return this.createCardFromObjList(deckName, "B", duneUprising)
+            case "dune-uprising-choam":
+                return this.createCardFromObjList(deckName, "B", [...duneUprising, ...duneCHOAM])
             case "brian-boru":
                 return this.createCardFromObjList(deckName, "A", brianBoru)
             case "cunning":
@@ -389,6 +395,59 @@ const duneImortal = [
     {name: "Study Melange", type: "Plot/Endgame", suit: "endgame-plot", url: "https://furtivespy.com/images/dune/study.png", description: "Gain 1 Spice OR If you have 3 or more Spice: 2 Genetic Markers: 1 Victory Point"},
     {name: "Tleilaxu Puppet", type: "Plot/Endgame", suit: "endgame-plot", url: "https://furtivespy.com/images/dune/tleilaxu.png", description: "Gain 1 Persuasion during your Reveal turn this round"},
     {name: "Vicious Talents", type: "Combat", suit: "combat", url: "https://furtivespy.com/images/dune/vicious.png", description: "2 Swords, 1 Genetic Marker: + 2 Swords, 2 Genetic Markers: + 2 Swords"},
+]
+
+const duneUprising = [
+    {name: "Sietch Ritual", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_0_0.png", description: "Discard for Bene Gesserit or Fremen Influence"},
+    {name: "Mercenaries", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_0_1.png", description: "3 Solari for Intrigue Card and 2 Troops"},
+    {name: "Councilor's Ambition", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_0_2.png", description: "If you have a seat on the High Council: 2 Water"},
+    {name: "Strategic Stockpiling", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_0_3.png", description: "5 Spice for Victory Point; 3 Fremen Influence: 3 Water for Victory Point"},
+    {name: "Detonation", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_0_4.png", description: "Remove Shield Wall or Deploy up to four troops from your garrison to the Conflict"},
+    {name: "Detonation", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_0_5.png", description: "Remove Shield Wall or Deploy up to four troops from your garrison to the Conflict"},
+    {name: "Depart for Arrakis", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_0_6.png", description: "2 Spice for 3 Troops; 3 Spacing Guild Influence: Draw a card"},
+    {name: "Cunning", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_0_7.png", description: "Draw a card OR 1 Spice for Draw a card and trash a card"},
+    {name: "Opportunism", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_0_8.png", description: "2 Solari and Lose 2 Influence for Victory Point"},
+    {name: "Change Allegiances", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_0_9.png", description: "Lose 1 Influence for gain 1 Influence; 3 Spice for gain 1 Influence"},
+    
+    {name: "Special Mission", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_1_0.png", description: "Spy on 'populated area' OR Recall Spy for Remove Shield Wall and 2 Spice"},
+    {name: "Special Mission", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_1_1.png", description: "Spy on 'populated area' OR Recall Spy for Remove Shield Wall and 2 Spice"},
+    {name: "Unexpected Allies", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_1_2.png", description: "2 Water for Remove Shield Wall and Summon Sandworm"},
+    {name: "Call To Arms", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_1_3.png", description: "During your Reveal turn this round, whenever you acquire a card: Gain a Troop"},
+    {name: "Buy Access", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_1_4.png", description: "5 Solari for gain 1 Influence in any two of Emperor, Spacing Guild, Bene Gesserit or Fremen"},
+    {name: "Imperium Politics", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_1_5.png", description: "1 Solari for 1 Influence in Emperor or Spacing Guild"},
+    {name: "Shaddam's Favor", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_1_6.png", description: "Gain a Troop; 3 Emperor Influence: Gain 3 Solari"},
+    {name: "Intelligence Report", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_1_7.png", description: "Draw a card; If you have 2 or more Spies on the board: Draw a card"},
+    {name: "Manipulate", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_1_8.png", description: "Remove and replace a card in the Imperium Row. During your reval turn this round, you may acquire the removed card for 1 Persuasion less"},
+    {name: "Distraction", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_1_9.png", description: "When you deploy three or more units to the Conflict in a single turn: Place a spy (You may place this Spy on the same observation post an another player's Spy)"},
+
+    {name: "Distraction", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_2_0.png", description: "When you deploy three or more units to the Conflict in a single turn: Place a spy (You may place this Spy on the same observation post an another player's Spy)"},
+    {name: "Market Opportunity", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_2_1.png", description: "2 Spice for 5 Solari OR 5 Solari for 5 Spice"},
+    {name: "Go To Ground", type: "Combat", suit: "combat", url: "https://furtivespy.com/images/dune-uprising/duneup_2_2.png", description: "Retreat on or two of your troops for Place a Spy"},
+    {name: "Contingency Plan", type: "Plot/Combat", suit: "combat-plot", url: "https://furtivespy.com/images/dune-uprising/duneup_2_3.png", description: "2 Solari OR + 3 Swords"},
+    {name: "Contingency Plan", type: "Plot/Combat", suit: "combat-plot", url: "https://furtivespy.com/images/dune-uprising/duneup_2_4.png", description: "2 Solari OR + 3 Swords"},
+    {name: "Contingency Plan", type: "Plot/Combat", suit: "combat-plot", url: "https://furtivespy.com/images/dune-uprising/duneup_2_5.png", description: "2 Solari OR + 3 Swords"},
+    {name: "Inspire Awe", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneup_2_6.png", description: "Acquire a card that costs 3 Persuasion or less. If you have one or more sandworms in the Conflict, put that card in your hand"},
+    {name: "Find Weakness", type: "Combat", suit: "combat", url: "https://furtivespy.com/images/dune-uprising/duneup_2_7.png", description: "+ 2 Swords; Recall a Spy for + 3 Swords"},
+    {name: "Spice is Power", type: "Combat", suit: "combat", url: "https://furtivespy.com/images/dune-uprising/duneup_2_8.png", description: "Retreat three of your troops for 3 Spice OR 3 Spice for +6 Swords"},
+    {name: "Devour", type: "Combat", suit: "combat", url: "https://furtivespy.com/images/dune-uprising/duneup_2_9.png", description: "+2 Swords; If you have one or more sandworms in the Conflict: + 2 Swords and Trash a Card"},
+
+    {name: "Impress", type: "Combat", suit: "combat", url: "https://furtivespy.com/images/dune-uprising/duneup_3_0.png", description: "+ 2 Swords; Acquire a card that costs 3 Persuasion or less"},
+    {name: "Spring The Trap", type: "Combat", suit: "combat", url: "https://furtivespy.com/images/dune-uprising/duneup_3_1.png", description: "Recall 2 Spies for +7 Swords"},
+    {name: "Weirding Combat", type: "Combat", suit: "combat", url: "https://furtivespy.com/images/dune-uprising/duneup_3_2.png", description: "+3 Swords; 3 Bene Gesserit Influence: + 2 Swords"},
+    {name: "Tactical Option", type: "Combat", suit: "combat", url: "https://furtivespy.com/images/dune-uprising/duneup_3_3.png", description: "+2 Swords OR Retreat any number of your troops"},
+    {name: "Questionable Methods", type: "Combat", suit: "combat", url: "https://furtivespy.com/images/dune-uprising/duneup_3_4.png", description: "+1 Sword; Lose 1 Influence for + 4 Swords"},
+    {name: "Desert Mouse", type: "Plot/Endgame", suit: "endgame-plot", url: "https://furtivespy.com/images/dune-uprising/duneup_3_5.png", description: "1 Spice OR Flip one of your Desert Mouse or Wild Conflict Cards for a Victory Point"},
+    {name: "Ornithopter", type: "Plot/Endgame", suit: "endgame-plot", url: "https://furtivespy.com/images/dune-uprising/duneup_3_6.png", description: "1 Spice OR Flip one of your Ornithopter or Wild Conflict Cards for a Victory Point"},
+    {name: "Crysknife", type: "Plot/Endgame", suit: "endgame-plot", url: "https://furtivespy.com/images/dune-uprising/duneup_3_7.png", description: "1 Spice OR Flip one of your Crysknife or Wild Conflict Cards for a Victory Point"},
+    {name: "Shadow Alliance", type: "Endgame", suit: "endgame", url: "https://furtivespy.com/images/dune-uprising/duneup_3_8.png", description: "If you have 4 Influence (or more) on a Faction track where an opponent has the Alliance: 1 Victory Point"},
+    {name: "Secure Spice Trade", type: "Endgame", suit: "endgame", url: "https://furtivespy.com/images/dune-uprising/duneup_3_9.png", description: "If you have at least two The Spice Must Flow: 1 Victory Point and 2 Spice"},
+]
+
+const duneCHOAM = [
+    {name: "Leverage", type: "Plot", suit: "plot", url: "https://furtivespy.com/images/dune-uprising/duneupchoam_0_0.png", description: "If you gained spice this turn: Take Contract and 1 Solari"},
+    {name: "Backed by CHOAM", type: "Plot/Combat", suit: "combat-plot", url: "https://furtivespy.com/images/dune-uprising/duneupchoam_0_1.png", description: "Lose 1 Influence for 4 Solari OR If you have completed two or more contracts: + 4 Swords"},
+    {name: "Reach Agreement", type: "Combat", suit: "combat", url: "https://furtivespy.com/images/dune-uprising/duneupchoam_1_0.png", description: "Retreat one or two of your troops for Take Contract"},
+    {name: "CHOAM Profits", type: "Endgame", suit: "endgame", url: "https://furtivespy.com/images/dune-uprising/duneupchoam_1_1.png", description: "If you have completed four or more contracts: 1 Victory Point"},
 ]
 
 const brianBoru = [
