@@ -22,7 +22,7 @@ class Pick {
         .setCustomId('card')
         .setPlaceholder('Select cards to draw back into hand')
         .setMinValues(1)
-        .setMaxValues(deck.piles.discard.cards.length)
+        .setMaxValues(Math.min(deck.piles.discard.cards.length,15))
         .addOptions(
           Formatter.cardSort(deck.piles.discard.cards).map(crd => 
             ({label: Formatter.cardShortName(crd), value: crd.id})
