@@ -11,11 +11,12 @@ class Flip {
         if (interaction.isAutocomplete()) {
             await GameHelper.getDeckAutocomplete(gameData, interaction)
         } else {
+            await interaction.deferReply()
             const inputDeck = interaction.options.getString('deck')
             const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
 
             if (!deck || deck.piles.draw.cards.length < 1){
-                await interaction.reply({ content: "No cards in draw pile", ephemeral: true })
+                await interaction.editReply({ content: "No cards in draw pile", ephemeral: true })
                 return
             } 
 
@@ -24,7 +25,7 @@ class Flip {
             //client.setGameData(`game-${interaction.channel.id}`, gameData)
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-            await interaction.reply({ 
+            await interaction.editReply({ 
                 content: `Flipped from the top of ${deck.name}`, 
                 embeds: [Formatter.oneCard(theCard)]
             })

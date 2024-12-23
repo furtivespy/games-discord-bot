@@ -89,7 +89,7 @@ class GameFormatter {
       },
       fit: true,
       title: {
-        text: `${gameData.name} Status`,
+        text: `${gameData.name} Status ${gameData.reverseOrder ? "(Turn Order Reversed)" : ""}`,
         fontSize: 24,
       },
       cell: {

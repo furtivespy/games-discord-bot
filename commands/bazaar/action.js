@@ -3,7 +3,6 @@ const { EmbedBuilder } = require("discord.js");
 const _ = require("lodash");
 const bazaarData = require("../../db/bazaar.js");
 const BazaarFormatter = require("../../modules/BazaarFormatter.js");
-const { val } = require("cheerio/lib/api/attributes.js");
 
 const scoregrid = [
   [5, 8, 12],

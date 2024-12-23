@@ -46,7 +46,7 @@ class NewDeck {
         });
         return;
       }
-      if (inputSet == "custom" && (!inputCustom || inputCustom.length == 0)) {
+      if (inputSet == "custom-csv" && (!inputCustom || inputCustom.length == 0)) {
         await interaction.reply({
           content: `When choosing a custom deck, please include the "customlist" of cards`,
           ephemeral: true,
@@ -58,13 +58,14 @@ class NewDeck {
         name: inputName,
       });
 
-      if (inputSet != "custom" && inputSet != "customempty") {
+      if (inputSet != "custom-csv" && inputSet != "customempty") {
         newdeck.allCards = GameDB.MakeSpecificDeck(inputName, inputSet);
       } else {
-        await interaction.reply({
-          content: `Custom decks are not ready yet...`,
-          ephemeral: true,
-        });
+        if (inputSet == "custom") {
+          newdeck.allCards = inputCustom.split(',').map(card => card.trim());
+        } else if (inputSet == "customempty") {
+          newdeck.allCards = [];
+        }
         return;
       }
 

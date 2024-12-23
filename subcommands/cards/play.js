@@ -34,6 +34,7 @@ class Play {
                 await interaction.reply({ content: "Something is broken!?", ephemeral: true })
                 return
             }
+            await interaction.deferReply()
             
             let card = find(player.hands.main, {id: cardid})
             let deck = find(gameData.decks, {name: card.origin})
@@ -42,7 +43,7 @@ class Play {
 
             //client.setGameData(`game-${interaction.channel.id}`, gameData)
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
-            await interaction.reply({ content: `${interaction.member.displayName} has Played:`,
+            await interaction.editReply({ content: `${interaction.member.displayName} has Played:`,
             embeds: [
                 Formatter.oneCard(card),
                 ...Formatter.deckStatus2(gameData)

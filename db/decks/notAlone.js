@@ -1,0 +1,42 @@
+const aloneHunt = [
+  {name: "Clone [Target]", type: "Phase 2", suit: "phase2", description: "Consider the Target token as a second Creature token.", url: "https://furtivespy.com/images/notalone/clone.png"},
+  {name: "Phobia [Artemia]", type: "Phase 2", suit: "phase2", description: "Force one Hunted to show you all but 2 Places cards from his hand.", url: "https://furtivespy.com/images/notalone/phobia.png"},
+  {name: "Ascendancy", type: "Phase 2", suit: "phase2", description: "Force one Hunted to discard all but 2 Place cards from his hand.", url: "https://furtivespy.com/images/notalone/ascendancy.png"},
+  {name: "Mutation [Artemia]", type: "Phase 2", suit: "phase2", description: "In addition to its effect, the Artemia token inflicts the loss of 1 Will.", url: "https://furtivespy.com/images/notalone/mutation.png"},
+  {name: "Toxin [Target]", type: "Phase 2", suit: "phase2", description: "Each Hunted on the targeted place discards 1 Survival card. The power of the place is ineffective.", url: "https://furtivespy.com/images/notalone/toxin.png"},
+  {name: "Force Field [Target]", type: "Phase 1", suit: "phase1", description: "Before the Hunted play, target 2 adjacent places. These places may not be played this turn.", url: "https://furtivespy.com/images/notalone/forcefield.png"},
+  {name: "Forbidden Zone", type: "Phase 2", suit: "phase2", description: "All Hunted discard 1 Place card simultaneously.", url: "https://furtivespy.com/images/notalone/forbiddenzone.png"},
+  {name: "Cataclysm", type: "Phase 3", suit: "phase3", description: "The place's power of your choice is ineffective.", url: "https://furtivespy.com/images/notalone/cataclysm.png"},
+  {name: "Flashback", type: "Phase of the Copied Card", suit: "phase0", description: "Copy the last Hunt card you discarded.", url: "https://furtivespy.com/images/notalone/flashback.png"},
+  {name: "Stasis", type: "Phase 4", suit: "phase4", description: "Prevent the Rescue counter from moving forward during this phase.", url: "https://furtivespy.com/images/notalone/stasis.png"},
+  {name: "Persecution", type: "Phase 2", suit: "phase2", description: "Each Hunted may only take back 1 Place card when using the power of a Place card.", url: "https://furtivespy.com/images/notalone/persecution.png"},
+  {name: "Interference", type: "Phase 2", suit: "phase2", description: "The powers of the Beach and the Wreck are ineffective.", url: "https://furtivespy.com/images/notalone/interference.png"},
+  {name: "Despair [Artemia]", type: "Phase 1", suit: "phase1", description: "No Survival card may be played or drawn for the remaining of the turn.", url: "https://furtivespy.com/images/notalone/despair.png"},
+  {name: "Virus [Artemia]", type: "Phase 2", suit: "phase2", description: "Target 2 adjacent places. Apply the effects of the Artemia token on both places.", url: "https://furtivespy.com/images/notalone/virus.png"},
+  {name: "Scream [Target]", type: "Phase 2", suit: "phase2", description: "Each Hunted on the targeted place must discard 2 Place cards or lose 1 Will.", url: "https://furtivespy.com/images/notalone/scream.png"},
+  {name: "Mirage [Target]", type: "Phase 2", suit: "phase2", description: "Target 2 adjacent places. Both are ineffective.", url: "https://furtivespy.com/images/notalone/mirage.png"},
+  {name: "Fierceness", type: "Phase 2", suit: "phase2", description: "Hunted caught by the Creature token lose 1 extra Will.", url: "https://furtivespy.com/images/notalone/fierceness.png"},
+  {name: "Detour", type: "Phase 3", suit: "phase3", description: "After the Hunted reveal their Place cards, move one Hunted to an adjacent place.", url: "https://furtivespy.com/images/notalone/detour.png"},
+  {name: "Anticipation", type: "Phase 2", suit: "phase2", description: "Choose one Hunted. If you catch him with the Creature token, move the Assimilation counter forward 1 extra space.", url: "https://furtivespy.com/images/notalone/anticipation.png"},
+  {name: "Tracking", type: "Phase 4", suit: "phase4", description: "Next turn, you may play up to 2 Hunt cards.", url: "https://furtivespy.com/images/notalone/tracking.png"},
+]
+
+const aloneSurvive = [
+  {name: "Wrong Track", type: "Phase 3", suit: "phase3", description: "Move the Creature token to an adjacent place.", url: "https://furtivespy.com/images/notalone/wrongtrack.png"},
+  {name: "Dodge", type: "Phase 3", suit: "phase3", description: "Avoid the effect of the Creature token.", url: "https://furtivespy.com/images/notalone/dodge.png"},
+  {name: "Strike Back", type: "Phase 1", suit: "phase1", description: "Take 2 random Hunt cards from the Creature's hand and put them at the bottom of the Hunt deck.", url: "https://furtivespy.com/images/notalone/strikeback.png"},
+  {name: "Sixth Sense", type: "Phase 1", suit: "phase1", description: "Take back to your hand 2 Place cards from your discard pile.", url: "https://furtivespy.com/images/notalone/sixthsense.png"},
+  {name: "Adrenaline", type: "Phase 1", suit: "phase1", description: "Regain 1 Will.", url: "https://furtivespy.com/images/notalone/adrenaline.png"},
+  {name: "Sacrifice", type: "Phase 1", suit: "phase1", description: "Discard 1 Place card. No Hunt card may be played this turn.", url: "https://furtivespy.com/images/notalone/sacrifice.png"},
+  {name: "Detector", type: "Phase 3", suit: "phase3", description: "Avoid the effects of the Artemia token.", url: "https://furtivespy.com/images/notalone/detector.png"},
+  {name: "Gate", type: "Phase 3", suit: "phase3", description: "Instead of using the power of your Place card, copy the power of an adjacent place.", url: "https://furtivespy.com/images/notalone/gate.png"},
+  {name: "Hologram", type: "Phase 3", suit: "phase3", description: "Move the Artemia token to an adjacent place.", url: "https://furtivespy.com/images/notalone/hologram.png"},
+  {name: "Amplifier", type: "Phase 4", suit: "phase4", description: "Remove the marker counter from the Beach to immediately move the Rescue counter forward 1 space.", url: "https://furtivespy.com/images/notalone/amplifier.png"},
+  {name: "Ingenuity", type: "Phase 1", suit: "phase1", description: "Place the Marker counter on the Beach.", url: "https://furtivespy.com/images/notalone/ingenuity.png"},
+  {name: "Smokescreen", type: "Phase 1", suit: "phase1", description: "All the Hunter hide their discarded Place cards until the end of their turn.", url: "https://furtivespy.com/images/notalone/smokescreen.png"},
+  {name: "Vortex", type: "Phase 2", suit: "phase2", description: "Swap your played Place card for on Place card from your discard pile.", url: "https://furtivespy.com/images/notalone/vortex.png"},
+  {name: "Double Back", type: "Phase 4", suit: "phase4", description: "Take back the Place card you just played.", url: "https://furtivespy.com/images/notalone/doubleback.png"},
+  {name: "Drone", type: "Phase 3", suit: "phase3", description: "Instead of using the power of your Place card, copy the power of the Rover.", url: "https://furtivespy.com/images/notalone/drone.png"},
+]
+
+module.exports = { aloneHunt, aloneSurvive }

@@ -45,20 +45,17 @@ class BoardGameGeek {
   }
 
   async LoadBggData() {
-    //console.log(`Loading BGG Data for ${this.gameId}`);
     let gameInfoResp = await fetch(
       `https://api.geekdo.com/xmlapi/boardgame/${this.gameId}?stats=1`
     );
-    this.gameInfo = parse(await gameInfoResp.text(), {
+    const text = await gameInfoResp.text();
+    this.gameInfo = parse(text, {
       attributeNamePrefix: "",
       textNodeName: "text",
       ignoreAttributes: false,
       ignoreNameSpace: true,
       allowBooleanAttributes: true,
-      // ignoreRootElement: true, // TODO: awaiting https://github.com/NaturalIntelligence/fast-xml-parser/issues/282
     }).boardgames.boardgame;
-
-    //console.log(JSON.stringify(this.gameInfo));
 
     const gameName = Array.isArray(this.gameInfo.name)
       ? find(this.gameInfo.name, { primary: "true" }).text
@@ -107,11 +104,10 @@ class BoardGameGeek {
   }
 
   async GetGameImageEmbed() {
-    //Embed 1 - Image
     const gameImage = await loadImage(this.gameInfo.image);
     const scaledWidth = 600;
-    let canvas = createCanvas(scaledWidth, (scaledWidth / gameImage.width) * gameImage.height);
-    let ctx = canvas.getContext("2d");
+    const canvas = createCanvas(scaledWidth, (scaledWidth / gameImage.width) * gameImage.height);
+    const ctx = canvas.getContext("2d");
     ctx.drawImage(gameImage, 0, 0, scaledWidth, (scaledWidth / gameImage.width) * gameImage.height);
     const imageAttach = new AttachmentBuilder(
       canvas.toBuffer(),
@@ -119,11 +115,16 @@ class BoardGameGeek {
     );
     this.attachments.push(imageAttach);
 
-    let imageEmbed = new EmbedBuilder()
+    const imageEmbed = new EmbedBuilder()
       .setTitle(this.gameName)
       .setURL(`https://boardgamegeek.com/boardgame/${this.gameId}`)
       .setImage(`attachment://gameImage.png`);
     this.embeds.push(imageEmbed);
+
+    // Explicitly free resources
+    canvas.width = 1;
+    canvas.height = 1;
+    ctx.clearRect(0, 0, 1, 1);
   }
 
   GetGameDetailsEmbed() {
@@ -134,15 +135,14 @@ class BoardGameGeek {
     } else {
       ranks += `\n**${he.decode(this.gameInfo.statistics.ratings.ranks.rank.friendlyname)}:** ${this.gameInfo.statistics.ratings.ranks.rank.value}`
     }
-    //let publisher = Array.isArray(this.gameInfo.boardgamepublisher) ? this.gameInfo.boardgamepublisher.map(d => d.text).join(", ") : this.gameInfo.boardgamepublisher.text
     let suggestedPlayers = ""
-    let suggestedPlayerPoll = find(this.gameInfo.poll, {name: "suggested_numplayers"})
-    suggestedPlayerPoll.results.map(x => x.result.sort((a, b) => b.numvotes - a.numvotes))
+    const suggestedPlayerPoll = find(this.gameInfo.poll, {name: "suggested_numplayers"})
     suggestedPlayerPoll.results.forEach(r => {
+      r.result.sort((a, b) => b.numvotes - a.numvotes)
       suggestedPlayers += `\n**${r.numplayers}**: ${r.result[0].value}`
     })
     
-    let detailEmbed = new EmbedBuilder().setTitle(`Details`).addFields(
+    const detailEmbed = new EmbedBuilder().setTitle(`Details`).addFields(
       {
         name: "Game Data",
         value: `**Published:** ${this.gameInfo.yearpublished}\n**Players:** ${this.gameInfo.minplayers} - ${this.gameInfo.maxplayers}\n**Playing Time:** ${this.gameInfo.minplaytime} - ${this.gameInfo.maxplaytime}\n**Age:** ${this.gameInfo.age}+`,
@@ -192,11 +192,11 @@ class BoardGameGeek {
 
   GetGameDescriptionEmbed() {
     //Embed 3 - Description
-    let turndownForWhat = new TurndownService();
-    let descriptionEmbed = new EmbedBuilder()
+    const turndownService = new TurndownService();
+    const descriptionEmbed = new EmbedBuilder()
       .setTitle("Description")
       .setDescription(
-        turndownForWhat.turndown(he.decode(this.gameInfo.description))
+        turndownService.turndown(he.decode(this.gameInfo.description))
       );
     this.embeds.push(descriptionEmbed);
   }
@@ -208,7 +208,7 @@ class BoardGameGeek {
       this.gameInfo.boardgamehonor.forEach((honor) => {
         honors += `${he.decode(honor.text)}\n`;
       });
-      let awardEmbed = new EmbedBuilder()
+      const awardEmbed = new EmbedBuilder()
         .setTitle(`Awards and Honors`)
         .setDescription(honors);
       this.embeds.push(awardEmbed);
@@ -217,7 +217,7 @@ class BoardGameGeek {
 
   async GetHistoryEmbed() {
     //Embed 5 - Local Data
-    let local = await this.discordClient.queryGameData(this.interaction.guildId, 'game', {bggGameId: this.gameId})
+    const local = await this.discordClient.queryGameData(this.interaction.guildId, 'game', {bggGameId: this.gameId})
     if (local && local.length > 0) {
       let history = ""
       local.forEach(game => {
@@ -229,7 +229,7 @@ class BoardGameGeek {
         }
       });
 
-      let localEmbed = new EmbedBuilder()
+      const localEmbed = new EmbedBuilder()
         .setTitle(`${this.gameName} in ${this.interaction.guild.name}`)
         .setDescription(history)
       
@@ -238,7 +238,7 @@ class BoardGameGeek {
   }
 
   async GetUsefulLinksEmbed() {
-    let linkData = Object.assign(
+    const linkData = Object.assign(
       {},
       cloneDeep(GameDB.defaultBGGGameData),
       await this.discordClient.getGameDataV2(this.interaction.guildId, 'bgg', this.gameId)
@@ -249,7 +249,7 @@ class BoardGameGeek {
       linkData.links.forEach((link) => {
         links += `🔗 [${link.name}](${link.url})\n`;
       });
-      let linkEmbed = new EmbedBuilder()
+      const linkEmbed = new EmbedBuilder()
         .setTitle(`Useful Links`)
         .setDescription(links);
       this.embeds.push(linkEmbed);

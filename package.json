@@ -27,6 +27,7 @@
     "chalk": "^2.4.2",
     "cheerio": "^1.0.0-rc.3",
     "discord.js": "^14.9.0",
+    "dotenv": "^16.4.5",
     "enmap": "^5.8.2",
     "fast-xml-parser": "^3.21.1",
     "flip": "^1.0.0",
@@ -49,5 +50,8 @@
     "turndown": "^7.1.1",
     "weighted": "^0.3.0",
     "word-wrap": "^1.2.3"
+  },
+  "devDependencies": {
+    "@flydotio/dockerfile": "^0.5.8"
   }
 }

@@ -10,6 +10,7 @@ const RemoveImage = require(`../../subcommands/genericgame/removeimage`)
 const Status = require(`../../subcommands/genericgame/status`)
 const Winner = require(`../../subcommands/genericgame/winner`)
 const Test = require(`../../subcommands/genericgame/test`)
+const Reverse = require(`../../subcommands/genericgame/reverse`)
 
 class Game extends SlashCommand {
     constructor(client){
@@ -62,6 +63,11 @@ class Game extends SlashCommand {
                 subcommand
                     .setName("next")
                     .setDescription("Notify the next player in turn order")
+                )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("reverse")
+                    .setDescription("Toggle the turn order of the game (for /game next command)")
                 )
             .addSubcommand(subcommand =>
                 subcommand
@@ -159,6 +165,9 @@ class Game extends SlashCommand {
                     break
                 case "next":
                     await Next.execute(interaction, this.client)
+                    break
+                case "reverse":
+                    await Reverse.execute(interaction, this.client)
                     break
                 case "delete":
                     await Delete.execute(interaction, this.client)
