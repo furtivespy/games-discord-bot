@@ -1,26 +1,21 @@
 const GameDB = require('../../db/anygame.js')
 const { cloneDeep, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
+const GameHelper = require('../../modules/GlobalGameHelper')
 const Shuffle = require(`./shuffle`)
 
 class Deal {
     async execute(interaction, client) {
 
-        let gameData = Object.assign(
-            {},
-            cloneDeep(GameDB.defaultGameData), 
-            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
-        )
-
         if (interaction.isAutocomplete()) {
-            if (gameData.isdeleted || gameData.decks.length < 1){
-                await interaction.respond([])
-                return
-            }
-            await interaction.respond(gameData.decks.map(d => ({name: d.name, value: d.name})))
+            let gameData = await GameHelper.getGameData(client, interaction)
+            await GameHelper.getDeckAutocomplete(gameData, interaction)
         } else {
+            await interaction.deferReply()
+
+            let gameData = await GameHelper.getGameData(client, interaction)
             if (gameData.isdeleted) {
-                await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
+                await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
                 return
             }
 
@@ -30,7 +25,7 @@ class Deal {
 
             const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
             if (!deck || deck.piles.draw.cards.length + deck.piles.discard.cards.length < 1){
-                await interaction.reply({ content: `No cards to deal.`, ephemeral: true })
+                await interaction.editReply({ content: `No cards to deal.`, ephemeral: true })
                 return
             } 
             
@@ -55,7 +50,7 @@ class Deal {
 
             const data = await Formatter.GameStatusV2(gameData, interaction.guild)
 
-            await interaction.reply({ 
+            await interaction.editReply({ 
                 content: `Dealt out a total of ${dealCount} cards from ${deck.name}.`,
                 embeds: [
                     Formatter.deckStatus(deck)

@@ -23,9 +23,9 @@ class PlayMulti {
             .setCustomId('card')
             .setPlaceholder('Select cards to play')
             .setMinValues(1)
-            .setMaxValues(Math.min(player.hands.main.length,15))
+            .setMaxValues(Math.min(player.hands.main.length, 15))
             .addOptions(
-              Formatter.cardSort(player.hands.main).map(crd => 
+              Formatter.cardSort(player.hands.main).slice(0, 25).map(crd => 
                 ({label: Formatter.cardShortName(crd), value: crd.id})
               )  
             )

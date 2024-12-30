@@ -1,27 +1,21 @@
 const GameDB = require('../../db/anygame.js')
 const { cloneDeep, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
+const GameHelper = require('../../modules/GlobalGameHelper')
 const Shuffle = require(`./shuffle`)
 const { ActionRowBuilder, SelectMenuBuilder } = require('discord.js');
 
 class Configure {
     async execute(interaction, client) {
 
-        let gameData = Object.assign(
-            {},
-            cloneDeep(GameDB.defaultGameData), 
-            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
-        )
-
         if (interaction.isAutocomplete()) {
-            if (gameData.isdeleted || gameData.decks.length < 1){
-                await interaction.respond([])
-                return
-            }
-            await interaction.respond(gameData.decks.map(d => ({name: d.name, value: d.name})))
+            let gameData = await GameHelper.getGameData(client, interaction)
+            await GameHelper.getDeckAutocomplete(gameData, interaction)
         } else {
+            await interaction.deferReply()
+            let gameData = await GameHelper.getGameData(client, interaction)
             if (gameData.isdeleted) {
-                await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
+                await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
                 return
             }
 
@@ -30,7 +24,7 @@ class Configure {
             
             const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
             if (!deck){
-                await interaction.reply({ content: `No deck found.`, ephemeral: true })
+                await interaction.editReply({ content: `No deck found.`, ephemeral: true })
                 return
             } 
             
@@ -86,25 +80,25 @@ class Configure {
                     }
                 break
                 default:
-                    await interaction.reply({ content: `Invalid config type.`, ephemeral: true })
+                    await interaction.editReply({ content: `Invalid config type.`, ephemeral: true })
                     return
             }
 
             
 
-            let rply = await interaction.reply({ 
+            let rply = await interaction.editReply({ 
                 content: msg, 
                 components: [row],
                 fetchReply:  true
             })
             const filter = (int) => int.customId === 'select'
             let newInteraction = await rply.awaitMessageComponent({ filter, time: 60_000 }).catch(err => client.logger.log(err,'error'))
-            
+            await newInteraction.deferReply()
             action()
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
             const data = await Formatter.GameStatusV2(gameData, interaction.guild)
             
-            await newInteraction.reply({ 
+            await newInteraction.editReply({ 
                 content: `Configured ${deck.name}`,
                 embeds: [
                     Formatter.deckStatus(deck)

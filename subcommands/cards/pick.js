@@ -10,11 +10,17 @@ class Pick {
     if (interaction.isAutocomplete()) {
       GameHelper.getDeckAutocomplete(gameData, interaction)
     } else {
+      await interaction.deferReply({ ephemeral: true })
       const inputDeck = interaction.options.getString('deck')
       const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
       let player = find(gameData.players, {userId: interaction.user.id})
       if (!player){
-        await interaction.reply({ content: "Something is broken!?", ephemeral: true })
+        await interaction.editReply({ content: "Something is broken!?", ephemeral: true })
+        return
+      }
+
+      if (deck.piles.discard.cards.length < 1) {
+        await interaction.editReply({ content: "No cards to pick up", ephemeral: true })
         return
       }
 
@@ -24,14 +30,14 @@ class Pick {
         .setMinValues(1)
         .setMaxValues(Math.min(deck.piles.discard.cards.length,15))
         .addOptions(
-          Formatter.cardSort(deck.piles.discard.cards).map(crd => 
+          Formatter.cardSort(deck.piles.discard.cards.slice(-25)).map(crd => 
             ({label: Formatter.cardShortName(crd), value: crd.id})
           )  
         )
 
       const row = new ActionRowBuilder().addComponents(select)
 
-      const CardsSelected = await interaction.reply({ content: `Choose cards to pick:`, components: [row], ephemeral: true, fetchReply: true })
+      const CardsSelected = await interaction.editReply({ content: `Choose cards to pick:`, components: [row], ephemeral: true, fetchReply: true })
       
       const filter = i => i.user.id === interaction.user.id && i.customId === 'card'
       let pickedCards = []
