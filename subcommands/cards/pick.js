@@ -68,7 +68,7 @@ class Pick {
       await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
       let followup = await Formatter.multiCard(pickedCardsObjects, `Cards Picked Back Up by ${interaction.member.displayName}`)
-      await interaction.followUp({ embeds: [followup[0]], files: [followup[1]] })    
+      await interaction.followUp({ embeds: [...followup[0]], files: [...followup[1]] })    
     }
   }
 }

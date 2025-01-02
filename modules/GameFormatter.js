@@ -480,31 +480,42 @@ class GameFormatter {
   }
 
   static async multiCard(cardArry, title) {
-    const newEmbed = new EmbedBuilder().setColor(13502711).setTitle(title);
-    const imgList = [];
+    const embeds = [];
+    const attachments = [];
+    let imgList = [];
     let description = "";
 
-    cardArry.forEach((card) => {
+    for (let i = 0; i < cardArry.length; i++) {
+      const card = cardArry[i];
       if (card.url) {
         imgList.push(card.url);
-      } 
+      }
       if (card.description.length > 0) {
         description += `• ${this.cardLongName(card)} - ${card.description}\n`;
       } else {
         description += `• ${this.cardLongName(card)}\n`;
       }
-    });
 
-    newEmbed.setDescription(`Cards: \n${description}`);
-    if (imgList.length > 0) {
-      const newAttach = new AttachmentBuilder(
-        await this.ImagefromUrlList(imgList),
-        {name: `multiCard.png`}
-      );
-      newEmbed.setImage(`attachment://multiCard.png`);
-      return [newEmbed, newAttach];
+      if ((i + 1) % 24 === 0 || i === cardArry.length - 1) {
+        const newEmbed = new EmbedBuilder()
+          .setColor(13502711)
+          .setTitle(title)
+          .setDescription(`Cards: \n${description}`);
+        embeds.push(newEmbed);
+        description = "";
+
+        if (imgList.length > 0) {
+          const newAttach = new AttachmentBuilder(
+            await this.ImagefromUrlList(imgList),
+            { name: `multiCard-${Math.floor(i / 24) + 1}.png` }
+          );
+          attachments.push(newAttach);
+          imgList = [];
+        }
+      }
     }
 
+    return [embeds, attachments];
   }
 
   static handEmbed(playerData, guildName, channelName) {

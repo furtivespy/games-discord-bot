@@ -30,7 +30,7 @@ class Review {
                 content: `${interaction.member.displayName} is reviewing the total makeup of ${deck.name}`,
             })
             
-            await interaction.followUp({ embeds: [followup[0]], files: [followup[1]], ephemeral: true })
+            await interaction.followUp({ embeds: [...followup[0]], files: [...followup[1]], ephemeral: true })
 
         }
     }

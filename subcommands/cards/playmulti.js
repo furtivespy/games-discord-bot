@@ -65,7 +65,7 @@ class PlayMulti {
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
         let followup = await Formatter.multiCard(playedCardsObjects, `Cards Played by ${interaction.member.displayName}`)
-        await interaction.followUp({ embeds: [followup[0]], files: [followup[1]] })                
+        await interaction.followUp({ embeds: [...followup[0]], files: [...followup[1]] })                
     }
 }
 

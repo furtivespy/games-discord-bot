@@ -31,7 +31,7 @@ class Check {
                 content: `${interaction.member.displayName} is looking at the ${deck.name} discard pile`
             })
 
-            await interaction.followUp({ embeds: [followup[0]], files: [followup[1]], ephemeral: true })
+            await interaction.followUp({ embeds: [...followup[0]], files: [...followup[1]], ephemeral: true })
         }
     }
 }
