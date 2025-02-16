@@ -40,6 +40,7 @@ const {
   } = require('./decks/riverboat');
 const tajMahal = require('./decks/tajMahal');
 const unoCards = require('./decks/uno');
+const penguinParty = require('./decks/penguinParty');
 
 class GameDatabase {
     
@@ -84,6 +85,7 @@ class GameDatabase {
         [ "Riverboat - Cultivation", "riverboat-cultivation"],
         [ "Taj Mahal", "taj-mahal"],
         [ "Uno Classic", "uno-classic"],
+        [ "Penguin Party", "penguin-party"],
     ]
 
     defaultGameData = {
@@ -300,6 +302,8 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "B", tajMahal);
             case "uno-classic":
                 return this.createCardFromObjList(deckName, "B", unoCards);
+            case "penguin-party":
+                return this.createCardFromObjList(deckName, "B", penguinParty);
             default:
                 return []
         }
