@@ -1,24 +1,21 @@
-const GameDB = require('../../db/anygame.js')
+const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, orderBy } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
 class Pass {
     async execute(interaction, client) {
-
-        let gameData = Object.assign(
-            {},
-            cloneDeep(GameDB.defaultGameData), 
-            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
-        )
+        await interaction.deferReply()
+        
+        let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
             return
         }
 
         const inputDir = interaction.options.getString('direction')
         if (inputDir != 'asc' && inputDir != 'desc') {
-            await interaction.reply({ content: `I don't know how to pass in that direction`, ephemeral: true })
+            await interaction.editReply({ content: `I don't know how to pass in that direction`, ephemeral: true })
             return
         }
 
@@ -42,7 +39,7 @@ class Pass {
         const data = await Formatter.GameStatusV2(gameData, interaction.guild)
         let content = `New Draft Round Has Started! Draft Round Passed ${inputDir == 'asc' ? 'Clockwise' : 'Counter-Clockwise'}\n`
         gameData.players.forEach(play => { content += `<@${play.userId}> ` })
-        await interaction.reply({ 
+        await interaction.editReply({ 
             content: content,
             files: [...data],
         })

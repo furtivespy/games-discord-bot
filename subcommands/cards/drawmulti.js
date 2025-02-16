@@ -6,87 +6,89 @@ const Shuffle = require(`./shuffle`)
 
 class DrawMulti {
     async execute(interaction, client) {
+        if (interaction.isAutocomplete()) {
+            let gameData = await GameHelper.getGameData(client, interaction)
+            await GameHelper.getDeckAutocomplete(gameData, interaction)
+            return
+        }
+
+        await interaction.deferReply()
 
         let gameData = await GameHelper.getGameData(client, interaction)
+        if (gameData.isdeleted) {
+            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            return
+        }
 
-        if (interaction.isAutocomplete()) {
-            await GameHelper.getDeckAutocomplete(gameData, interaction)
-        } else {
-            if (gameData.isdeleted) {
-                await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
-                return
-            }
+        const inputDeck = interaction.options.getString('deck')
+        const cardCount = interaction.options.getInteger('count')
+        let dealCount = 0
+        const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
 
-            const inputDeck = interaction.options.getString('deck')
-            const cardCount = interaction.options.getInteger('count')
-            let dealCount = 0
-            const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
+        if (!deck || deck.piles.draw.cards.length < 1){
+            await interaction.editReply({ content: "No cards in draw pile", ephemeral: true })
+            return
+        } 
 
-            if (!deck || deck.piles.draw.cards.length < 1){
-                await interaction.reply({ content: "No cards in draw pile", ephemeral: true })
-                return
+        let player = find(gameData.players, {userId: interaction.user.id})
+        if (!player){
+            gameData.players.push(
+                Object.assign(
+                    {},
+                    cloneDeep(GameDB.defaultPlayer), 
+                    {
+                        guildId: interaction.guild.id,
+                        userId: interaction.user.id,
+                        order: gameData.players.length + 1,
+                        name: interaction.member.displayName
+                    }    
+                )
+            )
+
+            player = find(gameData.players, {userId: interaction.user.id})
+        }
+        let wasShuffled = ""
+
+        dealLoop:
+        for (let i = 0; i < cardCount; i++) {
+            if (deck.piles.draw.cards.length < 1){
+                wasShuffled = "\n**The deck was shuffled**"
+                Shuffle.DoShuffle(deck)
             } 
 
-            let player = find(gameData.players, {userId: interaction.user.id})
-            if (!player){
-                gameData.players.push(
-                    Object.assign(
-                        {},
-                        cloneDeep(GameDB.defaultPlayer), 
-                        {
-                            guildId: interaction.guild.id,
-                            userId: interaction.user.id,
-                            order: gameData.players.length + 1,
-                            name: interaction.member.displayName
-                        }    
-                    )
-                )
-
-                player = find(gameData.players, {userId: interaction.user.id})
+            if (deck.piles.draw.cards.length < 1){
+                break dealLoop
             }
-            let wasShuffled = ""
-
-            dealLoop:
-            for (let i = 0; i < cardCount; i++) {
-                if (deck.piles.draw.cards.length < 1){
-                    wasShuffled = "\n**The deck was shuffled**"
-                    Shuffle.DoShuffle(deck)
-                } 
-
-                if (deck.piles.draw.cards.length < 1){
-                    break dealLoop
-                }
-                const theCard = deck.piles.draw.cards.shift()
-                player.hands.main.push(theCard)
-                dealCount++
-            }
-            
-            //client.setGameData(`game-${interaction.channel.id}`, gameData)
-            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
-            const data = await Formatter.GameStatusV2(gameData, interaction.guild)
-            
-            await interaction.reply({ 
-                content: `${interaction.member.displayName} drew ${dealCount} cards from ${deck.name}${wasShuffled}`,
-                embeds: [
-                    ...Formatter.deckStatus2(gameData)
-                ],
-                files: [...data]
-            })            
-            var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
-            if (handInfo.attachments.length >0){
-                await interaction.followUp({ 
-                    content: `Your Hand Now:`, 
-                    embeds: [...handInfo.embeds],
-                    files: [...handInfo.attachments],
-                    ephemeral: true
-                })  
-            } else {
-                await interaction.followUp({ 
-                    content: `Your Hand Now:`, 
-                    embeds: [...handInfo.embeds],
-                    ephemeral: true
-                })  
-            }
+            const theCard = deck.piles.draw.cards.shift()
+            player.hands.main.push(theCard)
+            dealCount++
+        }
+        
+        //client.setGameData(`game-${interaction.channel.id}`, gameData)
+        await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+        const data = await Formatter.GameStatusV2(gameData, interaction.guild)
+        
+        await interaction.editReply({ 
+            content: `${interaction.member.displayName} drew ${dealCount} cards from ${deck.name}${wasShuffled}`,
+            embeds: [
+                ...Formatter.deckStatus2(gameData)
+            ],
+            files: [...data]
+        })            
+        var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
+        if (handInfo.attachments.length >0){
+            await interaction.followUp({ 
+                content: `Your Hand Now:`, 
+                embeds: [...handInfo.embeds],
+                files: [...handInfo.attachments],
+                ephemeral: true
+            })  
+        } else {
+            await interaction.followUp({ 
+                content: `Your Hand Now:`, 
+                embeds: [...handInfo.embeds],
+                ephemeral: true
+            })  
         }
     }
 }

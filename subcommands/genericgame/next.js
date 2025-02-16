@@ -6,12 +6,10 @@ const Formatter = require('../../modules/GameFormatter')
 class Next {
   async execute(interaction, client) {
 
-    await interaction.deferReply()
-
     let gameData = await GameHelper.getGameData(client, interaction)
 
     if (gameData.isdeleted) {
-      await interaction.editReply({
+      await interaction.reply({
         content: `No game in progress`,
         ephemeral: true
       })
@@ -20,7 +18,7 @@ class Next {
 
     let player = find(gameData.players, {userId: interaction.user.id})
     if (!player){
-      await interaction.editReply({
+      await interaction.reply({
         content: `You're not playing in this game!`,
         ephemeral: true
       })
@@ -41,14 +39,14 @@ class Next {
     }
 
     if (!next){
-      await interaction.editReply({
+      await interaction.reply({
         content: `Something went wrong!`,
         ephemeral: true
       })
       return
     }
 
-    await interaction.editReply({
+    await interaction.reply({
       content: `<@${next.userId}>, it's your turn!`,
     })
   }
