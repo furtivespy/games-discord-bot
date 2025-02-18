@@ -1,5 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
-const { find } = require('lodash')
+const { find, remove, cloneDeep, shuffle } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
 class Recall {
@@ -38,7 +38,7 @@ class Recall {
         })
 
         deck.piles.discard.cards = []
-        deck.piles.draw.cards = GameHelper.shuffle(deck.allCards)
+        deck.piles.draw.cards = cloneDeep(shuffle(deck.allCards))
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         const data = await Formatter.GameStatusV2(gameData, interaction.guild)
