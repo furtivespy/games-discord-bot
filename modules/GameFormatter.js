@@ -124,7 +124,7 @@ class GameFormatter {
         const name = guild.members.cache.get(play.userId)?.displayName;
         if (draftCards > 0) {
           data.push([
-            `${Emoji.IndexToEmoji(play.order)}${
+            `(${play.order + 1}) ${
               name ?? play.name ?? play.userId
             }`,
             play.score,
@@ -133,7 +133,7 @@ class GameFormatter {
           ]);
         } else {
           data.push([
-            `${Emoji.IndexToEmoji(play.order)}${
+            `(${play.order + 1}) ${
               name ?? play.name ?? play.userId
             }`,
             play.score,
@@ -146,7 +146,7 @@ class GameFormatter {
       sortBy(gameData.players, ["order"]).forEach((play) => {
         const name2 = guild.members.cache.get(play.userId)?.displayName;
         data.push([
-          `${Emoji.IndexToEmoji(play.order)}${
+          `(${play.order + 1}) ${
             name2 ?? play.name ?? play.userId
           }`,
           play.score,

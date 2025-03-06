@@ -14,6 +14,7 @@ const Reverse = require(`../../subcommands/genericgame/reverse`)
 const AddPlayer = require(`../../subcommands/genericgame/addplayer`)
 const RemovePlayer = require(`../../subcommands/genericgame/removeplayer`)
 const AddScore = require(`../../subcommands/genericgame/addscore`)
+const FirstPlayer = require(`../../subcommands/genericgame/firstplayer`)
 
 class Game extends SlashCommand {
     constructor(client){
@@ -182,6 +183,17 @@ class Game extends SlashCommand {
                         .setRequired(true)
                     )
             )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("firstplayer")
+                    .setDescription("Set the first player in the game")
+                    .addUserOption(option =>
+                        option
+                            .setName("player")
+                            .setDescription("The player to set as first player")
+                            .setRequired(true)
+                    )
+            )
                 /*
             .addSubcommand(subcommand =>
                 subcommand
@@ -239,6 +251,9 @@ class Game extends SlashCommand {
                     break
                 case "addscore":
                     await AddScore.execute(interaction, this.client)
+                    break
+                case "firstplayer":
+                    await FirstPlayer.execute(interaction, this.client)
                     break
                 default:
                     await interaction.reply({ content: "Something Went Wrong!?!?!?", ephemeral: true })
