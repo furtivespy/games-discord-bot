@@ -19,12 +19,14 @@ const NewDeck = require(`../../subcommands/cards/newdeck`)
 const Pick = require(`../../subcommands/cards/pick`)
 const Play = require(`../../subcommands/cards/play`)
 const PlayMulti = require(`../../subcommands/cards/playmulti`)
+const PlaySimultaneous = require(`../../subcommands/cards/playsimultaneous`)
 const Recall = require(`../../subcommands/cards/recall`)
 const Reveal = require(`../../subcommands/cards/reveal`)
 const Review = require(`../../subcommands/cards/review`)
 const Rturn = require(`../../subcommands/cards/return`)
 const Show = require(`../../subcommands/cards/show`)
 const Shuffle = require(`../../subcommands/cards/shuffle`)
+const SimultaneousReveal = require(`../../subcommands/cards/simultaneousreveal`)
 const Steal = require(`../../subcommands/cards/steal`)
 const Help = require(`../../subcommands/cards/help`)
 
@@ -153,6 +155,16 @@ class Cards extends SlashCommand {
                     subcommand  
                         .setName("playmultiple")
                         .setDescription("play a number of cards")
+                    )
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("playsimultaneous")
+                        .setDescription("play a number of cards simultaneously")
+                    )
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("simultaneousreveal")
+                        .setDescription("Reveal all simultaneous cards")
                     )
                 .addSubcommand(subcommand =>
                     subcommand
@@ -302,6 +314,12 @@ class Cards extends SlashCommand {
                             break
                         case "playmultiple":
                             await PlayMulti.execute(interaction, this.client)
+                            break
+                        case "playsimultaneous":
+                            await PlaySimultaneous.execute(interaction, this.client)
+                            break
+                        case "simultaneousreveal":
+                            await SimultaneousReveal.execute(interaction, this.client)
                             break
                         case "reveal":
                             await Reveal.execute(interaction, this.client)

@@ -143,7 +143,8 @@ class GameDatabase {
             main: [],
             played: [],
             passed: [],
-            received: []
+            received: [],
+            simultaneous: []
         },
         color: null
     }

@@ -239,6 +239,24 @@ class GameFormatter {
       results.embeds.push(draftEmbed);
     }
 
+    //Simultaneous Hand
+    if (player.hands.simultaneous && player.hands.simultaneous.length > 0) {
+      const simultaneousEmbed = new EmbedBuilder()
+        .setColor(13502711)
+        .setTitle(`Selected for Simultaneous Play`)
+        .setDescription(`*These are the cards you have selected to play simultaneously*`);
+      const simultaneousHand = await this.genericHand(
+        player,
+        simultaneousEmbed,
+        "simultaneous", 
+        "Selected Cards"
+      );
+      if (simultaneousHand) {
+        results.attachments.push(simultaneousHand);
+      }
+      results.embeds.push(simultaneousEmbed);
+    }
+
     return results;
   }
 
