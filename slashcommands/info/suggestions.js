@@ -226,13 +226,19 @@ class Suggest extends SlashCommand {
           await this.client.getGameDataV2(interaction.guildId, 'suggest', "x")
         );
 
-        // Filter suggestions based on search term
+        // Filter suggestions based on search term and status
         const filteredSuggestions = suggestionData.suggestions
-          .filter(s => 
-            search === '' || 
-            s.suggestion.toLowerCase().includes(search) || 
-            s.id.toLowerCase().includes(search)
-          )
+          .filter(s => {
+            // For voting, only show active suggestions
+            if (interaction.options.getSubcommand() === 'vote') {
+              return ACTIVE_STATUSES.includes(s.status) && 
+                (search === '' || s.suggestion.toLowerCase().includes(search));
+            }
+            // For status updates (admin), show all suggestions
+            return search === '' || 
+              s.suggestion.toLowerCase().includes(search) || 
+              s.id.toLowerCase().includes(search);
+          })
           .slice(0, 25); // Limit to 25 results
 
         await interaction.respond(
