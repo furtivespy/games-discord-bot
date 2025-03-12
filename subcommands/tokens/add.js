@@ -1,74 +1,49 @@
-const GameDB = require("../../db/anygame.js");
-const { cloneDeep, find } = require("lodash");
-const { nanoid } = require("nanoid");
+const { EmbedBuilder } = require('discord.js')
+const { find } = require('lodash')
+const GameDB = require('../../db/anygame')
 
 class Add {
-  async execute(interaction, client) {
-    let gameData = Object.assign(
-      {},
-      cloneDeep(GameDB.defaultGameData),
-      await client.getGameDataV2(
-        interaction.guildId,
-        "game",
-        interaction.channelId
-      )
-    );
+    static async execute(interaction, client) {
+        const gameData = await GameDB.get(interaction.channel.id)
+        if (!gameData) {
+            return await interaction.reply({ content: "No game in progress!", ephemeral: true })
+        }
 
-    if (gameData.isdeleted) {
-      await interaction.reply({
-        content: `There is no game in this channel.`,
-        ephemeral: true,
-      });
-      return;
+        const name = interaction.options.getString('name')
+        const secret = interaction.options.getBoolean('secret') || false
+        const description = interaction.options.getString('description') || ''
+
+        // Initialize tokens array if it doesn't exist
+        if (!gameData.tokens) {
+            gameData.tokens = []
+        }
+
+        // Check if token already exists
+        if (find(gameData.tokens, { name })) {
+            return await interaction.reply({ content: `Token "${name}" already exists!`, ephemeral: true })
+        }
+
+        // Add new token type
+        gameData.tokens.push({
+            name,
+            secret,
+            description
+        })
+
+        // Save game data
+        await GameDB.set(interaction.channel.id, gameData)
+
+        const embed = new EmbedBuilder()
+            .setTitle('Token Added')
+            .setDescription(`Added new token type: ${name}`)
+            .addFields(
+                { name: 'Secret', value: secret ? 'Yes' : 'No', inline: true },
+                { name: 'Description', value: description || 'No description', inline: true }
+            )
+            .setColor('#00FF00')
+
+        await interaction.reply({ embeds: [embed] })
     }
-
-    let player = find(gameData.players, {userId: interaction.user.id});
-    if (!player) {
-      await interaction.reply({ 
-        content: "You're not in this game!", 
-        ephemeral: true 
-      });
-      return;
-    }
-
-    const tokenName = interaction.options.getString('name');
-    const isSecret = interaction.options.getBoolean('secret') ?? false;
-    const description = interaction.options.getString('description') ?? '';
-
-    // Check if token with same name exists
-    if (gameData.tokens.some(t => t.name.toLowerCase() === tokenName.toLowerCase())) {
-      await interaction.reply({
-        content: `A token named "${tokenName}" already exists!`,
-        ephemeral: true
-      });
-      return;
-    }
-
-    // Create new token
-    const newToken = Object.assign({}, cloneDeep(GameDB.defaultToken), {
-      id: nanoid(),
-      name: tokenName,
-      description: description,
-      isSecret: isSecret,
-      created: new Date().toISOString(),
-      createdBy: interaction.user.id
-    });
-
-    // Add token to game
-    gameData.tokens.push(newToken);
-
-    // Initialize token counts for all players
-    gameData.players.forEach(p => {
-      if (!p.tokens) p.tokens = {};
-      p.tokens[newToken.id] = { count: 0, isHidden: isSecret };
-    });
-
-    await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
-
-    await interaction.reply({
-      content: `Created new ${isSecret ? "secret " : ""}token: "${tokenName}"${description ? ` - ${description}` : ""}`,
-    });
-  }
 }
 
-module.exports = new Add(); 
+module.exports = Add 

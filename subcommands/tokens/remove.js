@@ -1,72 +1,52 @@
-const GameDB = require("../../db/anygame.js");
-const { cloneDeep, find } = require("lodash");
+const { EmbedBuilder } = require('discord.js')
+const { find } = require('lodash')
+const GameDB = require('../../db/anygame')
 
 class Remove {
-  async execute(interaction, client) {
-    let gameData = Object.assign(
-      {},
-      cloneDeep(GameDB.defaultGameData),
-      await client.getGameDataV2(
-        interaction.guildId,
-        "game",
-        interaction.channelId
-      )
-    );
+    static async execute(interaction, client) {
+        const gameData = await GameDB.get(interaction.channel.id)
+        if (!gameData) {
+            return await interaction.reply({ content: "No game in progress!", ephemeral: true })
+        }
 
-    if (gameData.isdeleted) {
-      await interaction.reply({
-        content: `There is no game in this channel.`,
-        ephemeral: true,
-      });
-      return;
+        const name = interaction.options.getString('name')
+
+        // Check if tokens array exists
+        if (!gameData.tokens || !gameData.tokens.length) {
+            return await interaction.reply({ content: "No tokens exist in this game!", ephemeral: true })
+        }
+
+        // Find token index
+        const tokenIndex = gameData.tokens.findIndex(token => token.name === name)
+        if (tokenIndex === -1) {
+            return await interaction.reply({ content: `Token "${name}" not found!`, ephemeral: true })
+        }
+
+        // Remove token
+        const removedToken = gameData.tokens.splice(tokenIndex, 1)[0]
+
+        // Remove token from all players
+        if (gameData.players) {
+            gameData.players.forEach(player => {
+                if (player.tokens && player.tokens[name]) {
+                    delete player.tokens[name]
+                }
+            })
+        }
+
+        // Save game data
+        await GameDB.set(interaction.channel.id, gameData)
+
+        const embed = new EmbedBuilder()
+            .setTitle('Token Removed')
+            .setDescription(`Removed token type: ${name}`)
+            .addFields(
+                { name: 'Was Secret', value: removedToken.secret ? 'Yes' : 'No', inline: true }
+            )
+            .setColor('#FF0000')
+
+        await interaction.reply({ embeds: [embed] })
     }
-
-    let player = find(gameData.players, {userId: interaction.user.id});
-    if (!player) {
-      await interaction.reply({ 
-        content: "You're not in this game!", 
-        ephemeral: true 
-      });
-      return;
-    }
-
-    const tokenName = interaction.options.getString('name');
-    
-    // Find token
-    const token = gameData.tokens.find(t => t.name.toLowerCase() === tokenName.toLowerCase());
-    if (!token) {
-      await interaction.reply({
-        content: `Token "${tokenName}" not found!`,
-        ephemeral: true
-      });
-      return;
-    }
-
-    // Check if user is creator or has permission
-    if (token.createdBy !== interaction.user.id) {
-      await interaction.reply({
-        content: `Only the token creator can remove it!`,
-        ephemeral: true
-      });
-      return;
-    }
-
-    // Remove token from game
-    gameData.tokens = gameData.tokens.filter(t => t.id !== token.id);
-
-    // Remove token counts from all players
-    gameData.players.forEach(p => {
-      if (p.tokens && p.tokens[token.id]) {
-        delete p.tokens[token.id];
-      }
-    });
-
-    await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
-
-    await interaction.reply({
-      content: `Removed token: "${token.name}"`,
-    });
-  }
 }
 
-module.exports = new Remove(); 
+module.exports = Remove 
