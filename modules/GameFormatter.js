@@ -1,6 +1,6 @@
 const { EmbedBuilder, AttachmentBuilder } = require("discord.js");
 const Emoji = require("./EmojiAssitant");
-const { sortBy, floor, isArray } = require("lodash");
+const { sortBy, floor, isArray, find } = require("lodash");
 var AsciiTable = require("ascii-table");
 const { createCanvas, Image, loadImage } = require("canvas");
 const { CanvasTable, CTColumn } = require("canvas-table");
@@ -83,6 +83,24 @@ class GameFormatter {
       { title: "Player" },
       { title: "Score", options: { textAlign: "right" } },
     ];
+
+    // Add token columns for each token in the game
+    if (gameData.tokens && gameData.tokens.length > 0) {
+      gameData.tokens.forEach(token => {
+        if (!token.isSecret) {
+          columns.push({ 
+            title: token.name, 
+            options: { textAlign: "right" } 
+          });
+        }
+      });
+    }
+
+    // Add cards column if needed
+    if (gameData.decks.length > 0) {
+      columns.push({ title: "Cards in Hand", options: { textAlign: "right" } });
+    }
+
     const options = {
       borders: {
         table: { color: "#aaa", width: 1 },
@@ -101,58 +119,33 @@ class GameFormatter {
     };
     const data = [];
 
-    if (gameData.decks.length > 0) {
-      //With Cards
-      columns.push({ title: "Cards in Hand", options: { textAlign: "right" } });
+    // Process each player's data
+    sortBy(gameData.players, ["order"]).forEach((play) => {
+      const name = guild.members.cache.get(play.userId)?.displayName;
+      let rowData = [
+        `(${play.order + 1}) ${name ?? play.name ?? play.userId}`,
+        play.score,
+      ];
 
-      let draftCards = 0;
-      gameData.players.forEach((player) => {
-        if (player.hands.draft && player.hands.draft.length > 0) {
-          draftCards += player.hands.draft.length;
-        }
-      });
-
-      if (draftCards > 0) {
-        columns.push({
-          title: "Draftable Cards",
-          options: { textAlign: "right" },
+      // Add token values for each public token
+      if (gameData.tokens && gameData.tokens.length > 0) {
+        gameData.tokens.forEach(token => {
+          if (!token.isSecret) {
+            const tokenCount = play.tokens[token.id] || 0;
+            rowData.push(tokenCount.toString());
+          }
         });
       }
 
-      sortBy(gameData.players, ["order"]).forEach((play) => {
+      // Add cards if needed
+      if (gameData.decks.length > 0) {
         const cards = GameFormatter.CountCards(gameData, play).toString();
-        const name = guild.members.cache.get(play.userId)?.displayName;
-        if (draftCards > 0) {
-          data.push([
-            `(${play.order + 1}) ${
-              name ?? play.name ?? play.userId
-            }`,
-            play.score,
-            cards,
-            play.hands.draft.length.toString(),
-          ]);
-        } else {
-          data.push([
-            `(${play.order + 1}) ${
-              name ?? play.name ?? play.userId
-            }`,
-            play.score,
-            cards,
-          ]);
-        }
-      });
-    } else {
-      //No Cards
-      sortBy(gameData.players, ["order"]).forEach((play) => {
-        const name2 = guild.members.cache.get(play.userId)?.displayName;
-        data.push([
-          `(${play.order + 1}) ${
-            name2 ?? play.name ?? play.userId
-          }`,
-          play.score,
-        ]);
-      });
-    }
+        rowData.push(cards);
+      }
+
+      data.push(rowData);
+    });
+
     const canvas = createCanvas(800, 100 + 35 * gameData.players.length);
     let ctx = canvas.getContext("2d");
     ctx.textDrawingMode = "glyph";
@@ -160,8 +153,23 @@ class GameFormatter {
     const ct = new CanvasTable(canvas, config);
     await ct.generateTable();
 
+    const embeds = [];
+    
+    // Create token info embed if there are any secret tokens
+    if (gameData.tokens && gameData.tokens.length > 0) {
+      const secretTokens = gameData.tokens.filter(t => t.isSecret);
+      if (secretTokens.length > 0) {
+        const tokenEmbed = new EmbedBuilder()
+          .setColor(13502711)
+          .setTitle("Secret Token Information")
+          .setDescription("Some tokens are hidden and will be sent to players privately.");
+        embeds.push(tokenEmbed);
+      }
+    }
+
     return [
       new AttachmentBuilder(await ct.renderToBuffer(), {name: `status-table.png`}),
+      ...embeds,
     ];
   }
 
@@ -562,6 +570,33 @@ class GameFormatter {
     const noshow = game.decks.find((deck) => deck.hiddenInfo == "hand" || deck.hiddenInfo == "all")
     if (noshow) return "?";
     return player.hands.main.length;
+  }
+
+  static async playerSecretTokens(gameData, player) {
+    if (!gameData.tokens || !player.tokens) {
+      return null;
+    }
+
+    const secretTokens = gameData.tokens.filter(t => t.isSecret);
+    if (secretTokens.length === 0) {
+      return null;
+    }
+
+    const tokenEmbed = new EmbedBuilder()
+      .setColor(13502711)
+      .setTitle("Your Secret Tokens")
+      .setDescription(`**Current Game:** ${gameData.name}\n`);
+
+    secretTokens.forEach(token => {
+      const count = player.tokens[token.id] || 0;
+      tokenEmbed.addFields({
+        name: token.name,
+        value: `${count}${token.description ? ` - ${token.description}` : ''}`,
+        inline: true
+      });
+    });
+
+    return tokenEmbed;
   }
 }
 
