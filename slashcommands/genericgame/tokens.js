@@ -3,13 +3,14 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const GameDB = require('../../db/anygame')
 const { find } = require('lodash')
 
-const Add = require(`../../subcommands/tokens/add`)
+const Create = require(`../../subcommands/tokens/create`)
 const Remove = require(`../../subcommands/tokens/remove`)
 const Check = require(`../../subcommands/tokens/check`)
 const Gain = require(`../../subcommands/tokens/gain`)
 const Lose = require(`../../subcommands/tokens/lose`)
 const Give = require(`../../subcommands/tokens/give`)
 const Take = require(`../../subcommands/tokens/take`)
+const Reveal = require(`../../subcommands/tokens/reveal`)
 
 class Tokens extends SlashCommand {
     constructor(client){
@@ -25,8 +26,8 @@ class Tokens extends SlashCommand {
             .setDescription("Token Management")
             .addSubcommand(subcommand =>
                 subcommand
-                    .setName("add")
-                    .setDescription("Add a new token type to the game")
+                    .setName("create")
+                    .setDescription("Create a new token type in the game")
                     .addStringOption(option => option.setName("name").setDescription("Name of the token").setRequired(true))
                     .addBooleanOption(option => option.setName("secret").setDescription("Whether the token is secret").setRequired(false))
                     .addStringOption(option => option.setName("description").setDescription("Description of the token").setRequired(false))
@@ -104,6 +105,17 @@ class Tokens extends SlashCommand {
                     )
                     .addIntegerOption(option => option.setName("amount").setDescription("Amount to take").setRequired(true))
                 )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("reveal")
+                    .setDescription("Reveal token information publicly")
+                    .addStringOption(option => 
+                        option.setName("name")
+                            .setDescription("Name of specific token to reveal")
+                            .setRequired(false)
+                            .setAutocomplete(true)
+                    )
+                )
     }
 
     async execute(interaction) {
@@ -115,8 +127,8 @@ class Tokens extends SlashCommand {
 
             // Handle regular command execution
             switch (interaction.options.getSubcommand()) {
-                case "add":
-                    await Add.execute(interaction, this.client)
+                case "create":
+                    await Create.execute(interaction, this.client)
                     break
                 case "remove":
                     await Remove.execute(interaction, this.client)
@@ -136,6 +148,9 @@ class Tokens extends SlashCommand {
                 case "take":
                     await Take.execute(interaction, this.client)
                     break
+                case "reveal":
+                    await Reveal.execute(interaction, this.client)
+                    break
                 default:
                     await interaction.reply({ content: "Something Went Wrong!?!?!", ephemeral: true })
             }
@@ -146,8 +161,13 @@ class Tokens extends SlashCommand {
 
     async handleAutocomplete(interaction) {
         try {
-            const gameData = await GameDB.get(interaction.channel.id)
-            if (!gameData || !gameData.tokens) {
+            const gameData = Object.assign(
+                {},
+                GameDB.defaultGameData,
+                await this.client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
+            )
+
+            if (gameData.isdeleted || !gameData.tokens) {
                 return await interaction.respond([])
             }
 

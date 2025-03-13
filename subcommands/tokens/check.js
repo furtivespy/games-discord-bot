@@ -5,8 +5,13 @@ const GameFormatter = require('../../modules/GameFormatter')
 
 class Check {
     static async execute(interaction, client) {
-        const gameData = await GameDB.get(interaction.channel.id)
-        if (!gameData) {
+        const gameData = Object.assign(
+            {},
+            GameDB.defaultGameData,
+            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
+        )
+
+        if (gameData.isdeleted) {
             return await interaction.reply({ content: "No game in progress!", ephemeral: true })
         }
 
@@ -30,9 +35,9 @@ class Check {
                 return await interaction.reply({ content: `Token "${name}" not found!`, ephemeral: true })
             }
 
-            if (token.secret && !showAll) {
+            if (token.isSecret && !showAll) {
                 // For secret tokens, only show the player's own count
-                const count = player.tokens?.[name] || 0
+                const count = player.tokens?.[token.id] || 0
                 const embed = new EmbedBuilder()
                     .setTitle(`Your ${name} Tokens`)
                     .setDescription(`You have ${count} ${name} token(s)`)
@@ -47,8 +52,9 @@ class Check {
                     .setColor('#0099FF')
 
                 gameData.players.forEach(p => {
-                    const count = p.tokens?.[name] || 0
-                    embed.addFields({ name: p.name, value: count.toString(), inline: true })
+                    const count = p.tokens?.[token.id] || 0
+                    const displayName = interaction.guild.members.cache.get(p.userId)?.displayName ?? p.name ?? p.userId
+                    embed.addFields({ name: displayName, value: count.toString(), inline: true })
                 })
 
                 return await interaction.reply({ 
@@ -70,9 +76,9 @@ class Check {
             let hasSecretTokens = false
 
             gameData.tokens.forEach(token => {
-                if (token.secret && !showAll) {
+                if (token.isSecret && !showAll) {
                     hasSecretTokens = true
-                    const count = player.tokens?.[token.name] || 0
+                    const count = player.tokens?.[token.id] || 0
                     secretEmbed.addFields({ 
                         name: token.name, 
                         value: `${count}${token.description ? ` - ${token.description}` : ''}`,
@@ -82,9 +88,10 @@ class Check {
                     hasPublicTokens = true
                     const field = { 
                         name: token.name,
-                        value: gameData.players.map(p => 
-                            `${p.name}: ${p.tokens?.[token.name] || 0}`
-                        ).join('\n'),
+                        value: gameData.players.map(p => {
+                            const displayName = interaction.guild.members.cache.get(p.userId)?.displayName ?? p.name ?? p.userId
+                            return `${displayName}: ${p.tokens?.[token.id] || 0}`
+                        }).join('\n'),
                         inline: false
                     }
                     publicEmbed.addFields(field)

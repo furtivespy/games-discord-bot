@@ -45,12 +45,11 @@ class AddPlayer {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         
-        const data = await Formatter.GameStatusV2(gameData, interaction.guild)
-
-        await interaction.editReply({ 
-            content: `Added ${newPlayer} to the game at position ${newOrder + 1}`,
-            files: [...data]
-        })
+        await interaction.editReply(
+            await Formatter.createGameStatusReply(gameData, interaction.guild, {
+                content: `Added ${newPlayer} to the game at position ${newOrder + 1}`
+            })
+        )
     }
 }
 

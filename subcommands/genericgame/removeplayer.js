@@ -51,13 +51,11 @@ class RemovePlayer {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         
-        const data = await Formatter.GameStatusV2(gameData, interaction.guild)
-
-        await interaction.editReply({ 
-            content: `Removed ${playerToRemove} from the game and discarded their cards`,
-            embeds: gameData.decks.length > 0 ? [...Formatter.deckStatus2(gameData)] : [],
-            files: [...data]
-        })
+        await interaction.editReply(
+            await Formatter.createGameStatusReply(gameData, interaction.guild, {
+                content: `Removed ${playerToRemove} from the game and discarded their cards`
+            })
+        )
     }
 }
 

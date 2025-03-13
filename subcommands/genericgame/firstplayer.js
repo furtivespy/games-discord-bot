@@ -51,12 +51,11 @@ class FirstPlayer {
         gameData
       );
 
-      const data = await Formatter.GameStatusV2(gameData, interaction.guild);
-
-      await interaction.reply({
-        content: `${newFirstPlayer} is now the first player.`,
-        files: [...data],
-      });
+      await interaction.reply(
+        await Formatter.createGameStatusReply(gameData, interaction.guild, {
+          content: `${newFirstPlayer} is now the first player.`
+        })
+      );
     } catch (e) {
       client.logger.error(e, __filename.slice(__dirname.length + 1));
       await interaction.reply({

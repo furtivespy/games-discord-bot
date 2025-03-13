@@ -1,31 +1,32 @@
+const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
+const { cloneDeep, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
 class Reverse {
   async execute(interaction, client) {
+    await interaction.deferReply()
+
     let gameData = await GameHelper.getGameData(client, interaction)
 
     if (gameData.isdeleted) {
-      await interaction.reply({
-        content: `No game in progress`,
-        ephemeral: true
+      await interaction.editReply({ 
+        content: `No active game in this channel`, 
+        ephemeral: true 
       })
       return
     }
 
-    await interaction.deferReply()
-
+    // Toggle reverse order
     gameData.reverseOrder = !gameData.reverseOrder
 
     await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
-
-    const data = await Formatter.GameStatusV2(gameData, interaction.guild);
-      await interaction.editReply({
-        content: `Game order reversed: ${gameData.reverseOrder ? 'Yes' : 'No'}`,
-        embeds: [...Formatter.deckStatus2(gameData)],
-        files: [...data],
-      });
-
+    
+    await interaction.editReply(
+      await Formatter.createGameStatusReply(gameData, interaction.guild, {
+        content: `Turn order has been ${gameData.reverseOrder ? 'reversed' : 'restored to normal'}`
+      })
+    )
   }
 }
 

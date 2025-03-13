@@ -30,20 +30,17 @@ class Steal {
         let stolen = targetPlayer.hands.main.splice(random(0,targetPlayer.hands.main.length - 1), 1)
         player.hands.main.push(stolen[0])
 
-        //client.setGameData(`game-${interaction.channel.id}`, gameData)
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         
-        const data = await Formatter.GameStatusV2(gameData, interaction.guild)
+        await interaction.editReply(
+            await Formatter.createGameStatusReply(gameData, interaction.guild, {
+                content: `${interaction.member.displayName} stole a card from ${interaction.guild.members.cache.get(targetPlayer.userId)?.displayName}`
+            })
+        )
 
-        await interaction.editReply({ 
-            content: `${interaction.member.displayName} stole a card from ${interaction.guild.members.cache.get(targetPlayer.userId)?.displayName}`,
-            embeds: [
-                ...Formatter.deckStatus2(gameData)
-            ],
-            files: [...data]
-        })
+        // Send private message to player about what they stole
         var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
-        if (handInfo.attachments.length >0){
+        if (handInfo.attachments.length > 0) {
             await interaction.followUp({ 
                 content: `You Stole:`, 
                 embeds: [Formatter.oneCard(stolen[0]), ...handInfo.embeds],
@@ -57,9 +54,7 @@ class Steal {
                 ephemeral: true
             })  
         }
-         
     }
 }
-
 
 module.exports = new Steal()

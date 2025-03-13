@@ -131,7 +131,7 @@ class GameFormatter {
       if (gameData.tokens && gameData.tokens.length > 0) {
         gameData.tokens.forEach(token => {
           if (!token.isSecret) {
-            const tokenCount = play.tokens[token.id] || 0;
+            const tokenCount = play.tokens?.[token.id] || 0;
             rowData.push(tokenCount.toString());
           }
         });
@@ -162,15 +162,15 @@ class GameFormatter {
         const tokenEmbed = new EmbedBuilder()
           .setColor(13502711)
           .setTitle("Secret Token Information")
-          .setDescription("Some tokens are hidden and will be sent to players privately.");
+          .setDescription(`Token counts for ${secretTokens.map(t => t.name).join(', ')} are not included - They are secret 🤫`);
         embeds.push(tokenEmbed);
       }
     }
 
-    return [
-      new AttachmentBuilder(await ct.renderToBuffer(), {name: `status-table.png`}),
-      ...embeds,
-    ];
+    return {
+      attachment: new AttachmentBuilder(await ct.renderToBuffer(), {name: `status-table.png`}),
+      embed: embeds.length > 0 ? embeds[0] : null
+    };
   }
 
   static draftHelpNotes() {
@@ -597,6 +597,34 @@ class GameFormatter {
     });
 
     return tokenEmbed;
+  }
+
+  /**
+   * Creates a reply object with game status, including the status table, deck status (if any), and token info
+   * @param {Object} gameData - The game data
+   * @param {Object} guild - The Discord guild object
+   * @param {Object} options - Additional options
+   * @param {string} options.content - Optional content message to include
+   * @param {Array} options.additionalEmbeds - Optional additional embeds to include
+   * @returns {Object} Reply options object compatible with interaction.reply or interaction.editReply
+   */
+  static async createGameStatusReply(gameData, guild, options = {}) {
+    const { attachment, embed } = await this.GameStatusV2(gameData, guild);
+    
+    const replyOptions = {
+      files: [attachment],
+      embeds: [
+        ...(gameData.decks?.length > 0 ? this.deckStatus2(gameData) : []),
+        ...(embed ? [embed] : []),
+        ...(options.additionalEmbeds || [])
+      ]
+    };
+
+    if (options.content) {
+      replyOptions.content = options.content;
+    }
+
+    return replyOptions;
   }
 }
 
