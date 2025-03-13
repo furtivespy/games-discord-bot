@@ -1,5 +1,7 @@
 const SlashCommand = require('../../base/SlashCommand.js')
 const { SlashCommandBuilder } = require('@discordjs/builders');
+const GameDB = require('../../db/anygame')
+const { find } = require('lodash')
 
 const Add = require(`../../subcommands/tokens/add`)
 const Remove = require(`../../subcommands/tokens/remove`)
@@ -33,27 +35,47 @@ class Tokens extends SlashCommand {
                 subcommand
                     .setName("remove")
                     .setDescription("Remove a token type from the game")
-                    .addStringOption(option => option.setName("name").setDescription("Name of the token to remove").setRequired(true))
+                    .addStringOption(option => 
+                        option.setName("name")
+                            .setDescription("Name of the token to remove")
+                            .setRequired(true)
+                            .setAutocomplete(true)
+                    )
                 )
             .addSubcommand(subcommand =>
                 subcommand
                     .setName("check")
                     .setDescription("Check token counts")
-                    .addStringOption(option => option.setName("name").setDescription("Name of specific token to check").setRequired(false))
+                    .addStringOption(option => 
+                        option.setName("name")
+                            .setDescription("Name of specific token to check")
+                            .setRequired(false)
+                            .setAutocomplete(true)
+                    )
                     .addBooleanOption(option => option.setName("all").setDescription("Show results to everyone").setRequired(false))
                 )
             .addSubcommand(subcommand =>
                 subcommand
                     .setName("gain")
                     .setDescription("Gain tokens from the supply")
-                    .addStringOption(option => option.setName("name").setDescription("Name of the token").setRequired(true))
+                    .addStringOption(option => 
+                        option.setName("name")
+                            .setDescription("Name of the token")
+                            .setRequired(true)
+                            .setAutocomplete(true)
+                    )
                     .addIntegerOption(option => option.setName("amount").setDescription("Amount to gain").setRequired(true))
                 )
             .addSubcommand(subcommand =>
                 subcommand
                     .setName("lose")
                     .setDescription("Lose tokens back to the supply")
-                    .addStringOption(option => option.setName("name").setDescription("Name of the token").setRequired(true))
+                    .addStringOption(option => 
+                        option.setName("name")
+                            .setDescription("Name of the token")
+                            .setRequired(true)
+                            .setAutocomplete(true)
+                    )
                     .addIntegerOption(option => option.setName("amount").setDescription("Amount to lose").setRequired(true))
                 )
             .addSubcommand(subcommand =>
@@ -61,7 +83,12 @@ class Tokens extends SlashCommand {
                     .setName("give")
                     .setDescription("Give tokens to another player")
                     .addUserOption(option => option.setName("player").setDescription("Player to give tokens to").setRequired(true))
-                    .addStringOption(option => option.setName("name").setDescription("Name of the token").setRequired(true))
+                    .addStringOption(option => 
+                        option.setName("name")
+                            .setDescription("Name of the token")
+                            .setRequired(true)
+                            .setAutocomplete(true)
+                    )
                     .addIntegerOption(option => option.setName("amount").setDescription("Amount to give").setRequired(true))
                 )
             .addSubcommand(subcommand =>
@@ -69,7 +96,12 @@ class Tokens extends SlashCommand {
                     .setName("take")
                     .setDescription("Take tokens from another player")
                     .addUserOption(option => option.setName("player").setDescription("Player to take tokens from").setRequired(true))
-                    .addStringOption(option => option.setName("name").setDescription("Name of the token").setRequired(true))
+                    .addStringOption(option => 
+                        option.setName("name")
+                            .setDescription("Name of the token")
+                            .setRequired(true)
+                            .setAutocomplete(true)
+                    )
                     .addIntegerOption(option => option.setName("amount").setDescription("Amount to take").setRequired(true))
                 )
     }
@@ -103,6 +135,29 @@ class Tokens extends SlashCommand {
             }
         } catch (e) {
             this.client.logger.log(e,'error')
+        }
+    }
+
+    async autocomplete(interaction) {
+        try {
+            const gameData = await GameDB.get(interaction.channel.id)
+            if (!gameData || !gameData.tokens) {
+                return await interaction.respond([])
+            }
+
+            const focusedValue = interaction.options.getFocused().toLowerCase()
+            const choices = gameData.tokens
+                .filter(token => token.name.toLowerCase().includes(focusedValue))
+                .map(token => ({
+                    name: token.name,
+                    value: token.name
+                }))
+                .slice(0, 25)
+
+            await interaction.respond(choices)
+        } catch (e) {
+            this.client.logger.log(e,'error')
+            await interaction.respond([])
         }
     }
 }
