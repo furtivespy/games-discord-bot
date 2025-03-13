@@ -104,21 +104,31 @@ class BoardGameGeek {
   }
 
   async GetGameImageEmbed() {
+    if (!this.gameInfo.image) {
+        // If no image is available, create a basic embed without an image
+        const imageEmbed = new EmbedBuilder()
+            .setTitle(this.gameName)
+            .setURL(`https://boardgamegeek.com/boardgame/${this.gameId}`);
+        this.embeds.push(imageEmbed);
+        return;
+    }
+
     const gameImage = await loadImage(this.gameInfo.image);
     const scaledWidth = 600;
     const canvas = createCanvas(scaledWidth, (scaledWidth / gameImage.width) * gameImage.height);
     const ctx = canvas.getContext("2d");
     ctx.drawImage(gameImage, 0, 0, scaledWidth, (scaledWidth / gameImage.width) * gameImage.height);
+    
     const imageAttach = new AttachmentBuilder(
-      canvas.toBuffer(),
-      {name: `gameImage.png`}
+        canvas.toBuffer(),
+        {name: `gameImage.png`}
     );
     this.attachments.push(imageAttach);
 
     const imageEmbed = new EmbedBuilder()
-      .setTitle(this.gameName)
-      .setURL(`https://boardgamegeek.com/boardgame/${this.gameId}`)
-      .setImage(`attachment://gameImage.png`);
+        .setTitle(this.gameName)
+        .setURL(`https://boardgamegeek.com/boardgame/${this.gameId}`)
+        .setImage(`attachment://gameImage.png`);
     this.embeds.push(imageEmbed);
 
     // Explicitly free resources
