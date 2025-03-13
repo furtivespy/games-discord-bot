@@ -1,31 +1,41 @@
-const GameDB = require('../../db/anygame.js')
-const { cloneDeep } = require('lodash')
+const { find } = require('lodash')
+const { AttachmentBuilder } = require('discord.js')
+const GameDB = require('../../db/anygame')
 const Formatter = require('../../modules/GameFormatter')
 
 class Status {
-    async execute(interaction, client) {
-
-        let gameData = Object.assign(
+    static async execute(interaction, client) {
+        const gameData = Object.assign(
             {},
-            cloneDeep(GameDB.defaultGameData), 
+            GameDB.defaultGameData,
             await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
         )
 
         if (gameData.isdeleted) {
-            await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
-        } else {
-            const data = await Formatter.GameStatusV2(gameData, interaction.guild)
-            await interaction.reply({ 
-                embeds: [
-                    ...Formatter.deckStatus2(gameData)
-                ],
-                files: [...data],
-            })  
-            
+            return await interaction.reply({ content: "No game in progress!", ephemeral: true })
+        }
 
+        // Get the status display
+        const { attachment, embed } = await Formatter.GameStatusV2(gameData, interaction.guild)
+
+        // Get secret tokens for the command caller
+        const player = find(gameData.players, { userId: interaction.user.id })
+        const secretTokensEmbed = player ? await Formatter.playerSecretTokens(gameData, player) : null
+
+        // Reply with public info
+        await interaction.reply({ 
+            files: [attachment],
+            embeds: embed ? [embed] : []
+        })
+
+        // If the player has secret tokens, send them in an ephemeral followup
+        if (secretTokensEmbed) {
+            await interaction.followUp({
+                embeds: [secretTokensEmbed],
+                ephemeral: true
+            })
         }
     }
 }
 
-
-module.exports = new Status()
+module.exports = Status

@@ -96,6 +96,7 @@ class GameDatabase {
         winner: null,
         bggGameId: null,
         reverseOrder: false,
+        tokens: [],
     }
 
     defaultBGGGameData = {
@@ -146,12 +147,22 @@ class GameDatabase {
             received: [],
             simultaneous: []
         },
-        color: null
+        color: null,
+        tokens: {},
     }
     
     defaultHand = {
         deck: "",
         cards: [],
+    }
+
+    defaultToken = {
+        id: "",
+        name: "",
+        description: "",
+        isSecret: false,
+        created: "",
+        createdBy: "",
     }
 
     createCard(deck, name, description = "", type = "", suit = "", value = "", format = "A", image){

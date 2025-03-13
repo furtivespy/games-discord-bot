@@ -49,17 +49,15 @@ class NewGame {
                 content += `${players[i]} `
             }
 
-            //client.setGameData(`game-${interaction.channel.id}`, gameData)
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
-            const data = await Formatter.GameStatusV2(gameData, interaction.guild)
-
-            await interaction.reply({ 
-                content: content,
-                files: [...data]
-            })
+            
+            await interaction.reply(
+                await Formatter.createGameStatusReply(gameData, interaction.guild, {
+                    content: content
+                })
+            )
         }
     }
 }
-
 
 module.exports = new NewGame()

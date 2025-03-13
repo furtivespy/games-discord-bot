@@ -1,5 +1,6 @@
+const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
-const { find } = require('lodash')
+const { cloneDeep, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
 class AddScore {
@@ -34,13 +35,11 @@ class AddScore {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         
-        const data = await Formatter.GameStatusV2(gameData, interaction.guild)
-
-        await interaction.editReply({ 
-            content: `Set ${targetPlayer}'s score to: ${score}`,
-            embeds: gameData.decks.length > 0 ? [...Formatter.deckStatus2(gameData)] : [],
-            files: [...data]
-        })
+        await interaction.editReply(
+            await Formatter.createGameStatusReply(gameData, interaction.guild, {
+                content: `Set ${targetPlayer}'s score to: ${score}`
+            })
+        )
     }
 }
 
