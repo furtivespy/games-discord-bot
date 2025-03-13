@@ -108,6 +108,12 @@ class Tokens extends SlashCommand {
 
     async execute(interaction) {
         try {
+            // Check if this is an autocomplete interaction
+            if (interaction.isAutocomplete()) {
+                return await this.handleAutocomplete(interaction)
+            }
+
+            // Handle regular command execution
             switch (interaction.options.getSubcommand()) {
                 case "add":
                     await Add.execute(interaction, this.client)
@@ -138,7 +144,7 @@ class Tokens extends SlashCommand {
         }
     }
 
-    async autocomplete(interaction) {
+    async handleAutocomplete(interaction) {
         try {
             const gameData = await GameDB.get(interaction.channel.id)
             if (!gameData || !gameData.tokens) {
