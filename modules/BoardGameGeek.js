@@ -7,6 +7,7 @@ const he = require("he");
 const TurndownService = require("turndown");
 const Formatter = require('./GameFormatter')
 const GameDB = require('../db/anygame.js')
+const { XMLParser } = require("fast-xml-parser");
 
 class BoardGameGeek {
   constructor(gameId, discordClient, interaction) {
@@ -49,13 +50,14 @@ class BoardGameGeek {
       `https://api.geekdo.com/xmlapi/boardgame/${this.gameId}?stats=1`
     );
     const text = await gameInfoResp.text();
-    this.gameInfo = parse(text, {
+    const parser = new XMLParser({
       attributeNamePrefix: "",
       textNodeName: "text",
       ignoreAttributes: false,
       ignoreNameSpace: true,
       allowBooleanAttributes: true,
-    }).boardgames.boardgame;
+    });
+    this.gameInfo = parser.parse(text).boardgames.boardgame;
 
     const gameName = Array.isArray(this.gameInfo.name)
       ? find(this.gameInfo.name, { primary: "true" }).text
