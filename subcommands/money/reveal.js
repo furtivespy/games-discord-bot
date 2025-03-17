@@ -4,6 +4,8 @@ const Formatter = require("../../modules/GameFormatter");
 
 class Reveal {
   async execute(interaction, client) {
+    await interaction.deferReply();
+    
     if (interaction.options.getString("confirm") == "reveal") {
       let gameData = Object.assign(
         {},
@@ -16,7 +18,7 @@ class Reveal {
       );
 
       if (gameData.isdeleted) {
-        await interaction.reply({
+        await interaction.editReply({
           content: `There is no game in this channel.`,
           ephemeral: true,
         });
@@ -25,10 +27,10 @@ class Reveal {
 
       const moneies = gameData.players.map(
         (p) => `- ${interaction.guild.members.cache.get(p.userId)?.displayName || p.name} has $${p.money || 0}`).join("\n");
-      await interaction.reply({content: `Here's the money:\n${moneies}`})
+      await interaction.editReply({content: `Here's the money:\n${moneies}`})
 
     } else {
-      await interaction.reply({ content: `Nothing revealed...`, ephemeral: true })
+      await interaction.editReply({ content: `Nothing revealed...`, ephemeral: true })
     }
   }
 }
