@@ -4,6 +4,8 @@ const Formatter = require("../../modules/GameFormatter");
 
 class Take {
   async execute(interaction, client) {
+    await interaction.deferReply();
+    
     let gameData = Object.assign(
       {},
       cloneDeep(GameDB.defaultGameData),
@@ -15,7 +17,7 @@ class Take {
     );
 
     if (gameData.isdeleted) {
-      await interaction.reply({
+      await interaction.editReply({
         content: `There is no game in this channel.`,
         ephemeral: true,
       });
@@ -24,24 +26,22 @@ class Take {
 
     let player = find(gameData.players, {userId: interaction.user.id})
     if (!player){
-        await interaction.reply({ content: "You're not in this game!", ephemeral: true })
+        await interaction.editReply({ content: "You're not in this game!", ephemeral: true })
         return
     }
-
 
     const whatToTake = interaction.options.getInteger('amount')
 
     if (whatToTake < 1) {
-        await interaction.reply({ content: "You can't take less than $1!", ephemeral: true })
+        await interaction.editReply({ content: "You can't take less than $1!", ephemeral: true })
         return
     }
     if (!player.money) { player.money = 0 }
     player.money += whatToTake
     await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-    await interaction.reply({content: `${interaction.member.displayName} took $${whatToTake}`})
+    await interaction.editReply({content: `${interaction.member.displayName} took $${whatToTake}`})
     await interaction.followUp({content: `You now have $${player.money || "0"} in the bank.`, ephemeral: true })
-    
   }
 }
 

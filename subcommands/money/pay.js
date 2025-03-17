@@ -4,6 +4,8 @@ const Formatter = require("../../modules/GameFormatter");
 
 class Pay {
   async execute(interaction, client) {
+    await interaction.deferReply();
+    
     let gameData = Object.assign(
       {},
       cloneDeep(GameDB.defaultGameData),
@@ -15,7 +17,7 @@ class Pay {
     );
 
     if (gameData.isdeleted) {
-      await interaction.reply({
+      await interaction.editReply({
         content: `There is no game in this channel.`,
         ephemeral: true,
       });
@@ -25,7 +27,7 @@ class Pay {
     let fromPlayer = find(gameData.players, {userId: interaction.user.id})
     let toPlayer = find(gameData.players, {userId: interaction.options.getUser('player').id})
     if (!fromPlayer || !toPlayer){
-        await interaction.reply({ content: "Someone involved in this transaction is not in this game", ephemeral: true })
+        await interaction.editReply({ content: "Someone involved in this transaction is not in this game", ephemeral: true })
         return
     }
     if (!fromPlayer.money) { fromPlayer.money = 0 }
@@ -34,11 +36,11 @@ class Pay {
     const whatToSpend = interaction.options.getInteger('amount')
 
     if (whatToSpend < 1) {
-        await interaction.reply({ content: "You can't pay less than $1!", ephemeral: true })
+        await interaction.editReply({ content: "You can't pay less than $1!", ephemeral: true })
         return
     }
     if (fromPlayer.money < whatToSpend) {
-        await interaction.reply({ content: "You don't have enough money!", ephemeral: true })
+        await interaction.editReply({ content: "You don't have enough money!", ephemeral: true })
         return
     }
     
@@ -46,9 +48,8 @@ class Pay {
     toPlayer.money += whatToSpend
     await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-    await interaction.reply({content: `${interaction.member.displayName} pays $${whatToSpend} to ${interaction.options.getUser('player')}`})
+    await interaction.editReply({content: `${interaction.member.displayName} pays $${whatToSpend} to ${interaction.options.getUser('player')}`})
     await interaction.followUp({content: `You now have $${fromPlayer.money || "0"} in the bank.`, ephemeral: true })
-    
   }
 }
 

@@ -4,6 +4,8 @@ const Formatter = require("../../modules/GameFormatter");
 
 class Check {
   async execute(interaction, client) {
+    await interaction.deferReply({ ephemeral: true });
+    
     let gameData = Object.assign(
       {},
       cloneDeep(GameDB.defaultGameData),
@@ -15,7 +17,7 @@ class Check {
     );
 
     if (gameData.isdeleted) {
-      await interaction.reply({
+      await interaction.editReply({
         content: `There is no game in this channel.`,
         ephemeral: true,
       });
@@ -24,11 +26,11 @@ class Check {
 
     let player = find(gameData.players, {userId: interaction.user.id})
     if (!player){
-        await interaction.reply({ content: "You're not in this game!", ephemeral: true })
+        await interaction.editReply({ content: "You're not in this game!", ephemeral: true })
         return
     }
 
-    await interaction.reply({content: `You have $${player.money || "0"} in the bank.`, ephemeral: true })
+    await interaction.editReply({content: `You have $${player.money || "0"} in the bank.`, ephemeral: true })
   }
 }
 
