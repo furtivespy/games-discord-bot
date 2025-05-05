@@ -41,14 +41,11 @@ class Rturn {
 
         //client.setGameData(`game-${interaction.channel.id}`, gameData)
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
-        const data = await Formatter.GameStatusV2(gameData, interaction.guild)
-        await interaction.editReply({ 
-            content: `${interaction.member.displayName} returned a card`,
-            embeds: [
-                ...Formatter.deckStatus2(gameData)
-            ],
-            files: [...data]
-        })
+        await interaction.editReply(
+            await Formatter.createGameStatusReply(gameData, interaction.guild,
+              { content: `${interaction.member.displayName} returned a card` }
+            )
+          );
         var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
         if (handInfo.attachments.length >0){
             await interaction.followUp({ 

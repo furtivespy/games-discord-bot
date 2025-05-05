@@ -5,6 +5,7 @@ const Formatter = require('../../modules/GameFormatter')
 
 class Status {
     static async execute(interaction, client) {
+        await interaction.deferReply()
         const gameData = Object.assign(
             {},
             GameDB.defaultGameData,
@@ -12,21 +13,16 @@ class Status {
         )
 
         if (gameData.isdeleted) {
-            return await interaction.reply({ content: "No game in progress!", ephemeral: true })
+            return await interaction.editReplyeply({ content: "No game in progress!", ephemeral: true })
         }
-
-        // Get the status display
-        const { attachment, embed } = await Formatter.GameStatusV2(gameData, interaction.guild)
 
         // Get secret tokens for the command caller
         const player = find(gameData.players, { userId: interaction.user.id })
         const secretTokensEmbed = player ? await Formatter.playerSecretTokens(gameData, player) : null
 
-        // Reply with public info
-        await interaction.reply({ 
-            files: [attachment],
-            embeds: embed ? [embed] : []
-        })
+        await interaction.editReply(
+            await Formatter.createGameStatusReply(gameData, interaction.guild)
+        );
 
         // If the player has secret tokens, send them in an ephemeral followup
         if (secretTokensEmbed) {

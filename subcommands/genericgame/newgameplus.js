@@ -122,11 +122,8 @@ class NewGame {
         content += `${players[i]} `;
       }
 
-      console.log("testing 1");
       let bgg = await BoardGameGeek.CreateAndLoad(search, client, interaction);
-      console.log("testing 2");
       await bgg.LoadEmbeds(BoardGameGeek.DetailsEnum.ALL);
-      console.log("testing 3");
 
       await client.setGameDataV2(
         interaction.guildId,

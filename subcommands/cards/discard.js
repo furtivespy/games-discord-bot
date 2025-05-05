@@ -38,15 +38,13 @@ class Discard {
         player.hands.main.splice(findIndex(player.hands.main, {id: cardid}), 1)
         deck.piles.discard.cards.push(card)
 
-        const data = await Formatter.GameStatusV2(gameData, interaction.guild)
-
         //client.setGameData(`game-${interaction.channel.id}`, gameData)
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
-        await interaction.editReply({ content: `${interaction.member.displayName} has Discarded a card`,
-        embeds: [
-            ...Formatter.deckStatus2(gameData)
-        ],
-        files: [...data]})
+        await interaction.editReply(
+            await Formatter.createGameStatusReply(gameData, interaction.guild,
+              { content: `${interaction.member.displayName} has Discarded a card` }
+            )
+          );
         var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
         if (handInfo.attachments.length >0){
             await interaction.followUp({ 

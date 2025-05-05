@@ -74,12 +74,11 @@ class NewDeck {
             gameData
         );
 
-        const data = await Formatter.GameStatusV2(gameData, interaction.guild);
-        await interaction.editReply({
-            content: `Added and shuffled the new deck: ${inputName}`,
-            embeds: [...Formatter.deckStatus2(gameData)],
-            files: [...data],
-        });
+        await interaction.editReply(
+            await Formatter.createGameStatusReply(gameData, interaction.guild,
+              { content: `Added and shuffled the new deck: ${inputName}` }
+            )
+          );
     }
 }
 

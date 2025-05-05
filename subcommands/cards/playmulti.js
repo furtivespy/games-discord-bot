@@ -5,7 +5,7 @@ const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js')
 
 class PlayMulti {
     async execute(interaction, client) {
-        await interaction.deferReply()
+        await interaction.deferReply({ ephemeral: true })
         
         let gameData = await GameHelper.getGameData(client, interaction)
 
@@ -49,7 +49,7 @@ class PlayMulti {
             await interaction.editReply({ content: 'No cards selected', components: [] })
             return
         }
-
+        await interaction.editReply({ content: `Playing ${playedCards.length} cards...`, components: [] })  
         let playedCardsObjects = []
         playedCards.forEach(crd => {
             let card = find(player.hands.main, {id: crd})
@@ -63,7 +63,7 @@ class PlayMulti {
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
         let followup = await Formatter.multiCard(playedCardsObjects, `Cards Played by ${interaction.member.displayName}`)
-        await interaction.editReply({ embeds: [...followup[0]], files: [...followup[1]], components: [] })
+        await interaction.followUp({ embeds: [...followup[0]], files: [...followup[1]], components: [] })
         
         var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
         if (handInfo.attachments.length >0){

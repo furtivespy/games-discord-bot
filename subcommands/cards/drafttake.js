@@ -53,10 +53,11 @@ class Take {
                 }
             }
             if (shouldPass){
-                const data = await Formatter.GameStatusV2(gameData, interaction.guild)
-                await interaction.followUp({ 
-                    content: `It's probably time to pass!`,
-                    files: [...data]})
+                await interaction.followUp(
+                    await Formatter.createGameStatusReply(gameData, interaction.guild,
+                      { content: `It's probably time to pass!` }
+                    )
+                  );
             }
         }
         

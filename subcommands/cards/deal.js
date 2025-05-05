@@ -46,17 +46,13 @@ class Deal {
             }
 
             //client.setGameData(`game-${interaction.channel.id}`, gameData)
-            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)           
 
-            const data = await Formatter.GameStatusV2(gameData, interaction.guild)
-
-            await interaction.editReply({ 
-                content: `Dealt out a total of ${dealCount} cards from ${deck.name}.`,
-                embeds: [
-                    Formatter.deckStatus(deck)
-                ],
-                files: [...data]
-            })
+            await interaction.editReply(
+                await Formatter.createGameStatusReply(gameData, interaction.guild,
+                  { content: `Dealt out a total of ${dealCount} cards from ${deck.name}.` }
+                )
+              );
         }
     }
 }

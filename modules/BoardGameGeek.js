@@ -241,11 +241,13 @@ class BoardGameGeek {
         }
       });
 
-      const localEmbed = new EmbedBuilder()
-        .setTitle(`${this.gameName} in ${this.interaction.guild.name}`)
-        .setDescription(history)
-      
-      this.embeds.push(localEmbed)
+      if (history.length > 0) {
+        const localEmbed = new EmbedBuilder()
+          .setTitle(`${this.gameName} in ${this.interaction.guild.name}`)
+          .setDescription(history)
+        
+        this.embeds.push(localEmbed)
+      }
     }
   }
 
