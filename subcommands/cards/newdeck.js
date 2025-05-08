@@ -55,12 +55,11 @@ class NewDeck {
         if (inputSet != "custom-csv" && inputSet != "customempty") {
             newdeck.allCards = GameDB.MakeSpecificDeck(inputName, inputSet);
         } else {
-            if (inputSet == "custom") {
-                newdeck.allCards = inputCustom.split(',').map(card => card.trim());
-            } else if (inputSet == "customempty") {
+            if (inputSet == "customempty") {
                 newdeck.allCards = [];
+            } else {
+                newdeck.allCards = GameDB.createCardFromStrList(inputName, inputCustom.split(',').map(card => card.trim()));
             }
-            return;
         }
 
         newdeck.piles.draw.cards = cloneDeep(shuffle(newdeck.allCards));

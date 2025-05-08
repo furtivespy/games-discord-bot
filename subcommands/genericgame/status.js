@@ -13,7 +13,7 @@ class Status {
         )
 
         if (gameData.isdeleted) {
-            return await interaction.editReplyeply({ content: "No game in progress!", ephemeral: true })
+            return await interaction.editReply({ content: "No game in progress!", ephemeral: true })
         }
 
         // Get secret tokens for the command caller
