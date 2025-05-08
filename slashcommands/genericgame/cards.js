@@ -178,6 +178,12 @@ class Cards extends SlashCommand {
                         .setDescription("return a card from your hand to the top of the draw pile")
                         .addStringOption(option => option.setName('card').setDescription('Card to return').setAutocomplete(true).setRequired(true))
                     )    
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("pass")
+                        .setDescription("Pass one or more cards from your hand to another player")
+                        .addUserOption(option => option.setName('target').setDescription('Player to pass cards to').setRequired(true))
+                )
             )
             .addSubcommandGroup(group =>
                 group.setName("player").setDescription("Manage cards of other players")
@@ -326,6 +332,10 @@ class Cards extends SlashCommand {
                             break
                         case "return":
                             await Rturn.execute(interaction, this.client)
+                            break
+                        case "pass":
+                            const Pass = require('../../subcommands/cards/pass')
+                            await Pass.execute(interaction, this.client)
                             break
                         default:
                             await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
