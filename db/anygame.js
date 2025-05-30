@@ -41,6 +41,9 @@ const {
 const tajMahal = require('./decks/tajMahal');
 const unoCards = require('./decks/uno');
 const penguinParty = require('./decks/penguinParty');
+const { archipelagoShortObjectives } = require('./decks/archipelagoShortObjectives');
+const { archipelagoMediumObjectives } = require('./decks/archipelagoMediumObjectives');
+const { archipelagoLongObjectives } = require('./decks/archipelagoLongObjectives');
 
 class GameDatabase {
     
@@ -86,6 +89,9 @@ class GameDatabase {
         [ "Taj Mahal", "taj-mahal"],
         [ "Uno Classic", "uno-classic"],
         [ "Penguin Party", "penguin-party"],
+        [ "Archipelago Short Objectives", "archipelago-short" ],
+        [ "Archipelago Medium Objectives", "archipelago-medium" ],
+        [ "Archipelago Long Objectives", "archipelago-long" ],
     ]
 
     defaultGameData = {
@@ -316,6 +322,12 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "B", unoCards);
             case "penguin-party":
                 return this.createCardFromObjList(deckName, "B", penguinParty);
+            case "archipelago-short":
+                return this.createCardFromObjList(deckName, "B", archipelagoShortObjectives);
+            case "archipelago-medium":
+                return this.createCardFromObjList(deckName, "B", archipelagoMediumObjectives);
+            case "archipelago-long":
+                return this.createCardFromObjList(deckName, "B", archipelagoLongObjectives);
             default:
                 return []
         }
