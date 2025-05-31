@@ -31,6 +31,7 @@ class Tokens extends SlashCommand {
                     .addStringOption(option => option.setName("name").setDescription("Name of the token").setRequired(true))
                     .addBooleanOption(option => option.setName("secret").setDescription("Whether the token is secret").setRequired(false))
                     .addStringOption(option => option.setName("description").setDescription("Description of the token").setRequired(false))
+                    .addIntegerOption(option => option.setName("cap").setDescription("Maximum number of these tokens allowed in circulation").setRequired(false))
                 )
             .addSubcommand(subcommand =>
                 subcommand

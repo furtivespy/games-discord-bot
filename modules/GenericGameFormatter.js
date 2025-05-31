@@ -20,7 +20,30 @@ class GameFormatter {
       const name = message.guild.members.cache.get(play.userId)?.displayName;
       table.addRow(name ?? play.name ?? play.userId, play.score, cards);
     });
-    newEmbed.setDescription(`\`\`\`\n${table.toString()}\n\`\`\``);
+
+    const tableString = `\`\`\`\n${table.toString()}\n\`\`\``;
+
+    let tokenCapInfo = "";
+    if (gameData.tokens && gameData.tokens.length > 0) {
+        let cappedTokenDetails = []; // Array to hold strings for each capped token
+        gameData.tokens.forEach(token => {
+            if (typeof token.cap === 'number' && !token.isSecret) { // Only show public tokens
+                let totalTokensHeldByAllPlayers = 0;
+                gameData.players.forEach(p => {
+                    if (p.tokens && p.tokens[token.id]) {
+                        totalTokensHeldByAllPlayers += p.tokens[token.id];
+                    }
+                });
+                const availableTokens = token.cap - totalTokensHeldByAllPlayers;
+                cappedTokenDetails.push(`**${token.name}**: ${totalTokensHeldByAllPlayers} / ${token.cap} (${availableTokens > 0 ? availableTokens : 0} available)`);
+            }
+        });
+        if (cappedTokenDetails.length > 0) {
+            tokenCapInfo = "\n\n**Token Supply:**\n" + cappedTokenDetails.join("\n");
+        }
+    }
+
+    newEmbed.setDescription(tableString + tokenCapInfo);
 
     return newEmbed;
   }
