@@ -87,12 +87,11 @@ class GameFormatter {
     // Add token columns for each token in the game
     if (gameData.tokens && gameData.tokens.length > 0) {
       gameData.tokens.forEach(token => {
-        if (!token.isSecret) {
-          columns.push({ 
-            title: token.name, 
-            options: { textAlign: "right" } 
-          });
-        }
+        // REMOVE the if(!token.isSecret) condition
+        columns.push({
+          title: token.name,
+          options: { textAlign: "right" }
+        });
       });
     }
 
@@ -130,7 +129,9 @@ class GameFormatter {
       // Add token values for each public token
       if (gameData.tokens && gameData.tokens.length > 0) {
         gameData.tokens.forEach(token => {
-          if (!token.isSecret) {
+          if (token.isSecret) {
+            rowData.push('?');
+          } else {
             const tokenCount = play.tokens?.[token.id] || 0;
             rowData.push(tokenCount.toString());
           }
@@ -643,15 +644,18 @@ class GameFormatter {
                     if (availableTokens <= 0) {
                         availableDisplay = '0 (cap met)';
                     } else {
-                        availableDisplay = `${availableTokens} (of ${capDisplay} total)`;
+                        availableDisplay = availableTokens.toString(); // Simplified: remove "(of ${capDisplay} total)"
                     }
-                } else {
+                } else { // Public token
                     availableDisplay = (availableTokens > 0 ? availableTokens : 0).toString();
                 }
+            } else { // No cap
+                availableDisplay = '♾️';
             }
 
+            const descriptionPart = token.description ? ` (${token.description})` : '';
             tokenDisplayLines.push(
-                `**${token.name}**: Circulation: ${circulationDisplay} | Cap: ${capDisplay} | Available: ${availableDisplay}`
+                `**${token.name}**${descriptionPart}: Circulation: ${circulationDisplay} | Cap: ${capDisplay} | Available: ${availableDisplay}`
             );
         });
     }
