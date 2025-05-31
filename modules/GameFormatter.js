@@ -153,23 +153,23 @@ class GameFormatter {
     const ct = new CanvasTable(canvas, config);
     await ct.generateTable();
 
-    const embeds = [];
+    const embeds = []; // This array will remain empty after the change
     
-    // Create token info embed if there are any secret tokens
-    if (gameData.tokens && gameData.tokens.length > 0) {
-      const secretTokens = gameData.tokens.filter(t => t.isSecret);
-      if (secretTokens.length > 0) {
-        const tokenEmbed = new EmbedBuilder()
-          .setColor(13502711)
-          .setTitle("Secret Token Information")
-          .setDescription(`Token counts for ${secretTokens.map(t => t.name).join(', ')} are not included - They are secret 🤫`);
-        embeds.push(tokenEmbed);
-      }
-    }
+    // // Create token info embed if there are any secret tokens
+    // if (gameData.tokens && gameData.tokens.length > 0) {
+    //   const secretTokens = gameData.tokens.filter(t => t.isSecret);
+    //   if (secretTokens.length > 0) {
+    //     const tokenEmbed = new EmbedBuilder()
+    //       .setColor(13502711)
+    //       .setTitle("Secret Token Information")
+    //       .setDescription(`Token counts for ${secretTokens.map(t => t.name).join(', ')} are not included - They are secret 🤫`);
+    //     embeds.push(tokenEmbed);
+    //   }
+    // }
 
     return {
       attachment: new AttachmentBuilder(await ct.renderToBuffer(), {name: `status-table.png`}),
-      embed: embeds.length > 0 ? embeds[0] : null
+      embed: embeds.length > 0 ? embeds[0] : null // This will effectively be null
     };
   }
 
@@ -610,20 +610,81 @@ class GameFormatter {
    */
   static async createGameStatusReply(gameData, guild, options = {}) {
     const { attachment, embed } = await this.GameStatusV2(gameData, guild);
+
+    const tokenSupplyEmbed = new EmbedBuilder()
+        .setColor(13502711) // Or a distinct color for token supply
+        .setTitle("Token Supply Status");
+
+    let tokenDisplayLines = [];
+
+    if (gameData.tokens && gameData.tokens.length > 0) {
+        gameData.tokens.forEach(token => {
+            const tokenCap = token.cap;
+            let circulationDisplay = '?';
+            let availableDisplay = '♾️';
+
+            let totalTokensHeldByAllPlayers = 0;
+            gameData.players.forEach(p => {
+                if (p.tokens && p.tokens[token.id]) {
+                    totalTokensHeldByAllPlayers += p.tokens[token.id];
+                }
+            });
+
+            if (!token.isSecret) {
+                circulationDisplay = totalTokensHeldByAllPlayers.toString();
+            }
+
+            let capDisplay = 'N/A';
+            if (typeof tokenCap === 'number') {
+                capDisplay = tokenCap.toString();
+                const availableTokens = tokenCap - totalTokensHeldByAllPlayers;
+
+                if (token.isSecret) {
+                    if (availableTokens <= 0) {
+                        availableDisplay = '0 (cap met)';
+                    } else {
+                        availableDisplay = `${availableTokens} (of ${capDisplay} total)`;
+                    }
+                } else {
+                    availableDisplay = (availableTokens > 0 ? availableTokens : 0).toString();
+                }
+            }
+
+            tokenDisplayLines.push(
+                `**${token.name}**: Circulation: ${circulationDisplay} | Cap: ${capDisplay} | Available: ${availableDisplay}`
+            );
+        });
+    }
+
+    if (tokenDisplayLines.length > 0) {
+        tokenSupplyEmbed.setDescription(tokenDisplayLines.join("\n"));
+    } else {
+        tokenSupplyEmbed.setDescription("No tokens defined in this game.");
+    }
+
+    // Initialize embeds array for replyOptions
+    let finalEmbeds = [];
+    if (gameData.decks?.length > 0) {
+        finalEmbeds.push(...this.deckStatus2(gameData));
+    }
+    if (embed) { // 'embed' is the (now potentially null) direct embed from GameStatusV2
+        finalEmbeds.push(embed);
+    }
+    // Always add tokenSupplyEmbed, its description handles the "No tokens" case.
+    finalEmbeds.push(tokenSupplyEmbed);
+
+    if (options.additionalEmbeds) {
+        finalEmbeds.push(...options.additionalEmbeds);
+    }
     
     const replyOptions = {
-      files: [attachment],
-      embeds: [
-        ...(gameData.decks?.length > 0 ? this.deckStatus2(gameData) : []),
-        ...(embed ? [embed] : []),
-        ...(options.additionalEmbeds || [])
-      ]
+        files: [attachment],
+        embeds: finalEmbeds // Use the newly constructed finalEmbeds array
     };
 
     if (options.content) {
-      replyOptions.content = options.content;
+        replyOptions.content = options.content;
     }
-
     return replyOptions;
   }
 }
