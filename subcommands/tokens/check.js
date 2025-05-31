@@ -36,14 +36,34 @@ class Check {
             }
 
             if (token.isSecret && !showAll) {
-                // For secret tokens, only show the player's own count
-                const count = player.tokens?.[token.id] || 0
+                const userCount = player.tokens?.[token.id] || 0;
                 const embed = new EmbedBuilder()
-                    .setTitle(`Your ${name} Tokens`)
-                    .setDescription(`You have ${count} ${name} token(s)`)
-                    .setColor('#0099FF')
+                    .setTitle(`Your ${name} Tokens (Secret)`)
+                    .setColor('#0099FF'); // Keep a distinct color or add to title to emphasize it's a secret token check
+
+                let descriptionLines = [`You personally have: ${userCount} ${name} token(s).`];
+
+                const tokenCap = token.cap;
+                if (typeof tokenCap === 'number') {
+                    let totalTokensHeldByAllPlayers = 0;
+                    gameData.players.forEach(p => {
+                        if (p.tokens && p.tokens[token.id]) {
+                            totalTokensHeldByAllPlayers += p.tokens[token.id];
+                        }
+                    });
+                    const availableTokens = tokenCap - totalTokensHeldByAllPlayers;
+
+                    descriptionLines.push(`\n--- Overall Token Details ---`);
+                    descriptionLines.push(`Cap: ${tokenCap}`);
+                    descriptionLines.push(`In Circulation (All Players): ${totalTokensHeldByAllPlayers}`);
+                    descriptionLines.push(`Available to be Gained (Overall): ${availableTokens > 0 ? availableTokens : 0}`);
+                } else {
+                    descriptionLines.push(`This token type does not have a defined cap.`);
+                }
+
+                embed.setDescription(descriptionLines.join('\n'));
                 
-                return await interaction.reply({ embeds: [embed], ephemeral: true })
+                return await interaction.reply({ embeds: [embed], ephemeral: true });
             } else {
                 // For public tokens or when showAll is true, show all players' counts
                 const embed = new EmbedBuilder()

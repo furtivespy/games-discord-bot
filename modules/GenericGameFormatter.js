@@ -23,27 +23,51 @@ class GameFormatter {
 
     const tableString = `\`\`\`\n${table.toString()}\n\`\`\``;
 
-    let tokenCapInfo = "";
+    let tokenDisplayLines = [];
+
     if (gameData.tokens && gameData.tokens.length > 0) {
-        let cappedTokenDetails = []; // Array to hold strings for each capped token
         gameData.tokens.forEach(token => {
-            if (typeof token.cap === 'number' && !token.isSecret) { // Only show public tokens
-                let totalTokensHeldByAllPlayers = 0;
-                gameData.players.forEach(p => {
-                    if (p.tokens && p.tokens[token.id]) {
-                        totalTokensHeldByAllPlayers += p.tokens[token.id];
-                    }
-                });
-                const availableTokens = token.cap - totalTokensHeldByAllPlayers;
-                cappedTokenDetails.push(`**${token.name}**: ${totalTokensHeldByAllPlayers} / ${token.cap} (${availableTokens > 0 ? availableTokens : 0} available)`);
+            const tokenCap = token.cap;
+            let circulationDisplay = '?';
+            let availableDisplay = '♾️'; // Default for no cap
+
+            // Calculate total tokens held by all players, regardless of secrecy for cap calculations
+            let totalTokensHeldByAllPlayers = 0;
+            gameData.players.forEach(p => {
+                if (p.tokens && p.tokens[token.id]) {
+                    totalTokensHeldByAllPlayers += p.tokens[token.id];
+                }
+            });
+
+            if (!token.isSecret) {
+                circulationDisplay = totalTokensHeldByAllPlayers.toString();
             }
+
+            let capDisplay = 'N/A'; // Default for no cap
+            if (typeof tokenCap === 'number') {
+                capDisplay = tokenCap.toString();
+                const availableTokens = tokenCap - totalTokensHeldByAllPlayers;
+                availableDisplay = (availableTokens > 0 ? availableTokens : 0).toString();
+                // Ensure availableDisplay respects that secret circulation isn't shown for totals if cap is met by secret tokens
+                if (token.isSecret && availableTokens <=0) {
+                    availableDisplay = '0 (cap met)';
+                } else if (token.isSecret && availableTokens > 0) {
+                    availableDisplay = `${availableTokens} (of ${capDisplay} total)`;
+                }
+            }
+
+            tokenDisplayLines.push(
+                `**${token.name}**: Circulation: ${circulationDisplay} | Cap: ${capDisplay} | Available: ${availableDisplay}`
+            );
         });
-        if (cappedTokenDetails.length > 0) {
-            tokenCapInfo = "\n\n**Token Supply:**\n" + cappedTokenDetails.join("\n");
-        }
     }
 
-    newEmbed.setDescription(tableString + tokenCapInfo);
+    let tokenSupplySection = "";
+    if (tokenDisplayLines.length > 0) {
+        tokenSupplySection = "\n\n**Token Supply:**\n" + tokenDisplayLines.join("\n");
+    }
+
+    newEmbed.setDescription(tableString + tokenSupplySection);
 
     return newEmbed;
   }
