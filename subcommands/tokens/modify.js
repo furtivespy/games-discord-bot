@@ -1,3 +1,62 @@
+/*
+Code snippets to be added to slashcommands/genericgame/tokens.js:
+
+1. Import Modify subcommand (at the top with other subcommand imports):
+const Modify = require(`../../subcommands/tokens/modify.js`);
+
+2. Add the 'modify' subcommand definition within the SlashCommandBuilder chain:
+.addSubcommand(subcommand =>
+    subcommand
+        .setName("modify")
+        .setDescription("Modify an existing token's properties")
+        .addStringOption(option =>
+            option.setName("name")
+                .setDescription("Name of the token to modify")
+                .setRequired(true)
+                .setAutocomplete(true)
+        )
+        .addStringOption(option =>
+            option.setName("new_name")
+                .setDescription("New name for the token")
+                .setRequired(false)
+        )
+        .addStringOption(option =>
+            option.setName("description")
+                .setDescription("New description for the token")
+                .setRequired(false)
+        )
+        .addBooleanOption(option =>
+            option.setName("secret")
+                .setDescription("New secret status for the token (true or false)")
+                .setRequired(false)
+        )
+        .addIntegerOption(option =>
+            option.setName("cap")
+                .setDescription("New numerical cap for the token")
+                .setRequired(false)
+        )
+        .addBooleanOption(option =>
+            option.setName("remove_cap")
+                .setDescription("Set to true to remove the current cap (overrides 'cap' option)")
+                .setRequired(false)
+        )
+)
+
+3. Add the 'case' for 'modify' in the execute method's switch statement:
+case "modify":
+    await Modify.execute(interaction, this.client);
+    break;
+
+4. Ensure the 'create' subcommand definition includes the 'cap' option:
+.addSubcommand(subcommand =>
+    subcommand
+        .setName("create")
+        // ... other create options ...
+        .addIntegerOption(option => option.setName("cap").setDescription("Maximum number of these tokens allowed in circulation").setRequired(false))
+)
+*/
+
+// Original content of subcommands/tokens/modify.js follows...
 const GameDB = require('../../db/anygame');
 const { find } = require('lodash');
 

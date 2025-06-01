@@ -147,7 +147,9 @@ class GameFormatter {
       data.push(rowData);
     });
 
-    const canvas = createCanvas(1200, 100 + 35 * gameData.players.length);
+    const hasTokens = gameData.tokens && gameData.tokens.length > 0;
+    const canvasWidth = hasTokens ? 1200 : 800;
+    const canvas = createCanvas(canvasWidth, 100 + 35 * gameData.players.length);
     let ctx = canvas.getContext("2d");
     ctx.textDrawingMode = "glyph";
     const config = { columns, data, options };
@@ -612,13 +614,21 @@ class GameFormatter {
   static async createGameStatusReply(gameData, guild, options = {}) {
     const { attachment, embed } = await this.GameStatusV2(gameData, guild);
 
-    const tokenSupplyEmbed = new EmbedBuilder()
-        .setColor(13502711) // Or a distinct color for token supply
-        .setTitle("Token Supply Status");
-
-    let tokenDisplayLines = [];
+    // Initialize embeds array for replyOptions
+    let finalEmbeds = [];
+    if (gameData.decks?.length > 0) {
+        finalEmbeds.push(...this.deckStatus2(gameData));
+    }
+    if (embed) { // 'embed' is the (now potentially null) direct embed from GameStatusV2
+        finalEmbeds.push(embed);
+    }
 
     if (gameData.tokens && gameData.tokens.length > 0) {
+        const tokenSupplyEmbed = new EmbedBuilder()
+            .setColor(13502711)
+            .setTitle("Token Supply Status");
+
+        let tokenDisplayLines = [];
         gameData.tokens.forEach(token => {
             const tokenCap = token.cap;
             let circulationDisplay = '?';
@@ -644,7 +654,7 @@ class GameFormatter {
                     if (availableTokens <= 0) {
                         availableDisplay = '0 (cap met)';
                     } else {
-                        availableDisplay = availableTokens.toString(); // Simplified: remove "(of ${capDisplay} total)"
+                        availableDisplay = availableTokens.toString();
                     }
                 } else { // Public token
                     availableDisplay = (availableTokens > 0 ? availableTokens : 0).toString();
@@ -658,29 +668,18 @@ class GameFormatter {
                 `**${token.name}**${descriptionPart}: Circulation: ${circulationDisplay} | Cap: ${capDisplay} | Available: ${availableDisplay}`
             );
         });
-    }
 
-    if (tokenDisplayLines.length > 0) {
-        tokenSupplyEmbed.setDescription(tokenDisplayLines.join("\n"));
-    } else {
-        tokenSupplyEmbed.setDescription("No tokens defined in this game.");
+        // This check ensures we only add the embed if there were lines generated (should always be true if gameData.tokens isn't empty)
+        if (tokenDisplayLines.length > 0) {
+            tokenSupplyEmbed.setDescription(tokenDisplayLines.join("\n"));
+            finalEmbeds.push(tokenSupplyEmbed);
+        }
     }
-
-    // Initialize embeds array for replyOptions
-    let finalEmbeds = [];
-    if (gameData.decks?.length > 0) {
-        finalEmbeds.push(...this.deckStatus2(gameData));
-    }
-    if (embed) { // 'embed' is the (now potentially null) direct embed from GameStatusV2
-        finalEmbeds.push(embed);
-    }
-    // Always add tokenSupplyEmbed, its description handles the "No tokens" case.
-    finalEmbeds.push(tokenSupplyEmbed);
 
     if (options.additionalEmbeds) {
         finalEmbeds.push(...options.additionalEmbeds);
     }
-    
+
     const replyOptions = {
         files: [attachment],
         embeds: finalEmbeds // Use the newly constructed finalEmbeds array
