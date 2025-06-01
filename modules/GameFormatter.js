@@ -147,7 +147,7 @@ class GameFormatter {
       data.push(rowData);
     });
 
-    const canvas = createCanvas(800, 100 + 35 * gameData.players.length);
+    const canvas = createCanvas(1200, 100 + 35 * gameData.players.length);
     let ctx = canvas.getContext("2d");
     ctx.textDrawingMode = "glyph";
     const config = { columns, data, options };
