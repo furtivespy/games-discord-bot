@@ -1,12 +1,16 @@
 class Help {
     async execute(interaction, client) {
-        await interaction.reply({
-            content: `🤑 **Welcome to the Money Zone!** 🤑
+        const introduction_content = `🤑 **Welcome to the Money Zone!** 🤑
 
 Hey there, high roller! 👋 Ready to make it rain (or just manage your virtual finances)?
-Here's a list of commands to help you navigate the world of moolah. Let's get this bread! 🍞
+Here's a list of commands to help you navigate the world of moolah. Let's get this bread! 🍞`;
 
-**Money Commands:**
+        await interaction.reply({ 
+            content: introduction_content,
+            ephemeral: true 
+        });
+
+        const commands_and_conclusion_content = `\n**Money Commands:**
 
 *   **/money take** 💰 - Need some cash? This command lets you take some money. Cha-ching! Hope you're feeling lucky! 🍀
 *   **/money spend** 💸 - Got that paper burning a hole in your pocket? Use this to spend your hard-earned cash. Treat yo' self! 🛍️
@@ -17,8 +21,10 @@ Here's a list of commands to help you navigate the world of moolah. Let's get th
 Remember, money isn't everything, but it sure makes the game more interesting! 😉
 If you have any questions, ask a real human – I'm just a bot trying to count my digital pennies. 🤖
 
-Go forth and prosper (or at least have fun trying)! 🚀
-`,
+Go forth and prosper (or at least have fun trying)! 🚀`;
+
+        await interaction.followUp({
+            content: commands_and_conclusion_content,
             ephemeral: true
         });
     }
