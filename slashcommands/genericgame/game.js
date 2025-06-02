@@ -15,6 +15,7 @@ const AddPlayer = require(`../../subcommands/genericgame/addplayer`)
 const RemovePlayer = require(`../../subcommands/genericgame/removeplayer`)
 const AddScore = require(`../../subcommands/genericgame/addscore`)
 const FirstPlayer = require(`../../subcommands/genericgame/firstplayer`)
+const Help = require('../../subcommands/genericgame/help.js')
 
 class Game extends SlashCommand {
     constructor(client){
@@ -28,6 +29,11 @@ class Game extends SlashCommand {
 		  this.data = new SlashCommandBuilder()
             .setName(this.help.name)
             .setDescription("Game Stuff")
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("help")
+                    .setDescription("Show help for the /game commands 🎲")
+            )
             /*
             .addSubcommand(subcommand =>
                 subcommand
@@ -254,6 +260,9 @@ class Game extends SlashCommand {
                     break
                 case "firstplayer":
                     await FirstPlayer.execute(interaction, this.client)
+                    break
+                case "help":
+                    await Help.execute(interaction, this.client)
                     break
                 default:
                     await interaction.reply({ content: "Something Went Wrong!?!?!?", ephemeral: true })
