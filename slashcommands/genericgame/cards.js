@@ -8,6 +8,7 @@ const Check = require('../../subcommands/cards/check')
 const Configure = require('../../subcommands/cards/configuredeck')
 const Deal = require('../../subcommands/cards/deal')
 const Discard = require(`../../subcommands/cards/discard`)
+const DiscardAll = require('../../subcommands/cards/discardall')
 const DraftDeal = require(`../../subcommands/cards/draftdeal`)
 const DraftPass = require(`../../subcommands/cards/draftpass`)
 const DraftTake = require(`../../subcommands/cards/drafttake`)
@@ -139,6 +140,11 @@ class Cards extends SlashCommand {
                         .setName("discard")
                         .setDescription("discard a card (not shown to everyone)")
                         .addStringOption(option => option.setName('card').setDescription('Card to discard').setAutocomplete(true).setRequired(true))
+                    )
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("discardall")
+                        .setDescription("Discards all cards from your hand.")
                     ) 
                 .addSubcommand(subcommand =>
                     subcommand
@@ -311,6 +317,9 @@ class Cards extends SlashCommand {
                     switch (interaction.options.getSubcommand()) {
                         case "discard":
                             await Discard.execute(interaction, this.client)
+                            break
+                        case "discardall":
+                            await DiscardAll.execute(interaction, this.client)
                             break
                         case "show":
                             await Show.execute(interaction, this.client)
