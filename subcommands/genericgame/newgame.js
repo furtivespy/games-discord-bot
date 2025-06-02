@@ -52,7 +52,7 @@ class NewGame {
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
             
             await interaction.reply(
-                await Formatter.createGameStatusReply(gameData, interaction.guild, {
+                await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
                     content: content
                 })
             )

@@ -141,7 +141,7 @@ class NewGame {
 
       // Then send the game status
       await interaction.followUp(
-        await Formatter.createGameStatusReply(gameData, interaction.guild, {
+        await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
           content: content
         })
       );

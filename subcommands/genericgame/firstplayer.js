@@ -52,7 +52,7 @@ class FirstPlayer {
       );
 
       await interaction.reply(
-        await Formatter.createGameStatusReply(gameData, interaction.guild, {
+        await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
           content: `${newFirstPlayer} is now the first player.`
         })
       );
