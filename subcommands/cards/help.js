@@ -26,6 +26,7 @@ class Help {
 
         const hand_and_game_commands_header = `\n**Hand & Game Commands:**`;
         const hand_and_game_commands_content = `• **/cards hand discard** - Puts a card from your hand into the deck's discard pile. Card is not show to other players.
+• **/cards hand discardall** - Discards all cards from your hand into their respective deck's discard piles.
 • **/cards hand play** - Plays a card from your hand into the deck's discard pile. Card is shows to everyone as played.
 • **/cards hand return** - Returns a card to the top of the draw pile. Not shown to others. *Not Avaialbe Yet*
 • **/cards hand reveal** - Reveals a card in your hand to other players, but card stays in your hand. *Not Avaialbe Yet*
