@@ -87,12 +87,11 @@ class GameFormatter {
     // Add token columns for each token in the game
     if (gameData.tokens && gameData.tokens.length > 0) {
       gameData.tokens.forEach(token => {
-        if (!token.isSecret) {
-          columns.push({ 
-            title: token.name, 
-            options: { textAlign: "right" } 
-          });
-        }
+        // REMOVE the if(!token.isSecret) condition
+        columns.push({
+          title: token.name,
+          options: { textAlign: "right" }
+        });
       });
     }
 
@@ -130,7 +129,9 @@ class GameFormatter {
       // Add token values for each public token
       if (gameData.tokens && gameData.tokens.length > 0) {
         gameData.tokens.forEach(token => {
-          if (!token.isSecret) {
+          if (token.isSecret) {
+            rowData.push('?');
+          } else {
             const tokenCount = play.tokens?.[token.id] || 0;
             rowData.push(tokenCount.toString());
           }
@@ -146,30 +147,22 @@ class GameFormatter {
       data.push(rowData);
     });
 
-    const canvas = createCanvas(800, 100 + 35 * gameData.players.length);
+    const hasTokens = gameData.tokens && gameData.tokens.length > 0;
+    const canvasWidth = hasTokens ? 1200 : 800;
+    const canvas = createCanvas(canvasWidth, 100 + 35 * gameData.players.length);
     let ctx = canvas.getContext("2d");
     ctx.textDrawingMode = "glyph";
     const config = { columns, data, options };
     const ct = new CanvasTable(canvas, config);
     await ct.generateTable();
 
-    const embeds = [];
-    
-    // Create token info embed if there are any secret tokens
-    if (gameData.tokens && gameData.tokens.length > 0) {
-      const secretTokens = gameData.tokens.filter(t => t.isSecret);
-      if (secretTokens.length > 0) {
-        const tokenEmbed = new EmbedBuilder()
-          .setColor(13502711)
-          .setTitle("Secret Token Information")
-          .setDescription(`Token counts for ${secretTokens.map(t => t.name).join(', ')} are not included - They are secret 🤫`);
-        embeds.push(tokenEmbed);
-      }
-    }
+    const embeds = []; 
+    // we previously had a special embed for secret tokens, but we removed it
+    // the logic for additional embeds is still here if needed.
 
     return {
       attachment: new AttachmentBuilder(await ct.renderToBuffer(), {name: `status-table.png`}),
-      embed: embeds.length > 0 ? embeds[0] : null
+      embed: embeds.length > 0 ? embeds[0] : null // This will effectively be null
     };
   }
 
@@ -610,20 +603,81 @@ class GameFormatter {
    */
   static async createGameStatusReply(gameData, guild, options = {}) {
     const { attachment, embed } = await this.GameStatusV2(gameData, guild);
-    
+
+    // Initialize embeds array for replyOptions
+    let finalEmbeds = [];
+    if (gameData.decks?.length > 0) {
+        finalEmbeds.push(...this.deckStatus2(gameData));
+    }
+    if (embed) { // 'embed' is the (now potentially null) direct embed from GameStatusV2
+        finalEmbeds.push(embed);
+    }
+
+    if (gameData.tokens && gameData.tokens.length > 0) {
+        const tokenSupplyEmbed = new EmbedBuilder()
+            .setColor(13502711)
+            .setTitle("Token Supply Status");
+
+        let tokenDisplayLines = [];
+        gameData.tokens.forEach(token => {
+            const tokenCap = token.cap;
+            let circulationDisplay = '?';
+            let availableDisplay = '♾️';
+
+            let totalTokensHeldByAllPlayers = 0;
+            gameData.players.forEach(p => {
+                if (p.tokens && p.tokens[token.id]) {
+                    totalTokensHeldByAllPlayers += p.tokens[token.id];
+                }
+            });
+
+            if (!token.isSecret) {
+                circulationDisplay = totalTokensHeldByAllPlayers.toString();
+            }
+
+            let capDisplay = 'N/A';
+            if (typeof tokenCap === 'number') {
+                capDisplay = tokenCap.toString();
+                const availableTokens = tokenCap - totalTokensHeldByAllPlayers;
+
+                if (token.isSecret) {
+                    if (availableTokens <= 0) {
+                        availableDisplay = '0 (cap met)';
+                    } else {
+                        availableDisplay = availableTokens.toString();
+                    }
+                } else { // Public token
+                    availableDisplay = (availableTokens > 0 ? availableTokens : 0).toString();
+                }
+            } else { // No cap
+                availableDisplay = '♾️';
+            }
+
+            const descriptionPart = token.description ? ` (${token.description})` : '';
+            tokenDisplayLines.push(
+                `**${token.name}**${descriptionPart}: Circulation: ${circulationDisplay} | Cap: ${capDisplay} | Available: ${availableDisplay}`
+            );
+        });
+
+        // This check ensures we only add the embed if there were lines generated (should always be true if gameData.tokens isn't empty)
+        if (tokenDisplayLines.length > 0) {
+            tokenSupplyEmbed.setDescription(tokenDisplayLines.join("\n"));
+            finalEmbeds.push(tokenSupplyEmbed);
+        }
+    }
+
+    if (options.additionalEmbeds) {
+        finalEmbeds.push(...options.additionalEmbeds);
+    }
+
     const replyOptions = {
-      files: [attachment],
-      embeds: [
-        ...(gameData.decks?.length > 0 ? this.deckStatus2(gameData) : []),
-        ...(embed ? [embed] : []),
-        ...(options.additionalEmbeds || [])
-      ]
+        files: [attachment],
+        embeds: finalEmbeds // Use the newly constructed finalEmbeds array
     };
 
     if (options.content) {
-      replyOptions.content = options.content;
+        replyOptions.content = options.content;
     }
-
     return replyOptions;
   }
 }

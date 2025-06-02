@@ -33,6 +33,29 @@ class Gain {
             return await interaction.reply({ content: "You're not in this game!", ephemeral: true })
         }
 
+        const tokenCap = token.cap; // Assuming 'cap' was added in the previous step
+
+        if (typeof tokenCap === 'number') {
+            // Calculate total tokens of this type held by all players
+            let totalTokensHeldByAllPlayers = 0;
+            gameData.players.forEach(p => {
+                if (p.tokens && p.tokens[token.id]) {
+                    totalTokensHeldByAllPlayers += p.tokens[token.id];
+                }
+            });
+
+            // Calculate available tokens
+            const availableTokens = tokenCap - totalTokensHeldByAllPlayers;
+
+            // Check if gain amount exceeds available tokens
+            if (amount > availableTokens) {
+                return await interaction.reply({
+                    content: `Cannot gain ${amount} ${name} token(s). Doing so would exceed the cap of ${tokenCap}. Currently, ${totalTokensHeldByAllPlayers} are in circulation, so only ${availableTokens > 0 ? availableTokens : 0} more can be gained.`,
+                    ephemeral: true
+                });
+            }
+        }
+
         // Initialize tokens object if it doesn't exist
         if (!player.tokens) player.tokens = {}
 

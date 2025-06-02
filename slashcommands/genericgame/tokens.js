@@ -11,6 +11,7 @@ const Lose = require(`../../subcommands/tokens/lose`)
 const Give = require(`../../subcommands/tokens/give`)
 const Take = require(`../../subcommands/tokens/take`)
 const Reveal = require(`../../subcommands/tokens/reveal`)
+const Modify = require(`../../subcommands/tokens/modify.js`);
 
 class Tokens extends SlashCommand {
     constructor(client){
@@ -31,6 +32,7 @@ class Tokens extends SlashCommand {
                     .addStringOption(option => option.setName("name").setDescription("Name of the token").setRequired(true))
                     .addBooleanOption(option => option.setName("secret").setDescription("Whether the token is secret").setRequired(false))
                     .addStringOption(option => option.setName("description").setDescription("Description of the token").setRequired(false))
+                    .addIntegerOption(option => option.setName("cap").setDescription("Maximum number of these tokens allowed in circulation").setRequired(false))
                 )
             .addSubcommand(subcommand =>
                 subcommand
@@ -116,6 +118,42 @@ class Tokens extends SlashCommand {
                             .setAutocomplete(true)
                     )
                 )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("modify")
+                    .setDescription("Modify an existing token's properties")
+                    .addStringOption(option =>
+                        option.setName("name")
+                            .setDescription("Name of the token to modify")
+                            .setRequired(true)
+                            .setAutocomplete(true)
+                    )
+                    .addStringOption(option =>
+                        option.setName("new_name")
+                            .setDescription("New name for the token")
+                            .setRequired(false)
+                    )
+                    .addStringOption(option =>
+                        option.setName("description")
+                            .setDescription("New description for the token")
+                            .setRequired(false)
+                    )
+                    .addBooleanOption(option =>
+                        option.setName("secret")
+                            .setDescription("New secret status for the token (true or false)")
+                            .setRequired(false)
+                    )
+                    .addIntegerOption(option =>
+                        option.setName("cap")
+                            .setDescription("New numerical cap for the token")
+                            .setRequired(false)
+                    )
+                    .addBooleanOption(option =>
+                        option.setName("remove_cap")
+                            .setDescription("Set to true to remove the current cap (overrides 'cap' option)")
+                            .setRequired(false)
+                    )
+            )
     }
 
     async execute(interaction) {
@@ -151,6 +189,9 @@ class Tokens extends SlashCommand {
                 case "reveal":
                     await Reveal.execute(interaction, this.client)
                     break
+                case "modify":
+                    await Modify.execute(interaction, this.client);
+                    break;
                 default:
                     await interaction.reply({ content: "Something Went Wrong!?!?!", ephemeral: true })
             }

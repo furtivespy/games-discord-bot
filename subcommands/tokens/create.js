@@ -16,6 +16,7 @@ class Add {
         const name = interaction.options.getString('name')
         const description = interaction.options.getString('description') || ''
         const isSecret = interaction.options.getBoolean('secret') || false
+        const cap = interaction.options.getInteger('cap')
 
         // Initialize tokens array if it doesn't exist
         if (!gameData.tokens) {
@@ -33,6 +34,7 @@ class Add {
             name,
             description,
             isSecret,
+            cap: typeof cap === 'number' ? cap : null,
             created: new Date().toISOString(),
             createdBy: interaction.user.id
         }
@@ -44,7 +46,7 @@ class Add {
         await client.setGameDataV2(interaction.guildId, 'game', interaction.channelId, gameData)
 
         return await interaction.reply({ 
-            content: `Added new ${isSecret ? 'secret ' : ''}token: ${name}${description ? ` - ${description}` : ''}`,
+            content: `Added new ${token.isSecret ? 'secret ' : ''}token: ${token.name}${token.description ? ` - ${token.description}` : ''}${token.cap !== null ? ` (Cap: ${token.cap})` : ''}`,
             ephemeral: false
         })
     }
