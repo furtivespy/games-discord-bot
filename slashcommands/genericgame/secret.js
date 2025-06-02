@@ -4,6 +4,7 @@ const GameDB = require('../../db/anygame.js')
 const Add = require(`../../subcommands/secret/add`)
 const Check = require(`../../subcommands/secret/check`)
 const Reveal = require(`../../subcommands/secret/reveal`)
+const Help = require('../../subcommands/secret/help.js')
 
 class Secret extends SlashCommand {
     constructor(client){
@@ -17,6 +18,11 @@ class Secret extends SlashCommand {
 		  this.data = new SlashCommandBuilder()
             .setName(this.help.name)
             .setDescription("Secret Stuff")
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("help")
+                    .setDescription("Show help for the /secret commands 🤫")
+            )
             .addSubcommand(subcommand =>
                 subcommand
                     .setName("add")
@@ -47,6 +53,9 @@ class Secret extends SlashCommand {
                     break
                 case "reveal":
                     await Reveal.execute(interaction, this.client)
+                    break
+                case "help":
+                    await Help.execute(interaction, this.client)
                     break
                 default:
                     await interaction.reply({ content: "Something Went Wrong!?!?!?", ephemeral: true })

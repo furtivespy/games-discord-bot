@@ -12,6 +12,7 @@ const Give = require(`../../subcommands/tokens/give`)
 const Take = require(`../../subcommands/tokens/take`)
 const Reveal = require(`../../subcommands/tokens/reveal`)
 const Modify = require(`../../subcommands/tokens/modify.js`);
+const Help = require('../../subcommands/tokens/help.js');
 
 class Tokens extends SlashCommand {
     constructor(client){
@@ -25,6 +26,11 @@ class Tokens extends SlashCommand {
           this.data = new SlashCommandBuilder()
             .setName(this.help.name)
             .setDescription("Token Management")
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("help")
+                    .setDescription("Show help for the /tokens commands 🪙")
+            )
             .addSubcommand(subcommand =>
                 subcommand
                     .setName("create")
@@ -191,6 +197,9 @@ class Tokens extends SlashCommand {
                     break
                 case "modify":
                     await Modify.execute(interaction, this.client);
+                    break;
+                case "help":
+                    await Help.execute(interaction, this.client);
                     break;
                 default:
                     await interaction.reply({ content: "Something Went Wrong!?!?!", ephemeral: true })

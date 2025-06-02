@@ -6,6 +6,7 @@ const Pay = require(`../../subcommands/money/pay`)
 const Reveal = require(`../../subcommands/money/reveal`)
 const Spend = require(`../../subcommands/money/spend`)
 const Take = require(`../../subcommands/money/take`)
+const Help = require('../../subcommands/money/help.js')
 
 class Money extends SlashCommand {
     constructor(client){
@@ -19,6 +20,11 @@ class Money extends SlashCommand {
 		  this.data = new SlashCommandBuilder()
             .setName(this.help.name)
             .setDescription("Money Stuff")
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("help")
+                    .setDescription("Show help for the /money commands 🤑")
+            )
             .addSubcommand(subcommand =>
                 subcommand
                     .setName("check")
@@ -68,6 +74,9 @@ class Money extends SlashCommand {
                     break
                 case "take":
                     await Take.execute(interaction, this.client)
+                    break
+                case "help":
+                    await Help.execute(interaction, this.client)
                     break
                 default:
                     await interaction.reply({ content: "Something Went Wrong!?!?!?", ephemeral: true })
