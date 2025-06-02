@@ -156,19 +156,9 @@ class GameFormatter {
     const ct = new CanvasTable(canvas, config);
     await ct.generateTable();
 
-    const embeds = []; // This array will remain empty after the change
-    
-    // // Create token info embed if there are any secret tokens
-    // if (gameData.tokens && gameData.tokens.length > 0) {
-    //   const secretTokens = gameData.tokens.filter(t => t.isSecret);
-    //   if (secretTokens.length > 0) {
-    //     const tokenEmbed = new EmbedBuilder()
-    //       .setColor(13502711)
-    //       .setTitle("Secret Token Information")
-    //       .setDescription(`Token counts for ${secretTokens.map(t => t.name).join(', ')} are not included - They are secret 🤫`);
-    //     embeds.push(tokenEmbed);
-    //   }
-    // }
+    const embeds = []; 
+    // we previously had a special embed for secret tokens, but we removed it
+    // the logic for additional embeds is still here if needed.
 
     return {
       attachment: new AttachmentBuilder(await ct.renderToBuffer(), {name: `status-table.png`}),

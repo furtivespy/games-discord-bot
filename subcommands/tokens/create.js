@@ -46,7 +46,7 @@ class Add {
         await client.setGameDataV2(interaction.guildId, 'game', interaction.channelId, gameData)
 
         return await interaction.reply({ 
-            content: `Added new ${isSecret ? 'secret ' : ''}token: ${token.name}${description ? ` - ${description}` : ''}${token.cap !== null ? ` (Cap: ${token.cap})` : ''}`,
+            content: `Added new ${token.isSecret ? 'secret ' : ''}token: ${token.name}${token.description ? ` - ${token.description}` : ''}${token.cap !== null ? ` (Cap: ${token.cap})` : ''}`,
             ephemeral: false
         })
     }
