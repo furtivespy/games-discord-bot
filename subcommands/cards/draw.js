@@ -51,7 +51,7 @@ class Draw {
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
                         
         await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild,
+            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id,
               { content: `${interaction.member.displayName} drew a card from ${deck.name}` }
             )
           );

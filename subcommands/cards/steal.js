@@ -33,7 +33,7 @@ class Steal {
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         
         await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, {
+            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
                 content: `${interaction.member.displayName} stole a card from ${interaction.guild.members.cache.get(targetPlayer.userId)?.displayName}`
             })
         )
