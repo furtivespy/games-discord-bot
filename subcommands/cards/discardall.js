@@ -52,18 +52,40 @@ class DiscardAll {
 
       await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
-      // Send public confirmation (edit the deferred reply)
-      await interaction.editReply(
-        await Formatter.createGameStatusReply(gameData, interaction.guild, {
-          content: `${interaction.member.displayName} has discarded all ${discardedCount} cards from their hand.`
-        })
-      );
-
-      // Send ephemeral follow-up to the user who initiated the command
-      await interaction.followUp({
-        content: `You have discarded all ${discardedCount} cards from your hand. Your hand is now empty.`,
-        ephemeral: true
+      // 1. Send the ephemeral confirmation to the user who typed the command.
+      // This uses the editReply on the initially deferred ephemeral reply.
+      await interaction.editReply({
+          content: `You have discarded all ${discardedCount} cards from your hand. Your hand is now empty.`,
+          ephemeral: true
       });
+
+      // 2. Prepare and send the public message to the channel.
+      // This will be a new followup message, set to be non-ephemeral.
+      const publicMessagePayload = await Formatter.createGameStatusReply(gameData, interaction.guild, {
+          content: `${interaction.member.displayName} has discarded all ${discardedCount} cards from their hand.`
+      });
+
+      // Check if publicMessagePayload is an object with content/embeds or just a string
+      if (publicMessagePayload && (publicMessagePayload.content || publicMessagePayload.embeds)) {
+          await interaction.followUp({
+              content: publicMessagePayload.content,
+              embeds: publicMessagePayload.embeds,
+              files: publicMessagePayload.files, // Include files if present in payload
+              ephemeral: false // Make this message public
+          });
+      } else if (publicMessagePayload) {
+          // Fallback if Formatter.createGameStatusReply returns a simple string
+          await interaction.followUp({
+              content: String(publicMessagePayload), // Ensure it's a string
+              ephemeral: false // Make this message public
+          });
+      } else {
+          // Fallback if payload is unexpectedly empty, still send a basic public message
+          await interaction.followUp({
+              content: `${interaction.member.displayName} has discarded all ${discardedCount} cards from their hand. (Status update formatting error)`,
+              ephemeral: false
+          });
+      }
 
     } catch (e) {
       console.error(e);
