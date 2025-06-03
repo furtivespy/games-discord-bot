@@ -118,6 +118,35 @@ class GameFormatter {
     };
     const data = [];
 
+    // Calculate Totals
+    let totalCards = 0;
+    let anyPlayerCardCountIsHidden = false;
+    gameData.players.forEach((play) => {
+      const playerCards = GameFormatter.CountCards(gameData, play);
+      if (playerCards === '?') {
+        anyPlayerCardCountIsHidden = true;
+      } else {
+        totalCards += Number(playerCards) || 0;
+      }
+    });
+    if (anyPlayerCardCountIsHidden) {
+      totalCards = '?';
+    }
+
+    const tokenTotals = {};
+    if (gameData.tokens && gameData.tokens.length > 0) {
+      gameData.tokens.forEach(token => {
+        const tokenId = token.id;
+        tokenTotals[tokenId] = 0;
+        gameData.players.forEach(player => {
+          tokenTotals[tokenId] += (player.tokens?.[tokenId] || 0);
+        });
+        if (token.isSecret && (!token.cap || token.cap === Infinity || token.cap === null)) {
+          tokenTotals[tokenId] = '?';
+        }
+      });
+    }
+
     // Process each player's data
     sortBy(gameData.players, ["order"]).forEach((play) => {
       const name = guild.members.cache.get(play.userId)?.displayName;
@@ -153,11 +182,29 @@ class GameFormatter {
       data.push(rowData);
     });
 
+    // Prepare Divider and Totals Rows
+    const dividerRow = columns.map(() => '-');
+    const totalsRowData = ['Totals', ''];
+    if (gameData.tokens && gameData.tokens.length > 0) {
+      gameData.tokens.forEach(token => {
+        totalsRowData.push(tokenTotals[token.id].toString());
+      });
+    }
+    const displayTotalCards = anyPlayerCardCountIsHidden ? '?' : totalCards.toString();
+    if (gameData.decks.length > 0) {
+      totalsRowData.push(displayTotalCards);
+    }
+
+    // Add to Data for CanvasTable
+    data.push(dividerRow);
+    data.push(totalsRowData);
+
     const hasTokens = gameData.tokens && gameData.tokens.length > 0;
     const canvasWidth = hasTokens ? 1200 : 800;
-    const canvas = createCanvas(canvasWidth, 100 + 35 * gameData.players.length);
+    const canvas = createCanvas(canvasWidth, 100 + 35 * (gameData.players.length + 2)); // +2 for divider and totals row.
     let ctx = canvas.getContext("2d");
     ctx.textDrawingMode = "glyph";
+
     const config = { columns, data, options };
     const ct = new CanvasTable(canvas, config);
     await ct.generateTable();
