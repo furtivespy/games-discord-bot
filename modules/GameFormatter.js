@@ -187,7 +187,16 @@ class GameFormatter {
     const totalsRowData = ['Totals', ''];
     if (gameData.tokens && gameData.tokens.length > 0) {
       gameData.tokens.forEach(token => {
-        totalsRowData.push(tokenTotals[token.id].toString());
+        const currentTotal = tokenTotals[token.id];
+        let displayValue;
+        if (currentTotal === '?') {
+          displayValue = '?';
+        } else if (token.cap && typeof token.cap === 'number' && isFinite(token.cap)) {
+          displayValue = `${currentTotal} (of ${token.cap})`;
+        } else {
+          displayValue = currentTotal.toString();
+        }
+        totalsRowData.push(displayValue);
       });
     }
     const displayTotalCards = anyPlayerCardCountIsHidden ? '?' : totalCards.toString();
