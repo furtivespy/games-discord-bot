@@ -114,6 +114,37 @@ class GameFormatter {
       },
       header: {
         fontSize: 18,
+        fontStyle: 'bold',
+        textAlign: 'center',
+        backgroundColor: '#f0f0f0',
+        border: { bottom: { color: '#000', width: 2 } },
+      },
+      title: {
+        text: `${gameData.name} Status ${gameData.reverseOrder ? "(Turn Order Reversed)" : ""}`,
+        fontSize: 24,
+        fontFamily: 'Open Sans',
+      },
+      cell: {
+        fontSize: 18,
+        fontFamily: 'Open Sans',
+        padding: 10,
+      },
+      fontFamily: 'Open Sans', // Default font for the table
+      row: (row, rowIndex, totalRows) => {
+        // "Totals" row styling
+        if (rowIndex === totalRows - 1) {
+          return {
+            border: { top: { color: '#000', width: 2 } },
+            backgroundColor: '#e0e0e0',
+            fontStyle: 'bold',
+          };
+        }
+        // Zebra striping for other rows
+        if (rowIndex % 2 === 0) {
+          return { backgroundColor: '#ffffff' };
+        } else {
+          return { backgroundColor: '#f9f9f9' };
+        }
       },
     };
     const data = [];
@@ -152,7 +183,7 @@ class GameFormatter {
       const name = guild.members.cache.get(play.userId)?.displayName;
       let rowData = [
         `(${play.order + 1}) ${name ?? play.name ?? play.userId}`,
-        play.score,
+        String(play.score), // Ensure score is a string
       ];
 
       // Add token values
@@ -162,29 +193,29 @@ class GameFormatter {
             // Check if the current player is the bot
             if (play.userId === clientUserId) {
               const tokenCount = play.tokens?.[token.id] || 0;
-              rowData.push(tokenCount.toString()); // Show bot's own secret token count
+              rowData.push(String(tokenCount)); // Ensure token count is a string
             } else {
               rowData.push('?'); // Show '?' for other players' secret tokens
             }
           } else {
             const tokenCount = play.tokens?.[token.id] || 0;
-            rowData.push(tokenCount.toString()); // Show public token counts for all players
+            rowData.push(String(tokenCount)); // Ensure token count is a string
           }
         });
       }
 
       // Add cards if needed
       if (gameData.decks.length > 0) {
-        const cards = GameFormatter.CountCards(gameData, play).toString();
-        rowData.push(cards);
+        const cards = GameFormatter.CountCards(gameData, play);
+        rowData.push(String(cards)); // Ensure card count is a string
       }
 
       data.push(rowData);
     });
 
     // Prepare Divider and Totals Rows
-    const dividerRow = columns.map(() => '-');
-    const totalsRowData = ['Totals', ''];
+    const dividerRow = columns.map(() => '-'); // This will be an array of strings
+    const totalsRowData = ['Totals', '']; // Initial parts are strings
     if (gameData.tokens && gameData.tokens.length > 0) {
       gameData.tokens.forEach(token => {
         const currentTotal = tokenTotals[token.id];
@@ -192,21 +223,22 @@ class GameFormatter {
         if (currentTotal === '?') {
           displayValue = '?';
         } else if (token.cap && typeof token.cap === 'number' && isFinite(token.cap)) {
-          displayValue = `${currentTotal} (of ${token.cap})`;
+          displayValue = `${currentTotal} (of ${token.cap})`; // String
         } else {
-          displayValue = currentTotal.toString();
+          displayValue = String(currentTotal); // Ensure total is a string
         }
         totalsRowData.push(displayValue);
       });
     }
-    const displayTotalCards = anyPlayerCardCountIsHidden ? '?' : totalCards.toString();
+    let displayTotalCards = anyPlayerCardCountIsHidden ? '?' : String(totalCards); // Ensure total cards is a string
     if (gameData.decks.length > 0) {
       totalsRowData.push(displayTotalCards);
     }
 
     // Add to Data for CanvasTable
-    data.push(dividerRow);
-    data.push(totalsRowData);
+    // Ensure all elements in dividerRow and totalsRowData are strings
+    data.push(dividerRow.map(String));
+    data.push(totalsRowData.map(String));
 
     const hasTokens = gameData.tokens && gameData.tokens.length > 0;
     const canvasWidth = hasTokens ? 1200 : 800;
