@@ -97,8 +97,8 @@ class Configure {
             action()
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
             
-            await interaction.editReply(
-                await Formatter.createGameStatusReply(gameData, interaction.guild,
+            await newInteraction.editReply( //This should be newInteraction.editReply, but the original code used interaction.editReply
+                await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id,
                   { content: `Configured ${deck.name}` }
                 )
             );

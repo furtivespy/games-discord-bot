@@ -39,7 +39,7 @@ class Pass {
         let content = `New Draft Round Has Started! Draft Round Passed ${inputDir == 'asc' ? 'Clockwise' : 'Counter-Clockwise'}\n`
         gameData.players.forEach(play => { content += `<@${play.userId}> ` })
         await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild,
+            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id,
               { content: content }
             )
           );

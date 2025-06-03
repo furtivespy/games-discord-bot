@@ -21,7 +21,7 @@ class Status {
         const secretTokensEmbed = player ? await Formatter.playerSecretTokens(gameData, player) : null
 
         await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild)
+            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id)
         );
 
         // If the player has secret tokens, send them in an ephemeral followup

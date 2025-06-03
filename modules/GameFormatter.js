@@ -78,7 +78,7 @@ class GameFormatter {
     return newEmbed;
   }
 
-  static async GameStatusV2(gameData, guild) {
+  static async GameStatusV2(gameData, guild, clientUserId) {
     const columns = [
       { title: "Player" },
       { title: "Score", options: { textAlign: "right" } },
@@ -126,14 +126,20 @@ class GameFormatter {
         play.score,
       ];
 
-      // Add token values for each public token
+      // Add token values
       if (gameData.tokens && gameData.tokens.length > 0) {
         gameData.tokens.forEach(token => {
           if (token.isSecret) {
-            rowData.push('?');
+            // Check if the current player is the bot
+            if (play.userId === clientUserId) {
+              const tokenCount = play.tokens?.[token.id] || 0;
+              rowData.push(tokenCount.toString()); // Show bot's own secret token count
+            } else {
+              rowData.push('?'); // Show '?' for other players' secret tokens
+            }
           } else {
             const tokenCount = play.tokens?.[token.id] || 0;
-            rowData.push(tokenCount.toString());
+            rowData.push(tokenCount.toString()); // Show public token counts for all players
           }
         });
       }
@@ -601,8 +607,8 @@ class GameFormatter {
    * @param {Array} options.additionalEmbeds - Optional additional embeds to include
    * @returns {Object} Reply options object compatible with interaction.reply or interaction.editReply
    */
-  static async createGameStatusReply(gameData, guild, options = {}) {
-    const { attachment, embed } = await this.GameStatusV2(gameData, guild);
+  static async createGameStatusReply(gameData, guild, clientUserId, options = {}) {
+    const { attachment, embed } = await this.GameStatusV2(gameData, guild, clientUserId);
 
     // Initialize embeds array for replyOptions
     let finalEmbeds = [];

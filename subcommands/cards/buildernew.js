@@ -58,7 +58,7 @@ class builderNew {
 
 
       await interaction.editReply(
-        await Formatter.createGameStatusReply(gameData, interaction.guild,
+        await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id,
           { content: `Added and shuffled the new decks` }
         )
       );

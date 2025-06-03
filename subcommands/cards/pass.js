@@ -77,6 +77,7 @@ class Pass {
         const gameStatusReply = await Formatter.createGameStatusReply(
             gameData,
             interaction.guild,
+            client.user.id,
             { content: `${interaction.member.displayName} passed ${passedCardsObjects.length} card(s) to ${selectedPlayer}.` }
         );
         await interaction.channel.send(gameStatusReply)

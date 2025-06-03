@@ -54,7 +54,7 @@ class Take {
             }
             if (shouldPass){
                 await interaction.followUp(
-                    await Formatter.createGameStatusReply(gameData, interaction.guild,
+                    await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id,
                       { content: `It's probably time to pass!` }
                     )
                   );
