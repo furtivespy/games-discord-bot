@@ -105,18 +105,13 @@ class GameFormatter {
         table: { color: "#aaa", width: 1 },
       },
       fit: true,
-      title: {
-        text: `${gameData.name} Status ${gameData.reverseOrder ? "(Turn Order Reversed)" : ""}`,
-        fontSize: 24,
-      },
-      cell: {
-        fontSize: 18,
-      },
+      // title object removed here
+      // cell object removed here
       header: {
         fontSize: 18,
         fontStyle: 'bold',
         textAlign: 'center',
-        backgroundColor: '#f0f0f0',
+        background: '#f0f0f0', // Corrected property name
         border: { bottom: { color: '#000', width: 2 } },
       },
       title: {
@@ -130,21 +125,30 @@ class GameFormatter {
         padding: 10,
       },
       fontFamily: 'Open Sans', // Default font for the table
-      row: (row, rowIndex, totalRows) => {
-        // "Totals" row styling
-        if (rowIndex === totalRows - 1) {
-          return {
-            border: { top: { color: '#000', width: 2 } },
-            backgroundColor: '#e0e0e0',
-            fontStyle: 'bold',
-          };
-        }
-        // Zebra striping for other rows
-        if (rowIndex % 2 === 0) {
-          return { backgroundColor: '#ffffff' };
-        } else {
-          return { backgroundColor: '#f9f9f9' };
-        }
+      row: (rowAsArray, rowIndex, totalRowsInTable) => {
+          // totalRowsInTable includes actual data rows, not conceptual ones like headers.
+          // gameData.players.length gives the count of player rows.
+          // The data array structure is: [player_row_1, ..., player_row_N, divider_row, totals_row]
+          // So, player rows are index 0 to gameData.players.length - 1
+          // Divider row is index gameData.players.length
+          // Totals row is index gameData.players.length + 1
+
+          // Player Rows
+          if (rowIndex < gameData.players.length) {
+              const isEvenPlayerRow = rowIndex % 2 === 0;
+              const playerRowBackground = isEvenPlayerRow ? '#ffffff' : '#f9f9f9';
+              return { background: playerRowBackground };
+          }
+          // Totals Row
+          else if (rowIndex === gameData.players.length + 1) {
+              return {
+                  background: '#e0e0e0',
+                  fontStyle: 'bold',
+                  border: { top: { color: '#000', width: 2 } }
+              };
+          }
+          // For other rows (like the divider row, or any unexpected ones), apply no specific styling.
+          return null;
       },
     };
     const data = [];
@@ -240,6 +244,8 @@ class GameFormatter {
     data.push(dividerRow.map(String));
     data.push(totalsRowData.map(String));
 
+    // REMOVED processedData transformation logic. 'data' array will be used directly.
+
     const hasTokens = gameData.tokens && gameData.tokens.length > 0;
     const canvasWidth = hasTokens ? 1200 : 800;
     const additionalRows = 2; // Divider and totals row
@@ -247,7 +253,7 @@ class GameFormatter {
     let ctx = canvas.getContext("2d");
     ctx.textDrawingMode = "glyph";
 
-    const config = { columns, data, options };
+    const config = { columns, data, options }; // Use 'data' directly
     const ct = new CanvasTable(canvas, config);
     await ct.generateTable();
 
