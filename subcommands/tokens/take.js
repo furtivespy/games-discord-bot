@@ -67,7 +67,7 @@ class Take {
 
         return await interaction.reply({ 
             content: `${targetDisplay} took ${amount} ${name} token(s) from ${sourceDisplay}`,
-            ephemeral: token.isSecret
+            ephemeral: false
         })
     }
 }

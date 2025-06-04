@@ -67,7 +67,7 @@ class Give {
 
         return await interaction.reply({ 
             content: `${sourceDisplay} gave ${amount} ${name} token(s) to ${targetDisplay}`,
-            ephemeral: token.isSecret
+            ephemeral: false
         })
     }
 }
