@@ -23,7 +23,7 @@
     "ascii-table": "github:belph/ascii-table",
     "better-sqlite3": "^7.1.1",
     "canvas": "^2.11.2",
-    "canvas-table": "^0.1.0",
+    "canvas-table": "^0.3.0",
     "chalk": "^2.4.2",
     "discord.js": "^14.19.3",
     "dotenv": "^16.4.5",

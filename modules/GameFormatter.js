@@ -109,7 +109,7 @@ class GameFormatter {
       // cell object removed here
       header: {
         fontSize: 18,
-        fontStyle: 'bold',
+        fontWeight: 'bold',
         textAlign: 'center',
         background: '#f0f0f0', // Corrected property name
         border: { bottom: { color: '#000', width: 2 } },
@@ -193,8 +193,7 @@ class GameFormatter {
       data.push(rowData);
     });
 
-    // Prepare Divider and Totals Rows
-    const dividerRow = columns.map(() => '-'); // This will be an array of strings
+    
     const totalsRowData = ['Totals', '']; // Initial parts are strings
     if (gameData.tokens && gameData.tokens.length > 0) {
       gameData.tokens.forEach(token => {
@@ -216,8 +215,6 @@ class GameFormatter {
     }
 
     // Add to Data for CanvasTable
-    // Ensure all elements in dividerRow and totalsRowData are strings
-    data.push(dividerRow.map(String));
     data.push(totalsRowData.map(String));
 
     const processedData = data.map((currentRow, rowIndex) => {
@@ -226,32 +223,24 @@ class GameFormatter {
             const isEvenPlayerRow = rowIndex % 2 === 0;
             const playerRowBackground = isEvenPlayerRow ? '#ffffff' : '#f9f9f9';
             return currentRow.map(cellValue => ({
-                value: String(cellValue),
+                value: String(cellValue == '' ? ' ' : cellValue),
                 background: playerRowBackground
             }));
         }
         // Totals row (index gameData.players.length + 1)
-        else if (rowIndex === gameData.players.length + 1) {
+        else {
             return currentRow.map(cellValue => ({
                 value: String(cellValue),
                 background: '#e0e0e0',
-                fontStyle: 'bold'
-            }));
-        }
-        // Divider row (index gameData.players.length)
-        else {
-            const dividerBackground = '#ffffff'; // Or another neutral color
-            return currentRow.map(cellValue => ({
-                value: String(cellValue),
-                background: dividerBackground
+                fontWeight: 'bold'
             }));
         }
     });
 
     const hasTokens = gameData.tokens && gameData.tokens.length > 0;
     const canvasWidth = hasTokens ? 1200 : 800;
-    const additionalRows = 2; // Divider and totals row
-    const canvas = createCanvas(canvasWidth, 100 + 50 * (gameData.players.length + additionalRows));
+    const additionalRows = 1; // totals row
+    const canvas = createCanvas(canvasWidth, 100 + 45 * (gameData.players.length + additionalRows));
     let ctx = canvas.getContext("2d");
     ctx.textDrawingMode = "glyph";
 
