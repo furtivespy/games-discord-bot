@@ -11,10 +11,7 @@ const Status = require(`../../subcommands/genericgame/status`)
 const Winner = require(`../../subcommands/genericgame/winner`)
 const Test = require(`../../subcommands/genericgame/test`)
 const Reverse = require(`../../subcommands/genericgame/reverse`)
-const AddPlayer = require(`../../subcommands/genericgame/addplayer`)
-const RemovePlayer = require(`../../subcommands/genericgame/removeplayer`)
 const AddScore = require(`../../subcommands/genericgame/addscore`)
-const FirstPlayer = require(`../../subcommands/genericgame/firstplayer`)
 const Help = require('../../subcommands/genericgame/help.js')
 
 class Game extends SlashCommand {
@@ -156,26 +153,6 @@ class Game extends SlashCommand {
                 )
             .addSubcommand(subcommand =>
                 subcommand
-                    .setName("addplayer")
-                    .setDescription("Add a new player to the current game")
-                    .addUserOption(option => 
-                        option.setName("player")
-                        .setDescription("The player to add to the game")
-                        .setRequired(true)
-                    )
-            )
-            .addSubcommand(subcommand =>
-                subcommand
-                    .setName("removeplayer")
-                    .setDescription("Remove a player from the current game")
-                    .addUserOption(option => 
-                        option.setName("player")
-                        .setDescription("The player to remove from the game")
-                        .setRequired(true)
-                    )
-            )
-            .addSubcommand(subcommand =>
-                subcommand
                     .setName("addscore")
                     .setDescription("Add a score for a player")
                     .addUserOption(option => 
@@ -187,17 +164,6 @@ class Game extends SlashCommand {
                         option.setName("score")
                         .setDescription("The score to set")
                         .setRequired(true)
-                    )
-            )
-            .addSubcommand(subcommand =>
-                subcommand
-                    .setName("firstplayer")
-                    .setDescription("Set the first player in the game")
-                    .addUserOption(option =>
-                        option
-                            .setName("player")
-                            .setDescription("The player to set as first player")
-                            .setRequired(true)
                     )
             )
                 /*
@@ -249,17 +215,8 @@ class Game extends SlashCommand {
                 case "removeimage":
                     await RemoveImage.execute(interaction, this.client)
                     break
-                case "addplayer":
-                    await AddPlayer.execute(interaction, this.client)
-                    break
-                case "removeplayer":
-                    await RemovePlayer.execute(interaction, this.client)
-                    break
                 case "addscore":
                     await AddScore.execute(interaction, this.client)
-                    break
-                case "firstplayer":
-                    await FirstPlayer.execute(interaction, this.client)
                     break
                 case "help":
                     await Help.execute(interaction, this.client)
