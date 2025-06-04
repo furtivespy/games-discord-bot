@@ -243,7 +243,7 @@ class GameFormatter {
     const hasTokens = gameData.tokens && gameData.tokens.length > 0;
     const canvasWidth = hasTokens ? 1200 : 800;
     const additionalRows = 2; // Divider and totals row
-    const canvas = createCanvas(canvasWidth, 100 + 35 * (gameData.players.length + additionalRows));
+    const canvas = createCanvas(canvasWidth, 100 + 50 * (gameData.players.length + additionalRows));
     let ctx = canvas.getContext("2d");
     ctx.textDrawingMode = "glyph";
 
