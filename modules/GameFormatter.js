@@ -125,31 +125,7 @@ class GameFormatter {
         padding: 10,
       },
       fontFamily: 'Open Sans', // Default font for the table
-      row: (rowAsArray, rowIndex, totalRowsInTable) => {
-          // totalRowsInTable includes actual data rows, not conceptual ones like headers.
-          // gameData.players.length gives the count of player rows.
-          // The data array structure is: [player_row_1, ..., player_row_N, divider_row, totals_row]
-          // So, player rows are index 0 to gameData.players.length - 1
-          // Divider row is index gameData.players.length
-          // Totals row is index gameData.players.length + 1
-
-          // Player Rows
-          if (rowIndex < gameData.players.length) {
-              const isEvenPlayerRow = rowIndex % 2 === 0;
-              const playerRowBackground = isEvenPlayerRow ? '#ffffff' : '#f9f9f9';
-              return { background: playerRowBackground };
-          }
-          // Totals Row
-          else if (rowIndex === gameData.players.length + 1) {
-              return {
-                  background: '#e0e0e0',
-                  fontStyle: 'bold',
-                  border: { top: { color: '#000', width: 2 } }
-              };
-          }
-          // For other rows (like the divider row, or any unexpected ones), apply no specific styling.
-          return null;
-      },
+      // options.row callback removed
     };
     const data = [];
 
@@ -244,7 +220,33 @@ class GameFormatter {
     data.push(dividerRow.map(String));
     data.push(totalsRowData.map(String));
 
-    // REMOVED processedData transformation logic. 'data' array will be used directly.
+    const processedData = data.map((currentRow, rowIndex) => {
+        // Player data rows (indices 0 to gameData.players.length - 1)
+        if (rowIndex < gameData.players.length) {
+            const isEvenPlayerRow = rowIndex % 2 === 0;
+            const playerRowBackground = isEvenPlayerRow ? '#ffffff' : '#f9f9f9';
+            return currentRow.map(cellValue => ({
+                value: String(cellValue),
+                background: playerRowBackground
+            }));
+        }
+        // Totals row (index gameData.players.length + 1)
+        else if (rowIndex === gameData.players.length + 1) {
+            return currentRow.map(cellValue => ({
+                value: String(cellValue),
+                background: '#e0e0e0',
+                fontStyle: 'bold'
+            }));
+        }
+        // Divider row (index gameData.players.length)
+        else {
+            const dividerBackground = '#ffffff'; // Or another neutral color
+            return currentRow.map(cellValue => ({
+                value: String(cellValue),
+                background: dividerBackground
+            }));
+        }
+    });
 
     const hasTokens = gameData.tokens && gameData.tokens.length > 0;
     const canvasWidth = hasTokens ? 1200 : 800;
@@ -253,7 +255,7 @@ class GameFormatter {
     let ctx = canvas.getContext("2d");
     ctx.textDrawingMode = "glyph";
 
-    const config = { columns, data, options }; // Use 'data' directly
+    const config = { columns, data: processedData, options };
     const ct = new CanvasTable(canvas, config);
     await ct.generateTable();
 
