@@ -3,6 +3,7 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const Add = require(`../../subcommands/players/add`)
 const Remove = require(`../../subcommands/players/remove`)
 const First = require(`../../subcommands/players/first`)
+const Color = require(`../../subcommands/players/color`)
 const Help = require('../../subcommands/players/help.js')
 
 class Players extends SlashCommand {
@@ -53,6 +54,21 @@ class Players extends SlashCommand {
                             .setRequired(true)
                     )
             )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("color")
+                    .setDescription("Set the color for a player")
+                    .addUserOption(option =>
+                        option.setName("player")
+                        .setDescription("The player to set the color for")
+                        .setRequired(true)
+                    )
+                    .addStringOption(option =>
+                        option.setName("color")
+                        .setDescription("The color to set (e.g., #FF0000 or red)")
+                        .setRequired(true)
+                    )
+            )
     }
 
     async execute(interaction) {
@@ -66,6 +82,9 @@ class Players extends SlashCommand {
                     break
                 case "first":
                     await First.execute(interaction, this.client)
+                    break
+                case "color":
+                    await Color.execute(interaction, this.client) // Assuming Color will be the class/object for the subcommand
                     break
                 case "help":
                     await Help.execute(interaction, this.client)

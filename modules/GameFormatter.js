@@ -220,14 +220,22 @@ class GameFormatter {
     const processedData = data.map((currentRow, rowIndex) => {
         // Player data rows (indices 0 to gameData.players.length - 1)
         if (rowIndex < gameData.players.length) {
+            const player = sortBy(gameData.players, ["order"])[rowIndex]; // Get the current player
             const isEvenPlayerRow = rowIndex % 2 === 0;
             const playerRowBackground = isEvenPlayerRow ? '#ffffff' : '#f9f9f9';
-            return currentRow.map(cellValue => ({
-                value: String(cellValue == '' ? ' ' : cellValue),
-                background: playerRowBackground
-            }));
+            return currentRow.map((cellValue, cellIndex) => {
+                let cellProperties = {
+                    value: String(cellValue == '' ? ' ' : cellValue),
+                    background: playerRowBackground
+                };
+                // If this is the first cell (player name) and the player has a color
+                if (cellIndex === 0 && player.color) {
+                    cellProperties.color = player.color; // Set text color
+                }
+                return cellProperties;
+            });
         }
-        // Totals row (index gameData.players.length + 1)
+        // Totals row (last row)
         else {
             return currentRow.map(cellValue => ({
                 value: String(cellValue),

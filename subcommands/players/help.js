@@ -14,7 +14,8 @@ Here's a list of commands to get you started. They're super easy to use! 😉
 
         const commands_chunk_1 = `*   **/players add** 🙋‍♀️ - The more the merrier! Adds a player to the game. Welcome aboard!
 *   **/players remove** 🚶‍♂️ - Need to make some room? Removes a player from the game. See ya later, alligator!
-*   **/players first** 🥇 - Who's the lucky one? Sets the first player. May the odds be ever in your favor!`;
+*   **/players first** 🥇 - Who's the lucky one? Sets the first player. May the odds be ever in your favor!
+*   **/players color <player> <color>** 🎨 - Feeling colorful? Sets a display color for a player (e.g., #FF0000 or "red").`;
 
         await interaction.followUp({
             content: commands_chunk_1,
