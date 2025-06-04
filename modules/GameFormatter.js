@@ -105,16 +105,27 @@ class GameFormatter {
         table: { color: "#aaa", width: 1 },
       },
       fit: true,
+      // title object removed here
+      // cell object removed here
+      header: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        background: '#f0f0f0', // Corrected property name
+        border: { bottom: { color: '#000', width: 2 } },
+      },
       title: {
         text: `${gameData.name} Status ${gameData.reverseOrder ? "(Turn Order Reversed)" : ""}`,
         fontSize: 24,
+        fontFamily: 'Open Sans',
       },
       cell: {
         fontSize: 18,
+        fontFamily: 'Open Sans',
+        padding: 10,
       },
-      header: {
-        fontSize: 18,
-      },
+      fontFamily: 'Open Sans', // Default font for the table
+      // options.row callback removed
     };
     const data = [];
 
@@ -152,7 +163,7 @@ class GameFormatter {
       const name = guild.members.cache.get(play.userId)?.displayName;
       let rowData = [
         `(${play.order + 1}) ${name ?? play.name ?? play.userId}`,
-        play.score,
+        String(play.score), // Ensure score is a string
       ];
 
       // Add token values
@@ -162,29 +173,28 @@ class GameFormatter {
             // Check if the current player is the bot
             if (play.userId === clientUserId) {
               const tokenCount = play.tokens?.[token.id] || 0;
-              rowData.push(tokenCount.toString()); // Show bot's own secret token count
+              rowData.push(String(tokenCount)); // Ensure token count is a string
             } else {
               rowData.push('?'); // Show '?' for other players' secret tokens
             }
           } else {
             const tokenCount = play.tokens?.[token.id] || 0;
-            rowData.push(tokenCount.toString()); // Show public token counts for all players
+            rowData.push(String(tokenCount)); // Ensure token count is a string
           }
         });
       }
 
       // Add cards if needed
       if (gameData.decks.length > 0) {
-        const cards = GameFormatter.CountCards(gameData, play).toString();
-        rowData.push(cards);
+        const cards = GameFormatter.CountCards(gameData, play);
+        rowData.push(String(cards)); // Ensure card count is a string
       }
 
       data.push(rowData);
     });
 
-    // Prepare Divider and Totals Rows
-    const dividerRow = columns.map(() => '-');
-    const totalsRowData = ['Totals', ''];
+    
+    const totalsRowData = ['Totals', '']; // Initial parts are strings
     if (gameData.tokens && gameData.tokens.length > 0) {
       gameData.tokens.forEach(token => {
         const currentTotal = tokenTotals[token.id];
@@ -192,30 +202,49 @@ class GameFormatter {
         if (currentTotal === '?') {
           displayValue = '?';
         } else if (token.cap && typeof token.cap === 'number' && isFinite(token.cap)) {
-          displayValue = `${currentTotal} (of ${token.cap})`;
+          displayValue = `${currentTotal} (of ${token.cap})`; // String
         } else {
-          displayValue = currentTotal.toString();
+          displayValue = String(currentTotal); // Ensure total is a string
         }
         totalsRowData.push(displayValue);
       });
     }
-    const displayTotalCards = anyPlayerCardCountIsHidden ? '?' : totalCards.toString();
+    let displayTotalCards = anyPlayerCardCountIsHidden ? '?' : String(totalCards); // Ensure total cards is a string
     if (gameData.decks.length > 0) {
       totalsRowData.push(displayTotalCards);
     }
 
     // Add to Data for CanvasTable
-    data.push(dividerRow);
-    data.push(totalsRowData);
+    data.push(totalsRowData.map(String));
+
+    const processedData = data.map((currentRow, rowIndex) => {
+        // Player data rows (indices 0 to gameData.players.length - 1)
+        if (rowIndex < gameData.players.length) {
+            const isEvenPlayerRow = rowIndex % 2 === 0;
+            const playerRowBackground = isEvenPlayerRow ? '#ffffff' : '#f9f9f9';
+            return currentRow.map(cellValue => ({
+                value: String(cellValue == '' ? ' ' : cellValue),
+                background: playerRowBackground
+            }));
+        }
+        // Totals row (index gameData.players.length + 1)
+        else {
+            return currentRow.map(cellValue => ({
+                value: String(cellValue),
+                background: '#e0e0e0',
+                fontWeight: 'bold'
+            }));
+        }
+    });
 
     const hasTokens = gameData.tokens && gameData.tokens.length > 0;
     const canvasWidth = hasTokens ? 1200 : 800;
-    const additionalRows = 2; // Divider and totals row
-    const canvas = createCanvas(canvasWidth, 100 + 35 * (gameData.players.length + additionalRows));
+    const additionalRows = 1; // totals row
+    const canvas = createCanvas(canvasWidth, 100 + 45 * (gameData.players.length + additionalRows));
     let ctx = canvas.getContext("2d");
     ctx.textDrawingMode = "glyph";
 
-    const config = { columns, data, options };
+    const config = { columns, data: processedData, options };
     const ct = new CanvasTable(canvas, config);
     await ct.generateTable();
 
