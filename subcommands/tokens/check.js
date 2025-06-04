@@ -98,7 +98,7 @@ class Check {
 
                 return await interaction.reply({ 
                     embeds: [embed], 
-                    ephemeral: false
+                    ephemeral: !showAll
                 })
             }
         } else {
@@ -157,7 +157,7 @@ class Check {
 
             return await interaction.reply({ 
                 embeds, 
-                ephemeral: !showAll && hasSecretTokens && !hasPublicTokens
+                ephemeral: !showAll || hasSecretTokens
             })
         }
     }
