@@ -4,10 +4,11 @@ const { find } = require("lodash");
 
 class First {
   async execute(interaction, client) {
+    await interaction.deferReply();
     try {
       const newFirstPlayer = interaction.options.getUser("player");
       if (!newFirstPlayer) {
-        return interaction.reply({
+        return interaction.editReply({
           content: "Please mention a player to set as first player.",
           ephemeral: true,
         });
@@ -16,7 +17,7 @@ class First {
       let gameData = await GameHelper.getGameData(client, interaction);
 
       if (!gameData || !gameData.players) {
-        return interaction.reply({
+        return interaction.editReply({
           content: "No game happening in this channel.",
           ephemeral: true,
         });
@@ -26,7 +27,7 @@ class First {
         (p) => p.userId === newFirstPlayer.id
       );
       if (!player) {
-        return interaction.reply({
+        return interaction.editReply({
           content: "That player is not in the game.",
           ephemeral: true,
         });
@@ -51,14 +52,14 @@ class First {
         gameData
       );
 
-      await interaction.reply(
+      await interaction.editReply(
         await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
           content: `${newFirstPlayer} is now the first player.`
         })
       );
     } catch (e) {
       client.logger.error(e, __filename.slice(__dirname.length + 1));
-      await interaction.reply({
+      await interaction.editReply({
         content: "An error occurred while setting the first player.",
         ephemeral: true,
       });
