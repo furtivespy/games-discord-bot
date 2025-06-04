@@ -15,11 +15,8 @@ Here's a list of commands to get you started. Don't worry, they're super easy to
         const commands_chunk_1 = `*   **/game newgame** 🎮 - Let's get this party started! Starts a brand new game. 🥳
 *   **/game newgameplus** ✨ - Feeling fancy? Starts a new game with ✨advanced options✨. Ooh la la!
 *   **/game status** 📊 - Curious about what's happening? Shows the current game status. 🤔
-*   **/game addplayer** 🙋‍♀️ - The more the merrier! Adds a player to the game. Welcome aboard!
-*   **/game removeplayer** 🚶‍♂️ - Need to make some room? Removes a player from the game. See ya later, alligator!
 *   **/game next** ⏭️ - Onwards and upwards! Advances to the next turn. Whose turn is it anyway?
-*   **/game reverse** 🔄 - UNO REVERSE CARD! Reverses the turn order. Now things are getting interesting! 😜
-*   **/game firstplayer** 🥇 - Who's the lucky one? Sets the first player. May the odds be ever in your favor!`;
+*   **/game reverse** 🔄 - UNO REVERSE CARD! Reverses the turn order. Now things are getting interesting! 😜`;
 
         await interaction.followUp({
             content: commands_chunk_1,
