@@ -17,7 +17,7 @@ class AddScore {
             return
         }
 
-        const targetPlayer = interaction.options.getUser('player')
+        const targetPlayer = interaction.options.getUser('player') || interaction.user
         const score = interaction.options.getString('score')
         
         // Find the player in the game
@@ -43,4 +43,4 @@ class AddScore {
     }
 }
 
-module.exports = new AddScore() 
+module.exports = new AddScore()
