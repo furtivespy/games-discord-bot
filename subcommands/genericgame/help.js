@@ -30,7 +30,6 @@ Here's a list of commands to get you started. Don't worry, they're super easy to
 *   **/game removeimage** 🚫🖼️ - Changed your mind? Removes an image from the game. Poof! It's gone.
 *   **/game addlink** 🔗 - Sharing is caring! Adds a link to the game. Let's see those cool links!
 *   **/game removelink** 🚫🔗 - Oops, wrong link? Removes a link from the game. No problemo!
-*   **/game addscore** 💯 - Keep track of those points! Adds or updates a player's score. Aim for the high score!
 *   **/game test** 🧪 - Just checking things out! For testing purposes. Nothing to see here, folks! 😉`;
 
         await interaction.followUp({

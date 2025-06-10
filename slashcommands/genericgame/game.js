@@ -11,7 +11,6 @@ const Status = require(`../../subcommands/genericgame/status`)
 const Winner = require(`../../subcommands/genericgame/winner`)
 const Test = require(`../../subcommands/genericgame/test`)
 const Reverse = require(`../../subcommands/genericgame/reverse`)
-const AddScore = require(`../../subcommands/genericgame/addscore`)
 const Help = require('../../subcommands/genericgame/help.js')
 
 class Game extends SlashCommand {
@@ -151,21 +150,6 @@ class Game extends SlashCommand {
                         .setRequired(true)
                     )
                 )
-            .addSubcommand(subcommand =>
-                subcommand
-                    .setName("addscore")
-                    .setDescription("Add a score for a player")
-                    .addUserOption(option => 
-                        option.setName("player")
-                        .setDescription("The player to set the score for")
-                        .setRequired(true)
-                    )
-                    .addStringOption(option =>
-                        option.setName("score")
-                        .setDescription("The score to set")
-                        .setRequired(true)
-                    )
-            )
                 /*
             .addSubcommand(subcommand =>
                 subcommand
@@ -214,9 +198,6 @@ class Game extends SlashCommand {
                     break
                 case "removeimage":
                     await RemoveImage.execute(interaction, this.client)
-                    break
-                case "addscore":
-                    await AddScore.execute(interaction, this.client)
                     break
                 case "help":
                     await Help.execute(interaction, this.client)
