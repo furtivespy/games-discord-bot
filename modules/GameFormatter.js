@@ -100,6 +100,12 @@ class GameFormatter {
       columns.push({ title: "Cards in Hand", options: { textAlign: "right" } });
     }
 
+    // Add Play Area column if any player has a play area (even if empty, to show the column)
+    // or if the playToPlayArea setting is enabled.
+    if (gameData.players.some(p => p.playArea !== undefined) || gameData.playToPlayArea) {
+      columns.push({ title: "Play Area", options: { textAlign: "right" } });
+    }
+
     const options = {
       borders: {
         table: { color: "#aaa", width: 1 },
@@ -190,6 +196,12 @@ class GameFormatter {
         rowData.push(String(cards)); // Ensure card count is a string
       }
 
+      // Add Play Area card count if the column is present
+      if (gameData.players.some(p => p.playArea !== undefined) || gameData.playToPlayArea) {
+        const playAreaCount = play.playArea ? play.playArea.length : 0;
+        rowData.push(String(playAreaCount));
+      }
+
       data.push(rowData);
     });
 
@@ -212,6 +224,17 @@ class GameFormatter {
     let displayTotalCards = anyPlayerCardCountIsHidden ? '?' : String(totalCards); // Ensure total cards is a string
     if (gameData.decks.length > 0) {
       totalsRowData.push(displayTotalCards);
+    }
+
+    // Add total for Play Area if the column is present
+    if (gameData.players.some(p => p.playArea !== undefined) || gameData.playToPlayArea) {
+      let totalPlayAreaCards = 0;
+      gameData.players.forEach(p => {
+        if (p.playArea) {
+          totalPlayAreaCards += p.playArea.length;
+        }
+      });
+      totalsRowData.push(String(totalPlayAreaCards));
     }
 
     // Add to Data for CanvasTable
@@ -779,6 +802,27 @@ class GameFormatter {
         replyOptions.content = options.content;
     }
     return replyOptions;
+  }
+
+  static formatPlayAreaText(player) {
+    if (!player || !player.playArea || player.playArea.length === 0) {
+      return "Play area is empty.";
+    }
+
+    let playAreaString = "";
+    player.playArea.forEach((card, index) => {
+      // Using cardLongName for more detail, fallback to shortName or just name
+      let cardNameFormatted;
+      if (typeof this.cardLongName === 'function') {
+        cardNameFormatted = this.cardLongName(card);
+      } else if (typeof this.cardShortName === 'function') {
+        cardNameFormatted = this.cardShortName(card);
+      } else {
+        cardNameFormatted = card.name || `Unnamed Card (ID: ${card.id})`;
+      }
+      playAreaString += `${index + 1}. ${cardNameFormatted}\n`;
+    });
+    return playAreaString;
   }
 }
 
