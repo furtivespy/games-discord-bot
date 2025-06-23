@@ -30,6 +30,7 @@ const Shuffle = require(`../../subcommands/cards/shuffle`)
 const SimultaneousReveal = require(`../../subcommands/cards/simultaneousreveal`)
 const Steal = require(`../../subcommands/cards/steal`)
 const Help = require(`../../subcommands/cards/help`)
+const PlayAreaDiscard = require(`../../subcommands/cards/playareadiscard`) // Added for /cards playarea discard
 
 class Cards extends SlashCommand {
     constructor(client){
@@ -251,6 +252,16 @@ class Cards extends SlashCommand {
                         .addStringOption(option => option.setName('card').setDescription('Card to remove').setAutocomplete(true).setRequired(true))
                 )
             )
+            .addSubcommandGroup(group => // Added for /cards playarea discard
+                group.setName("playarea").setDescription("Manage cards in your play area")
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("discard")
+                        .setDescription("Discard a card from your play area.")
+                        // Options for selecting the card will be handled by the subcommand's interaction flow (e.g., select menu)
+                        // No specific options needed here unless we want to filter by card name, etc.
+                )
+            )
     }
 
     async execute(interaction) {
@@ -374,13 +385,23 @@ class Cards extends SlashCommand {
                             await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
                     }
                     break
-                default:
+                case "playarea": // Added for /cards playarea discard
+                    switch (interaction.options.getSubcommand()) {
+                        case "discard":
+                            await PlayAreaDiscard.execute(interaction, this.client)
+                            break
+                        default:
+                            await interaction.reply({ content: "Unknown playarea command.", ephemeral: true })
+                    }
+                    break
+                default: // Handles commands without a group, like /cards help
                     switch (interaction.options.getSubcommand()) {
                         case "help":
                             await Help.execute(interaction, this.client)
                             break
                         default:
-                            await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
+                            // This case should ideally not be reached if getSubcommandGroup() is null for non-grouped commands
+                            await interaction.reply({ content: "Command not fully written yet or structure error :(", ephemeral: true })
                     }
                     break
             }

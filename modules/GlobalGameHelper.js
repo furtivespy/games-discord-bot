@@ -47,54 +47,6 @@ class GameHelper {
       return find(gameData.decks, { id: userId })
     }
   }
-
-  /**
-   * Handles playing a card for a player.
-   * Moves the card from the player's hand to either their play area or the deck's discard pile.
-   * @param {object} gameData - The overall game data object.
-   * @param {object} player - The player object who is playing the card.
-   * @param {object} cardToPlay - The card object to be played.
-   * @param {string} handId - The ID of the hand the card is coming from (e.g., 'main').
-   * @param {object} deck - The deck object from which the card originated, for discard pile access.
-   * @returns {boolean} True if the card was successfully played, false otherwise.
-   */
-  static handlePlayCard(gameData, player, cardToPlay, handId = 'main', deck) {
-    if (!player || !cardToPlay || !deck) {
-      console.error("handlePlayCard: Missing player, cardToPlay, or deck parameter.");
-      return false;
-    }
-
-    const hand = player.hands[handId];
-    if (!hand) {
-      console.error(`handlePlayCard: Hand '${handId}' not found for player.`);
-      return false;
-    }
-
-    const cardIndex = hand.cards.findIndex(c => c.id === cardToPlay.id);
-    if (cardIndex === -1) {
-      console.error(`handlePlayCard: Card with id ${cardToPlay.id} not found in player's hand '${handId}'.`);
-      return false;
-    }
-
-    // Remove card from hand
-    const [playedCard] = hand.cards.splice(cardIndex, 1);
-
-    if (gameData.playToPlayArea) {
-      if (!player.playArea) { // Should have been initialized by defaultPlayer
-        player.playArea = [];
-      }
-      player.playArea.push(playedCard);
-    } else {
-      if (!deck.piles || !deck.piles.discard) {
-        console.error("handlePlayCard: Deck discard pile is not properly initialized.");
-        // Potentially add it back to hand or handle error more gracefully
-        hand.cards.splice(cardIndex, 0, playedCard); // Add back if error
-        return false;
-      }
-      deck.piles.discard.cards.push(playedCard);
-    }
-    return true;
-  }
 }
 
 

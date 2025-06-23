@@ -102,7 +102,8 @@ class GameFormatter {
 
     // Add Play Area column if any player has a play area (even if empty, to show the column)
     // or if the playToPlayArea setting is enabled.
-    if (gameData.players.some(p => p.playArea !== undefined) || gameData.playToPlayArea) {
+    const showPlayAreaColumn = gameData.players.some(p => p.playArea !== undefined) || gameData.playToPlayArea;
+    if (showPlayAreaColumn) {
       columns.push({ title: "Play Area", options: { textAlign: "right" } });
     }
 
@@ -197,7 +198,7 @@ class GameFormatter {
       }
 
       // Add Play Area card count if the column is present
-      if (gameData.players.some(p => p.playArea !== undefined) || gameData.playToPlayArea) {
+      if (showPlayAreaColumn) { // Use the variable defined earlier
         const playAreaCount = play.playArea ? play.playArea.length : 0;
         rowData.push(String(playAreaCount));
       }
@@ -227,7 +228,7 @@ class GameFormatter {
     }
 
     // Add total for Play Area if the column is present
-    if (gameData.players.some(p => p.playArea !== undefined) || gameData.playToPlayArea) {
+    if (showPlayAreaColumn) { // Use the variable defined earlier
       let totalPlayAreaCards = 0;
       gameData.players.forEach(p => {
         if (p.playArea) {
@@ -793,6 +794,33 @@ class GameFormatter {
         finalEmbeds.push(...options.additionalEmbeds);
     }
 
+    // Add embeds for each player's play area if they have cards
+    gameData.players.forEach(player => {
+      if (player.playArea && player.playArea.length > 0) {
+        const member = guild.members.cache.get(player.userId);
+        const playerName = member ? member.displayName : (player.name || `Player ${player.userId}`);
+        const playAreaText = this.formatPlayAreaText(player); // Use the existing formatter
+
+        if (playAreaText) { // formatPlayAreaText returns "" if empty, so this check is good
+          // Remove the "**Play Area:**\n" part if formatPlayAreaText includes it,
+          // as the embed title will convey this.
+          let descriptionText = playAreaText;
+          if (descriptionText.startsWith("**Play Area:**\n")) {
+            descriptionText = descriptionText.substring("**Play Area:**\n".length);
+          }
+
+          if (descriptionText.trim() !== "") { // Ensure there's content
+            const playAreaEmbed = new EmbedBuilder()
+              .setColor(player.color || 386945) // Use player color or a default
+              .setTitle(`${playerName}'s Play Area`)
+              .setDescription(descriptionText.substring(0, 4090)) // Max description length
+              .setTimestamp();
+            finalEmbeds.push(playAreaEmbed);
+          }
+        }
+      }
+    });
+
     const replyOptions = {
         files: [attachment],
         embeds: finalEmbeds // Use the newly constructed finalEmbeds array
@@ -806,10 +834,10 @@ class GameFormatter {
 
   static formatPlayAreaText(player) {
     if (!player || !player.playArea || player.playArea.length === 0) {
-      return "Play area is empty.";
+      return ""; // Return empty string if no play area or empty, so it can be conditionally added
     }
 
-    let playAreaString = "";
+    let playAreaString = "**Play Area:**\n";
     player.playArea.forEach((card, index) => {
       // Using cardLongName for more detail, fallback to shortName or just name
       let cardNameFormatted;

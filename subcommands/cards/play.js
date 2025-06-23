@@ -37,10 +37,28 @@ class Play {
             return
         }
         
-        let card = find(player.hands.main, {id: cardid})
-        let deck = find(gameData.decks, {name: card.origin})
-        player.hands.main.splice(findIndex(player.hands.main, {id: cardid}), 1)
-        deck.piles.discard.cards.push(card)
+        const cardIndex = findIndex(player.hands.main, {id: cardid})
+        // It's important to get the card object before splicing, or splice and get it from the result
+        const [playedCard] = player.hands.main.splice(cardIndex, 1)
+
+        if (gameData.playToPlayArea) {
+            if (!player.playArea) { // Should be initialized by defaultPlayer
+                player.playArea = [];
+            }
+            player.playArea.push(playedCard);
+            // Optional: Log or notify that it went to play area
+        } else {
+            let deck = find(gameData.decks, {name: playedCard.origin});
+            if (deck && deck.piles && deck.piles.discard) {
+                deck.piles.discard.cards.push(playedCard);
+            } else {
+                // Attempt to return card to hand if discard pile is not found
+                player.hands.main.splice(cardIndex, 0, playedCard); // Add back to original position
+                client.logger.log(`Error: Deck or discard pile not found for card origin '${playedCard.origin}' in /cards play. Card '${playedCard.name}' returned to hand.`, 'error');
+                await interaction.editReply({ content: `Error: Could not find the discard pile for card '${playedCard.name}'. It has been returned to your hand.`, ephemeral: true });
+                return; // Stop further processing for this play
+            }
+        }
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         await interaction.editReply({ content: `${interaction.member.displayName} has Played:`,
