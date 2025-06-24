@@ -47,53 +47,111 @@ module.exports = {
 
 
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('playarea_discard_select')
-            .setPlaceholder('Select a card to discard from your play area')
-            .addOptions(options.slice(0, 25)); // Take first 25
+            .setCustomId('playarea_discard_multiselect') // Changed ID for clarity
+            .setPlaceholder('Select card(s) to discard from your play area')
+            .setMinValues(1)
+            .setMaxValues(Math.min(options.length, 25)) // Allow selecting multiple
+            .addOptions(options.slice(0, 25));
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
         const selectionMessage = await interaction.editReply({
-            content: 'Which card would you like to discard from your play area?',
+            content: 'Which card(s) would you like to discard from your play area?',
             components: [row],
             ephemeral: true
         });
 
-        const collectorFilter = i => i.user.id === interaction.user.id && i.customId === 'playarea_discard_select';
+        const collectorFilter = i => i.user.id === interaction.user.id && i.customId === 'playarea_discard_multiselect';
         try {
-            const selectionInteraction = await selectionMessage.awaitMessageComponent({ filter: collectorFilter, time: 60000 }); // 60 seconds
+            const selectionInteraction = await selectionMessage.awaitMessageComponent({ filter: collectorFilter, time: 120000 }); // Increased time for multi-select
 
-            const selectedCardId = selectionInteraction.values[0];
-            const cardIndex = findIndex(player.playArea, { id: selectedCardId });
-            if (cardIndex === -1) {
-                // This should not happen if selection is from the generated list
-                await selectionInteraction.update({ content: "Error: Selected card not found in your play area. Please try again.", components: [], ephemeral: true });
-                return;
-            }
+            const selectedCardIds = selectionInteraction.values;
+            const discardedCards = [];
+            const cardsToKeepInPlayArea = [];
 
-            const [discardedCard] = player.playArea.splice(cardIndex, 1);
-
-            let deck = find(gameData.decks, { name: discardedCard.origin });
-            if (deck && deck.piles && deck.piles.discard) {
-                deck.piles.discard.cards.push(discardedCard);
-            } else {
-                // Critical error: cannot find discard pile. Return card to play area.
-                player.playArea.splice(cardIndex, 0, discardedCard); // Add back
-                client.logger.log(`Critical Error: Deck or discard pile not found for card origin '${discardedCard.origin}' in /cards playareadiscard. Card '${discardedCard.name}' returned to play area.`, 'error');
-                await selectionInteraction.update({ content: `Error: Could not find the discard pile for card '${discardedCard.name}'. It has been returned to your play area.`, components: [], ephemeral: true });
-                // No game data save here as we reverted the change.
-                return;
-            }
-
-            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
-
-            await selectionInteraction.update({
-                content: `You discarded '${Formatter.cardShortName(discardedCard)}' from your play area.`,
-                components: [] // Remove the select menu
+            player.playArea.forEach(card => {
+                if (selectedCardIds.includes(card.id)) {
+                    discardedCards.push(card);
+                } else {
+                    cardsToKeepInPlayArea.push(card);
+                }
             });
 
-            // Optionally, send a public confirmation if desired
-            // await interaction.followUp({ content: `${interaction.member.displayName} discarded a card from their play area.` });
+            if (discardedCards.length === 0) {
+                await selectionInteraction.update({ content: "No valid cards were selected or an error occurred.", components: [], ephemeral: true });
+                return;
+            }
+
+            player.playArea = cardsToKeepInPlayArea; // Update play area
+
+            let allDiscardsSuccessful = true;
+            for (const cardToDiscard of discardedCards) {
+                let deck = find(gameData.decks, { name: cardToDiscard.origin });
+                if (deck && deck.piles && deck.piles.discard) {
+                    deck.piles.discard.cards.push(cardToDiscard);
+                } else {
+                    // Critical error: cannot find discard pile for one of the cards.
+                    // Return this card to play area and notify.
+                    player.playArea.push(cardToDiscard); // Add back this specific card
+                    allDiscardsSuccessful = false;
+                    client.logger.log(`Critical Error: Deck or discard pile not found for card origin '${cardToDiscard.origin}' in multi-discard. Card '${cardToDiscard.name}' returned to play area.`, 'error');
+                    await interaction.followUp({ content: `Error: Could not find the discard pile for card '${Formatter.cardShortName(cardToDiscard)}'. It has been returned to your play area. Some other cards may have been discarded.`, ephemeral: true });
+                }
+            }
+
+            if (allDiscardsSuccessful || discardedCards.some(c => !player.playArea.find(pc => pc.id === c.id))) { // Check if at least some cards were successfully processed for discard
+                await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
+            }
+
+            // Ephemeral confirmation of action
+            const successfullyDiscardedCards = discardedCards.filter(dc => !player.playArea.find(pc => pc.id === dc.id));
+
+            if (successfullyDiscardedCards.length > 0) {
+                await selectionInteraction.update({
+                    content: `You discarded ${successfullyDiscardedCards.length} card(s) from your play area: ${successfullyDiscardedCards.map(c => Formatter.cardShortName(c)).join(', ')}.`,
+                    components: []
+                });
+
+                // Public follow-up message
+                await interaction.followUp({
+                    content: `${interaction.member.displayName} discarded ${successfullyDiscardedCards.length} card(s) from their play area.`,
+                    ephemeral: false
+                });
+            } else {
+                 await selectionInteraction.update({
+                    content: `No cards were ultimately discarded due to errors finding their discard piles.`,
+                    components: []
+                });
+            }
+
+
+            // Display updated play area to the player (ephemeral)
+            // This can be part of the selectionInteraction.update or a new followUp
+            const playAreaEmbed = new EmbedBuilder()
+                .setColor(player.color || 13502711)
+                .setTitle("Your Updated Play Area");
+
+            const playAreaAttachment = await Formatter.genericCardZoneDisplay(
+                player.playArea, // Send the updated playArea
+                playAreaEmbed,
+                "Current Cards",
+                `PlayAreaUpdate-${player.userId}`
+            );
+
+            const finalEphemeralReply = {
+                embeds: [playAreaEmbed],
+                components: [], // clean up any previous components
+                ephemeral: true
+            };
+            if (playAreaAttachment) {
+                finalEphemeralReply.files = [playAreaAttachment];
+            }
+            // If selectionInteraction was already updated, use followUp for this status
+            if (selectionInteraction.replied || selectionInteraction.deferred) {
+                 await interaction.followUp(finalEphemeralReply);
+            } else { // Should not happen with await selectionInteraction.update above
+                 await selectionInteraction.update(finalEphemeralReply);
+            }
 
 
         } catch (e) {
@@ -101,7 +159,7 @@ module.exports = {
                 await interaction.editReply({ content: 'Card selection timed out. Please try the command again.', components: [], ephemeral: true });
             } else {
                 client.logger.log(e, 'error');
-                await interaction.editReply({ content: 'An error occurred during card selection.', components: [], ephemeral: true });
+                await interaction.editReply({ content: 'An error occurred during card selection for discard.', components: [], ephemeral: true });
             }
         }
     }

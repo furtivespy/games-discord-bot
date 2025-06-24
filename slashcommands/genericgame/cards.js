@@ -30,7 +30,10 @@ const Shuffle = require(`../../subcommands/cards/shuffle`)
 const SimultaneousReveal = require(`../../subcommands/cards/simultaneousreveal`)
 const Steal = require(`../../subcommands/cards/steal`)
 const Help = require(`../../subcommands/cards/help`)
-const PlayAreaDiscard = require(`../../subcommands/cards/playareadiscard`) // Added for /cards playarea discard
+const PlayAreaDiscard = require(`../../subcommands/cards/playareadiscard`)
+const PlayAreaPick = require(`../../subcommands/cards/playareapick`)
+const PlayAreaTake = require(`../../subcommands/cards/playareatake`)
+const PlayAreaGive = require(`../../subcommands/cards/playareagive`) // Added for /cards playarea give
 
 class Cards extends SlashCommand {
     constructor(client){
@@ -261,6 +264,23 @@ class Cards extends SlashCommand {
                         // Options for selecting the card will be handled by the subcommand's interaction flow (e.g., select menu)
                         // No specific options needed here unless we want to filter by card name, etc.
                 )
+                .addSubcommand(subcommand => // Added for /cards playarea pick
+                    subcommand
+                        .setName("pick")
+                        .setDescription("Pick up card(s) from your play area into your hand.")
+                )
+                .addSubcommand(subcommand => // Added for /cards playarea take
+                    subcommand
+                        .setName("take")
+                        .setDescription("Take card(s) from another player's play area into your own.")
+                        .addUserOption(option => option.setName('target').setDescription('The player to take cards from').setRequired(true))
+                )
+                .addSubcommand(subcommand => // Added for /cards playarea give
+                    subcommand
+                        .setName("give")
+                        .setDescription("Give card(s) from your play area to another player.")
+                        .addUserOption(option => option.setName('target').setDescription('The player to give cards to').setRequired(true))
+                )
             )
     }
 
@@ -385,10 +405,19 @@ class Cards extends SlashCommand {
                             await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
                     }
                     break
-                case "playarea": // Added for /cards playarea discard
+                case "playarea":
                     switch (interaction.options.getSubcommand()) {
                         case "discard":
                             await PlayAreaDiscard.execute(interaction, this.client)
+                            break
+                        case "pick":
+                            await PlayAreaPick.execute(interaction, this.client)
+                            break
+                        case "take":
+                            await PlayAreaTake.execute(interaction, this.client)
+                            break
+                        case "give": // Added for /cards playarea give
+                            await PlayAreaGive.execute(interaction, this.client)
                             break
                         default:
                             await interaction.reply({ content: "Unknown playarea command.", ephemeral: true })

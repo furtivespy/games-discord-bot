@@ -61,11 +61,44 @@ class Play {
         }
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
-        await interaction.editReply({ content: `${interaction.member.displayName} has Played:`,
-        embeds: [
-            Formatter.oneCard(playedCard), // Corrected variable name from card to playedCard
+
+        const replyEmbeds = [
+            Formatter.oneCard(playedCard),
             ...Formatter.deckStatus2(gameData)
-        ]})
+        ];
+        const replyFiles = [];
+
+        if (gameData.playToPlayArea && player.playArea && player.playArea.length > 0) {
+            const { EmbedBuilder } = require('discord.js'); // Ensure EmbedBuilder is available
+            const playAreaEmbed = new EmbedBuilder()
+                .setColor(player.color || 13502711)
+                .setTitle(`${interaction.member.displayName}'s Updated Play Area`);
+
+            const playAreaAttachment = await Formatter.genericCardZoneDisplay(
+                player.playArea,
+                playAreaEmbed,
+                "Current Cards in Play Area",
+                `PlayAreaUpdate-${player.userId}`
+            );
+
+            if (playAreaEmbed.data.fields && playAreaEmbed.data.fields.length > 0) {
+                replyEmbeds.push(playAreaEmbed);
+            }
+            if (playAreaAttachment) {
+                replyFiles.push(playAreaAttachment);
+            }
+        }
+
+        const replyOptions = {
+            content: `${interaction.member.displayName} has Played:`,
+            embeds: replyEmbeds
+        };
+        if (replyFiles.length > 0) {
+            replyOptions.files = replyFiles;
+        }
+        await interaction.editReply(replyOptions);
+
+        // The ephemeral follow-up for hand status remains the same
         var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
         if (handInfo.attachments.length >0){
             await interaction.followUp({ 

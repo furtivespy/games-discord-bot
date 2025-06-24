@@ -382,15 +382,101 @@ class GameFormatter {
       results.embeds.push(simultaneousEmbed);
     }
 
+    // Play Area Display
+    if (player.playArea && player.playArea.length > 0) {
+      const playAreaEmbed = new EmbedBuilder()
+        .setColor(player.color || 13502711) // Use player color or a default
+        .setTitle(`Your Play Area`)
+        .setDescription(`Cards currently in your play area:`); // Initial description
+
+      // Unlike hands, playArea cards are typically not sorted by suit/value but by order of play.
+      // So, we pass player.playArea directly without this.cardSort().
+      const playAreaAttachment = await this.genericCardZoneDisplay(
+        player.playArea,
+        playAreaEmbed,
+        "Cards in Play Area", // This will be the field title within the embed
+        "PlayArea"
+      );
+
+      if (playAreaAttachment) {
+        results.attachments.push(playAreaAttachment);
+      }
+      results.embeds.push(playAreaEmbed);
+    }
+
     return results;
   }
 
-  static async genericHand(player, embed, handName, fieldTitle) {
-    let hasImages = false;
+  /**
+   * Formats a generic list of cards (e.g., hand, play area) into an embed,
+   * adding text list and a composite image if cards have URLs.
+   * @param {Array<Object>} cardArray - The array of card objects.
+   * @param {EmbedBuilder} embed - The Discord EmbedBuilder to modify.
+   * @param {String} fieldTitle - The title for the embed field listing the cards.
+   * @param {String} imageAttachmentNamePrefix - Prefix for the image attachment name (e.g., "PlayArea", "Hand").
+   * @returns {Promise<AttachmentBuilder|null>} The image attachment if created, otherwise null.
+   */
+  static async genericCardZoneDisplay(cardArray, embed, fieldTitle, imageAttachmentNamePrefix) {
+    if (!cardArray || cardArray.length === 0) {
+      embed.addFields({ name: fieldTitle, value: "Empty" });
+      return null;
+    }
 
-    if (player.hands[handName].length > 0) {
-      let cardList = "";
-      this.cardSort(player.hands[handName]).forEach((card) => {
+    let hasImages = false;
+    let cardListText = "";
+    const imageUrls = [];
+
+    // Sort cards first (assuming cardSort is applicable, might need to pass it or sort externally if not always by suit/value/name)
+    // For playArea, original order is important, so we don't sort here. For hands, cardSort is used before calling.
+    // If sorting is needed for other zones, it should be done before calling this function.
+    cardArray.forEach((card) => {
+      let newCardInfo = "";
+      if (card.url) { // Assuming card.url is the image link
+        hasImages = true;
+        imageUrls.push(card.url);
+        newCardInfo = `• ${this.cardLongName(card)} [image](${card.url})\n`;
+      } else {
+        newCardInfo = `• ${this.cardLongName(card)}\n`;
+      }
+
+      if (cardListText.length + newCardInfo.length > 1020) { // Embed field value limit
+        embed.addFields({ name: fieldTitle, value: cardListText });
+        cardListText = ""; // Reset for next field if needed (though one field is typical)
+        fieldTitle = `${fieldTitle} (cont.)`; // Indicate continuation
+      }
+      cardListText += newCardInfo;
+    });
+
+    if (cardListText) {
+      embed.addFields({ name: fieldTitle, value: cardListText });
+    }
+
+    if (hasImages && imageUrls.length > 0) {
+      const imageBuffer = await this.ImagefromUrlList(imageUrls);
+      const attachmentName = `${imageAttachmentNamePrefix}-${Date.now()}.png`; // Add timestamp for uniqueness
+      const attachment = new AttachmentBuilder(imageBuffer, { name: attachmentName });
+      embed.setImage(`attachment://${attachmentName}`);
+      return attachment;
+    }
+    return null;
+  }
+
+  static async genericHand(player, embed, handName, fieldTitle) {
+    // This function now primarily acts as a wrapper for genericCardZoneDisplay for hands
+    const handCards = player.hands[handName] ? this.cardSort(player.hands[handName]) : [];
+    if (handCards.length === 0 && player.hands[handName] && player.hands[handName].length === 0) { // Explicitly check if hand exists but is empty
+        embed.addFields({ name: fieldTitle, value: "Empty" });
+        return null;
+    }
+    if (handCards.length === 0 && !player.hands[handName]) { // Hand type doesn't exist for player
+        return null;
+    }
+    return await this.genericCardZoneDisplay(handCards, embed, fieldTitle, `${handName}Hand`);
+  }
+
+  static async playerHandImage(player, handName) {
+    const imgList = [];
+    this.cardSort(player.hands[handName]).forEach((card) => {
         let newcardinfo = "";
         if (card.url) {
           hasImages = true;
@@ -795,34 +881,38 @@ class GameFormatter {
     }
 
     // Add embeds for each player's play area if they have cards
-    gameData.players.forEach(player => {
+    const playAreaAttachments = [];
+    for (const player of gameData.players) { // Changed to for...of for async/await within loop
       if (player.playArea && player.playArea.length > 0) {
         const member = guild.members.cache.get(player.userId);
         const playerName = member ? member.displayName : (player.name || `Player ${player.userId}`);
-        const playAreaText = this.formatPlayAreaText(player); // Use the existing formatter
 
-        if (playAreaText) { // formatPlayAreaText returns "" if empty, so this check is good
-          // Remove the "**Play Area:**\n" part if formatPlayAreaText includes it,
-          // as the embed title will convey this.
-          let descriptionText = playAreaText;
-          if (descriptionText.startsWith("**Play Area:**\n")) {
-            descriptionText = descriptionText.substring("**Play Area:**\n".length);
-          }
+        const playAreaEmbed = new EmbedBuilder()
+          .setColor(player.color || 386945) // Use player color or a default
+          .setTitle(`${playerName}'s Play Area`);
+          // Description will be set by genericCardZoneDisplay via fields.
+          // If you want a general description above the fields, set it here.
 
-          if (descriptionText.trim() !== "") { // Ensure there's content
-            const playAreaEmbed = new EmbedBuilder()
-              .setColor(player.color || 386945) // Use player color or a default
-              .setTitle(`${playerName}'s Play Area`)
-              .setDescription(descriptionText.substring(0, 4090)) // Max description length
-              .setTimestamp();
+        // genericCardZoneDisplay will add fields for text and set the image on the embed
+        const playAreaImgAttachment = await this.genericCardZoneDisplay(
+          player.playArea,
+          playAreaEmbed,
+          "Current Cards", // Field title for the list of cards
+          `PlayArea-${player.userId}` // Attachment name prefix
+        );
+
+        if (playAreaImgAttachment) {
+          playAreaAttachments.push(playAreaImgAttachment);
+        }
+        // Only add the embed if it has fields (i.e., cards were actually processed by genericCardZoneDisplay)
+        if (playAreaEmbed.data.fields && playAreaEmbed.data.fields.length > 0) {
             finalEmbeds.push(playAreaEmbed);
-          }
         }
       }
-    });
+    }
 
     const replyOptions = {
-        files: [attachment],
+        files: [attachment, ...playAreaAttachments], // Add main status table + any play area images
         embeds: finalEmbeds // Use the newly constructed finalEmbeds array
     };
 
