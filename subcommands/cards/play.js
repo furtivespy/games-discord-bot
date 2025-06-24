@@ -63,7 +63,7 @@ class Play {
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         await interaction.editReply({ content: `${interaction.member.displayName} has Played:`,
         embeds: [
-            Formatter.oneCard(card),
+            Formatter.oneCard(playedCard), // Corrected variable name from card to playedCard
             ...Formatter.deckStatus2(gameData)
         ]})
         var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
