@@ -1,4 +1,4 @@
-const GlobalGameHelper = require('../../../modules/GlobalGameHelper'); // Adjusted path
+const GlobalGameHelper = require('../../modules/GlobalGameHelper'); // Corrected path
 const { SlashCommandSubcommandBuilder } = require('discord.js');
 
 module.exports = {
