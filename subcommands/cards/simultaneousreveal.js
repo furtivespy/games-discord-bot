@@ -24,6 +24,8 @@ class SimultaneousReveal {
     }
 
     let revealMessage = `**Simultaneous Play Results:**\n`;
+    const cardsToReturnToHand = {}; // Moved declaration before the player loop
+    const playedToPlayArea = gameData.playToPlayArea; // Define playedToPlayArea once before the loop
 
     for (const p of gameData.players) {
       const name =
@@ -45,18 +47,45 @@ class SimultaneousReveal {
           files: [...followup[1]],
         });
 
-        // Move the played cards to the discard pile
-        p.hands.simultaneous.forEach((card) => {
-          let deck = find(gameData.decks, { name: card.origin });
-          if (deck) {
-            deck.piles.discard.cards.push(card);
-          }
-        });
+        // Move the played cards
+        // const playedToPlayArea = gameData.playToPlayArea; // No longer define here
+        let destinationMessagePart = playedToPlayArea ? "to their Play Area" : "to the Discard Pile";
 
-        p.hands.simultaneous = []; // Clear the simultaneous hand
-      } else {
-        revealMessage += `\n**${name}:** No cards played`;
+        if (p.hands.simultaneous.length > 0) { // Check again in case it was cleared by an error
+            p.hands.simultaneous.forEach((card) => {
+                if (playedToPlayArea) {
+                    if (!p.playArea) p.playArea = [];
+                    p.playArea.push(card);
+                } else {
+                    let deck = find(gameData.decks, { name: card.origin });
+                    if (deck && deck.piles && deck.piles.discard) {
+                        deck.piles.discard.cards.push(card);
+                    } else {
+                        client.logger.log(`Error: Deck or discard pile not found for card origin '${card.origin}' in /cards simultaneousreveal for player ${p.userId}. Card '${card.name}' will be returned to their hand.`, 'error');
+                        if (!cardsToReturnToHand[p.userId]) cardsToReturnToHand[p.userId] = [];
+                        cardsToReturnToHand[p.userId].push(card);
+                    }
+                }
+            });
+            revealMessage += ` (played ${destinationMessagePart})`;
+            p.hands.simultaneous = []; // Clear the simultaneous hand
+        }
+
+      } else { // End of if (p.hands.simultaneous?.length > 0)
+        revealMessage += `\n**${name}:** No cards selected for simultaneous play`;
       }
+    }
+
+    // Add back any cards that failed to discard
+    for (const playerId in cardsToReturnToHand) {
+        const playerToReturnTo = find(gameData.players, { userId: playerId });
+        if (playerToReturnTo) {
+            if (!playerToReturnTo.hands.main) playerToReturnTo.hands.main = []; // Should exist, but safety
+            playerToReturnTo.hands.main.push(...cardsToReturnToHand[playerId]);
+            // Announce this return in the reveal message or a follow-up
+            const returnedCardNames = cardsToReturnToHand[playerId].map(c => Formatter.cardShortName(c)).join(', ');
+            revealMessage += `\n*Note: ${interaction.guild.members.cache.get(playerId)?.displayName || playerId}'s card(s) (${returnedCardNames}) were returned to hand due to a discard error.*`;
+        }
     }
 
     // Save the updated game data
@@ -67,9 +96,45 @@ class SimultaneousReveal {
       gameData
     );
 
+    // Main reveal summary
+    if (revealMessage.length > 2000) revealMessage = revealMessage.substring(0, 1997) + "...";
     await interaction.editReply({
       content: revealMessage,
     });
+
+    // Follow-up with Play Area statuses if cards went there
+    if (playedToPlayArea) {
+        for (const p of gameData.players) {
+            // Check if this player actually had cards moved to their play area in this reveal
+            // This requires knowing which players had cards in p.hands.simultaneous initially
+            // For simplicity, we'll just show play area if it's not empty and playToPlayArea was true.
+            // A more precise check would involve tracking players who had cards in simultaneous before clearing.
+            // However, genericCardZoneDisplay handles empty play areas gracefully.
+            if (p.playArea && p.playArea.length > 0) {
+                 const member = interaction.guild.members.cache.get(p.userId);
+                 const playerName = member ? member.displayName : (p.name || `Player ${p.userId}`);
+                 const { EmbedBuilder } = require('discord.js');
+                 const playAreaEmbed = new EmbedBuilder()
+                    .setColor(p.color || 13502711)
+                    .setTitle(`${playerName}'s Updated Play Area`);
+
+                const playAreaAttachment = await Formatter.genericCardZoneDisplay(
+                    p.playArea,
+                    playAreaEmbed,
+                    "Current Cards in Play Area",
+                    `PlayAreaSimultaneous-${p.userId}`
+                );
+
+                const followupOptions = { embeds: [playAreaEmbed], ephemeral: false }; // Public status
+                if (playAreaAttachment) {
+                    followupOptions.files = [playAreaAttachment];
+                }
+                if (playAreaEmbed.data.fields && playAreaEmbed.data.fields.length > 0) { // Only send if there's content
+                    await interaction.followUp(followupOptions);
+                }
+            }
+        }
+    }
   }
 }
 

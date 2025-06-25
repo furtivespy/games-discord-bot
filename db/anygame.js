@@ -103,6 +103,7 @@ class GameDatabase {
         bggGameId: null,
         reverseOrder: false,
         tokens: [],
+        playToPlayArea: false, // Added for play area feature
     }
 
     defaultBGGGameData = {
@@ -153,6 +154,7 @@ class GameDatabase {
             received: [],
             simultaneous: []
         },
+        playArea: [], // Added for play area feature
         color: null,
         tokens: {},
     }

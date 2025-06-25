@@ -28,8 +28,12 @@ const Rturn = require(`../../subcommands/cards/return`)
 const Show = require(`../../subcommands/cards/show`)
 const Shuffle = require(`../../subcommands/cards/shuffle`)
 const SimultaneousReveal = require(`../../subcommands/cards/simultaneousreveal`)
-const Steal = require(`../../subcommands/cards/steal`)
-const Help = require(`../../subcommands/cards/help`)
+const Steal = require('../../subcommands/cards/steal')
+const Help = require('../../subcommands/cards/help')
+const PlayAreaDiscard = require('../../subcommands/cards/playareadiscard') // Restoring
+const PlayAreaPick = require('../../subcommands/cards/playareapick') // Restoring
+const PlayAreaTake = require('../../subcommands/cards/playareatake') // Restoring
+const PlayAreaGive = require('../../subcommands/cards/playareagive') // Restoring
 
 class Cards extends SlashCommand {
     constructor(client){
@@ -149,23 +153,23 @@ class Cards extends SlashCommand {
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName("show")
-                        .setDescription("Shows you your current hand")
+                        .setDescription("Shows your current hand and play area, including card images.")
                     )
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName("play")
-                        .setDescription("play a card")
+                        .setDescription("Play a card from your hand (to discard or your play area).")
                         .addStringOption(option => option.setName('card').setDescription('Card to play').setAutocomplete(true).setRequired(true))
                     ) 
                 .addSubcommand(subcommand =>
                     subcommand  
                         .setName("playmultiple")
-                        .setDescription("play a number of cards")
+                        .setDescription("Play multiple cards from your hand (to discard or your play area).")
                     )
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName("playsimultaneous")
-                        .setDescription("play a number of cards simultaneously")
+                        .setDescription("Select card(s) from your hand for simultaneous play (reveal determines destination: discard or play area).")
                     )
                 .addSubcommand(subcommand =>
                     subcommand
@@ -251,11 +255,37 @@ class Cards extends SlashCommand {
                         .addStringOption(option => option.setName('card').setDescription('Card to remove').setAutocomplete(true).setRequired(true))
                 )
             )
+            .addSubcommandGroup(group =>
+                group.setName("playarea").setDescription("Manage cards in your play area")
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("discard")
+                        .setDescription("Discard one or more cards from your play area.") // Updated description
+                )
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("pick")
+                        .setDescription("Pick up one or more cards from your play area into your hand.") // Updated description
+                )
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("take")
+                        .setDescription("Take one or more cards from another player's play area into yours.") // Updated description
+                        .addUserOption(option => option.setName('target').setDescription('The player to take cards from').setRequired(true))
+                )
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("give")
+                        .setDescription("Give one or more cards from your play area to another player.") // Updated description
+                        .addUserOption(option => option.setName('target').setDescription('The player to give cards to').setRequired(true))
+                )
+            )
+            // Removed duplicated playarea subcommand group definition
     }
 
     async execute(interaction) {
         try {
-            switch (interaction.options.getSubcommandGroup()) {
+            switch (interaction.options.getSubcommandGroup(false)) { // Added false to allow non-grouped commands like help
                 case "deck":
                     switch (interaction.options.getSubcommand()) {
                         case "check":
@@ -374,13 +404,35 @@ class Cards extends SlashCommand {
                             await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
                     }
                     break
-                default:
+                // Restoring playarea group handling
+                case "playarea":
+                    switch (interaction.options.getSubcommand()) {
+                        case "discard":
+                            await PlayAreaDiscard.execute(interaction, this.client)
+                            break
+                        case "pick":
+                            await PlayAreaPick.execute(interaction, this.client)
+                            break
+                        case "take":
+                            await PlayAreaTake.execute(interaction, this.client)
+                            break
+                        case "give":
+                            await PlayAreaGive.execute(interaction, this.client)
+                            break
+                        default:
+                            await interaction.reply({ content: "Unknown playarea command.", ephemeral: true })
+                    }
+                    break
+                default: // Handles commands without a group, like /cards help
                     switch (interaction.options.getSubcommand()) {
                         case "help":
                             await Help.execute(interaction, this.client)
                             break
                         default:
-                            await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
+                            // This case should ideally not be reached if getSubcommandGroup() is null for non-grouped commands
+                            // However, if a command has no group and is not 'help', it might fall here.
+                            // Or if getSubcommandGroup(false) returns null and it's not 'help'.
+                            await interaction.reply({ content: "This command structure is not recognized or the command is incomplete.", ephemeral: true })
                     }
                     break
             }

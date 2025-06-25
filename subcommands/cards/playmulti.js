@@ -49,21 +49,81 @@ class PlayMulti {
             await interaction.editReply({ content: 'No cards selected', components: [] })
             return
         }
-        await interaction.editReply({ content: `Playing ${playedCards.length} cards...`, components: [] })  
-        let playedCardsObjects = []
-        playedCards.forEach(crd => {
-            let card = find(player.hands.main, {id: crd})
-            if (!card) { return }
-            let deck = find(gameData.decks, {name: card.origin})
-            player.hands.main.splice(findIndex(player.hands.main, {id: crd}), 1)
-            deck.piles.discard.cards.push(card)
-            playedCardsObjects.push(card)
-        })
+        await interaction.editReply({ content: `Processing ${playedCards.length} cards...`, components: [] })
 
-        await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+        let successfullyPlayedObjects = [];
+        let cardsPutBackInHand = [];
 
-        let followup = await Formatter.multiCard(playedCardsObjects, `Cards Played by ${interaction.member.displayName}`)
-        await interaction.followUp({ embeds: [...followup[0]], files: [...followup[1]], components: [] })
+        for (const cardId of playedCards) {
+            const cardIndex = findIndex(player.hands.main, { id: cardId });
+            if (cardIndex === -1) continue; // Card already processed or not found (e.g. if IDs were duplicated in selection somehow)
+
+            const [playedCard] = player.hands.main.splice(cardIndex, 1);
+
+            if (gameData.playToPlayArea) {
+                if (!player.playArea) player.playArea = [];
+                player.playArea.push(playedCard);
+                successfullyPlayedObjects.push(playedCard);
+            } else {
+                let deck = find(gameData.decks, { name: playedCard.origin });
+                if (deck && deck.piles && deck.piles.discard) {
+                    deck.piles.discard.cards.push(playedCard);
+                    successfullyPlayedObjects.push(playedCard);
+                } else {
+                    client.logger.log(`Error: Deck or discard pile not found for card origin '${playedCard.origin}' in /cards playmulti. Card '${playedCard.name}' returned to hand.`, 'error');
+                    // Add card back to hand at its original position (or end) for user to see
+                    player.hands.main.splice(cardIndex, 0, playedCard);
+                    cardsPutBackInHand.push(playedCard);
+                }
+            }
+        }
+
+        if (successfullyPlayedObjects.length > 0 || cardsPutBackInHand.length > 0) { // Save if any change or attempted change occurred
+            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
+        }
+
+        const replyEmbeds = [];
+        const replyFiles = [];
+        let playedWhereMessage = gameData.playToPlayArea ? "to their Play Area" : "to the Discard Pile";
+
+        if (successfullyPlayedObjects.length > 0) {
+            const multiCardDisplay = await Formatter.multiCard(successfullyPlayedObjects, `Cards Played by ${interaction.member.displayName}`);
+            replyEmbeds.push(...multiCardDisplay[0]);
+            replyFiles.push(...multiCardDisplay[1]);
+
+            if (gameData.playToPlayArea && player.playArea && player.playArea.length > 0) {
+                const { EmbedBuilder } = require('discord.js');
+                const playAreaEmbed = new EmbedBuilder()
+                    .setColor(player.color || 13502711)
+                    .setTitle(`${interaction.member.displayName}'s Updated Play Area`);
+                const playAreaAttachment = await Formatter.genericCardZoneDisplay(
+                    player.playArea,
+                    playAreaEmbed,
+                    "Current Cards in Play Area",
+                    `PlayAreaMulti-${player.userId}`
+                );
+                if (playAreaEmbed.data.fields && playAreaEmbed.data.fields.length > 0) {
+                    replyEmbeds.push(playAreaEmbed);
+                }
+                if (playAreaAttachment) {
+                    replyFiles.push(playAreaAttachment);
+                }
+            }
+        }
+
+        let mainContent = `${interaction.member.displayName} played ${successfullyPlayedObjects.length} card(s) ${playedWhereMessage}.`;
+        if (cardsPutBackInHand.length > 0) {
+            mainContent += `\nCould not discard ${cardsPutBackInHand.length} card(s (returned to hand): ${cardsPutBackInHand.map(c => Formatter.cardShortName(c)).join(', ')}.`;
+        }
+        if (successfullyPlayedObjects.length === 0 && cardsPutBackInHand.length === 0) {
+             mainContent = "No cards were played (possibly due to an issue or empty selection).";
+        }
+
+
+        const followupOptions = { content: mainContent, components: [] };
+        if (replyEmbeds.length > 0) followupOptions.embeds = replyEmbeds;
+        if (replyFiles.length > 0) followupOptions.files = replyFiles;
+        await interaction.followUp(followupOptions);
         
         var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
         if (handInfo.attachments.length >0){

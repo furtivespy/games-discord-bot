@@ -14,7 +14,7 @@ Here's a list of commands to get you started. Don't worry, they're super easy to
 
         const commands_chunk_1 = `*   **/game newgame** 🎮 - Let's get this party started! Starts a brand new game. 🥳
 *   **/game newgameplus** ✨ - Feeling fancy? Starts a new game with ✨advanced options✨. Ooh la la!
-*   **/game status** 📊 - Curious about what's happening? Shows the current game status. 🤔
+*   **/game status** 📊 - Curious about what's happening? Shows the current game status, including play area details and images. 🤔
 *   **/game next** ⏭️ - Onwards and upwards! Advances to the next turn. Whose turn is it anyway?
 *   **/game reverse** 🔄 - UNO REVERSE CARD! Reverses the turn order. Now things are getting interesting! 😜`;
 
@@ -30,6 +30,7 @@ Here's a list of commands to get you started. Don't worry, they're super easy to
 *   **/game removeimage** 🚫🖼️ - Changed your mind? Removes an image from the game. Poof! It's gone.
 *   **/game addlink** 🔗 - Sharing is caring! Adds a link to the game. Let's see those cool links!
 *   **/game removelink** 🚫🔗 - Oops, wrong link? Removes a link from the game. No problemo!
+*   **/game playarea [mode:on/off]** 🏞️ - Toggles or sets if cards are played to a personal Play Area or the common discard. Default is toggle; specify 'on' or 'off' to set.
 *   **/game test** 🧪 - Just checking things out! For testing purposes. Nothing to see here, folks! 😉`;
 
         await interaction.followUp({

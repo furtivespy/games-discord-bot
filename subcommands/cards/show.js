@@ -21,19 +21,18 @@ class Show {
 
         var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
 
+        // The block that added Play Area information directly to the hand embed or created a new one
+        // has been removed. playerSecretHandAndImages now handles returning a distinct embed for the play area.
+
         if (handInfo.attachments.length >0){
             await interaction.editReply({ 
-                embeds: [
-                    ...handInfo.embeds
-                ],
+                embeds: handInfo.embeds, // Use potentially modified embeds array
                 files: [...handInfo.attachments],
                 ephemeral: true
             })  
         } else {
             await interaction.editReply({ 
-                embeds: [
-                    ...handInfo.embeds
-                ],
+                embeds: handInfo.embeds, // Use potentially modified embeds array
                 ephemeral: true
             })  
         }
