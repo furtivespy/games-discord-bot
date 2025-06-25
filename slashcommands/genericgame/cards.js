@@ -282,32 +282,7 @@ class Cards extends SlashCommand {
                         .addUserOption(option => option.setName('target').setDescription('The player to give cards to').setRequired(true))
                 )
             )
-            // Restoring playarea group
-            .addSubcommandGroup(group =>
-                group.setName("playarea").setDescription("Manage cards in your play area")
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName("discard")
-                        .setDescription("Discard a card from your play area.")
-                )
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName("pick")
-                        .setDescription("Pick up card(s) from your play area into your hand.")
-                )
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName("take")
-                        .setDescription("Take card(s) from another player's play area into your own.")
-                        .addUserOption(option => option.setName('target').setDescription('The player to take cards from').setRequired(true))
-                )
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName("give")
-                        .setDescription("Give card(s) from your play area to another player.")
-                        .addUserOption(option => option.setName('target').setDescription('The player to give cards to').setRequired(true))
-                )
-            )
+            // Removed duplicated playarea subcommand group definition
     }
 
     async execute(interaction) {
