@@ -50,9 +50,9 @@ class Modify {
 
         // 2. Description
         // Check if description option was explicitly passed by the user
-        const descriptionOptionPassed = interaction.options.data.some(opt => opt.name === 'description');
-        if (descriptionOptionPassed && descriptionOpt !== token.description) {
-            token.description = descriptionOpt || ""; // Set to empty string if null but passed
+        // descriptionOpt will be null if not provided, or a string (including empty) if provided
+        if (descriptionOpt !== null && descriptionOpt !== (token.description || "")) {
+            token.description = descriptionOpt; // Can be empty string if user wants to clear it
             changesMade.push(`Description updated to "${token.description}"`);
         }
 
