@@ -25,6 +25,7 @@ class SimultaneousReveal {
 
     let revealMessage = `**Simultaneous Play Results:**\n`;
     const cardsToReturnToHand = {}; // Moved declaration before the player loop
+    const playedToPlayArea = gameData.playToPlayArea; // Define playedToPlayArea once before the loop
 
     for (const p of gameData.players) {
       const name =
@@ -47,7 +48,7 @@ class SimultaneousReveal {
         });
 
         // Move the played cards
-        const playedToPlayArea = gameData.playToPlayArea;
+        // const playedToPlayArea = gameData.playToPlayArea; // No longer define here
         let destinationMessagePart = playedToPlayArea ? "to their Play Area" : "to the Discard Pile";
 
         if (p.hands.simultaneous.length > 0) { // Check again in case it was cleared by an error
