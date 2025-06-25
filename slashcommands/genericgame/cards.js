@@ -153,23 +153,23 @@ class Cards extends SlashCommand {
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName("show")
-                        .setDescription("Shows you your current hand")
+                        .setDescription("Shows your current hand and play area, including card images.")
                     )
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName("play")
-                        .setDescription("play a card")
+                        .setDescription("Play a card from your hand (to discard or your play area).")
                         .addStringOption(option => option.setName('card').setDescription('Card to play').setAutocomplete(true).setRequired(true))
                     ) 
                 .addSubcommand(subcommand =>
                     subcommand  
                         .setName("playmultiple")
-                        .setDescription("play a number of cards")
+                        .setDescription("Play multiple cards from your hand (to discard or your play area).")
                     )
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName("playsimultaneous")
-                        .setDescription("play a number of cards simultaneously")
+                        .setDescription("Select card(s) from your hand for simultaneous play (reveal determines destination: discard or play area).")
                     )
                 .addSubcommand(subcommand =>
                     subcommand
@@ -255,30 +255,28 @@ class Cards extends SlashCommand {
                         .addStringOption(option => option.setName('card').setDescription('Card to remove').setAutocomplete(true).setRequired(true))
                 )
             )
-            .addSubcommandGroup(group => // Added for /cards playarea discard
+            .addSubcommandGroup(group =>
                 group.setName("playarea").setDescription("Manage cards in your play area")
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName("discard")
-                        .setDescription("Discard a card from your play area.")
-                        // Options for selecting the card will be handled by the subcommand's interaction flow (e.g., select menu)
-                        // No specific options needed here unless we want to filter by card name, etc.
+                        .setDescription("Discard one or more cards from your play area.") // Updated description
                 )
-                .addSubcommand(subcommand => // Added for /cards playarea pick
+                .addSubcommand(subcommand =>
                     subcommand
                         .setName("pick")
-                        .setDescription("Pick up card(s) from your play area into your hand.")
+                        .setDescription("Pick up one or more cards from your play area into your hand.") // Updated description
                 )
-                .addSubcommand(subcommand => // Added for /cards playarea take
+                .addSubcommand(subcommand =>
                     subcommand
                         .setName("take")
-                        .setDescription("Take card(s) from another player's play area into your own.")
+                        .setDescription("Take one or more cards from another player's play area into yours.") // Updated description
                         .addUserOption(option => option.setName('target').setDescription('The player to take cards from').setRequired(true))
                 )
-                .addSubcommand(subcommand => // Added for /cards playarea give
+                .addSubcommand(subcommand =>
                     subcommand
                         .setName("give")
-                        .setDescription("Give card(s) from your play area to another player.")
+                        .setDescription("Give one or more cards from your play area to another player.") // Updated description
                         .addUserOption(option => option.setName('target').setDescription('The player to give cards to').setRequired(true))
                 )
             )

@@ -79,7 +79,7 @@ class Game extends SlashCommand {
             .addSubcommand(subcommand =>
                 subcommand
                     .setName("status")
-                    .setDescription("Get current game status")
+                    .setDescription("Get current game status, including play area details and images.")
                 )
             .addSubcommand(subcommand =>
                 subcommand

@@ -4,7 +4,7 @@ const { SlashCommandSubcommandBuilder } = require('discord.js');
 module.exports = {
     data: new SlashCommandSubcommandBuilder()
         .setName('playarea')
-        .setDescription('Toggles the Play Area mode for the current game.')
+        .setDescription('Toggles or sets the Play Area mode (cards go to Play Area or Discard Pile).')
         .addStringOption(option =>
             option.setName('mode')
                 .setDescription('Set to "on" to use play areas, "off" to play to discard.')
