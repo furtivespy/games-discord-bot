@@ -474,46 +474,13 @@ class GameFormatter {
     return await this.genericCardZoneDisplay(handCards, embed, fieldTitle, `${handName}Hand`);
   }
 
-  static async playerHandImage(player, handName) {
-    const imgList = [];
-    this.cardSort(player.hands[handName]).forEach((card) => {
-        let newcardinfo = "";
-        if (card.url) {
-          hasImages = true;
-          newcardinfo = `• ${this.cardLongName(card)} [image](${card.url})\n`;
-        } else {
-          newcardinfo = `• ${this.cardLongName(card)}\n`;
-        }
+  // Both versions of playerHandImage have been removed.
+  // The first one contained syntax errors and incorrect logic.
+  // The second one is now redundant because genericHand calls genericCardZoneDisplay,
+  // which in turn calls ImagefromUrlList directly.
 
-        if (cardList.length + newcardinfo.length > 1020) {
-          embed.addFields({name: fieldTitle, value: cardList});
-          cardList = "";
-        }
-        cardList += newcardinfo;
-      });
-      embed.addFields({name: fieldTitle, value: cardList});
-    }
-    if (hasImages) {
-      const newAttach = new AttachmentBuilder(
-        await this.playerHandImage(player, handName),
-        {name: `${handName}Hand.png`}
-      );
-      embed.setImage(`attachment://${handName}Hand.png`);
-      return newAttach;
-    }
-    return null;
-  }
-
-  static async playerHandImage(player, handName) {
-    const imgList = [];
-    this.cardSort(player.hands[handName]).forEach((card) => {
-      if (card.url) {
-        imgList.push(card.url);
-      }
-    });
-    return await this.ImagefromUrlList(imgList);
-    // let canvas = createCanvas(1200, 1);
-    // let ctx = canvas.getContext("2d");
+  static async ImagefromUrlList(imgList) {
+    let canvas = createCanvas(1200, 1);
     // const cardWidth = 200;
     // let rowstart = 0;
     // let rowend = 0;

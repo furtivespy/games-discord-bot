@@ -12,7 +12,7 @@ const Winner = require(`../../subcommands/genericgame/winner`)
 const Test = require(`../../subcommands/genericgame/test`)
 const Reverse = require(`../../subcommands/genericgame/reverse`)
 const Help = require('../../subcommands/genericgame/help.js')
-const PlayArea = require('../../subcommands/genericgame/playarea.js') // Added for playarea toggle
+const PlayArea = require('../../subcommands/genericgame/playarea.js') // Restoring playarea toggle
 
 class Game extends SlashCommand {
     constructor(client){
@@ -158,7 +158,7 @@ class Game extends SlashCommand {
                     .setDescription("Testing Bot - db stuff")
                 )
                 */
-            .addSubcommand(PlayArea.data) // Added for playarea toggle
+            .addSubcommand(PlayArea.data) // Restoring playarea toggle
                 
     }
 
@@ -204,8 +204,8 @@ class Game extends SlashCommand {
                 case "help":
                     await Help.execute(interaction, this.client)
                     break
-                case "playarea": // Added for playarea toggle
-                    await PlayArea.execute(interaction) // client is part of interaction
+                case "playarea": // Restoring playarea toggle
+                    await PlayArea.execute(interaction)
                     break
                 default:
                     await interaction.reply({ content: "Something Went Wrong!?!?!?", ephemeral: true })
