@@ -99,8 +99,15 @@ module.exports = {
                 components: []
             });
 
+            let publicFollowUpContent = `${interaction.member.displayName} took ${takenCards.length} card(s) from ${targetUser.username}'s play area`;
+            if (takenCards.length > 0) {
+                publicFollowUpContent += `: ${takenCardsList}`;
+            }
+            if (publicFollowUpContent.length > 2000) { // Discord message limit
+                publicFollowUpContent = `${interaction.member.displayName} took ${takenCards.length} card(s) from ${targetUser.username}'s play area. (Card list too long to display).`;
+            }
             await interaction.followUp({
-                content: `${interaction.member.displayName} took ${takenCards.length} card(s) from ${targetUser.username}'s play area.`,
+                content: publicFollowUpContent,
                 ephemeral: false
             });
 
