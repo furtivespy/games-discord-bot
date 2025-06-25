@@ -24,6 +24,7 @@ class SimultaneousReveal {
     }
 
     let revealMessage = `**Simultaneous Play Results:**\n`;
+    const cardsToReturnToHand = {}; // Moved declaration before the player loop
 
     for (const p of gameData.players) {
       const name =
@@ -44,8 +45,6 @@ class SimultaneousReveal {
           embeds: [...followup[0]],
           files: [...followup[1]],
         });
-
-        const cardsToReturnToHand = {}; // Store { playerId: [cards] } if discard fails
 
         // Move the played cards
         const playedToPlayArea = gameData.playToPlayArea;
