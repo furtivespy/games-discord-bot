@@ -34,6 +34,7 @@ const PlayAreaDiscard = require('../../subcommands/cards/playareadiscard') // Re
 const PlayAreaPick = require('../../subcommands/cards/playareapick') // Restoring
 const PlayAreaTake = require('../../subcommands/cards/playareatake') // Restoring
 const PlayAreaGive = require('../../subcommands/cards/playareagive') // Restoring
+const PlayAreaClearAll = require('../../subcommands/cards/playareaclearall')
 
 class Cards extends SlashCommand {
     constructor(client){
@@ -272,6 +273,11 @@ class Cards extends SlashCommand {
                     .setDescription("Give one or more cards from your play area to another player.") // Updated description
                     .addUserOption(option => option.setName('target').setDescription('The player to give cards to').setRequired(true))
             )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("clearall")
+                    .setDescription("Move all cards from all play areas to the discard pile(s).")
+            )
         );
     }
 
@@ -373,6 +379,9 @@ class Cards extends SlashCommand {
                             break
                         case "give":
                             await PlayAreaGive.execute(interaction, this.client)
+                            break
+                        case "clearall":
+                            await PlayAreaClearAll.execute(interaction, this.client)
                             break
                         default:
                             await interaction.reply({ content: "Unknown playarea command.", ephemeral: true })
