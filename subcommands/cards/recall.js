@@ -31,11 +31,26 @@ class Recall {
         } 
 
         gameData.players.forEach(player => {
-            remove(player.hands.main, card => card.origin === deck.name)
-            if (player.hands.draft){
-                remove(player.hands.draft, card => card.origin === deck.name)
+            // Helper function to safely remove cards by origin
+            const removeCardsFromLocation = (locationArray) => {
+                if (Array.isArray(locationArray)) {
+                    remove(locationArray, card => card.origin === deck.name);
+                }
+            };
+
+            if (player.hands) {
+                removeCardsFromLocation(player.hands.main);
+                removeCardsFromLocation(player.hands.draft);
+                removeCardsFromLocation(player.hands.played);
+                removeCardsFromLocation(player.hands.passed);
+                removeCardsFromLocation(player.hands.received);
+                removeCardsFromLocation(player.hands.simultaneous);
             }
-        })
+
+            if (player.playArea) { // playArea is directly on player object
+                removeCardsFromLocation(player.playArea);
+            }
+        });
 
         deck.piles.discard.cards = []
         deck.piles.draw.cards = cloneDeep(shuffle(deck.allCards))
