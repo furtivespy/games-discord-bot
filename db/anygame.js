@@ -44,6 +44,7 @@ const penguinParty = require('./decks/penguinParty');
 const { archipelagoShortObjectives } = require('./decks/archipelagoShortObjectives');
 const { archipelagoMediumObjectives } = require('./decks/archipelagoMediumObjectives');
 const { archipelagoLongObjectives } = require('./decks/archipelagoLongObjectives');
+const { loveLetterBase, loveLetterExpansion } = require('./decks/loveLetter');
 
 class GameDatabase {
     
@@ -92,6 +93,8 @@ class GameDatabase {
         [ "Archipelago Short Objectives", "archipelago-short" ],
         [ "Archipelago Medium Objectives", "archipelago-medium" ],
         [ "Archipelago Long Objectives", "archipelago-long" ],
+        [ "Love Letter (1-4 Players)", "love-letter" ],
+        [ "Love Letter 5+ (5-8 Players)", "love-letter-5plus" ],
     ]
 
     defaultGameData = {
@@ -330,6 +333,10 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "B", archipelagoMediumObjectives);
             case "archipelago-long":
                 return this.createCardFromObjList(deckName, "B", archipelagoLongObjectives);
+            case "love-letter":
+                return this.createCardFromObjList(deckName, "B", loveLetterBase);
+            case "love-letter-5plus":
+                return this.createCardFromObjList(deckName, "B", [...loveLetterBase, ...loveLetterExpansion]);
             default:
                 return []
         }
