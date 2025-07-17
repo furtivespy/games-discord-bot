@@ -43,6 +43,30 @@ class Add {
             )
         )
 
+        // Record this action in game history
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const addedDisplayName = interaction.guild.members.cache.get(newPlayer.id)?.displayName || newPlayer.username
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.PLAYER,
+                GameDB.ACTION_TYPES.ADD,
+                `${actorDisplayName} added ${addedDisplayName} to the game at position ${newOrder + 1}`,
+                {
+                    addedPlayer: {
+                        userId: newPlayer.id,
+                        username: newPlayer.username
+                    },
+                    position: newOrder + 1
+                },
+                actorDisplayName
+            )
+        } catch (error) {
+            console.warn('Failed to record player add action in history:', error)
+        }
+
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
         await interaction.editReply(

@@ -4,10 +4,12 @@ const GameDB = require('../../db/anygame')
 const GameHelper = require('../../modules/GlobalGameHelper')
 
 class History {
-    static PAGE_SIZE = 15
-    static MAX_PAGE = 100 // Reasonable upper limit
+    constructor() {
+        this.PAGE_SIZE = 15
+        this.MAX_PAGE = 100 // Reasonable upper limit
+    }
 
-    static async execute(interaction, client) {
+    async execute(interaction, client) {
         try {
             await interaction.deferReply()
             
@@ -34,16 +36,22 @@ class History {
             
             // Filter history with error resilience
             let filteredHistory = this.filterAndSortHistory(gameData.history, categoryFilter, playerFilter)
+            
+            console.log('DEBUG History Command:')
+            console.log('- Original history length:', gameData.history?.length || 0)
+            console.log('- Filtered history length:', filteredHistory?.length || 0)
+            console.log('- PAGE_SIZE:', this.PAGE_SIZE)
 
             if (filteredHistory.length === 0) {
                 return await interaction.editReply({ 
-                    content: this.getNoResultsMessage(categoryFilter, playerFilter), 
+                    content: this.getNoResultsMessage(categoryFilter, playerFilter, interaction), 
                     ephemeral: true 
                 })
             }
 
             // Validate page bounds against filtered results
             const totalPages = Math.ceil(filteredHistory.length / this.PAGE_SIZE)
+            console.log('- Total pages calculated:', totalPages)
             if (page > totalPages) {
                 return await interaction.editReply({
                     content: `Page ${page} doesn't exist. This game has ${totalPages} page${totalPages !== 1 ? 's' : ''} of history.`,
@@ -54,18 +62,40 @@ class History {
             // Paginate
             const startIndex = (page - 1) * this.PAGE_SIZE
             const pageEntries = filteredHistory.slice(startIndex, startIndex + this.PAGE_SIZE)
+            console.log('- Page entries length:', pageEntries?.length || 0)
 
             // Format entries with error handling
             const formattedEntries = this.formatHistoryEntries(pageEntries)
+            console.log('- Formatted entries length:', formattedEntries?.length || 0)
+            console.log('- First formatted entry:', formattedEntries?.[0] || 'None')
+
+            // Validate embed content
+            let description = formattedEntries.join('\n')
+            console.log('- Joined description length:', description?.length || 0)
+            console.log('- Joined description preview:', description?.substring(0, 100) || 'Empty')
+            
+            // Discord embed description must not be empty and max 4096 characters
+            if (!description || description.trim().length === 0) {
+                console.log('- Using fallback: No history entries to display')
+                description = '*No history entries to display*'
+            } else if (description.length > 4096) {
+                // Truncate and add indicator
+                console.log('- Truncating description (too long)')
+                description = description.substring(0, 4090) + '...\n*[Truncated]*'
+            }
+
+            const footerText = this.getFooterText(filteredHistory.length, categoryFilter, playerFilter, interaction)
+            
+            // Validate footer text (max 2048 characters)
+            const validFooterText = footerText.length > 2048 ? 
+                footerText.substring(0, 2045) + '...' : footerText
 
             // Create embed
             const embed = new EmbedBuilder()
                 .setTitle(`📜 Game History - Page ${page}/${totalPages}`)
-                .setDescription(formattedEntries.join('\n'))
+                .setDescription(description)
                 .setColor(0x5865F2)
-                .setFooter({ 
-                    text: this.getFooterText(filteredHistory.length, categoryFilter, playerFilter)
-                })
+                .setFooter({ text: validFooterText })
 
             await interaction.editReply({ embeds: [embed] })
 
@@ -78,13 +108,19 @@ class History {
         }
     }
 
-    static validatePage(page) {
+    validatePage(page) {
         if (page < 1) return 1
         if (page > this.MAX_PAGE) return this.MAX_PAGE
         return page
     }
 
-    static filterAndSortHistory(history, categoryFilter, playerFilter) {
+    filterAndSortHistory(history, categoryFilter, playerFilter) {
+        // Ensure history is a valid array
+        if (!Array.isArray(history)) {
+            console.warn('filterAndSortHistory received non-array history:', history)
+            return []
+        }
+
         return history
             .filter(entry => {
                 // Skip malformed entries
@@ -102,15 +138,30 @@ class History {
             })
     }
 
-    static formatHistoryEntries(entries) {
+    formatHistoryEntries(entries) {
+        // Ensure entries is a valid array
+        if (!Array.isArray(entries)) {
+            console.warn('formatHistoryEntries received non-array:', entries)
+            return ['⚡ `--:--` [Invalid entries data]']
+        }
+
         return entries.map(entry => {
             try {
-                const timestamp = new Date(entry.timestamp).toLocaleTimeString('en-US', { 
-                    hour: 'numeric', 
-                    minute: '2-digit'
-                })
-                const emoji = this.getCategoryEmoji(entry.action.category)
-                return `${emoji} \`${timestamp}\` ${entry.summary}`
+                // Additional validation for entry structure
+                if (!entry || typeof entry !== 'object') {
+                    return `⚡ \`--:--\` [Malformed entry]`
+                }
+
+                const timestamp = entry.timestamp ? 
+                    new Date(entry.timestamp).toLocaleTimeString('en-US', { 
+                        hour: 'numeric', 
+                        minute: '2-digit'
+                    }) : '--:--'
+                
+                const emoji = this.getCategoryEmoji(entry.action?.category)
+                const summary = entry.summary || '[No summary available]'
+                
+                return `${emoji} \`${timestamp}\` ${summary}`
             } catch (error) {
                 console.warn('Error formatting history entry:', error, entry)
                 return `⚡ \`--:--\` [Error displaying this entry]`
@@ -118,7 +169,7 @@ class History {
         })
     }
 
-    static getCategoryEmoji(category) {
+    getCategoryEmoji(category) {
         const emojiMap = {
             [GameDB.ACTION_CATEGORIES.CARD]: '🃏',
             [GameDB.ACTION_CATEGORIES.PLAYER]: '👥', 
@@ -130,24 +181,29 @@ class History {
         return emojiMap[category] || '⚡'
     }
 
-    static getNoResultsMessage(categoryFilter, playerFilter) {
+    getNoResultsMessage(categoryFilter, playerFilter, interaction) {
         if (categoryFilter && playerFilter) {
-            return `No ${categoryFilter} actions found for ${playerFilter.username}.`
+            const playerDisplayName = interaction.guild.members.cache.get(playerFilter.id)?.displayName || playerFilter.username
+            return `No ${categoryFilter} actions found for ${playerDisplayName}.`
         } else if (categoryFilter) {
             return `No ${categoryFilter} actions found in this game's history.`
         } else if (playerFilter) {
-            return `No actions found for ${playerFilter.username} in this game.`
+            const playerDisplayName = interaction.guild.members.cache.get(playerFilter.id)?.displayName || playerFilter.username
+            return `No actions found for ${playerDisplayName} in this game.`
         } else {
-            return "No history entries found with the specified filters."
+            return "No history entries found."
         }
     }
 
-    static getFooterText(totalEntries, categoryFilter, playerFilter) {
+    getFooterText(totalEntries, categoryFilter, playerFilter, interaction) {
         let text = `${totalEntries} total event${totalEntries !== 1 ? 's' : ''}`
-        
-        if (categoryFilter) text += ` | Category: ${categoryFilter}`
-        if (playerFilter) text += ` | Player: ${playerFilter.username}`
-        
+        if (categoryFilter) {
+            text += ` | Category: ${categoryFilter}`
+        }
+        if (playerFilter && playerFilter.username) {
+            const playerDisplayName = interaction.guild.members.cache.get(playerFilter.id)?.displayName || playerFilter.username
+            text += ` | Player: ${playerDisplayName}`
+        }
         return text
     }
 }

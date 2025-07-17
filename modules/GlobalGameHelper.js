@@ -57,9 +57,10 @@ class GameHelper {
    * @param {string} actionType - Type of action (use GameDB.ACTION_TYPES) 
    * @param {string} summary - Human-readable description of what happened
    * @param {Object} details - Optional additional data for analysis/filtering
+   * @param {string} displayName - Guild display name for the actor (fallback to username if not provided)
    * @throws {Error} If required parameters are missing or invalid
    */
-  static recordMove(gameData, actor, actionCategory, actionType, summary, details = {}) {
+  static recordMove(gameData, actor, actionCategory, actionType, summary, details = {}, displayName = null) {
     // Input validation
     if (!gameData) {
       throw new Error('GameData is required for history recording')
@@ -93,7 +94,8 @@ class GameHelper {
         timestamp: new Date().toISOString(),
         actor: {
           userId: actor.id,
-          username: actor.username
+          username: actor.username,
+          displayName: displayName || actor.username // Use displayName if provided, fallback to username
         },
         action: {
           category: actionCategory,
