@@ -48,6 +48,43 @@ const { loveLetterBase, loveLetterExpansion } = require('./decks/loveLetter');
 
 class GameDatabase {
     
+    // History tracking constants
+    ACTION_CATEGORIES = {
+        GAME: 'game',
+        PLAYER: 'player',
+        CARD: 'card', 
+        TOKEN: 'token',
+        MONEY: 'money',
+        SECRET: 'secret'
+    }
+
+    ACTION_TYPES = {
+        CREATE: 'create',
+        DELETE: 'delete',
+        ADD: 'add',
+        REMOVE: 'remove',
+        MODIFY: 'modify',
+        DRAW: 'draw',
+        PLAY: 'play',
+        DISCARD: 'discard',
+        SHUFFLE: 'shuffle',
+        DEAL: 'deal',
+        FLIP: 'flip',
+        BURN: 'burn',
+        GIVE: 'give',
+        TAKE: 'take',
+        GAIN: 'gain',
+        LOSE: 'lose',
+        PAY: 'pay',
+        SPEND: 'spend',
+        REVEAL: 'reveal',
+        PASS: 'pass',
+        STEAL: 'steal',
+        ADVANCE: 'advance',
+        REVERSE: 'reverse',
+        SCORE: 'score'
+    }
+    
     CurrentCardList = [
         [ "Custom - From CSV", "custom-csv" ],
         [ "Standard 52 Card Poker Deck", "standard" ],
@@ -107,6 +144,7 @@ class GameDatabase {
         reverseOrder: false,
         tokens: [],
         playToPlayArea: false, // Added for play area feature
+        history: [], // Added for history tracking feature
     }
 
     defaultBGGGameData = {
@@ -334,9 +372,9 @@ class GameDatabase {
             case "archipelago-long":
                 return this.createCardFromObjList(deckName, "B", archipelagoLongObjectives);
             case "love-letter":
-                return this.createCardFromObjList(deckName, "B", loveLetterBase);
+                return this.createCardFromObjList(deckName, "C", loveLetterBase);
             case "love-letter-5plus":
-                return this.createCardFromObjList(deckName, "B", [...loveLetterBase, ...loveLetterExpansion]);
+                return this.createCardFromObjList(deckName, "C", [...loveLetterBase, ...loveLetterExpansion]);
             default:
                 return []
         }
