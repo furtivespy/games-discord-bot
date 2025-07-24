@@ -13,6 +13,7 @@ const Test = require(`../../subcommands/genericgame/test`)
 const Reverse = require(`../../subcommands/genericgame/reverse`)
 const Help = require('../../subcommands/genericgame/help.js')
 const History = require('../../subcommands/genericgame/history.js')
+const HistoryAdd = require('../../subcommands/genericgame/historyadd.js')
 const PlayArea = require('../../subcommands/genericgame/playarea.js') // Restoring playarea toggle
 
 class Game extends SlashCommand {
@@ -178,6 +179,16 @@ class Game extends SlashCommand {
                 )
             .addSubcommand(subcommand =>
                 subcommand
+                    .setName("historyadd")
+                    .setDescription("Add a manual note to the game history 📝")
+                    .addStringOption(option =>
+                        option.setName('text')
+                            .setDescription('The text to add to history (e.g., "end of round", "rule clarification")')
+                            .setRequired(true)
+                            .setMaxLength(200))
+                )
+            .addSubcommand(subcommand =>
+                subcommand
                     .setName("test")        
                     .setDescription("Testing Bot stuff")
                 )
@@ -230,6 +241,9 @@ class Game extends SlashCommand {
                     break
                 case "history":
                     await History.execute(interaction, this.client)
+                    break
+                case "historyadd":
+                    await HistoryAdd.execute(interaction, this.client)
                     break
                 case "playarea": // Restoring playarea toggle
                     await PlayArea.execute(interaction)

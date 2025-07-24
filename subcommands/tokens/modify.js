@@ -1,4 +1,5 @@
 const GameDB = require('../../db/anygame');
+const GameHelper = require('../../modules/GlobalGameHelper');
 const { find } = require('lodash');
 
 class Modify {
@@ -91,6 +92,31 @@ class Modify {
 
         if (changesMade.length === 0) {
             return await interaction.reply({ content: "No changes specified, or provided values match current token settings.", ephemeral: true });
+        }
+
+        // Record history
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.TOKEN,
+                GameDB.ACTION_TYPES.MODIFY,
+                `${actorDisplayName} modified token "${originalTokenForComparison.name}": ${changesMade.join(', ')}`,
+                {
+                    tokenId: token.id,
+                    tokenName: originalTokenForComparison.name,
+                    changes: changesMade,
+                    originalData: originalTokenForComparison,
+                    newName: token.name,
+                    newDescription: token.description,
+                    newSecret: token.isSecret,
+                    newCap: token.cap
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record token modification in history:', error)
         }
 
         await client.setGameDataV2(interaction.guildId, 'game', interaction.channelId, gameData);

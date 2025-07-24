@@ -759,6 +759,15 @@ class GameFormatter {
     const consolidatedPlayAreaData = await this.generateConsolidatedPlayAreaEmbedsAndAttachments(gameData, guild);
     finalEmbeds.push(...consolidatedPlayAreaData.embeds);
 
+    // Add recent history embed
+    const historyEmbed = this.createHistoryEmbed(gameData, { 
+      limit: 15, 
+      title: "Recent Actions" 
+    });
+    if (historyEmbed) {
+      finalEmbeds.push(historyEmbed);
+    }
+
     if (options.additionalEmbeds) {
       finalEmbeds.push(...options.additionalEmbeds);
     }
@@ -772,6 +781,104 @@ class GameFormatter {
         replyOptions.content = options.content;
     }
     return replyOptions;
+  }
+
+  /**
+   * Creates a history embed showing recent game actions
+   * @param {Object} gameData - The game data containing history
+   * @param {Object} options - Options for filtering and display
+   * @param {string} options.categoryFilter - Filter by action category
+   * @param {string} options.playerFilter - Filter by player ID
+   * @param {number} options.limit - Maximum number of entries to show (default: 10)
+   * @param {string} options.title - Custom embed title (default: "Recent Game History")
+   * @returns {EmbedBuilder|null} History embed or null if no history
+   */
+  static createHistoryEmbed(gameData, options = {}) {
+    if (!gameData.history || gameData.history.length === 0) {
+      return null;
+    }
+
+    const { categoryFilter, playerFilter, limit = 10, title = "Recent Game History" } = options;
+
+    // Filter and sort history
+    let filteredHistory = gameData.history
+      .filter(entry => {
+        try {
+          if (!entry || typeof entry !== 'object') return false;
+          
+          // Category filter
+          if (categoryFilter && entry.action?.category !== categoryFilter) return false;
+          
+          // Player filter  
+          if (playerFilter && entry.actor?.userId !== playerFilter) return false;
+          
+          return true;
+        } catch (error) {
+          console.warn('Error filtering history entry:', error, entry);
+          return false;
+        }
+      })
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      .slice(-limit);
+
+    if (filteredHistory.length === 0) {
+      return null;
+    }
+
+    // Format entries
+    const formattedEntries = filteredHistory.map(entry => {
+      try {
+        const timestamp = entry.timestamp ? 
+          `<t:${Math.floor(new Date(entry.timestamp).getTime() / 1000)}:R>` : '--';
+        
+        const emoji = this.getCategoryEmoji(entry.action?.category, entry.action?.type);
+        const summary = entry.summary || '[No summary available]';
+        
+        return `${emoji} ${timestamp} ${summary}`;
+      } catch (error) {
+        console.warn('Error formatting history entry:', error, entry);
+        return `⚡ -- [Error displaying this entry]`;
+      }
+    });
+
+    // Create embed
+    const embed = new EmbedBuilder()
+      .setColor(0x3498db)
+      .setTitle(title)
+      .setDescription(formattedEntries.join('\n'))
+      .setTimestamp();
+
+    // Add filter info in footer if filters applied
+    if (categoryFilter || playerFilter) {
+      const filters = [];
+      if (categoryFilter) filters.push(`Category: ${categoryFilter}`);
+      if (playerFilter) filters.push(`Player filtered`);
+      embed.setFooter({ text: `Filtered by: ${filters.join(', ')}` });
+    }
+
+    return embed;
+  }
+
+  /**
+   * Get emoji for history action category
+   * @param {string} category - Action category
+   * @returns {string} Emoji for the category
+   */
+  static getCategoryEmoji(category, actionType) {
+    // Special case for manual note entries
+    if (actionType === 'note') {
+      return '📝';
+    }
+    
+    const emojiMap = {
+      'game': '🎲',
+      'player': '👤', 
+      'card': '🃏',
+      'token': '🔹',
+      'money': '💰',
+      'secret': '🤐'
+    };
+    return emojiMap[category] || '📝';
   }
 
   /**
@@ -789,7 +896,7 @@ class GameFormatter {
 
     const playAreaEmbed = new EmbedBuilder()
       .setColor(386945)
-      .setTitle("All Play Areas");
+      .setTitle("Play Areas");
 
     // Add inline fields for each player
     for (const player of playersWithPlayAreas) {

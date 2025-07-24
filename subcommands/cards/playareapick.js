@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper');
+const GameDB = require('../../db/anygame.js');
 const Formatter = require('../../modules/GameFormatter');
 const { find, findIndex, pullAt } = require('lodash');
 const { EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js');
@@ -83,6 +84,29 @@ module.exports = {
             player.hands.main.cards.push(...pickedCards);
             // Consider sorting hand if that's a convention: player.hands.main.cards = Formatter.cardSort(player.hands.main.cards);
 
+
+            // Record history
+            try {
+                const actorDisplayName = interaction.member?.displayName || interaction.user.username
+                const cardNames = pickedCards.map(c => Formatter.cardShortName(c)).join(', ')
+                
+                GameHelper.recordMove(
+                    gameData,
+                    interaction.user,
+                    GameDB.ACTION_CATEGORIES.CARD,
+                    GameDB.ACTION_TYPES.TAKE,
+                    `${actorDisplayName} picked ${pickedCards.length} cards from play area to hand: ${cardNames}`,
+                    {
+                        cardCount: pickedCards.length,
+                        cardIds: pickedCards.map(c => c.id),
+                        cardNames: cardNames,
+                        source: "play area",
+                        destination: "hand"
+                    }
+                )
+            } catch (error) {
+                console.warn('Failed to record play area pick in history:', error)
+            }
 
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 

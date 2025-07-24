@@ -1,6 +1,7 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { sortBy, find, filter, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
+const GameDB = require('../../db/anygame')
 
 class Play {
     async execute(interaction, client) {
@@ -58,6 +59,30 @@ class Play {
                 await interaction.editReply({ content: `Error: Could not find the discard pile for card '${playedCard.name}'. It has been returned to your hand.`, ephemeral: true });
                 return; // Stop further processing for this play
             }
+        }
+
+        // Record this action in game history
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const destination = gameData.playToPlayArea ? "play area" : "discard pile"
+            const cardName = Formatter.cardShortName(playedCard)
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.PLAY,
+                `${actorDisplayName} played ${cardName} to ${destination}`,
+                {
+                    cardId: playedCard.id,
+                    cardName: cardName,
+                    destination: destination,
+                    origin: playedCard.origin
+                },
+                actorDisplayName
+            )
+        } catch (error) {
+            console.warn('Failed to record card play in history:', error)
         }
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)

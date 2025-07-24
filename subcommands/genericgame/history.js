@@ -2,11 +2,12 @@ const { find } = require('lodash')
 const { EmbedBuilder } = require('discord.js')
 const GameDB = require('../../db/anygame')
 const GameHelper = require('../../modules/GlobalGameHelper')
+const Formatter = require('../../modules/GameFormatter')
 
 class History {
     constructor() {
-        this.PAGE_SIZE = 15
-        this.MAX_PAGE = 100 // Reasonable upper limit
+        this.PAGE_SIZE = 25
+        this.MAX_PAGE = 25 // Reasonable upper limit
     }
 
     async execute(interaction, client) {
@@ -36,11 +37,6 @@ class History {
             
             // Filter history with error resilience
             let filteredHistory = this.filterAndSortHistory(gameData.history, categoryFilter, playerFilter)
-            
-            console.log('DEBUG History Command:')
-            console.log('- Original history length:', gameData.history?.length || 0)
-            console.log('- Filtered history length:', filteredHistory?.length || 0)
-            console.log('- PAGE_SIZE:', this.PAGE_SIZE)
 
             if (filteredHistory.length === 0) {
                 return await interaction.editReply({ 
@@ -51,7 +47,6 @@ class History {
 
             // Validate page bounds against filtered results
             const totalPages = Math.ceil(filteredHistory.length / this.PAGE_SIZE)
-            console.log('- Total pages calculated:', totalPages)
             if (page > totalPages) {
                 return await interaction.editReply({
                     content: `Page ${page} doesn't exist. This game has ${totalPages} page${totalPages !== 1 ? 's' : ''} of history.`,
@@ -62,42 +57,30 @@ class History {
             // Paginate
             const startIndex = (page - 1) * this.PAGE_SIZE
             const pageEntries = filteredHistory.slice(startIndex, startIndex + this.PAGE_SIZE)
-            console.log('- Page entries length:', pageEntries?.length || 0)
 
-            // Format entries with error handling
-            const formattedEntries = this.formatHistoryEntries(pageEntries)
-            console.log('- Formatted entries length:', formattedEntries?.length || 0)
-            console.log('- First formatted entry:', formattedEntries?.[0] || 'None')
+            // Use centralized formatter for consistency 
+            const tempGameData = { history: pageEntries }
+            const historyEmbed = Formatter.createHistoryEmbed(tempGameData, {
+                title: `📜 Game History - Page ${page}/${totalPages}`,
+                limit: this.PAGE_SIZE
+            })
 
-            // Validate embed content
-            let description = formattedEntries.join('\n')
-            console.log('- Joined description length:', description?.length || 0)
-            console.log('- Joined description preview:', description?.substring(0, 100) || 'Empty')
-            
-            // Discord embed description must not be empty and max 4096 characters
-            if (!description || description.trim().length === 0) {
-                console.log('- Using fallback: No history entries to display')
-                description = '*No history entries to display*'
-            } else if (description.length > 4096) {
-                // Truncate and add indicator
-                console.log('- Truncating description (too long)')
-                description = description.substring(0, 4090) + '...\n*[Truncated]*'
+            if (!historyEmbed) {
+                await interaction.editReply({ 
+                    content: "No history entries to display for this page.", 
+                    ephemeral: true 
+                })
+                return
             }
 
+            // Add pagination info to footer
             const footerText = this.getFooterText(filteredHistory.length, categoryFilter, playerFilter, interaction)
-            
-            // Validate footer text (max 2048 characters)
             const validFooterText = footerText.length > 2048 ? 
                 footerText.substring(0, 2045) + '...' : footerText
+            
+            historyEmbed.setFooter({ text: validFooterText })
 
-            // Create embed
-            const embed = new EmbedBuilder()
-                .setTitle(`📜 Game History - Page ${page}/${totalPages}`)
-                .setDescription(description)
-                .setColor(0x5865F2)
-                .setFooter({ text: validFooterText })
-
-            await interaction.editReply({ embeds: [embed] })
+            await interaction.editReply({ embeds: [historyEmbed] })
 
         } catch (error) {
             client.logger.log(`Error in history command: ${error.message}`, 'error')
@@ -130,7 +113,7 @@ class History {
                 }
                 return true
             })
-            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
             .filter(entry => {
                 if (categoryFilter && entry.action.category !== categoryFilter) return false
                 if (playerFilter && entry.actor.userId !== playerFilter.id) return false
@@ -138,48 +121,7 @@ class History {
             })
     }
 
-    formatHistoryEntries(entries) {
-        // Ensure entries is a valid array
-        if (!Array.isArray(entries)) {
-            console.warn('formatHistoryEntries received non-array:', entries)
-            return ['⚡ `--:--` [Invalid entries data]']
-        }
 
-        return entries.map(entry => {
-            try {
-                // Additional validation for entry structure
-                if (!entry || typeof entry !== 'object') {
-                    return `⚡ \`--:--\` [Malformed entry]`
-                }
-
-                const timestamp = entry.timestamp ? 
-                    new Date(entry.timestamp).toLocaleTimeString('en-US', { 
-                        hour: 'numeric', 
-                        minute: '2-digit'
-                    }) : '--:--'
-                
-                const emoji = this.getCategoryEmoji(entry.action?.category)
-                const summary = entry.summary || '[No summary available]'
-                
-                return `${emoji} \`${timestamp}\` ${summary}`
-            } catch (error) {
-                console.warn('Error formatting history entry:', error, entry)
-                return `⚡ \`--:--\` [Error displaying this entry]`
-            }
-        })
-    }
-
-    getCategoryEmoji(category) {
-        const emojiMap = {
-            [GameDB.ACTION_CATEGORIES.CARD]: '🃏',
-            [GameDB.ACTION_CATEGORIES.PLAYER]: '👥', 
-            [GameDB.ACTION_CATEGORIES.TOKEN]: '🪙',
-            [GameDB.ACTION_CATEGORIES.MONEY]: '💰',
-            [GameDB.ACTION_CATEGORIES.GAME]: '🎮',
-            [GameDB.ACTION_CATEGORIES.SECRET]: '🤫'
-        }
-        return emojiMap[category] || '⚡'
-    }
 
     getNoResultsMessage(categoryFilter, playerFilter, interaction) {
         if (categoryFilter && playerFilter) {

@@ -47,6 +47,28 @@ class Draw {
         }
 
         player.hands.main.push(theCard)
+        
+        // Record this action in game history
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.DRAW,
+                `${actorDisplayName} drew a card from ${deck.name}`,
+                {
+                    cardId: theCard.id,
+                    deckName: deck.name,
+                    source: "draw pile"
+                },
+                actorDisplayName
+            )
+        } catch (error) {
+            console.warn('Failed to record card draw in history:', error)
+        }
+        
         //client.setGameData(`game-${interaction.channel.id}`, gameData)
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
                         

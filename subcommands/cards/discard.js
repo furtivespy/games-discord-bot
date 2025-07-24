@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
+const GameDB = require('../../db/anygame.js')
 const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
@@ -37,6 +38,26 @@ class Discard {
         let deck = find(gameData.decks, {name: card.origin})
         player.hands.main.splice(findIndex(player.hands.main, {id: cardid}), 1)
         deck.piles.discard.cards.push(card)
+
+        // Record history
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const cardName = Formatter.cardShortName(card)
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.DISCARD,
+                `${actorDisplayName} has discarded a card`,
+                {
+                    destinationDeck: deck.name,
+                    origin: card.origin
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record card discard in history:', error)
+        }
 
         //client.setGameData(`game-${interaction.channel.id}`, gameData)
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)

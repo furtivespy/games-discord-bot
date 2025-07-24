@@ -82,7 +82,8 @@ class GameDatabase {
         STEAL: 'steal',
         ADVANCE: 'advance',
         REVERSE: 'reverse',
-        SCORE: 'score'
+        SCORE: 'score',
+        NOTE: 'note'
     }
     
     CurrentCardList = [

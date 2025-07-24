@@ -40,6 +40,31 @@ class Reveal {
         
         let card = find(player.hands.main, {id: cardid})
         
+        // Record history
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const cardName = Formatter.cardShortName(card)
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.REVEAL,
+                `${actorDisplayName} revealed ${cardName} from hand`,
+                {
+                    cardId: card.id,
+                    cardName: cardName,
+                    source: "hand",
+                    action: "public reveal"
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record card reveal in history:', error)
+        }
+
+        // Save game data to persist history entry
+        await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+        
         await interaction.editReply({ content: "Revealing a card:",
         embeds: [
             Formatter.oneCard(card),

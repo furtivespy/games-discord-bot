@@ -1,5 +1,6 @@
 const { nanoid } = require('nanoid')
 const GameDB = require('../../db/anygame')
+const GameHelper = require('../../modules/GlobalGameHelper')
 
 class Add {
     static async execute(interaction, client) {
@@ -41,6 +42,28 @@ class Add {
 
         // Add token to game
         gameData.tokens.push(token)
+
+        // Record history
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.TOKEN,
+                GameDB.ACTION_TYPES.CREATE,
+                `${actorDisplayName} created ${token.isSecret ? 'secret ' : ''}token type: ${token.name}`,
+                {
+                    tokenId: token.id,
+                    tokenName: token.name,
+                    isSecret: token.isSecret,
+                    description: token.description,
+                    cap: token.cap
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record token creation in history:', error)
+        }
 
         // Save game data
         await client.setGameDataV2(interaction.guildId, 'game', interaction.channelId, gameData)

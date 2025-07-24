@@ -2,6 +2,7 @@ const GameHelper = require('../../modules/GlobalGameHelper')
 const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js')
+const GameDB = require('../../db/anygame')
 
 class PlayMulti {
     async execute(interaction, client) {
@@ -79,6 +80,35 @@ class PlayMulti {
         }
 
         if (successfullyPlayedObjects.length > 0 || cardsPutBackInHand.length > 0) { // Save if any change or attempted change occurred
+            // Record this action in game history for successfully played cards
+            if (successfullyPlayedObjects.length > 0) {
+                try {
+                    const actorDisplayName = interaction.member?.displayName || interaction.user.username
+                    const destination = gameData.playToPlayArea ? "play area" : "discard pile"
+                    const cardNames = successfullyPlayedObjects.map(card => Formatter.cardShortName(card))
+                    const summary = successfullyPlayedObjects.length === 1 
+                        ? `${actorDisplayName} played ${cardNames[0]} to ${destination}`
+                        : `${actorDisplayName} played ${successfullyPlayedObjects.length} cards to ${destination}: ${cardNames.join(', ')}`
+                    
+                    GameHelper.recordMove(
+                        gameData,
+                        interaction.user,
+                        GameDB.ACTION_CATEGORIES.CARD,
+                        GameDB.ACTION_TYPES.PLAY,
+                        summary,
+                        {
+                            cardCount: successfullyPlayedObjects.length,
+                            cardNames: cardNames,
+                            destination: destination,
+                            cardIds: successfullyPlayedObjects.map(c => c.id)
+                        },
+                        actorDisplayName
+                    )
+                } catch (error) {
+                    console.warn('Failed to record multi-card play in history:', error)
+                }
+            }
+            
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
         }
 

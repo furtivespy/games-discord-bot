@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper');
+const GameDB = require('../../db/anygame.js');
 const Formatter = require('../../modules/GameFormatter');
 const { find, findIndex } = require('lodash');
 const { EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js'); // For select menu
@@ -100,6 +101,30 @@ module.exports = {
             }
 
             if (allDiscardsSuccessful || discardedCards.some(c => !player.playArea.find(pc => pc.id === c.id))) { // Check if at least some cards were successfully processed for discard
+                // Record history  
+                try {
+                    const actorDisplayName = interaction.member?.displayName || interaction.user.username
+                    const successfullyDiscarded = discardedCards.filter(c => !player.playArea.find(pc => pc.id === c.id))
+                    const cardNames = successfullyDiscarded.map(c => Formatter.cardShortName(c)).join(', ')
+                    
+                    GameHelper.recordMove(
+                        gameData,
+                        interaction.user,
+                        GameDB.ACTION_CATEGORIES.CARD,
+                        GameDB.ACTION_TYPES.DISCARD,
+                        `${actorDisplayName} discarded ${successfullyDiscarded.length} cards from play area: ${cardNames}`,
+                        {
+                            cardCount: successfullyDiscarded.length,
+                            cardIds: successfullyDiscarded.map(c => c.id),
+                            cardNames: cardNames,
+                            source: "play area",
+                            destination: "discard piles"
+                        }
+                    )
+                } catch (error) {
+                    console.warn('Failed to record play area discard in history:', error)
+                }
+                
                 await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
             }
 

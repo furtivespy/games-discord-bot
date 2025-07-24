@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper');
+const GameDB = require('../../db/anygame.js');
 const Formatter = require('../../modules/GameFormatter');
 const { find, pullAllWith, isEqual } = require('lodash');
 const { EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder, SlashCommandUserOption } = require('discord.js');
@@ -88,6 +89,32 @@ module.exports = {
             // Add to targetPlayer's playArea
             if (!targetPlayer.playArea) targetPlayer.playArea = [];
             targetPlayer.playArea.push(...givenCards);
+
+            // Record history
+            try {
+                const actorDisplayName = interaction.member?.displayName || interaction.user.username
+                const targetDisplayName = interaction.guild.members.cache.get(targetUser.id)?.displayName || targetUser.username
+                const cardNames = givenCards.map(c => Formatter.cardShortName(c)).join(', ')
+                
+                GameHelper.recordMove(
+                    gameData,
+                    interaction.user,
+                    GameDB.ACTION_CATEGORIES.CARD,
+                    GameDB.ACTION_TYPES.GIVE,
+                    `${actorDisplayName} gave ${givenCards.length} cards to ${targetDisplayName}'s play area: ${cardNames}`,
+                    {
+                        targetUserId: targetUser.id,
+                        targetUsername: targetDisplayName,
+                        cardCount: givenCards.length,
+                        cardIds: givenCards.map(c => c.id),
+                        cardNames: cardNames,
+                        source: "own play area",
+                        destination: "target play area"
+                    }
+                )
+            } catch (error) {
+                console.warn('Failed to record play area give in history:', error)
+            }
 
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 

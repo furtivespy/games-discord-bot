@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper');
+const GameDB = require('../../db/anygame.js');
 const { find, cloneDeep } = require('lodash');
 
 module.exports = {
@@ -48,6 +49,26 @@ module.exports = {
             if (cardsMovedCount === 0) {
                 await interaction.reply({ content: "All player play areas were already empty. No cards were moved.", ephemeral: false });
                 return;
+            }
+
+            // Record history
+            try {
+                const actorDisplayName = interaction.member?.displayName || interaction.user.username
+                
+                GameHelper.recordMove(
+                    updatedGameData,
+                    interaction.user,
+                    GameDB.ACTION_CATEGORIES.CARD,
+                    GameDB.ACTION_TYPES.DISCARD,
+                    `${actorDisplayName} cleared all play areas (${cardsMovedCount} cards to discard piles)`,
+                    {
+                        cardCount: cardsMovedCount,
+                        playerCount: updatedGameData.players.filter(p => p.playArea && p.playArea.length > 0).length,
+                        action: "clearall"
+                    }
+                )
+            } catch (error) {
+                console.warn('Failed to record play area clear all in history:', error)
             }
 
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, updatedGameData);
