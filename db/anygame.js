@@ -340,7 +340,7 @@ class GameDatabase {
             case "love-letter-5plus":
                 return this.createCardFromObjList(deckName, "B", [...loveLetterBase, ...loveLetterExpansion]);
             case "spectral":
-                return this.createCardFromObjList(deckName, "A", spectralCards);
+                return this.createCardFromObjList(deckName, "B", spectralCards);
             default:
                 return []
         }
