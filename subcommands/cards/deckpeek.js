@@ -40,7 +40,7 @@ module.exports = {
                     )
                 );
                 await interaction.followUp({ 
-                    content: `You drew:`, 
+                    content: `You peeked and saw:`, 
                     embeds: [Formatter.oneCard(theCard)],
                     ephemeral: true
                 })
