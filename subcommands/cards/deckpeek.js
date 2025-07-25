@@ -1,5 +1,5 @@
-const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
+const Formatter = require('../../modules/GameFormatter')
 
 module.exports = {
     async execute(interaction, client) {
@@ -45,7 +45,7 @@ module.exports = {
                     client.logger.log(e, 'error');
                 }
                 if (interaction && interaction.editReply) {
-                    await interaction.reply({ content: 'An error occurred while peeking at the deck.', ephemeral: true });
+                    await interaction.editReply({ content: 'An error occurred while peeking at the deck.', ephemeral: true });
                 }
             }
         }
