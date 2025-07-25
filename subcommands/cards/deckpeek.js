@@ -1,4 +1,5 @@
 const GameDB = require('../../db/anygame.js')
+const GameHelper = require('../../modules/GlobalGameHelper')
 
 module.exports = {
     async execute(interaction, client) {
@@ -7,7 +8,7 @@ module.exports = {
             await GameHelper.getDeckAutocomplete(gameData, interaction)
         } else {
             try {
-                await interaction.deferReply({ ephemeral: true })
+                await interaction.deferReply()
 
                 const deckName = interaction.options.getString('deck');
                 let depth = interaction.options.getInteger('depth') ?? 1;
@@ -20,25 +21,26 @@ module.exports = {
                     return;
                 }
                 // Fetch the deck from the DB
-                const deckData = await GameDB.getDeck(interaction.channelId, deckName);
-                if (!deckData || !Array.isArray(deckData.cards) || deckData.cards.length === 0) {
+                const deckData = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id);
+                if (!deckData) {
                     await interaction.editReply({ content: `Deck "${deckName}" is empty or not set up correctly.`, ephemeral: true });
                     return;
                 }
-                if (depth > deckData.cards.length) {
-                    await interaction.editReply({ content: `Deck "${deckName}" only has ${deckData.cards.length} card(s). Cannot peek at position ${depth}.`, ephemeral: true });
+
+                const cardsArray = deck.piles.draw.cards;
+                if(!Array.isArray(cardsArray) || cardsArray.length === 0) {
+                    await interaction.editReply({ content: `Deck "${deckName}" is empty or not set up correctly.`, ephemeral: true });
                     return;
                 }
-                const theCard = deckData.cards[depth - 1];
+                if (depth > cardsArray.length) {
+                    await interaction.editReply({ content: `Deck "${deckName}" only has ${cardsArray.length} card(s). Cannot peek at position ${depth}.`, ephemeral: true });
+                    return;
+                }
 
-                await interaction.editReply(
-                    await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id,
-                        { 
-                            content: `${interaction.member.displayName} peeked at a card from deck ${deck.name} at depth ${depth}`,
-                            ephemeral: false
-                        }
-                    )
-                );
+                const theCard = cardsArray[depth - 1];
+                await interaction.editReply({ 
+                    content: `${interaction.member.displayName} peeked at a card from deck ${deck.name} at depth ${depth}`
+                })
                 await interaction.followUp({ 
                     content: `You peeked and saw:`, 
                     embeds: [Formatter.oneCard(theCard)],

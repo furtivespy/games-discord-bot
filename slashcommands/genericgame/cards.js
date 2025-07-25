@@ -106,7 +106,7 @@ class Cards extends SlashCommand {
                     .setName("peek")
                     .setDescription("Privately peek at the top card (or a card deeper in the deck) without removing it.")
                     .addIntegerOption(option => option.setName('depth').setDescription('How deep to peek (1 = top card)').setRequired(false).setMinValue(1))
-                    .addStringOption(option => option.setName('deck').setDescription('Deck to peek at').setAutocomplete(true).setRequired(true))
+                    .addStringOption(option => option.setName('deck').setDescription('Deck to peek at').setAutocomplete(true))
             )
             .addSubcommand(subcommand =>
                 subcommand
