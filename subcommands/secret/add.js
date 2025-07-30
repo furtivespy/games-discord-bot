@@ -1,4 +1,5 @@
 const GameDB = require('../../db/anygame.js')
+const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
@@ -51,8 +52,38 @@ class Add {
             mySecret = find(secretData.players, {'userId': interaction.user.id})
         }
 
+        const isNewSecret = !mySecret.hassecret
         mySecret.hassecret = true
         mySecret.secret = interaction.options.getString('secret')
+        
+        // Record history in main game (privacy protected - no secret content)
+        try {
+            const mainGameData = await GameHelper.getGameData(client, interaction)
+            if (!mainGameData.isdeleted) {
+                const actorDisplayName = interaction.member?.displayName || interaction.user.username
+                const actionType = isNewSecret ? GameDB.ACTION_TYPES.ADD : GameDB.ACTION_TYPES.MODIFY
+                const actionText = isNewSecret ? 'added' : 'updated'
+                
+                GameHelper.recordMove(
+                    mainGameData,
+                    interaction.user,
+                    GameDB.ACTION_CATEGORIES.SECRET,
+                    actionType,
+                    `${actorDisplayName} ${actionText} their secret`,
+                    {
+                        playerUserId: interaction.user.id,
+                        playerUsername: actorDisplayName,
+                        wasNewSecret: isNewSecret,
+                        action: `secret ${actionText}`
+                    }
+                )
+                
+                await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, mainGameData)
+            }
+        } catch (error) {
+            console.warn('Failed to record secret addition in main game history:', error)
+        }
+        
         //client.setGameData(`secret-${interaction.channel.id}`, secretData)
         await client.setGameDataV2(interaction.guildId, "secret", interaction.channelId, secretData)
 
