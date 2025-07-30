@@ -57,9 +57,12 @@ class History {
             // Paginate
             const startIndex = (page - 1) * this.PAGE_SIZE
             const pageEntries = filteredHistory.slice(startIndex, startIndex + this.PAGE_SIZE)
+            
+            // Reverse the page entries so newest appears at bottom (while keeping page 1 = most recent entries)
+            const reversedPageEntries = pageEntries.reverse()
 
             // Use centralized formatter for consistency 
-            const tempGameData = { history: pageEntries }
+            const tempGameData = { history: reversedPageEntries }
             const historyEmbed = Formatter.createHistoryEmbed(tempGameData, {
                 title: `📜 Game History - Page ${page}/${totalPages}`,
                 limit: this.PAGE_SIZE
@@ -113,7 +116,7 @@ class History {
                 }
                 return true
             })
-            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
             .filter(entry => {
                 if (categoryFilter && entry.action.category !== categoryFilter) return false
                 if (playerFilter && entry.actor.userId !== playerFilter.id) return false

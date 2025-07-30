@@ -22,7 +22,7 @@ class Reveal {
             return
         }
 
-        await interaction.deferReply({ ephemeral: true })
+        await interaction.deferReply()
         
         let gameData = await GameHelper.getGameData(client, interaction)
 

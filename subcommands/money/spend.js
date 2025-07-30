@@ -1,6 +1,7 @@
 const GameDB = require("../../db/anygame.js");
 const { cloneDeep, find } = require("lodash");
 const Formatter = require("../../modules/GameFormatter");
+const GameHelper = require("../../modules/GlobalGameHelper");
 
 class Spend {
   async execute(interaction, client) {
@@ -42,7 +43,31 @@ class Spend {
         return
     }
     
+    const oldBalance = player.money
     player.money -= whatToSpend
+
+    // Record history
+    try {
+        const actorDisplayName = interaction.member?.displayName || interaction.user.username
+        
+        GameHelper.recordMove(
+            gameData,
+            interaction.user,
+            GameDB.ACTION_CATEGORIES.MONEY,
+            GameDB.ACTION_TYPES.SPEND,
+            `${actorDisplayName} spent $${whatToSpend}`,
+            {
+                amount: whatToSpend,
+                playerUserId: player.userId,
+                playerUsername: actorDisplayName,
+                oldBalance: oldBalance,
+                newBalance: player.money
+            }
+        )
+    } catch (error) {
+        console.warn('Failed to record money spend in history:', error)
+    }
+
     await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
     await interaction.editReply({content: `${interaction.member.displayName} spent $${whatToSpend}`})

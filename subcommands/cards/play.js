@@ -99,19 +99,15 @@ class Play {
                 .setColor(player.color || 13502711)
                 .setTitle(`${interaction.member.displayName}'s Updated Play Area`);
 
-            const playAreaAttachment = await Formatter.genericCardZoneDisplay(
-                player.playArea,
-                playAreaEmbed,
-                "Current Cards in Play Area",
-                `PlayAreaUpdate-${player.userId}`
-            );
+            // Create text-only display for play area without images
+            const cardNames = player.playArea.map(card => Formatter.cardShortName(card));
+            playAreaEmbed.addFields({
+                name: "Current Cards in Play Area",
+                value: cardNames.length > 0 ? cardNames.join(', ') : 'No cards in play area',
+                inline: false
+            });
 
-            if (playAreaEmbed.data.fields && playAreaEmbed.data.fields.length > 0) {
-                replyEmbeds.push(playAreaEmbed);
-            }
-            if (playAreaAttachment) {
-                replyFiles.push(playAreaAttachment);
-            }
+            replyEmbeds.push(playAreaEmbed);
         }
 
         const replyOptions = {
