@@ -45,6 +45,7 @@ const { archipelagoShortObjectives } = require('./decks/archipelagoShortObjectiv
 const { archipelagoMediumObjectives } = require('./decks/archipelagoMediumObjectives');
 const { archipelagoLongObjectives } = require('./decks/archipelagoLongObjectives');
 const { loveLetterBase, loveLetterExpansion } = require('./decks/loveLetter');
+const { spectralGlyphCards, spectralLetterCards }  = require('./decks/spectral');
 
 class GameDatabase {
     
@@ -133,6 +134,8 @@ class GameDatabase {
         [ "Archipelago Long Objectives", "archipelago-long" ],
         [ "Love Letter (1-4 Players)", "love-letter" ],
         [ "Love Letter 5+ (5-8 Players)", "love-letter-5plus" ],
+        [ "Spectral Glyphs", "spectral-glyphs" ],
+        [ "Spectral Letters", "spectral-letters" ],
     ]
 
     defaultGameData = {
@@ -376,6 +379,10 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "C", loveLetterBase);
             case "love-letter-5plus":
                 return this.createCardFromObjList(deckName, "C", [...loveLetterBase, ...loveLetterExpansion]);
+            case "spectral-glyphs":
+                return this.createCardFromObjList(deckName, "B", spectralGlyphCards);
+            case "spectral-letters":
+                return this.createCardFromObjList(deckName, "B", spectralLetterCards);
             default:
                 return []
         }

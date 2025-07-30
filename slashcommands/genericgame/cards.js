@@ -36,6 +36,7 @@ const PlayAreaTake = require('../../subcommands/cards/playareatake') // Restorin
 const PlayAreaGive = require('../../subcommands/cards/playareagive') // Restoring
 const PlayAreaClearAll = require('../../subcommands/cards/playareaclearall')
 const Burn = require('../../subcommands/cards/burn')
+const DeckPeek = require('../../subcommands/cards/deckpeek')
 
 class Cards extends SlashCommand {
     constructor(client){
@@ -100,6 +101,13 @@ class Cards extends SlashCommand {
                     .setDescription("Flip the top card of the deck")
                     .addStringOption(option => option.setName('deck').setDescription('Deck to flip from').setAutocomplete(true))
                 ) 
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("peek")
+                    .setDescription("Privately peek at the top card (or a card deeper in the deck) without removing it.")
+                    .addIntegerOption(option => option.setName('depth').setDescription('How deep to peek (1 = top card)').setRequired(false).setMinValue(1))
+                    .addStringOption(option => option.setName('deck').setDescription('Deck to peek at').setAutocomplete(true))
+            )
             .addSubcommand(subcommand =>
                 subcommand
                     .setName("deal")
@@ -336,6 +344,9 @@ class Cards extends SlashCommand {
                             break
                         case "burn":
                             await Burn.execute(interaction, this.client)
+                            break
+                        case "peek":
+                            await DeckPeek.execute(interaction, this.client)
                             break
                         default:
                             await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
