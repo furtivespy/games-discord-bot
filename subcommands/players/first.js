@@ -1,4 +1,5 @@
 const GameHelper = require("../../modules/GlobalGameHelper");
+const GameDB = require("../../db/anygame.js");
 const Formatter = require("../../modules/GameFormatter");
 const { find } = require("lodash");
 
@@ -35,6 +36,7 @@ class First {
 
       // Adjust player order
       const newFirstPlayerOrder = player.order;
+      const oldFirstPlayer = gameData.players.find(p => p.order === 0)
 
       gameData.players.forEach((p) => {
         let newOrder = p.order - newFirstPlayerOrder;
@@ -43,6 +45,32 @@ class First {
         }
         p.order = newOrder;
       });
+
+      // Record history for first player change
+      try {
+        const actorDisplayName = interaction.member?.displayName || interaction.user.username
+        const newFirstPlayerName = interaction.guild.members.cache.get(newFirstPlayer.id)?.displayName || newFirstPlayer.username
+        const oldFirstPlayerName = oldFirstPlayer ? (interaction.guild.members.cache.get(oldFirstPlayer.userId)?.displayName || oldFirstPlayer.name) : 'Unknown'
+        
+        GameHelper.recordMove(
+          gameData,
+          interaction.user,
+          GameDB.ACTION_CATEGORIES.PLAYER,
+          GameDB.ACTION_TYPES.MODIFY,
+          `${actorDisplayName} set ${newFirstPlayerName} as the first player`,
+          {
+            newFirstUserId: newFirstPlayer.id,
+            newFirstUsername: newFirstPlayerName,
+            oldFirstUserId: oldFirstPlayer?.userId,
+            oldFirstUsername: oldFirstPlayerName,
+            actorUserId: interaction.user.id,
+            actorUsername: actorDisplayName,
+            playerCount: gameData.players.length
+          }
+        )
+      } catch (error) {
+        console.warn('Failed to record first player change in history:', error)
+      }
 
       // Save the updated game data
       await client.setGameDataV2(

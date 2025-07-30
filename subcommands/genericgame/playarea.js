@@ -1,4 +1,5 @@
 const GlobalGameHelper = require('../../modules/GlobalGameHelper'); // Corrected path
+const GameDB = require('../../db/anygame.js');
 const { SlashCommandSubcommandBuilder } = require('discord.js');
 
 module.exports = {
@@ -34,6 +35,30 @@ module.exports = {
             } else { // Toggle if no specific mode is set
                 gameData.playToPlayArea = !gameData.playToPlayArea;
                 finalMode = gameData.playToPlayArea;
+            }
+
+            // Record history for play area mode change
+            try {
+                const actorDisplayName = interaction.member?.displayName || interaction.user.username
+                const modeText = finalMode ? 'ON (cards go to Player Areas)' : 'OFF (cards go to Discard Pile)'
+                
+                GlobalGameHelper.recordMove(
+                    gameData,
+                    interaction.user,
+                    GameDB.ACTION_CATEGORIES.GAME,
+                    GameDB.ACTION_TYPES.MODIFY,
+                    `${actorDisplayName} set Play Area mode to ${modeText}`,
+                    {
+                        newMode: finalMode,
+                        modeDescription: modeText,
+                        wasToggled: !desiredMode,
+                        specifiedMode: desiredMode || 'toggle',
+                        actorUserId: interaction.user.id,
+                        actorUsername: actorDisplayName
+                    }
+                )
+            } catch (error) {
+                console.warn('Failed to record play area mode change in history:', error)
             }
 
             // Save the updated game data

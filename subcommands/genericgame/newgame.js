@@ -1,4 +1,5 @@
 const GameDB = require('../../db/anygame.js')
+const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, shuffle } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
@@ -47,6 +48,34 @@ class NewGame {
                     )
                 )
                 content += `${players[i]} `
+            }
+
+            // Record history for new game creation
+            try {
+                const actorDisplayName = interaction.member?.displayName || interaction.user.username
+                const playerNames = players.map(p => interaction.guild.members.cache.get(p.id)?.displayName || p.username)
+                
+                GameHelper.recordMove(
+                    gameData,
+                    interaction.user,
+                    GameDB.ACTION_CATEGORIES.GAME,
+                    GameDB.ACTION_TYPES.CREATE,
+                    `${actorDisplayName} created new game with ${players.length} players`,
+                    {
+                        gameName: gameData.name,
+                        playerCount: players.length,
+                        playerList: players.map((p, i) => ({
+                            userId: p.id,
+                            username: playerNames[i],
+                            order: i
+                        })),
+                        channelId: interaction.channelId,
+                        guildId: interaction.guildId,
+                        createdBy: actorDisplayName
+                    }
+                )
+            } catch (error) {
+                console.warn('Failed to record new game creation in history:', error)
             }
 
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)

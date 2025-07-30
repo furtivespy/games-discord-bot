@@ -49,6 +49,32 @@ class Remove {
             gameData.players[i].order = i
         }
 
+        // Record history for player removal
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const removedPlayerName = interaction.guild.members.cache.get(playerToRemove.id)?.displayName || playerToRemove.username
+            const cardsDiscarded = player.hands.main.length
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.PLAYER,
+                GameDB.ACTION_TYPES.REMOVE,
+                `${actorDisplayName} removed ${removedPlayerName} from the game`,
+                {
+                    removedUserId: playerToRemove.id,
+                    removedUsername: removedPlayerName,
+                    removedFromPosition: playerIndex,
+                    cardsDiscarded: cardsDiscarded,
+                    playersRemaining: gameData.players.length,
+                    actorUserId: interaction.user.id,
+                    actorUsername: actorDisplayName
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record player removal in history:', error)
+        }
+
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
         await interaction.editReply(

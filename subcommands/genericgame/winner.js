@@ -1,4 +1,5 @@
 const GameDB = require('../../db/anygame.js')
+const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
@@ -25,6 +26,34 @@ class NewGame {
             console.log(players)
             if (players.length > 0) {
                 gameData.winner = players
+                
+                // Record history for game end with winners
+                try {
+                    const actorDisplayName = interaction.member?.displayName || interaction.user.username
+                    const winnerNames = players.map(playerId => {
+                        const player = find(gameData.players, {userId: playerId})
+                        return interaction.guild.members.cache.get(playerId)?.displayName || player?.name || playerId
+                    })
+                    
+                    GameHelper.recordMove(
+                        gameData,
+                        interaction.user,
+                        GameDB.ACTION_CATEGORIES.GAME,
+                        GameDB.ACTION_TYPES.NOTE,
+                        `${actorDisplayName} declared game winner(s): ${winnerNames.join(', ')}`,
+                        {
+                            winnerUserIds: players,
+                            winnerUsernames: winnerNames,
+                            winnerCount: players.length,
+                            declaredBy: actorDisplayName,
+                            gameName: gameData.name,
+                            totalPlayers: gameData.players.length
+                        }
+                    )
+                } catch (error) {
+                    console.warn('Failed to record winner declaration in history:', error)
+                }
+                
                 //client.setGameData(`game-${interaction.channel.id}`, gameData)
                 await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
