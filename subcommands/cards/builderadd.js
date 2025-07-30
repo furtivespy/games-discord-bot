@@ -39,6 +39,31 @@ class Add {
 
       playerDeck.allCards.push(newCard)
       playerDeck.piles.discard.cards.push(newCard)
+      
+      // Record history for builder card addition
+      try {
+          const actorDisplayName = interaction.member?.displayName || interaction.user.username
+          const cardName = Formatter.cardShortName(newCard)
+          
+          GameHelper.recordMove(
+              gameData,
+              interaction.user,
+              GameDB.ACTION_CATEGORIES.CARD,
+              GameDB.ACTION_TYPES.ADD,
+              `${actorDisplayName} added ${cardName} to their deck`,
+              {
+                  cardId: newCard.id,
+                  cardName: cardName,
+                  playerDeckName: playerDeck.name,
+                  playerUserId: interaction.user.id,
+                  playerUsername: actorDisplayName,
+                  newDeckSize: playerDeck.allCards.length,
+                  action: "add card to personal deck"
+              }
+          )
+      } catch (error) {
+          console.warn('Failed to record builder add in history:', error)
+      }
          
       await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
       

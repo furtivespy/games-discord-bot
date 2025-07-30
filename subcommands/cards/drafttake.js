@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
+const GameDB = require('../../db/anygame.js')
 const { cloneDeep, sortBy, find, filter, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
@@ -39,6 +40,32 @@ class Take {
         let theCard = find(player.hands.draft, {id: cardid})
         player.hands.draft.splice(findIndex(player.hands.draft, {id: cardid}), 1)
         player.hands.main.push(theCard)
+        
+        // Record history (privacy protected - no card names since drafting is private)
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.TAKE,
+                `${actorDisplayName} drafted a card from draft hand`,
+                {
+                    cardId: theCard.id,
+                    cardName: Formatter.cardShortName(theCard), // For admin/debugging only
+                    playerUserId: player.userId,
+                    playerUsername: actorDisplayName,
+                    draftHandSizeBefore: player.hands.draft.length + 1,
+                    draftHandSizeAfter: player.hands.draft.length,
+                    mainHandSizeBefore: player.hands.main.length - 1,
+                    mainHandSizeAfter: player.hands.main.length,
+                    action: "draft to main hand"
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record draft take in history:', error)
+        }
         
         //client.setGameData(`game-${interaction.channel.id}`, gameData)
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)

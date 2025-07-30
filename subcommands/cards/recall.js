@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
+const GameDB = require('../../db/anygame.js')
 const { find, remove, cloneDeep, shuffle } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
@@ -54,6 +55,26 @@ class Recall {
 
         deck.piles.discard.cards = []
         deck.piles.draw.cards = cloneDeep(shuffle(deck.allCards))
+
+        // Record history - major game state change affecting all players
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.RECALL,
+                `${actorDisplayName} recalled all cards from ${deck.name} and reshuffled deck`,
+                {
+                    deckName: deck.name,
+                    totalCards: deck.allCards.length,
+                    action: "deck recall and reshuffle"
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record deck recall in history:', error)
+        }
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         await interaction.editReply(

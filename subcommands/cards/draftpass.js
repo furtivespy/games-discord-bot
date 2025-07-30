@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
+const GameDB = require('../../db/anygame.js')
 const { cloneDeep, orderBy } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
@@ -33,6 +34,39 @@ class Pass {
             PrevHand = currentHand
         })
         playerOne.hands.draft = PrevHand
+
+        // Record history for draft pass affecting all players
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const direction = inputDir === 'asc' ? 'clockwise' : 'counter-clockwise'
+            const playerInfo = []
+            
+            gameData.players.forEach(player => {
+                const displayName = interaction.guild.members.cache.get(player.userId)?.displayName || player.name || player.userId
+                playerInfo.push({
+                    userId: player.userId,
+                    displayName: displayName,
+                    draftHandSize: player.hands.draft?.length || 0
+                })
+            })
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.PASS,
+                `${actorDisplayName} passed draft hands ${direction} to all players`,
+                {
+                    direction: direction,
+                    directionCode: inputDir,
+                    playersAffected: gameData.players.length,
+                    playerInfo: playerInfo,
+                    action: "draft hand rotation"
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record draft pass in history:', error)
+        }
 
         //client.setGameData(`game-${interaction.channel.id}`, gameData)
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)

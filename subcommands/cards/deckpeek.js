@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
+const GameDB = require('../../db/anygame.js')
 const Formatter = require('../../modules/GameFormatter')
 
 module.exports = {
@@ -31,6 +32,33 @@ module.exports = {
                 }
 
                 const theCard = cardsArray[depth - 1];
+
+                // Record history for deck peek (strategically significant information)
+                try {
+                    const actorDisplayName = interaction.member?.displayName || interaction.user.username
+                    
+                    GameHelper.recordMove(
+                        gameData,
+                        interaction.user,
+                        GameDB.ACTION_CATEGORIES.CARD,
+                        GameDB.ACTION_TYPES.REVEAL,
+                        `${actorDisplayName} peeked at card ${depth} in deck ${deckData.name}`,
+                        {
+                            deckName: deckData.name,
+                            peekDepth: depth,
+                            cardId: theCard.id,
+                            cardName: Formatter.cardShortName(theCard), // For admin/debugging only
+                            playerUserId: interaction.user.id,
+                            playerUsername: actorDisplayName,
+                            deckSize: cardsArray.length,
+                            action: "deck peek at specific depth"
+                        }
+                    )
+                } catch (error) {
+                    console.warn('Failed to record deck peek in history:', error)
+                }
+
+                await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
                 await interaction.editReply({ 
                     content: `${interaction.member.displayName} peeked at a card from deck ${deckData.name} at depth ${depth}`

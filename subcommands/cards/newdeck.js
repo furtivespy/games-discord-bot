@@ -65,6 +65,32 @@ class NewDeck {
         newdeck.piles.draw.cards = cloneDeep(shuffle(newdeck.allCards));
         gameData.decks.push(newdeck);
 
+        // Record history
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const cardSetType = inputSet === "custom-csv" ? "custom CSV" : 
+                               inputSet === "customempty" ? "empty deck" :
+                               (GameDB.CurrentCardList.find(cl => cl[1] === inputSet)?.[0] || inputSet)
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.CREATE,
+                `${actorDisplayName} created new deck "${inputName}" (${cardSetType}) with ${newdeck.allCards.length} cards`,
+                {
+                    deckName: inputName,
+                    cardSetType: inputSet,
+                    cardSetDisplay: cardSetType,
+                    cardCount: newdeck.allCards.length,
+                    isCustom: inputSet === "custom-csv" || inputSet === "customempty",
+                    customList: inputSet === "custom-csv" ? inputCustom : undefined
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record deck creation in history:', error)
+        }
+
         //client.setGameData(`game-${interaction.channel.id}`, gameData)
         await client.setGameDataV2(
             interaction.guildId,

@@ -35,6 +35,32 @@ class Remove {
 
       currentPlayer.hands.main.splice(findIndex(currentPlayer.hands.main, {id: cardid}), 1)
       playerDeck.allCards.splice(findIndex(playerDeck.allCards, {id: cardid}), 1)
+      
+      // Record history for builder card removal
+      try {
+          const actorDisplayName = interaction.member?.displayName || interaction.user.username
+          const cardName = Formatter.cardShortName(handCard)
+          
+          GameHelper.recordMove(
+              gameData,
+              interaction.user,
+              GameDB.ACTION_CATEGORIES.CARD,
+              GameDB.ACTION_TYPES.REMOVE,
+              `${actorDisplayName} removed ${cardName} from their deck`,
+              {
+                  cardId: handCard.id,
+                  cardName: cardName,
+                  playerDeckName: playerDeck.name,
+                  playerUserId: interaction.user.id,
+                  playerUsername: actorDisplayName,
+                  newDeckSize: playerDeck.allCards.length,
+                  action: "remove card from personal deck"
+              }
+          )
+      } catch (error) {
+          console.warn('Failed to record builder remove in history:', error)
+      }
+      
       await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
       await interaction.reply(
         { 
