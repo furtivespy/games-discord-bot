@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
+const GameDB = require('../../db/anygame.js')
 const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js')
@@ -70,6 +71,28 @@ class Pass {
             targetPlayer.hands.main.push(card)
             passedCardsObjects.push(card)
         })
+
+        // Record history
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const targetDisplayName = interaction.guild.members.cache.get(selectedPlayer.id)?.displayName || selectedPlayer.username
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.PASS,
+                `${actorDisplayName} passed ${passedCardsObjects.length} cards to ${targetDisplayName}`,
+                {
+                    targetUserId: selectedPlayer.id,
+                    targetUsername: targetDisplayName,
+                    cardCount: passedCardsObjects.length,
+                    cardIds: passedCardsObjects.map(card => card.id)
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record card pass in history:', error)
+        }
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 

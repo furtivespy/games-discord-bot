@@ -13,71 +13,6 @@ const HiddenEnum = {
 }
 
 class GameFormatter {
-  static async GameStatus(gameData, guild) {
-    const newEmbed = new EmbedBuilder()
-      .setColor(13502711)
-      .setTitle(`Current Game Status`)
-      .setFooter({ text: "\u2800".repeat(60) + "🎲" });
-
-    const table = new AsciiTable(gameData.name ?? "Game Title");
-    if (gameData.decks.length > 0) {
-      //With Cards
-      let handName = "Cards in Hand";
-      if (gameData.decks.length == 1) {
-        handName = `${gameData.decks[0].name} Hand`;
-      }
-      let draftCards = 0;
-      gameData.players.forEach((player) => {
-        if (player.hands.draft && player.hands.draft.length > 0) {
-          draftCards += player.hands.draft.length;
-        }
-      });
-      if (draftCards > 0) {
-        table.setHeading("Player", "Score", handName, "Draft");
-      } else {
-        table.setHeading("Player", "Score", handName);
-      }
-      sortBy(gameData.players, ["order"]).forEach((play) => {
-        const cards = GameFormatter.CountCards(gameData, play);
-        const name = guild.members.cache.get(play.userId)?.displayName;
-        if (draftCards > 0) {
-          table.addRow(
-            `${Emoji.IndexToEmoji(play.order)}${
-              name ?? play.name ?? play.userId
-            }`,
-            play.score,
-            cards,
-            play.hands.draft.length
-          );
-        } else {
-          table.addRow(
-            `${Emoji.IndexToEmoji(play.order)}${
-              name ?? play.name ?? play.userId
-            }`,
-            play.score,
-            cards
-          );
-        }
-      });
-    } else {
-      //No Cards
-      table.setHeading("Player", "Score");
-      sortBy(gameData.players, ["order"]).forEach((play) => {
-        const name2 = guild.members.cache.get(play.userId)?.displayName;
-        table.addRow(
-          `${Emoji.IndexToEmoji(play.order)}${
-            name2 ?? play.name ?? play.userId
-          }`,
-          play.score
-        );
-      });
-    }
-
-    newEmbed.setDescription(`\`\`\`\n${table.toString()}\n\`\`\``);
-
-    return newEmbed;
-  }
-
   static async GameStatusV2(gameData, guild, clientUserId) {
     const columns = [
       { title: "Player" },
@@ -474,45 +409,12 @@ class GameFormatter {
     return await this.genericCardZoneDisplay(handCards, embed, fieldTitle, `${handName}Hand`);
   }
 
-  // Both versions of playerHandImage have been removed.
-  // The first one contained syntax errors and incorrect logic.
-  // The second one is now redundant because genericHand calls genericCardZoneDisplay,
-  // which in turn calls ImagefromUrlList directly.
-
   static async ImagefromUrlList(imgList) {
-    let canvas = createCanvas(1200, 1);
-    // const cardWidth = 200;
-    // let rowstart = 0;
-    // let rowend = 0;
-    // for (let i = 0; i < imgList.length; i++) {
-    //   const cardImage = await loadImage(imgList[i]);
-    //   const cardHeight = (cardWidth / cardImage.width) * cardImage.height;
-    //   const spot = i % 6;
-    //   if (spot == 0) {
-    //     rowstart = rowend;
-    //   }
-    //   if (rowstart + cardHeight > rowend) {
-    //     rowend = rowstart + cardHeight;
-    //   }
-    //   if (rowend > canvas.height) {
-    //     const oldCanvas = canvas;
-    //     canvas = createCanvas(oldCanvas.width, rowend);
-    //     ctx = canvas.getContext("2d");
-    //     ctx.drawImage(oldCanvas, 0, 0);
-    //   }
-    //   ctx.drawImage(
-    //     cardImage,
-    //     (i % 6) * cardWidth,
-    //     rowstart,
-    //     cardWidth,
-    //     cardHeight
-    //   );
-    // }
-    // return canvas.toBuffer();
-  }
-
-  static async ImagefromUrlList(imgList) {
-    let canvas = createCanvas(1200, 1);
+    // Calculate canvas width based on number of cards (max 6 cards per row)
+    const cardsInFirstRow = Math.min(imgList.length, 6);
+    const canvasWidth = cardsInFirstRow * 200;
+    
+    let canvas = createCanvas(canvasWidth, 1);
     let ctx = canvas.getContext("2d");
     const cardWidth = 200;
     let rowstart = 0;
@@ -529,7 +431,7 @@ class GameFormatter {
       }
       if (rowend > canvas.height) {
         const oldCanvas = canvas;
-        canvas = createCanvas(oldCanvas.width, rowend);
+        canvas = createCanvas(canvasWidth, rowend);
         ctx = canvas.getContext("2d");
         ctx.drawImage(oldCanvas, 0, 0);
       }
@@ -638,15 +540,20 @@ class GameFormatter {
 
   static cardShortName(cardObj) {
     let cardStr = cardObj.name;
-    if (cardObj.type.length > 0) {
-      switch (cardObj.format) {
-        case "B":
+    switch (cardObj.format) {
+      case "B":
+        if (cardObj.type.length > 0) {
           cardStr = `${cardObj.type}: ${cardStr}`;
-          break;
-        default:
+        }
+        break;
+      case "C":
+        cardStr = `${cardObj.value}: ${cardStr}`;
+        break;
+      default:
+        if (cardObj.type.length > 0) {
           cardStr += ` of ${cardObj.type}`;
-          break;
-      }
+        }
+        break;
     }
     return cardStr;
   }
@@ -843,13 +750,326 @@ class GameFormatter {
         }
     }
 
-    if (options.additionalEmbeds) {
-        finalEmbeds.push(...options.additionalEmbeds);
+    // Add embeds for each player's play area if they have cards
+    // not used right now, using consolidated
+    // const playAreaData = await this.generatePlayAreaEmbedsAndAttachments(gameData, guild);
+    // finalEmbeds.push(...playAreaData.embeds);
+
+    // Add consolidated play area embed
+    const consolidatedPlayAreaData = await this.generateConsolidatedPlayAreaEmbedsAndAttachments(gameData, guild);
+    finalEmbeds.push(...consolidatedPlayAreaData.embeds);
+
+    // Add recent history embed
+    const historyEmbed = this.createHistoryEmbed(gameData, { 
+      limit: 15, 
+      title: "Recent Actions" 
+    });
+    if (historyEmbed) {
+      finalEmbeds.push(historyEmbed);
     }
 
-    // Add embeds for each player's play area if they have cards
+    if (options.additionalEmbeds) {
+      finalEmbeds.push(...options.additionalEmbeds);
+    }
+
+    const replyOptions = {
+        files: [attachment, ...consolidatedPlayAreaData.attachments], // Add main status table + consolidated play area images
+        embeds: finalEmbeds // Use the constructed finalEmbeds array
+    };
+
+    if (options.content) {
+        replyOptions.content = options.content;
+    }
+    return replyOptions;
+  }
+
+  /**
+   * Creates a history embed showing recent game actions
+   * @param {Object} gameData - The game data containing history
+   * @param {Object} options - Options for filtering and display
+   * @param {string} options.categoryFilter - Filter by action category
+   * @param {string} options.playerFilter - Filter by player ID
+   * @param {number} options.limit - Maximum number of entries to show (default: 10)
+   * @param {string} options.title - Custom embed title (default: "Recent Game History")
+   * @returns {EmbedBuilder|null} History embed or null if no history
+   */
+  static createHistoryEmbed(gameData, options = {}) {
+    if (!gameData.history || gameData.history.length === 0) {
+      return null;
+    }
+
+    const { categoryFilter, playerFilter, limit = 10, title = "Recent Game History" } = options;
+
+    // Filter and sort history
+    let filteredHistory = gameData.history
+      .filter(entry => {
+        try {
+          if (!entry || typeof entry !== 'object') return false;
+          
+          // Category filter
+          if (categoryFilter && entry.action?.category !== categoryFilter) return false;
+          
+          // Player filter  
+          if (playerFilter && entry.actor?.userId !== playerFilter) return false;
+          
+          return true;
+        } catch (error) {
+          console.warn('Error filtering history entry:', error, entry);
+          return false;
+        }
+      })
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      .slice(-limit);
+
+    if (filteredHistory.length === 0) {
+      return null;
+    }
+
+    // Format entries
+    const formattedEntries = filteredHistory.map(entry => {
+      try {
+        const timestamp = entry.timestamp ? 
+          `<t:${Math.floor(new Date(entry.timestamp).getTime() / 1000)}:R>` : '--';
+        
+        const emoji = this.getCategoryEmoji(entry.action?.category, entry.action?.type);
+        const summary = entry.summary || '[No summary available]';
+        
+        return `${emoji} ${timestamp} ${summary}`;
+      } catch (error) {
+        console.warn('Error formatting history entry:', error, entry);
+        return `⚡ -- [Error displaying this entry]`;
+      }
+    });
+
+    // Create embed
+    const embed = new EmbedBuilder()
+      .setColor(0x3498db)
+      .setTitle(title)
+      .setDescription(formattedEntries.join('\n'))
+      .setTimestamp();
+
+    // Add filter info in footer if filters applied
+    if (categoryFilter || playerFilter) {
+      const filters = [];
+      if (categoryFilter) filters.push(`Category: ${categoryFilter}`);
+      if (playerFilter) filters.push(`Player filtered`);
+      embed.setFooter({ text: `Filtered by: ${filters.join(', ')}` });
+    }
+
+    return embed;
+  }
+
+  /**
+   * Get emoji for history action category
+   * @param {string} category - Action category
+   * @returns {string} Emoji for the category
+   */
+  static getCategoryEmoji(category, actionType) {
+    // Special case for manual note entries
+    if (actionType === 'note') {
+      return '📝';
+    }
+    
+    const emojiMap = {
+      'game': '🎲',
+      'player': '👤', 
+      'card': '🃏',
+      'token': '🔹',
+      'money': '💰',
+      'secret': '🤐'
+    };
+    return emojiMap[category] || '📝';
+  }
+
+  /**
+   * Generates a single consolidated embed and attachment for all players' play areas
+   * @param {Object} gameData - The game data
+   * @param {Object} guild - The Discord guild object
+   * @returns {Object} Object containing embeds and attachments arrays
+   */
+  static async generateConsolidatedPlayAreaEmbedsAndAttachments(gameData, guild) {
+    const playersWithPlayAreas = gameData.players.filter(player => player.playArea && player.playArea.length > 0);
+    
+    if (playersWithPlayAreas.length === 0) {
+      return { embeds: [], attachments: [] };
+    }
+
+    const playAreaEmbed = new EmbedBuilder()
+      .setColor(386945)
+      .setTitle("Play Areas");
+
+    // Add inline fields for each player
+    for (const player of playersWithPlayAreas) {
+      const member = guild.members.cache.get(player.userId);
+      const playerName = member ? member.displayName : (player.name || `Player ${player.userId}`);
+      
+      const cardsList = player.playArea.map(card => this.cardShortName(card)).join('\n');
+      playAreaEmbed.addFields({
+        name: playerName,
+        value: cardsList || 'No cards',
+        inline: true
+      });
+    }
+
+    // Generate consolidated image
+    const consolidatedAttachment = await this.generateConsolidatedPlayAreaImage(playersWithPlayAreas, guild);
+    
+    if (consolidatedAttachment) {
+      playAreaEmbed.setImage(`attachment://${consolidatedAttachment.name}`);
+    }
+
+         return { 
+       embeds: [playAreaEmbed], 
+       attachments: consolidatedAttachment ? [consolidatedAttachment] : [] 
+     };
+   }
+
+  /**
+   * Generates a consolidated image showing all players' play areas
+   * @param {Array} playersWithPlayAreas - Array of players who have play areas
+   * @param {Object} guild - The Discord guild object
+   * @returns {Promise<AttachmentBuilder|null>} The consolidated image attachment
+   */
+  static async generateConsolidatedPlayAreaImage(playersWithPlayAreas, guild) {
+    if (!playersWithPlayAreas || playersWithPlayAreas.length === 0) {
+      return null;
+    }
+
+    const cardWidth = 200;
+    const avatarSize = 40;
+    const nameWidth = 200;
+    const padding = 20;
+    const rowSpacing = 10;
+
+    // Calculate canvas dimensions
+    let maxCardsInRow = 0;
+    let totalHeight = padding;
+
+    for (const player of playersWithPlayAreas) {
+      maxCardsInRow = Math.max(maxCardsInRow, player.playArea.length);
+      
+      // Calculate row height based on tallest card in this player's play area
+      let maxCardHeight = 0;
+      for (const card of player.playArea) {
+        if (card.url) {
+          try {
+            const cardImage = await loadImage(card.url);
+            const cardHeight = (cardWidth / cardImage.width) * cardImage.height;
+            maxCardHeight = Math.max(maxCardHeight, cardHeight);
+          } catch (error) {
+            // If image fails to load, use default height
+            maxCardHeight = Math.max(maxCardHeight, 280); // default card height
+          }
+        }
+      }
+      
+      const rowHeight = Math.max(maxCardHeight, avatarSize);
+      totalHeight += rowHeight + rowSpacing;
+    }
+
+    const canvasWidth = nameWidth + avatarSize + padding + (maxCardsInRow * cardWidth) + padding;
+    const canvas = createCanvas(canvasWidth, totalHeight);
+    const ctx = canvas.getContext("2d");
+    ctx.textDrawingMode = "glyph";
+
+    // Set background
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvasWidth, totalHeight);
+
+    let currentY = padding;
+
+    for (const player of playersWithPlayAreas) {
+      const member = guild.members.cache.get(player.userId);
+      const playerName = member ? member.displayName : (player.name || `Player ${player.userId}`);
+
+      // Calculate row height for this player
+      let maxCardHeight = 0;
+      const cardImages = [];
+      
+      for (const card of player.playArea) {
+        if (card.url) {
+          try {
+            const cardImage = await loadImage(card.url);
+            const cardHeight = (cardWidth / cardImage.width) * cardImage.height;
+            maxCardHeight = Math.max(maxCardHeight, cardHeight);
+            cardImages.push({ image: cardImage, height: cardHeight });
+          } catch (error) {
+            console.error(`Failed to load card image: ${card.url}`);
+            maxCardHeight = Math.max(maxCardHeight, 280);
+            cardImages.push(null);
+          }
+        } else {
+          cardImages.push(null);
+        }
+      }
+
+      const rowHeight = Math.max(maxCardHeight, avatarSize);
+
+      // Draw player avatar if available
+      let currentX = padding;
+      if (member && member.user.displayAvatarURL) {
+        try {
+          const avatarUrl = member.user.displayAvatarURL({ extension: 'png', size: 128 });
+          const avatarImage = await loadImage(avatarUrl);
+          
+          // Draw circular avatar
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(currentX + avatarSize/2, currentY + rowHeight/2, avatarSize/2, 0, Math.PI * 2);
+          ctx.clip();
+          ctx.drawImage(avatarImage, currentX, currentY + (rowHeight - avatarSize)/2, avatarSize, avatarSize);
+          ctx.restore();
+        } catch (error) {
+          console.error(`Failed to load avatar for ${playerName}`);
+        }
+      }
+      currentX += avatarSize + 10;
+
+      // Draw player name
+      ctx.fillStyle = player.color || "#000000";
+      ctx.font = "bold 24px Open Sans";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`${playerName}:`, currentX, currentY + rowHeight/2);
+      
+      currentX += nameWidth;
+
+      // Draw cards
+      for (let i = 0; i < player.playArea.length; i++) {
+        const cardImageData = cardImages[i];
+        if (cardImageData) {
+          const cardY = currentY + (rowHeight - cardImageData.height) / 2;
+          ctx.drawImage(cardImageData.image, currentX, cardY, cardWidth, cardImageData.height);
+        } else {
+          // Draw placeholder for missing card image
+          ctx.fillStyle = "#cccccc";
+          ctx.fillRect(currentX, currentY + (rowHeight - 280) / 2, cardWidth, 280);
+          ctx.fillStyle = "#000000";
+          ctx.font = "16px Open Sans";
+          ctx.textAlign = "center";
+          ctx.fillText("No Image", currentX + cardWidth/2, currentY + rowHeight/2);
+        }
+        currentX += cardWidth + 5; // Small spacing between cards
+      }
+
+      currentY += rowHeight + rowSpacing;
+    }
+
+    const attachmentName = `consolidated-playareas-${Date.now()}.png`;
+    return new AttachmentBuilder(canvas.toBuffer(), { name: attachmentName });
+  }
+
+  /**
+   * Generates embeds and attachments for all players' play areas
+   * @param {Object} gameData - The game data
+   * @param {Object} guild - The Discord guild object
+   * @returns {Object} Object containing embeds and attachments arrays
+   */
+  static async generatePlayAreaEmbedsAndAttachments(gameData, guild) {
+    const playAreaEmbeds = [];
     const playAreaAttachments = [];
-    for (const player of gameData.players) { // Changed to for...of for async/await within loop
+
+    for (const player of gameData.players) {
       if (player.playArea && player.playArea.length > 0) {
         const member = guild.members.cache.get(player.userId);
         const playerName = member ? member.displayName : (player.name || `Player ${player.userId}`);
@@ -873,20 +1093,12 @@ class GameFormatter {
         }
         // Only add the embed if it has fields (i.e., cards were actually processed by genericCardZoneDisplay)
         if (playAreaEmbed.data.fields && playAreaEmbed.data.fields.length > 0) {
-            finalEmbeds.push(playAreaEmbed);
+            playAreaEmbeds.push(playAreaEmbed);
         }
       }
     }
 
-    const replyOptions = {
-        files: [attachment, ...playAreaAttachments], // Add main status table + any play area images
-        embeds: finalEmbeds // Use the newly constructed finalEmbeds array
-    };
-
-    if (options.content) {
-        replyOptions.content = options.content;
-    }
-    return replyOptions;
+    return { embeds: playAreaEmbeds, attachments: playAreaAttachments };
   }
 
   static formatPlayAreaText(player) {
@@ -912,3 +1124,5 @@ class GameFormatter {
 }
 
 module.exports = GameFormatter;
+
+

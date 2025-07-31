@@ -45,6 +45,27 @@ class Deal {
                 }
             }
 
+            // Record history
+            try {
+                const actorDisplayName = interaction.member?.displayName || interaction.user.username
+                
+                GameHelper.recordMove(
+                    gameData,
+                    interaction.user,
+                    GameDB.ACTION_CATEGORIES.CARD,
+                    GameDB.ACTION_TYPES.DEAL,
+                    `${actorDisplayName} dealt ${dealCount} cards from ${deck.name} to all players`,
+                    {
+                        deckName: deck.name,
+                        cardCount: dealCount,
+                        requestedCount: cardCount,
+                        playerCount: gameData.players.length
+                    }
+                )
+            } catch (error) {
+                console.warn('Failed to record card deal in history:', error)
+            }
+
             //client.setGameData(`game-${interaction.channel.id}`, gameData)
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)           
 

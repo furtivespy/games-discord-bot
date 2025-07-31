@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
+const GameDB = require('../../db/anygame.js')
 const { find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
@@ -39,7 +40,32 @@ class Color {
             // client.logger.log(`Potentially invalid color format: ${colorInput}`);
         }
 
-        player.color = colorInput;
+        const oldColor = player.color
+        player.color = colorInput
+
+        // Record history for color change
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const targetPlayerName = interaction.guild.members.cache.get(targetPlayer.id)?.displayName || targetPlayer.username
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.PLAYER,
+                GameDB.ACTION_TYPES.MODIFY,
+                `${actorDisplayName} set ${targetPlayerName}'s color to ${colorInput}`,
+                {
+                    targetUserId: targetPlayer.id,
+                    targetUsername: targetPlayerName,
+                    oldColor: oldColor || 'default',
+                    newColor: colorInput,
+                    actorUserId: interaction.user.id,
+                    actorUsername: actorDisplayName
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record color change in history:', error)
+        }
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 

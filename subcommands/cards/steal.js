@@ -30,6 +30,27 @@ class Steal {
         let stolen = targetPlayer.hands.main.splice(random(0,targetPlayer.hands.main.length - 1), 1)
         player.hands.main.push(stolen[0])
 
+        // Record history
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const targetDisplayName = interaction.guild.members.cache.get(targetPlayer.userId)?.displayName || selectedPlayer.username
+            const cardName = Formatter.cardShortName(stolen[0])
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.STEAL,
+                `${actorDisplayName} stole a card from ${targetDisplayName}`,
+                {
+                    targetUserId: targetPlayer.userId,
+                    targetUsername: targetDisplayName
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record card steal in history:', error)
+        }
+
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         
         await interaction.editReply(

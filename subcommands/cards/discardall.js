@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const GameHelper = require('../../modules/GlobalGameHelper');
 const Formatter = require('../../modules/GameFormatter');
+const GameDB = require('../../db/anygame.js');
 const { find, findIndex } = require('lodash');
 
 class DiscardAll {
@@ -49,6 +50,27 @@ class DiscardAll {
       }
 
       player.hands.main = [];
+
+      // Record history (privacy protected - no card names since discard is private)
+      try {
+        const actorDisplayName = interaction.member?.displayName || interaction.user.username
+        
+        GameHelper.recordMove(
+          gameData,
+          interaction.user,
+          GameDB.ACTION_CATEGORIES.CARD,
+          GameDB.ACTION_TYPES.DISCARD,
+          `${actorDisplayName} discarded all ${discardedCount} cards from hand`,
+          {
+            cardCount: discardedCount,
+            playerUserId: player.userId,
+            playerUsername: actorDisplayName,
+            action: "discard all from hand"
+          }
+        )
+      } catch (error) {
+        console.warn('Failed to record discard all in history:', error)
+      }
 
       await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 

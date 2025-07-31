@@ -12,6 +12,8 @@ const Winner = require(`../../subcommands/genericgame/winner`)
 const Test = require(`../../subcommands/genericgame/test`)
 const Reverse = require(`../../subcommands/genericgame/reverse`)
 const Help = require('../../subcommands/genericgame/help.js')
+const History = require('../../subcommands/genericgame/history.js')
+const HistoryAdd = require('../../subcommands/genericgame/historyadd.js')
 const PlayArea = require('../../subcommands/genericgame/playarea.js') // Restoring playarea toggle
 
 class Game extends SlashCommand {
@@ -151,13 +153,46 @@ class Game extends SlashCommand {
                         .setRequired(true)
                     )
                 )
-                /*
+                
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("history")
+                    .setDescription("View game action history with filtering options 📜")
+                    .addIntegerOption(option => 
+                        option.setName('page')
+                            .setDescription('Page number to view (default: 1)')
+                            .setMinValue(1))
+                    .addStringOption(option =>
+                        option.setName('category')
+                            .setDescription('Filter by action category')
+                            .addChoices(
+                                {name: '🃏 Card Actions', value: 'card'},
+                                {name: '👥 Player Actions', value: 'player'}, 
+                                {name: '🪙 Token Actions', value: 'token'},
+                                {name: '💰 Money Actions', value: 'money'},
+                                {name: '🎮 Game Actions', value: 'game'},
+                                {name: '🤫 Secret Actions', value: 'secret'}
+                            ))
+                    .addUserOption(option =>
+                        option.setName('player')
+                            .setDescription('Filter by specific player'))
+                )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("historyadd")
+                    .setDescription("Add a manual note to the game history 📝")
+                    .addStringOption(option =>
+                        option.setName('text')
+                            .setDescription('The text to add to history (e.g., "end of round", "rule clarification")')
+                            .setRequired(true)
+                            .setMaxLength(200))
+                )
             .addSubcommand(subcommand =>
                 subcommand
                     .setName("test")        
-                    .setDescription("Testing Bot - db stuff")
+                    .setDescription("Testing Bot stuff")
                 )
-                */
+                
             .addSubcommand(PlayArea.data) // Restoring playarea toggle
                 
     }
@@ -203,6 +238,12 @@ class Game extends SlashCommand {
                     break
                 case "help":
                     await Help.execute(interaction, this.client)
+                    break
+                case "history":
+                    await History.execute(interaction, this.client)
+                    break
+                case "historyadd":
+                    await HistoryAdd.execute(interaction, this.client)
                     break
                 case "playarea": // Restoring playarea toggle
                     await PlayArea.execute(interaction)

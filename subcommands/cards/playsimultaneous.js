@@ -1,4 +1,5 @@
 const GameHelper = require("../../modules/GlobalGameHelper");
+const GameDB = require("../../db/anygame.js");
 const { find, findIndex } = require("lodash");
 const Formatter = require("../../modules/GameFormatter");
 const {
@@ -89,6 +90,7 @@ class PlaySimultaneous {
 
     // Store the selected cards in player.hands.simultaneous
     player.hands.simultaneous = [];
+    const stagedCardNames = [];
     playedCards.forEach((crd) => {
       let card = find(player.hands.main, { id: crd });
       if (!card) {
@@ -96,7 +98,33 @@ class PlaySimultaneous {
       }
       player.hands.simultaneous.push(card);
       player.hands.main.splice(findIndex(player.hands.main, { id: crd }), 1);
+      stagedCardNames.push(Formatter.cardShortName(card));
     });
+
+    // Record history (privacy protected - no card names since staging is private until reveal)
+    try {
+        const actorDisplayName = interaction.member?.displayName || interaction.user.username
+        
+        GameHelper.recordMove(
+            gameData,
+            interaction.user,
+            GameDB.ACTION_CATEGORIES.CARD,
+            GameDB.ACTION_TYPES.STAGE,
+            `${actorDisplayName} staged ${player.hands.simultaneous.length} cards for simultaneous play`,
+            {
+                cardCount: player.hands.simultaneous.length,
+                cardIds: player.hands.simultaneous.map(c => c.id),
+                cardNames: stagedCardNames, // For admin/debugging only
+                playerUserId: player.userId,
+                playerUsername: actorDisplayName,
+                mainHandSizeAfter: player.hands.main.length,
+                simultaneousHandSize: player.hands.simultaneous.length,
+                action: "stage cards for simultaneous reveal"
+            }
+        )
+    } catch (error) {
+        console.warn('Failed to record simultaneous staging in history:', error)
+    }
 
     // Save the updated game data
     await client.setGameDataV2(

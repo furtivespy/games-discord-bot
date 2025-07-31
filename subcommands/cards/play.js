@@ -1,6 +1,7 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { sortBy, find, filter, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
+const GameDB = require('../../db/anygame')
 
 class Play {
     async execute(interaction, client) {
@@ -60,6 +61,30 @@ class Play {
             }
         }
 
+        // Record this action in game history
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const destination = gameData.playToPlayArea ? "play area" : "discard pile"
+            const cardName = Formatter.cardShortName(playedCard)
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.PLAY,
+                `${actorDisplayName} played ${cardName} to ${destination}`,
+                {
+                    cardId: playedCard.id,
+                    cardName: cardName,
+                    destination: destination,
+                    origin: playedCard.origin
+                },
+                actorDisplayName
+            )
+        } catch (error) {
+            console.warn('Failed to record card play in history:', error)
+        }
+
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
         const replyEmbeds = [
@@ -74,19 +99,15 @@ class Play {
                 .setColor(player.color || 13502711)
                 .setTitle(`${interaction.member.displayName}'s Updated Play Area`);
 
-            const playAreaAttachment = await Formatter.genericCardZoneDisplay(
-                player.playArea,
-                playAreaEmbed,
-                "Current Cards in Play Area",
-                `PlayAreaUpdate-${player.userId}`
-            );
+            // Create text-only display for play area without images
+            const cardNames = player.playArea.map(card => Formatter.cardShortName(card));
+            playAreaEmbed.addFields({
+                name: "Current Cards in Play Area",
+                value: cardNames.length > 0 ? cardNames.join(', ') : 'No cards in play area',
+                inline: false
+            });
 
-            if (playAreaEmbed.data.fields && playAreaEmbed.data.fields.length > 0) {
-                replyEmbeds.push(playAreaEmbed);
-            }
-            if (playAreaAttachment) {
-                replyFiles.push(playAreaAttachment);
-            }
+            replyEmbeds.push(playAreaEmbed);
         }
 
         const replyOptions = {

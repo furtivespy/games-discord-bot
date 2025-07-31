@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require('discord.js')
 const { find } = require('lodash')
 const GameDB = require('../../db/anygame')
+const GameHelper = require('../../modules/GlobalGameHelper')
 
 class Give {
     static async execute(interaction, client) {
@@ -57,6 +58,32 @@ class Give {
         // Transfer tokens
         sourcePlayer.tokens[token.id] = sourceCount - amount
         targetPlayer.tokens[token.id] = (targetPlayer.tokens[token.id] || 0) + amount
+
+        // Record history
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const targetDisplayName = interaction.guild.members.cache.get(targetPlayer.userId)?.displayName || targetPlayer.name || targetPlayer.userId
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.TOKEN,
+                GameDB.ACTION_TYPES.GIVE,
+                `${actorDisplayName} gave ${amount} ${name} tokens to ${targetDisplayName}`,
+                {
+                    tokenId: token.id,
+                    tokenName: name,
+                    amount: amount,
+                    targetUserId: targetPlayer.userId,
+                    targetUsername: targetDisplayName,
+                    sourceCount: sourceCount,
+                    newSourceCount: sourceCount - amount,
+                    newTargetCount: (targetPlayer.tokens[token.id] || 0) + amount
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record token give in history:', error)
+        }
 
         // Save game data
         await client.setGameDataV2(interaction.guildId, 'game', interaction.channelId, gameData)

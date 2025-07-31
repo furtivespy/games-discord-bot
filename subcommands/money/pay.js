@@ -1,6 +1,7 @@
 const GameDB = require("../../db/anygame.js");
 const { cloneDeep, find } = require("lodash");
 const Formatter = require("../../modules/GameFormatter");
+const GameHelper = require("../../modules/GlobalGameHelper");
 
 class Pay {
   async execute(interaction, client) {
@@ -44,8 +45,38 @@ class Pay {
         return
     }
     
+    const fromOldBalance = fromPlayer.money
+    const toOldBalance = toPlayer.money
     fromPlayer.money -= whatToSpend
     toPlayer.money += whatToSpend
+
+    // Record history
+    try {
+        const actorDisplayName = interaction.member?.displayName || interaction.user.username
+        const targetDisplayName = interaction.guild.members.cache.get(toPlayer.userId)?.displayName || toPlayer.name || toPlayer.userId
+        
+        GameHelper.recordMove(
+            gameData,
+            interaction.user,
+            GameDB.ACTION_CATEGORIES.MONEY,
+            GameDB.ACTION_TYPES.PAY,
+            `${actorDisplayName} paid $${whatToSpend} to ${targetDisplayName}`,
+            {
+                amount: whatToSpend,
+                fromUserId: fromPlayer.userId,
+                fromUsername: actorDisplayName,
+                toUserId: toPlayer.userId,
+                toUsername: targetDisplayName,
+                fromOldBalance: fromOldBalance,
+                fromNewBalance: fromPlayer.money,
+                toOldBalance: toOldBalance,
+                toNewBalance: toPlayer.money
+            }
+        )
+    } catch (error) {
+        console.warn('Failed to record money payment in history:', error)
+    }
+
     await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
     await interaction.editReply({content: `${interaction.member.displayName} pays $${whatToSpend} to ${interaction.options.getUser('player')}`})

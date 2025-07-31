@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
+const GameDB = require('../../db/anygame.js')
 const { cloneDeep, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const Shuffle = require(`./shuffle`)
@@ -50,6 +51,39 @@ class Deal {
                 player.hands.draft.push(theCard)
                 dealCount++
             }
+        }
+
+        // Record history for draft deal affecting all players
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const playerDrafts = []
+            
+            gameData.players.forEach(player => {
+                const displayName = interaction.guild.members.cache.get(player.userId)?.displayName || player.name || player.userId
+                playerDrafts.push({
+                    userId: player.userId,
+                    displayName: displayName,
+                    draftHandSize: player.hands.draft?.length || 0
+                })
+            })
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.DEAL,
+                `${actorDisplayName} dealt ${dealCount} cards for drafting (${cardCount} per player)`,
+                {
+                    deckName: deck.name,
+                    cardsPerPlayer: cardCount,
+                    totalCardsDealt: dealCount,
+                    playersReceived: gameData.players.length,
+                    playerDrafts: playerDrafts,
+                    action: "draft deal to all players"
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record draft deal in history:', error)
         }
 
         //client.setGameData(`game-${interaction.channel.id}`, gameData)

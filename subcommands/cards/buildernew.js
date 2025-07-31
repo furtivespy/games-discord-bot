@@ -49,6 +49,44 @@ class builderNew {
       newDeck.piles.draw.cards = cloneDeep(shuffle(newDeck.allCards));
       gameData.decks.push(newDeck);
 
+      // Record history for builder setup
+      try {
+          const actorDisplayName = interaction.member?.displayName || interaction.user.username
+          const playerDecks = []
+          const supplyDeck = gameData.decks.find(d => d.name.startsWith('Supply-'))
+          
+          gameData.players.forEach(player => {
+              const deckName = interaction.guild.members.cache.get(player.userId)?.displayName || player.name
+              const deck = find(gameData.decks, { name: deckName })
+              if (deck) {
+                  playerDecks.push({
+                      userId: player.userId,
+                      deckName: deckName,
+                      cardCount: deck.allCards.length
+                  })
+              }
+          })
+          
+          GameHelper.recordMove(
+              gameData,
+              interaction.user,
+              GameDB.ACTION_CATEGORIES.CARD,
+              GameDB.ACTION_TYPES.CREATE,
+              `${actorDisplayName} created builder environment: ${playerDecks.length} player decks + supply deck`,
+              {
+                  baseCardSet: inputSet,
+                  supplyCardSet: allCardSet,
+                  playerDecks: playerDecks,
+                  supplyDeckName: supplyDeck ? supplyDeck.name : 'Unknown',
+                  supplyCardCount: supplyDeck ? supplyDeck.allCards.length : 0,
+                  playersReceived: playerDecks.length,
+                  action: "builder environment setup"
+              }
+          )
+      } catch (error) {
+          console.warn('Failed to record builder new in history:', error)
+      }
+
       await client.setGameDataV2(
         interaction.guildId,
         "game",

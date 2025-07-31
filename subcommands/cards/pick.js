@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
+const GameDB = require('../../db/anygame.js')
 const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js')
@@ -68,6 +69,30 @@ class Pick {
           player.hands.main.push(card)
           pickedCardsObjects.push(card)
       })
+
+      // Record history
+      try {
+          const actorDisplayName = interaction.member?.displayName || interaction.user.username
+          const cardNames = pickedCardsObjects.map(c => Formatter.cardShortName(c)).join(', ')
+          
+          GameHelper.recordMove(
+              gameData,
+              interaction.user,
+              GameDB.ACTION_CATEGORIES.CARD,
+              GameDB.ACTION_TYPES.TAKE,
+              `${actorDisplayName} picked ${pickedCardsObjects.length} cards from ${deck.name} discard pile: ${cardNames}`,
+              {
+                  deckName: deck.name,
+                  cardCount: pickedCardsObjects.length,
+                  cardIds: pickedCardsObjects.map(c => c.id),
+                  cardNames: cardNames,
+                  source: "discard pile",
+                  destination: "hand"
+              }
+          )
+      } catch (error) {
+          console.warn('Failed to record card pick in history:', error)
+      }
 
       await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 

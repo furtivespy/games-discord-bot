@@ -94,7 +94,34 @@ class Configure {
             const filter = (int) => int.customId === 'select'
             let newInteraction = await rply.awaitMessageComponent({ filter, time: 60_000 }).catch(err => client.logger.log(err,'error'))
             await newInteraction.deferReply()
+            // Store original value before modification for history tracking
+            const originalValue = configType === 'shufflestyle' ? deck.shuffleStyle : deck.hiddenInfo
+            
             action()
+            
+            // Record history
+            try {
+                const actorDisplayName = interaction.member?.displayName || interaction.user.username
+                const newValue = configType === 'shufflestyle' ? deck.shuffleStyle : deck.hiddenInfo
+                
+                GameHelper.recordMove(
+                    gameData,
+                    interaction.user,
+                    GameDB.ACTION_CATEGORIES.CARD,
+                    GameDB.ACTION_TYPES.MODIFY,
+                    `${actorDisplayName} configured ${deck.name} ${configType}: ${originalValue} → ${newValue}`,
+                    {
+                        deckName: deck.name,
+                        configType: configType,
+                        originalValue: originalValue,
+                        newValue: newValue,
+                        configCategory: configType === 'shufflestyle' ? 'shuffle behavior' : 'visibility settings'
+                    }
+                )
+            } catch (error) {
+                console.warn('Failed to record deck configuration in history:', error)
+            }
+            
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
             
             await newInteraction.editReply( //This should be newInteraction.editReply, but the original code used interaction.editReply

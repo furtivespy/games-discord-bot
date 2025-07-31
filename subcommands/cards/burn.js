@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper');
+const GameDB = require('../../db/anygame.js');
 // No Formatter needed as we are not displaying card details
 
 class Burn {
@@ -57,6 +58,28 @@ class Burn {
             // This case should ideally be caught by the initial draw pile check, but as a safeguard:
             await interaction.editReply({ content: `No cards were burned. The draw pile for ${deck.name} might be empty.`, ephemeral: true });
             return;
+        }
+
+        // Record history
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.BURN,
+                `${actorDisplayName} burned ${actualBurnedCount} cards from ${deck.name}`,
+                {
+                    deckName: deck.name,
+                    cardCount: actualBurnedCount,
+                    requestedCount: countToBurn,
+                    source: "draw pile",
+                    destination: "discard pile"
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record card burn in history:', error)
         }
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);

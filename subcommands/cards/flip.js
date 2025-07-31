@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
+const GameDB = require('../../db/anygame.js')
 const Formatter = require('../../modules/GameFormatter')
 
 class Flip {
@@ -28,6 +29,30 @@ class Flip {
 
         const theCard = deck.piles.draw.cards.shift()
         deck.piles.discard.cards.push(theCard)
+        
+        // Record history
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const cardName = Formatter.cardShortName(theCard)
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.FLIP,
+                `${actorDisplayName} flipped ${cardName} from ${deck.name}`,
+                {
+                    cardId: theCard.id,
+                    cardName: cardName,
+                    deckName: deck.name,
+                    source: "draw pile",
+                    destination: "discard pile"
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record card flip in history:', error)
+        }
+        
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
         await interaction.editReply({ 

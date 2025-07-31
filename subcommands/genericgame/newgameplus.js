@@ -72,12 +72,33 @@ class NewGame {
     if (!gameData.isdeleted) {
       //convert to new game plus!
       gameData.bggGameId = search;
+      
+      // Record this action in game history
+      try {
+        const actorDisplayName = interaction.member?.displayName || interaction.user.username
+        GameHelper.recordMove(
+          gameData,
+          interaction.user,
+          GameDB.ACTION_CATEGORIES.GAME,
+          GameDB.ACTION_TYPES.BGG_LINK,
+          `${actorDisplayName} linked the game to BGG: ${gameData.name}`,
+          {
+            bggGameId: search,
+            action: 'bgg_link_added'
+          },
+          actorDisplayName
+        )
+      } catch (error) {
+        console.warn('Failed to record BGG link action in history:', error)
+      }
+      
       await client.setGameDataV2(
         interaction.guildId,
         "game",
         interaction.channelId,
         gameData
       );
+      
       await interaction.reply({
         content: `There is an existing game in this channel. I've assigned the game, but did not change players.`,
         ephemeral: true,
@@ -124,6 +145,26 @@ class NewGame {
 
       let bgg = await BoardGameGeek.CreateAndLoad(search, client, interaction);
       await bgg.LoadEmbeds(BoardGameGeek.DetailsEnum.ALL);
+
+      // Record this action in game history
+      try {
+        const actorDisplayName = interaction.member?.displayName || interaction.user.username
+        GameHelper.recordMove(
+          gameData,
+          interaction.user,
+          GameDB.ACTION_CATEGORIES.GAME,
+          GameDB.ACTION_TYPES.CREATE,
+          `${actorDisplayName} created a new game with ${players.length} player${players.length !== 1 ? 's' : ''}`,
+          {
+            playerCount: players.length,
+            bggGameId: search,
+            players: players.map(p => ({ userId: p.id, username: p.username }))
+          },
+          actorDisplayName
+        )
+      } catch (error) {
+        console.warn('Failed to record game creation action in history:', error)
+      }
 
       await client.setGameDataV2(
         interaction.guildId,

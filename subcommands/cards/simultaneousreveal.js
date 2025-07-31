@@ -1,4 +1,5 @@
 const GameHelper = require("../../modules/GlobalGameHelper");
+const GameDB = require("../../db/anygame.js");
 const { find, findIndex } = require("lodash");
 const Formatter = require("../../modules/GameFormatter");
 
@@ -86,6 +87,45 @@ class SimultaneousReveal {
             const returnedCardNames = cardsToReturnToHand[playerId].map(c => Formatter.cardShortName(c)).join(', ');
             revealMessage += `\n*Note: ${interaction.guild.members.cache.get(playerId)?.displayName || playerId}'s card(s) (${returnedCardNames}) were returned to hand due to a discard error.*`;
         }
+    }
+
+    // Record history for simultaneous reveal (public action showing all revealed cards)
+    try {
+        const actorDisplayName = interaction.member?.displayName || interaction.user.username
+        const participatingPlayers = []
+        let totalCardsRevealed = 0
+        
+        // Count participants and total cards
+        for (const p of gameData.players) {
+            if (p.hands.simultaneous?.length > 0) {
+                const displayName = interaction.guild.members.cache.get(p.userId)?.displayName || p.name || p.userId
+                const cardNames = p.hands.simultaneous.map(card => Formatter.cardShortName(card))
+                participatingPlayers.push({
+                    userId: p.userId,
+                    displayName: displayName,
+                    cardCount: p.hands.simultaneous.length,
+                    cardNames: cardNames // Public action, so card names are OK
+                })
+                totalCardsRevealed += p.hands.simultaneous.length
+            }
+        }
+        
+        GameHelper.recordMove(
+            gameData,
+            interaction.user,
+            GameDB.ACTION_CATEGORIES.CARD,
+            GameDB.ACTION_TYPES.REVEAL,
+            `${actorDisplayName} revealed simultaneous plays: ${participatingPlayers.length} players, ${totalCardsRevealed} cards`,
+            {
+                participatingPlayers: participatingPlayers,
+                totalCardsRevealed: totalCardsRevealed,
+                playersParticipating: participatingPlayers.length,
+                playedToPlayArea: playedToPlayArea,
+                action: "simultaneous card reveal"
+            }
+        )
+    } catch (error) {
+        console.warn('Failed to record simultaneous reveal in history:', error)
     }
 
     // Save the updated game data

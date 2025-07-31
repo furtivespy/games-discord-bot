@@ -1,4 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper');
+const GameDB = require('../../db/anygame.js');
 const Formatter = require('../../modules/GameFormatter');
 const { find, pullAllWith, isEqual } = require('lodash'); // Using pullAllWith for removing multiple items
 const { EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder, SlashCommandUserOption } = require('discord.js');
@@ -90,6 +91,32 @@ module.exports = {
             // Add to initiator's playArea
             if (!initiator.playArea) initiator.playArea = [];
             initiator.playArea.push(...takenCards);
+
+            // Record history
+            try {
+                const actorDisplayName = interaction.member?.displayName || interaction.user.username
+                const targetDisplayName = interaction.guild.members.cache.get(targetUser.id)?.displayName || targetUser.username
+                const cardNames = takenCards.map(c => Formatter.cardShortName(c)).join(', ')
+                
+                GameHelper.recordMove(
+                    gameData,
+                    interaction.user,
+                    GameDB.ACTION_CATEGORIES.CARD,
+                    GameDB.ACTION_TYPES.TAKE,
+                    `${actorDisplayName} took ${takenCards.length} cards from ${targetDisplayName}'s play area: ${cardNames}`,
+                    {
+                        targetUserId: targetUser.id,
+                        targetUsername: targetDisplayName,
+                        cardCount: takenCards.length,
+                        cardIds: takenCards.map(c => c.id),
+                        cardNames: cardNames,
+                        source: "target play area",
+                        destination: "own play area"
+                    }
+                )
+            } catch (error) {
+                console.warn('Failed to record play area take in history:', error)
+            }
 
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
