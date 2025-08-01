@@ -46,7 +46,7 @@ class NewGame {
       
       await interaction.respond(
         games.items.map((gameItem) => ({
-          name: `${gameItem.name} (${gameItem.yearpublished})`,
+          name: `${gameItem.name.substring(0, 95)} (${gameItem.yearpublished})`.substring(0, 100),
           value: gameItem.objectid,
         }))
       );

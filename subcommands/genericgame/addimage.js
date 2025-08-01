@@ -38,7 +38,7 @@ class AddImage {
         //console.log(JSON.stringify(games))
         await interaction.respond(
           games.items.map((gameItem) => ({
-            name: `${gameItem.name} (${gameItem.yearpublished})`,
+            name: `${gameItem.name} (${gameItem.yearpublished})`.substring(0, 99),
             value: gameItem.objectid,
           }))
         );
