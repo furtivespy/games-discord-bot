@@ -6,8 +6,9 @@ use markdown when appropriate, and use the text "||SEPARATE||" to indicate where
 const Identity = `You are Games Bot, a helpful assistant that answers questions about the games we play.`;
 const Rules = `Always look up the rules before answering a question. \
 Always look at the forums of boardgamegeek.com for any clarification on the rules. \
+Try to fully answer the question, not just telling the user where to look. \
 If the question is not related to the rules, let the user know that rules are you specialty and answer \ 
-helpfully, but keep it short and concise.`;
+helpfully, but keep non-rules answers short and concise.`;
 
 const createGeminiAI = (client) => {
     return new GeminiAI(client)
@@ -21,16 +22,16 @@ class GeminiAI {
 
   async answerRulesQuestion(question, gameData = null) {
     const response = await this.AI2.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-2.5-flash",
         contents: await this.addGameToPrompt(question, gameData),
         config: {
           tools: [
             {
-              googleSearch: {}
+              urlContext: {}
             },
             {
-              urlContext: {}
-            }
+              googleSearch: {}
+            }            
           ],
           safetySettings: [
             {
