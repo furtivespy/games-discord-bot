@@ -251,12 +251,18 @@ class BoardGameGeek {
     }
   }
 
-  async GetUsefulLinksEmbed() {
+  async LoadUsefulLinks() {
     const linkData = Object.assign(
       {},
       cloneDeep(GameDB.defaultBGGGameData),
       await this.discordClient.getGameDataV2(this.interaction.guildId, 'bgg', this.gameId)
     );
+
+    return linkData
+  }
+
+  async GetUsefulLinksEmbed() {
+    const linkData = await this.LoadUsefulLinks()
 
     if (linkData.links.length > 0) {
       let links = "";

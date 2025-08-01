@@ -38,7 +38,7 @@ class AddLink {
         //console.log(JSON.stringify(games))
         await interaction.respond(
           games.items.map((gameItem) => ({
-            name: `${gameItem.name} (${gameItem.yearpublished})`,
+            name: `${gameItem.name} (${gameItem.yearpublished})`.substring(0, 99),
             value: gameItem.objectid,
           }))
         );
@@ -62,6 +62,7 @@ class AddLink {
 
         gameData.links.push({id: nanoid(), name: name, url: url})
         await client.setGameDataV2(interaction.guildId, "bgg", search, gameData)
+        console.log(gameData)
 
         await interaction.reply({
           content: `Added link [${name}](${url})`,
