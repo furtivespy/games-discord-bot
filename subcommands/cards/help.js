@@ -15,6 +15,7 @@ class Help {
         const deck_commands_header = `\n**Deck Commands:**`;
         const deck_commands_content = `• **/cards deck new** - Create a new deck of cards in the channel. All cards will be shuffled into a "Draw" pile. Of note there needs to be a /game started
 • **/cards deck draw** - Draw a card from a deck in the channel (if no deck is specified, will draw from first created in channel)
+• **/cards deck remove** - Remove a deck from the game entirely. This cannot be undone.
 • **/cards deck configure** - To add special rules to a deck. *Not Avaialbe Yet*
 • **/cards deck flipcard** - Flips and shows the top card of the deck. It is then added to the discard pile
 • **/cards deck shuffle** - Shuffle the draw and discard piles together into a new draw pile. *Not Avaialbe Yet*`;
