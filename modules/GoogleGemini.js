@@ -73,7 +73,7 @@ class GeminiAI {
     const linkData = await gameData.LoadUsefulLinks()
 
     const gameInstructions = `In the game ${gameData.gameName} https://boardgamegeek.com/boardgame/${gameData.gameId}, `
-    const links = linkData.links.map(link => link.url).join(' ')
+    const links = linkData.links.map(link => `${link.name}: ${link.url}`).join(', ')
     return `${gameInstructions} ${prompt} ${links}`
   }
 
