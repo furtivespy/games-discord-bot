@@ -1,7 +1,7 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
-const { find, remove, cloneDeep, shuffle } = require('lodash')
-const Formatter = require('../../modules/GameFormatter')
+const { find, remove } = require('lodash')
+const Formatter =require('../../modules/GameFormatter')
 
 class DeckRemove {
     async execute(interaction, client) {
@@ -37,13 +37,13 @@ class DeckRemove {
         }
 
         // Recall logic first
-        gameData.players.forEach(player => {
-            const removeCardsFromLocation = (locationArray) => {
-                if (Array.isArray(locationArray)) {
-                    remove(locationArray, card => card.origin === deck.name);
-                }
-            };
+        const removeCardsFromLocation = (locationArray) => {
+            if (Array.isArray(locationArray)) {
+                remove(locationArray, card => card.origin === deck.name);
+            }
+        };
 
+        gameData.players.forEach(player => {
             if (player.hands) {
                 removeCardsFromLocation(player.hands.main);
                 removeCardsFromLocation(player.hands.draft);
