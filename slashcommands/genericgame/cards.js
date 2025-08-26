@@ -37,6 +37,7 @@ const PlayAreaGive = require('../../subcommands/cards/playareagive') // Restorin
 const PlayAreaClearAll = require('../../subcommands/cards/playareaclearall')
 const Burn = require('../../subcommands/cards/burn')
 const DeckPeek = require('../../subcommands/cards/deckpeek')
+const DeckRemove = require('../../subcommands/cards/deckremove')
 
 class Cards extends SlashCommand {
     constructor(client){
@@ -152,6 +153,13 @@ class Cards extends SlashCommand {
                         option.setName('deck')
                               .setDescription('Deck to burn from.')
                               .setAutocomplete(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("remove")
+                    .setDescription("Remove a deck from the game entirely.")
+                    .addStringOption(option => option.setName('deckname').setDescription('Name of the deck to remove').setRequired(true).setAutocomplete(true))
+                    .addStringOption(option => option.setName('confirm').setDescription("Type 'delete' to confirm").setRequired(true))
             );
         });
         this.data.addSubcommandGroup(group =>
@@ -347,6 +355,9 @@ class Cards extends SlashCommand {
                             break
                         case "peek":
                             await DeckPeek.execute(interaction, this.client)
+                            break
+                        case "remove":
+                            await DeckRemove.execute(interaction, this.client)
                             break
                         default:
                             await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
