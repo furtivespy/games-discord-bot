@@ -21,6 +21,14 @@ class ColorAll {
             return;
         }
 
+        if (gameData.players.length > 5) {
+            await interaction.reply({
+                content: `There are too many players in the game to use this command. The maximum is 5.`,
+                ephemeral: true
+            });
+            return;
+        }
+
         const modal = new ModalBuilder()
             .setCustomId('colorall-modal')
             .setTitle('Set All Player Colors');
