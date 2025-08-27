@@ -16,7 +16,8 @@ Here's a list of commands to get you started. They're super easy to use! 😉
 *   **/players remove** 🚶‍♂️ - Need to make some room? Removes a player from the game. See ya later, alligator!
 *   **/players first** 🥇 - Who's the lucky one? Sets the first player. May the odds be ever in your favor!
 *   **/players score <score> [player]** 💯 - Set a player's score. If no player is mentioned, it sets your score.
-*   **/players color <player> <color>** 🎨 - Feeling colorful? Sets a display color for a player (e.g., #FF0000 or "red").`;
+*   **/players color <player> <color>** 🎨 - Feeling colorful? Sets a display color for a player (e.g., #FF0000 or "red").
+*   **/players colorall** 🎨 - Set all player colors at once.`;
 
         await interaction.followUp({
             content: commands_chunk_1,

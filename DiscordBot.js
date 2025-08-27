@@ -584,19 +584,31 @@ client.on("messageReactionRemove", async (reaction, user) => {
 });
 
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isCommand() && !interaction.isAutocomplete()) return;
-  const command = client.slashcommands.get(interaction.commandName);
+  if (interaction.isCommand() || interaction.isAutocomplete()) {
+    const command = client.slashcommands.get(interaction.commandName);
 
-  if (!command) return;
-  client.logger.log(`Slash Command ${interaction.commandName}`);
-  try {
-    await command.execute(interaction);
-  } catch (error) {
-    console.error(error);
-    return interaction.reply({
-      content: "There was an error while executing this command!",
-      ephemeral: true,
-    });
+    if (!command) return;
+    client.logger.log(`Slash Command ${interaction.commandName}`);
+    try {
+      await command.execute(interaction);
+    } catch (error) {
+      console.error(error);
+      return interaction.reply({
+        content: "There was an error while executing this command!",
+        ephemeral: true,
+      });
+    }
+  } else if (interaction.isModalSubmit()) {
+    const modalSubmission = require('./events/modalSubmission.js');
+    try {
+      await modalSubmission.execute(interaction);
+    } catch (error) {
+      console.error(error);
+      return interaction.reply({
+        content: "There was an error while processing this modal!",
+        ephemeral: true,
+      });
+    }
   }
 });
 
