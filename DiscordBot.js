@@ -14,6 +14,7 @@ const database = require("./db/db.js");
 const mongoDb = require("./db/mongoDb.js");
 const GoogleSearch = require("./modules/GoogleSearch.js");
 const _ = require("lodash");
+const modalSubmission = require('./events/modalSubmission.js');
 
 class DiscordBot extends Client {
   constructor(options) {
@@ -584,19 +585,30 @@ client.on("messageReactionRemove", async (reaction, user) => {
 });
 
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isCommand() && !interaction.isAutocomplete()) return;
-  const command = client.slashcommands.get(interaction.commandName);
+  if (interaction.isCommand() || interaction.isAutocomplete()) {
+    const command = client.slashcommands.get(interaction.commandName);
 
-  if (!command) return;
-  client.logger.log(`Slash Command ${interaction.commandName}`);
-  try {
-    await command.execute(interaction);
-  } catch (error) {
-    console.error(error);
-    return interaction.reply({
-      content: "There was an error while executing this command!",
-      ephemeral: true,
-    });
+    if (!command) return;
+    client.logger.log(`Slash Command ${interaction.commandName}`);
+    try {
+      await command.execute(interaction);
+    } catch (error) {
+      console.error(error);
+      return interaction.reply({
+        content: "There was an error while executing this command!",
+        ephemeral: true,
+      });
+    }
+  } else if (interaction.isModalSubmit()) {
+    try {
+      await modalSubmission.execute(interaction);
+    } catch (error) {
+      console.error(error);
+      return interaction.reply({
+        content: "There was an error while processing this modal!",
+        ephemeral: true,
+      });
+    }
   }
 });
 
