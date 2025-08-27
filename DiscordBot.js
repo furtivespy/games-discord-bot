@@ -14,6 +14,7 @@ const database = require("./db/db.js");
 const mongoDb = require("./db/mongoDb.js");
 const GoogleSearch = require("./modules/GoogleSearch.js");
 const _ = require("lodash");
+const modalSubmission = require('./events/modalSubmission.js');
 
 class DiscordBot extends Client {
   constructor(options) {
@@ -599,7 +600,6 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
   } else if (interaction.isModalSubmit()) {
-    const modalSubmission = require('./events/modalSubmission.js');
     try {
       await modalSubmission.execute(interaction);
     } catch (error) {

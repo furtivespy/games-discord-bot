@@ -34,7 +34,10 @@ class ColorAll {
             .setTitle('Set All Player Colors');
 
         const promises = gameData.players.map(async (player) => {
-            const member = await interaction.guild.members.fetch(player.userId);
+            let member = interaction.guild.members.cache.get(player.userId);
+            if (!member) {
+                member = await interaction.guild.members.fetch(player.userId);
+            }
             const playerName = member ? member.displayName : `Player ${player.userId}`;
 
             const colorInput = new TextInputBuilder()
