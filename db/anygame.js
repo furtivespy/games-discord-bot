@@ -46,6 +46,7 @@ const { archipelagoMediumObjectives } = require('./decks/archipelagoMediumObject
 const { archipelagoLongObjectives } = require('./decks/archipelagoLongObjectives');
 const { loveLetterBase, loveLetterExpansion } = require('./decks/loveLetter');
 const { spectralGlyphCards, spectralLetterCards }  = require('./decks/spectral');
+const rebirth = require('./decks/rebirth');
 
 class GameDatabase {
     
@@ -139,6 +140,7 @@ class GameDatabase {
         [ "Love Letter 5+ (5-8 Players)", "love-letter-5plus" ],
         [ "Spectral Glyphs", "spectral-glyphs" ],
         [ "Spectral Letters", "spectral-letters" ],
+        [ "Rebirth Missions", "rebirth" ],
     ]
 
     defaultGameData = {
@@ -386,6 +388,8 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "B", spectralGlyphCards);
             case "spectral-letters":
                 return this.createCardFromObjList(deckName, "B", spectralLetterCards);
+            case "rebirth":
+                return this.createCardFromObjList(deckName, "B", rebirth);
             default:
                 return []
         }
