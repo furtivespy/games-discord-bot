@@ -23,8 +23,8 @@ class ReleaseNotes extends SlashCommand {
   }
 
   async execute(interaction) {
-    const focusedValue = interaction.options.getFocused();
     if (interaction.isAutocomplete()) {
+      const focusedValue = interaction.options.getFocused();
       const response = await fetch(`https://api.github.com/repos/furtivespy/games-discord-bot/releases`);
       const releases = await response.json();
       const choices = releases
