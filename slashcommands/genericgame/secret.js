@@ -4,6 +4,7 @@ const GameDB = require('../../db/anygame.js')
 const Add = require(`../../subcommands/secret/add`)
 const Check = require(`../../subcommands/secret/check`)
 const Reveal = require(`../../subcommands/secret/reveal`)
+const AnonReveal = require(`../../subcommands/secret/anonreveal`)
 const Help = require('../../subcommands/secret/help.js')
 
 class Secret extends SlashCommand {
@@ -40,6 +41,12 @@ class Secret extends SlashCommand {
                     .setDescription("Reveals all the secrets")
                     .addStringOption(option => option.setName('confirm').setDescription('Type "reveal" to confirm secrets reveal').setRequired(true))
                 )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("anonreveal")
+                    .setDescription("Reveals all the secrets anonymously")
+                    .addStringOption(option => option.setName('confirm').setDescription('Type "reveal" to confirm secrets reveal').setRequired(true))
+                )
     }
 
     async execute(interaction) {
@@ -53,6 +60,9 @@ class Secret extends SlashCommand {
                     break
                 case "reveal":
                     await Reveal.execute(interaction, this.client)
+                    break
+                case "anonreveal":
+                    await AnonReveal.execute(interaction, this.client)
                     break
                 case "help":
                     await Help.execute(interaction, this.client)
