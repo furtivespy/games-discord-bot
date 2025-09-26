@@ -22,6 +22,12 @@ class ModalSubmission extends Event {
     }
 
     async run(interaction) {
+        // The 'run' method is called by the event handler.
+        // It now delegates to the 'execute' method.
+        return this.execute(interaction);
+    }
+
+    async execute(interaction) {
         if (!interaction.isModalSubmit()) return;
 
         if (interaction.customId === 'colorall-modal') {
