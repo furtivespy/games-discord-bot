@@ -1,38 +1,16 @@
-const Event = require('../base/Event.js');
-const EventTypes = require('../base/EventTypes.js');
-const { Events } = require('discord.js');
 const GameHelper = require('../modules/GlobalGameHelper');
 const GameDB = require('../db/anygame.js');
 const Formatter = require('../modules/GameFormatter');
-const { find } = require('lodash');
 
-class ModalSubmission extends Event {
-    constructor(client) {
-        super(client, {
-            name: "ModalSubmission",
-            eventType: EventTypes.INTERACTION_CREATE,
-            description: "Handles modal submission interactions",
-            category: "Interaction",
-            usage: "Automatic handling of modal submissions",
-            enabled: true,
-            guildOnly: true,
-            showHelp: false,
-            permLevel: "User"
-        });
-    }
-
-    async run(interaction) {
-        // The 'run' method is called by the event handler.
-        // It now delegates to the 'execute' method.
-        return this.execute(interaction);
-    }
-
+module.exports = {
     async execute(interaction) {
         if (!interaction.isModalSubmit()) return;
 
+        const client = interaction.client;
+
         if (interaction.customId === 'colorall-modal') {
             await interaction.deferReply();
-            let gameData = await GameHelper.getGameData(interaction.client, interaction);
+            let gameData = await GameHelper.getGameData(client, interaction);
 
             if (gameData.isdeleted) {
                 await interaction.editReply({
@@ -69,17 +47,17 @@ class ModalSubmission extends Event {
                     { changes }
                 );
 
-                await interaction.client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
+                await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
             }
 
             await interaction.editReply(
-                await Formatter.createGameStatusReply(gameData, interaction.guild, interaction.client.user.id, {
+                await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
                     content: `Player colors updated successfully.`
                 })
             );
         } else if (interaction.customId === 'scoreall-modal') {
             await interaction.deferReply();
-            let gameData = await GameHelper.getGameData(interaction.client, interaction);
+            let gameData = await GameHelper.getGameData(client, interaction);
 
             if (gameData.isdeleted) {
                 await interaction.editReply({
@@ -119,16 +97,14 @@ class ModalSubmission extends Event {
                     { changes }
                 );
 
-                await interaction.client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
+                await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
             }
 
             await interaction.editReply(
-                await Formatter.createGameStatusReply(gameData, interaction.guild, interaction.client.user.id, {
+                await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
                     content: `Player scores updated successfully.`
                 })
             );
         }
     }
-}
-
-module.exports = ModalSubmission;
+};
