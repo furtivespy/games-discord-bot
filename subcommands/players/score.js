@@ -18,7 +18,16 @@ class AddScore {
         }
 
         const targetPlayer = interaction.options.getUser('player') || interaction.user
-        const score = interaction.options.getString('score')
+        const scoreRaw = interaction.options.getString('score')
+        const score = parseFloat(scoreRaw)
+
+        if (isNaN(score)) {
+            await interaction.editReply({
+                content: `'${scoreRaw}' is not a valid number.`,
+                ephemeral: true
+            })
+            return
+        }
         
         // Find the player in the game
         const player = find(gameData.players, { userId: targetPlayer.id })

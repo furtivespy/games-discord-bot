@@ -6,6 +6,7 @@ const First = require(`../../subcommands/players/first`)
 const Color = require(`../../subcommands/players/color`)
 const ColorAll = require(`../../subcommands/players/colorall`)
 const Score = require('../../subcommands/players/score.js') // Added import for Score
+const ScoreAll = require('../../subcommands/players/scoreall.js')
 const Help = require('../../subcommands/players/help.js')
 
 class Players extends SlashCommand {
@@ -91,6 +92,11 @@ class Players extends SlashCommand {
                         .setRequired(false)
                     )
             )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("scoreall")
+                    .setDescription("Set the score for all players at once")
+            )
     }
 
     async execute(interaction) {
@@ -113,6 +119,9 @@ class Players extends SlashCommand {
                     break
                 case "score": // Added case for score
                     await Score.execute(interaction, this.client)
+                    break
+                case "scoreall":
+                    await ScoreAll.execute(interaction, this.client)
                     break
                 case "help":
                     await Help.execute(interaction, this.client)
