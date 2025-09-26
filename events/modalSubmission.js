@@ -70,16 +70,13 @@ module.exports = {
             let changes = [];
 
             for (const player of gameData.players) {
-                const newScoreRaw = interaction.fields.getTextInputValue(`score-${player.userId}`);
-                if (newScoreRaw) {
-                    const newScore = parseFloat(newScoreRaw);
-                    if (!isNaN(newScore) && player.score !== newScore) {
-                        const oldScore = player.score;
-                        player.score = newScore;
-                        const member = await interaction.guild.members.fetch(player.userId);
-                        const playerName = member ? member.displayName : `Player ${player.userId}`;
-                        changes.push({ playerName, oldScore, newScore });
-                    }
+                const newScore = interaction.fields.getTextInputValue(`score-${player.userId}`);
+                if (newScore && player.score !== newScore) {
+                    const oldScore = player.score;
+                    player.score = newScore;
+                    const member = await interaction.guild.members.fetch(player.userId);
+                    const playerName = member ? member.displayName : `Player ${player.userId}`;
+                    changes.push({ playerName, oldScore, newScore });
                 }
             }
 
