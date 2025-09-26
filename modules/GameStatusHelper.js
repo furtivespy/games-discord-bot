@@ -4,9 +4,9 @@ class GameStatusHelper {
 
   static async cleanUpPreviousMessage(channel, gameData) {
     const now = Date.now();
-    const sixtySeconds = 60 * 1000;
+    const fiveMinutes = 5 * 60 * 1000;
 
-    if (gameData.lastStatusMessageId && gameData.lastStatusMessageTimestamp && (now - gameData.lastStatusMessageTimestamp < sixtySeconds)) {
+    if (gameData.lastStatusMessageId && gameData.lastStatusMessageTimestamp && (now - gameData.lastStatusMessageTimestamp < fiveMinutes)) {
       try {
         const previousMessage = await channel.messages.fetch(gameData.lastStatusMessageId);
         if (previousMessage) {
