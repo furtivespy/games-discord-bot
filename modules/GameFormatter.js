@@ -242,7 +242,7 @@ class GameFormatter {
   static async SecretStatusAnon(secretData, guild) {
     const newEmbed = new EmbedBuilder().setColor(0x360280).setTitle(`Anonymous Secrets`);
 
-    const secrets = secretData.players.filter(p => p.hassecret).map(p => p.secret);
+    const secrets = secretData.players.filter(p => p.hassecret).map(p => `• ${p.secret}`);
     const shuffledSecrets = shuffle(secrets);
 
     if (shuffledSecrets.length > 0){
