@@ -1,6 +1,6 @@
 const { EmbedBuilder, AttachmentBuilder } = require("discord.js");
 const Emoji = require("./EmojiAssitant");
-const { sortBy, floor, isArray, find } = require("lodash");
+const { sortBy, floor, isArray, find, shuffle } = require("lodash");
 var AsciiTable = require("ascii-table");
 const { createCanvas, Image, loadImage } = require("canvas");
 const { CanvasTable, CTColumn } = require("canvas-table");
@@ -235,6 +235,21 @@ class GameFormatter {
           `\`/cards draft take\` - Take a card from the draft. \n` +
           `\`/cards draft pass\` - Passes all draft cards around the table (for all players)`
       );
+
+    return newEmbed;
+  }
+
+  static async SecretStatusAnon(secretData, guild) {
+    const newEmbed = new EmbedBuilder().setColor(0x360280).setTitle(`Anonymous Secrets`);
+
+    const secrets = secretData.players.filter(p => p.hassecret).map(p => p.secret);
+    const shuffledSecrets = shuffle(secrets);
+
+    if (shuffledSecrets.length > 0){
+      newEmbed.setDescription(shuffledSecrets.join('\n'));
+    } else {
+      newEmbed.setDescription('No secrets to reveal.');
+    }
 
     return newEmbed;
   }
