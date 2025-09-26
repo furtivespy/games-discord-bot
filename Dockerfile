@@ -36,7 +36,7 @@ FROM base
 
 # Copy built application
 COPY --from=build /app /app
-COPY --from=build /usr/local/bin/wormhole /usr/local/bin/wormhole
+# COPY --from=build /usr/local/bin/wormhole /usr/local/bin/wormhole
 
 # Setup sqlite3 on a separate volume
 RUN mkdir -p /data
