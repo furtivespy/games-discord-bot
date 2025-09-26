@@ -11,14 +11,14 @@ class GameStatusHelper {
         const previousMessage = await channel.messages.fetch(gameData.lastStatusMessageId);
 
         if (previousMessage) {
-          // Edit the public message to be text-only
+          // Edit the message to remove embeds and attachments, but leave the content as is.
           await previousMessage.edit({
-            content: options.content || 'Game status updated.',
+            content: previousMessage.content, // Preserve the original content
             attachments: [],
             embeds: []
           });
 
-          // But send a full, new, ephemeral status to the user who ran the command
+          // Send a full, new, ephemeral status to the user who ran the command
           const ephemeralReplyPayload = await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, options);
 
           const ephemeralReplyOptions = {
@@ -71,9 +71,9 @@ class GameStatusHelper {
         try {
             const previousMessage = await channel.messages.fetch(gameData.lastStatusMessageId);
             if (previousMessage) {
-                // Edit the previous message with the new action's content, and remove embeds/attachments
+                // Edit the message to remove embeds and attachments, but leave the content as is.
                 await previousMessage.edit({
-                  content: options.content || 'Game status updated.',
+                  content: previousMessage.content, // Preserve the original content
                   attachments: [],
                   embeds: []
                 });
