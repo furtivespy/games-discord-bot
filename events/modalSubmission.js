@@ -1,32 +1,16 @@
-const Event = require('../base/Event.js');
-const EventTypes = require('../base/EventTypes.js');
-const { Events } = require('discord.js');
 const GameHelper = require('../modules/GlobalGameHelper');
 const GameDB = require('../db/anygame.js');
-const Formatter = require('../modules/GameFormatter');
-const { find } = require('lodash');
+const GameStatusHelper = require('../modules/GameStatusHelper');
 
-class ModalSubmission extends Event {
-    constructor(client) {
-        super(client, {
-            name: "ModalSubmission",
-            eventType: EventTypes.INTERACTION_CREATE,
-            description: "Handles modal submission interactions",
-            category: "Interaction",
-            usage: "Automatic handling of modal submissions",
-            enabled: true,
-            guildOnly: true,
-            showHelp: false,
-            permLevel: "User"
-        });
-    }
-
-    async run(interaction) {
+module.exports = {
+    async execute(interaction) {
         if (!interaction.isModalSubmit()) return;
+
+        const client = interaction.client;
 
         if (interaction.customId === 'colorall-modal') {
             await interaction.deferReply();
-            let gameData = await GameHelper.getGameData(interaction.client, interaction);
+            let gameData = await GameHelper.getGameData(client, interaction);
 
             if (gameData.isdeleted) {
                 await interaction.editReply({
@@ -63,70 +47,58 @@ class ModalSubmission extends Event {
                     { changes }
                 );
 
-                await interaction.client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
+                await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
             }
 
-            await interaction.editReply(
-                await Formatter.createGameStatusReply(gameData, interaction.guild, interaction.client.user.id, {
-                    content: `Player colors updated successfully.`
-                })
-            );
-        }
-    }
-}
-
-// Export the class but also add the execute method for direct usage
-ModalSubmission.execute = async function(interaction) {
-    if (!interaction.isModalSubmit()) return;
-
-    if (interaction.customId === 'colorall-modal') {
-        await interaction.deferReply();
-        let gameData = await GameHelper.getGameData(interaction.client, interaction);
-
-        if (gameData.isdeleted) {
-            await interaction.editReply({
-                content: `No active game in this channel.`,
-                ephemeral: true
-            });
-            return;
-        }
-
-        let changes = [];
-
-        for (const player of gameData.players) {
-            const newColor = interaction.fields.getTextInputValue(`color-${player.userId}`);
-            if (newColor && player.color !== newColor) {
-                const oldColor = player.color;
-                player.color = newColor;
-                const member = await interaction.guild.members.fetch(player.userId);
-                const playerName = member ? member.displayName : `Player ${player.userId}`;
-                changes.push({ playerName, oldColor, newColor });
-            }
-        }
-
-        if (changes.length > 0) {
-            const actorDisplayName = interaction.member?.displayName || interaction.user.username;
-            let historyMessage = `${actorDisplayName} updated player colors:\n`;
-            historyMessage += changes.map(c => `${c.playerName}'s color changed from ${c.oldColor || 'default'} to ${c.newColor}`).join('\n');
-
-            GameHelper.recordMove(
-                gameData,
-                interaction.user,
-                GameDB.ACTION_CATEGORIES.PLAYER,
-                GameDB.ACTION_TYPES.MODIFY,
-                historyMessage,
-                { changes }
-            );
-
-            await interaction.client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
-        }
-
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, interaction.client.user.id, {
+            await GameStatusHelper.sendGameStatus(interaction, client, gameData, {
                 content: `Player colors updated successfully.`
-            })
-        );
+            });
+
+        } else if (interaction.customId === 'scoreall-modal') {
+            await interaction.deferReply();
+            let gameData = await GameHelper.getGameData(client, interaction);
+
+            if (gameData.isdeleted) {
+                await interaction.editReply({
+                    content: `No active game in this channel.`,
+                    ephemeral: true
+                });
+                return;
+            }
+
+            let changes = [];
+
+            for (const player of gameData.players) {
+                const newScore = interaction.fields.getTextInputValue(`score-${player.userId}`);
+                if (newScore && player.score !== newScore) {
+                    const oldScore = player.score;
+                    player.score = newScore;
+                    const member = await interaction.guild.members.fetch(player.userId);
+                    const playerName = member ? member.displayName : `Player ${player.userId}`;
+                    changes.push({ playerName, oldScore, newScore });
+                }
+            }
+
+            if (changes.length > 0) {
+                const actorDisplayName = interaction.member?.displayName || interaction.user.username;
+                let historyMessage = `${actorDisplayName} updated player scores:\n`;
+                historyMessage += changes.map(c => `${c.playerName}'s score changed from ${c.oldScore || '0'} to ${c.newScore}`).join('\n');
+
+                GameHelper.recordMove(
+                    gameData,
+                    interaction.user,
+                    GameDB.ACTION_CATEGORIES.PLAYER,
+                    GameDB.ACTION_TYPES.SCORE,
+                    historyMessage,
+                    { changes }
+                );
+
+                await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
+            }
+
+            await GameStatusHelper.sendGameStatus(interaction, client, gameData, {
+                content: `Player scores updated successfully.`
+            });
+        }
     }
 };
-
-module.exports = ModalSubmission;
