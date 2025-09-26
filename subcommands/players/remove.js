@@ -1,7 +1,7 @@
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find, findIndex } = require('lodash')
-const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class Remove {
     async execute(interaction, client) {
@@ -29,8 +29,10 @@ class Remove {
             return
         }
 
+        const cardsDiscarded = player.hands.main.length;
+
         // Discard all cards from player's hand
-        if (player.hands.main.length > 0) {
+        if (cardsDiscarded > 0) {
             for (const card of player.hands.main) {
                 const deck = find(gameData.decks, {name: card.origin})
                 if (deck) {
@@ -53,7 +55,6 @@ class Remove {
         try {
             const actorDisplayName = interaction.member?.displayName || interaction.user.username
             const removedPlayerName = interaction.guild.members.cache.get(playerToRemove.id)?.displayName || playerToRemove.username
-            const cardsDiscarded = player.hands.main.length
             
             GameHelper.recordMove(
                 gameData,
@@ -77,11 +78,9 @@ class Remove {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
-                content: `Removed ${playerToRemove} from the game and discarded their cards`
-            })
-        )
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData, {
+            content: `Removed ${playerToRemove} from the game and discarded their cards`
+        })
     }
 }
 

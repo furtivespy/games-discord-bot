@@ -1,7 +1,7 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const { find, remove } = require('lodash')
-const Formatter =require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class DeckRemove {
     async execute(interaction, client) {
@@ -82,11 +82,9 @@ class DeckRemove {
         }
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id,
-              { content: `Deck "${deckName}" has been removed.` }
-            )
-          );
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData,
+          { content: `Deck "${deckName}" has been removed.` }
+        );
     }
 }
 

@@ -1,6 +1,6 @@
 const GameDB = require('../../db/anygame.js')
 const { cloneDeep, find } = require('lodash')
-const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const Shuffle = require(`./shuffle`)
 const { ActionRowBuilder, SelectMenuBuilder } = require('discord.js');
@@ -47,7 +47,7 @@ class Configure {
                     msg = `How would you like to configure ${deck.name} for shuffling?\n` +
                             `Standard - Shuffle discard pile and place on bottom of draw\n` +
                             `Bag - Draw and discard piles are shuffled together`
-                    action = () => {
+                    action = (newInteraction) => {
                         let val = null
                         if (newInteraction) {
                             val = newInteraction.values[0]
@@ -71,7 +71,7 @@ class Configure {
                     msg = `How would you like to configure ${deck.name} for showing card counts?\n` +
                             `Hand - The cards currently in a players hand\n` +
                             `Deck - The Draw and Discard piles\n`
-                    action = () => {
+                    action = (newInteraction) => {
                         let val = null
                         if (newInteraction) {
                             val = newInteraction.values[0]
@@ -84,8 +84,6 @@ class Configure {
                     return
             }
 
-            
-
             let rply = await interaction.editReply({ 
                 content: msg, 
                 components: [row],
@@ -93,20 +91,22 @@ class Configure {
             })
             const filter = (int) => int.customId === 'select'
             let newInteraction = await rply.awaitMessageComponent({ filter, time: 60_000 }).catch(err => client.logger.log(err,'error'))
+            if (!newInteraction) {
+                await interaction.editReply({ content: 'No selection made, command timed out.', components: [] });
+                return;
+            }
             await newInteraction.deferReply()
-            // Store original value before modification for history tracking
             const originalValue = configType === 'shufflestyle' ? deck.shuffleStyle : deck.hiddenInfo
             
-            action()
+            action(newInteraction)
             
-            // Record history
             try {
-                const actorDisplayName = interaction.member?.displayName || interaction.user.username
+                const actorDisplayName = newInteraction.member?.displayName || newInteraction.user.username
                 const newValue = configType === 'shufflestyle' ? deck.shuffleStyle : deck.hiddenInfo
                 
                 GameHelper.recordMove(
                     gameData,
-                    interaction.user,
+                    newInteraction.user,
                     GameDB.ACTION_CATEGORIES.CARD,
                     GameDB.ACTION_TYPES.MODIFY,
                     `${actorDisplayName} configured ${deck.name} ${configType}: ${originalValue} → ${newValue}`,
@@ -124,10 +124,8 @@ class Configure {
             
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
             
-            await newInteraction.editReply( //This should be newInteraction.editReply, but the original code used interaction.editReply
-                await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id,
-                  { content: `Configured ${deck.name}` }
-                )
+            await GameStatusHelper.sendGameStatus(newInteraction, client, gameData,
+              { content: `Configured ${deck.name}` }
             );
         }
     }

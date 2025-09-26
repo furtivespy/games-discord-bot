@@ -1,8 +1,8 @@
 const { SlashCommandBuilder } = require('discord.js');
 const GameHelper = require('../../modules/GlobalGameHelper');
-const Formatter = require('../../modules/GameFormatter');
+const GameStatusHelper = require('../../modules/GameStatusHelper');
 const GameDB = require('../../db/anygame.js');
-const { find, findIndex } = require('lodash');
+const { find } = require('lodash');
 
 class DiscardAll {
   constructor() {
@@ -30,7 +30,6 @@ class DiscardAll {
       }
 
       const playerHand = player.hands.main;
-
       if (!playerHand || playerHand.length === 0) {
         await interaction.editReply({ content: "Your hand is already empty.", ephemeral: true });
         return;
@@ -41,83 +40,57 @@ class DiscardAll {
       for (const card of playerHand) {
         const deck = find(gameData.decks, { name: card.origin });
         if (deck) {
-          if (!deck.piles.discard) { // Ensure discard pile exists
+          if (!deck.piles.discard) {
             deck.piles.discard = { cards: [] };
           }
           deck.piles.discard.cards.push(card);
         }
-        // If deck is not found, card effectively disappears, which is acceptable for discard.
       }
 
       player.hands.main = [];
 
-      // Record history (privacy protected - no card names since discard is private)
       try {
-        const actorDisplayName = interaction.member?.displayName || interaction.user.username
-        
+        const actorDisplayName = interaction.member?.displayName || interaction.user.username;
         GameHelper.recordMove(
           gameData,
           interaction.user,
           GameDB.ACTION_CATEGORIES.CARD,
           GameDB.ACTION_TYPES.DISCARD,
           `${actorDisplayName} discarded all ${discardedCount} cards from hand`,
-          {
-            cardCount: discardedCount,
-            playerUserId: player.userId,
-            playerUsername: actorDisplayName,
-            action: "discard all from hand"
-          }
-        )
+          { cardCount: discardedCount }
+        );
       } catch (error) {
-        console.warn('Failed to record discard all in history:', error)
+        console.warn('Failed to record discard all in history:', error);
       }
 
+      // Save the game data after the primary action (discarding).
       await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
-      // 1. Send the ephemeral confirmation to the user who typed the command.
-      // This uses the editReply on the initially deferred ephemeral reply.
+      // First, send the private confirmation to the user.
       await interaction.editReply({
           content: `You have discarded all ${discardedCount} cards from your hand. Your hand is now empty.`,
           ephemeral: true
       });
 
-      // 2. Prepare and send the public message to the channel.
-      // This will be a new followup message, set to be non-ephemeral.
-      const publicMessagePayload = await Formatter.createGameStatusReply(gameData, interaction.guild, {
-          content: `${interaction.member.displayName} has discarded all ${discardedCount} cards from their hand.`
+      // Now, handle the public status update using the helper.
+      const publicUpdateResult = await GameStatusHelper.sendPublicStatusUpdate(interaction.channel, client, gameData, {
+        content: `${interaction.member.displayName} has discarded all ${discardedCount} cards from their hand.`
       });
 
-      // Check if publicMessagePayload is an object with content/embeds or just a string
-      if (publicMessagePayload && (publicMessagePayload.content || publicMessagePayload.embeds)) {
-          await interaction.followUp({
-              content: publicMessagePayload.content,
-              embeds: publicMessagePayload.embeds,
-              files: publicMessagePayload.files, // Include files if present in payload
-              ephemeral: false // Make this message public
-          });
-      } else if (publicMessagePayload) {
-          // Fallback if Formatter.createGameStatusReply returns a simple string
-          await interaction.followUp({
-              content: String(publicMessagePayload), // Ensure it's a string
-              ephemeral: false // Make this message public
-          });
-      } else {
-          // Fallback if payload is unexpectedly empty, still send a basic public message
-          await interaction.followUp({
-              content: `${interaction.member.displayName} has discarded all ${discardedCount} cards from their hand. (Status update formatting error)`,
-              ephemeral: false
-          });
+      // If the helper sent a new message, it returns the new data. Update and save.
+      if (publicUpdateResult) {
+          gameData.lastStatusMessageId = publicUpdateResult.lastStatusMessageId;
+          gameData.lastStatusMessageTimestamp = publicUpdateResult.lastStatusMessageTimestamp;
+          await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
       }
 
     } catch (e) {
       console.error(e);
-      // Ensure a reply is sent even if an error occurs
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ content: "An error occurred while trying to discard all cards. Check the logs.", ephemeral: true }).catch(() => {}); // catch potential error if interaction is already gone
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({ content: "An error occurred. Check logs.", ephemeral: true }).catch(() => {});
       } else {
-        await interaction.reply({ content: "An error occurred while trying to discard all cards. Check the logs.", ephemeral: true }).catch(() => {});
+        await interaction.editReply({ content: "An error occurred. Check logs.", ephemeral: true }).catch(() => {});
       }
-      // It's good practice to log the error to your logging system (e.g., client.logger.error(e) if available)
       if (client.logger) {
         client.logger.log(e, 'error');
       }

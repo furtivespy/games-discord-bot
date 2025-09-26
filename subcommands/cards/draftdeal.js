@@ -1,7 +1,7 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const { cloneDeep, find } = require('lodash')
-const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 const Shuffle = require(`./shuffle`)
 
 class Deal {
@@ -40,10 +40,10 @@ class Deal {
             for (let j = 0; j < gameData.players.length; j++) {
                 const player = gameData.players[j]
                 if (deck.piles.draw.cards.length < 1){
-                    await Shuffle.execute(interaction, client)
+                    await Shuffle.execute(interaction, client, gameData, deck.name, true)
                 } 
 
-                if (deck.piles.draw.cards.length + deck.piles.discard.cards.length < 1){
+                if (deck.piles.draw.cards.length < 1){
                     break dealLoop
                 }
                 const theCard = deck.piles.draw.cards.shift()
@@ -86,14 +86,11 @@ class Deal {
             console.warn('Failed to record draft deal in history:', error)
         }
 
-        //client.setGameData(`game-${interaction.channel.id}`, gameData)
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id,
-              { content: `Dealt out a total of ${dealCount} cards.` }
-            )
-          );
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData,
+          { content: `Dealt out a total of ${dealCount} cards.` }
+        );
     }
 }
 

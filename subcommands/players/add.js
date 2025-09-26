@@ -1,7 +1,7 @@
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find } = require('lodash')
-const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class Add {
     async execute(interaction, client) {
@@ -69,11 +69,9 @@ class Add {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
-                content: `Added ${newPlayer} to the game at position ${newOrder + 1}`
-            })
-        )
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData, {
+            content: `Added ${newPlayer} to the game at position ${newOrder + 1}`
+        })
     }
 }
 

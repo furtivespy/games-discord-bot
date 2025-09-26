@@ -1,6 +1,6 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { find, chain, cloneDeep, shuffle } = require('lodash')
-const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 const GameDB = require("../../db/anygame.js")
 
 class NewDeck {
@@ -91,7 +91,6 @@ class NewDeck {
             console.warn('Failed to record deck creation in history:', error)
         }
 
-        //client.setGameData(`game-${interaction.channel.id}`, gameData)
         await client.setGameDataV2(
             interaction.guildId,
             "game",
@@ -99,11 +98,9 @@ class NewDeck {
             gameData
         );
 
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id,
-              { content: `Added and shuffled the new deck: ${inputName}` }
-            )
-          );
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData,
+          { content: `Added and shuffled the new deck: ${inputName}` }
+        );
     }
 }
 

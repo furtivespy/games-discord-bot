@@ -3,7 +3,7 @@ const EventTypes = require('../base/EventTypes.js');
 const { Events } = require('discord.js');
 const GameHelper = require('../modules/GlobalGameHelper');
 const GameDB = require('../db/anygame.js');
-const Formatter = require('../modules/GameFormatter');
+const GameStatusHelper = require('../modules/GameStatusHelper');
 const { find } = require('lodash');
 
 class ModalSubmission extends Event {
@@ -66,11 +66,9 @@ class ModalSubmission extends Event {
                 await interaction.client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
             }
 
-            await interaction.editReply(
-                await Formatter.createGameStatusReply(gameData, interaction.guild, interaction.client.user.id, {
-                    content: `Player colors updated successfully.`
-                })
-            );
+            await GameStatusHelper.sendGameStatus(interaction, interaction.client, gameData, {
+                content: `Player colors updated successfully.`
+            });
         }
     }
 }
@@ -121,11 +119,9 @@ ModalSubmission.execute = async function(interaction) {
             await interaction.client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
         }
 
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, interaction.client.user.id, {
-                content: `Player colors updated successfully.`
-            })
-        );
+        await GameStatusHelper.sendGameStatus(interaction, interaction.client, gameData, {
+            content: `Player colors updated successfully.`
+        });
     }
 };
 

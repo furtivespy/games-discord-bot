@@ -2,6 +2,7 @@ const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 const Shuffle = require(`./shuffle`)
 
 class DrawMulti {
@@ -89,14 +90,11 @@ class DrawMulti {
             }
         }
         
-        //client.setGameData(`game-${interaction.channel.id}`, gameData)
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id,
-              { content: `${interaction.member.displayName} drew ${dealCount} cards from ${deck.name}${wasShuffled}` }
-            )
-          );
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData,
+          { content: `${interaction.member.displayName} drew ${dealCount} cards from ${deck.name}${wasShuffled}` }
+        );
             
         var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
         if (handInfo.attachments.length >0){

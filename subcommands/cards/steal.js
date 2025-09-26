@@ -2,6 +2,7 @@ const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find, random } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class Steal {
     async execute(interaction, client) {
@@ -53,11 +54,9 @@ class Steal {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
-                content: `${interaction.member.displayName} stole a card from ${interaction.guild.members.cache.get(targetPlayer.userId)?.displayName}`
-            })
-        )
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData, {
+            content: `${interaction.member.displayName} stole a card from ${interaction.guild.members.cache.get(targetPlayer.userId)?.displayName}`
+        })
 
         // Send private message to player about what they stole
         var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)

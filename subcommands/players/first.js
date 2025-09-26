@@ -1,6 +1,6 @@
 const GameHelper = require("../../modules/GlobalGameHelper");
 const GameDB = require("../../db/anygame.js");
-const Formatter = require("../../modules/GameFormatter");
+const GameStatusHelper = require("../../modules/GameStatusHelper");
 const { find } = require("lodash");
 
 class First {
@@ -17,7 +17,7 @@ class First {
 
       let gameData = await GameHelper.getGameData(client, interaction);
 
-      if (!gameData || !gameData.players) {
+      if (gameData.isdeleted) {
         return interaction.editReply({
           content: "No game happening in this channel.",
           ephemeral: true,
@@ -80,17 +80,15 @@ class First {
         gameData
       );
 
-      await interaction.editReply(
-        await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
-          content: `${newFirstPlayer} is now the first player.`
-        })
-      );
+      await GameStatusHelper.sendGameStatus(interaction, client, gameData, {
+        content: `${newFirstPlayer} is now the first player.`
+      });
     } catch (e) {
-      client.logger.error(e, __filename.slice(__dirname.length + 1));
+      console.error(e);
       await interaction.editReply({
         content: "An error occurred while setting the first player.",
         ephemeral: true,
-      });
+      }).catch(()=>{});
     }
   }
 }

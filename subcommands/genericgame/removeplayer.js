@@ -1,7 +1,7 @@
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find, findIndex } = require('lodash')
-const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class RemovePlayer {
     async execute(interaction, client) {
@@ -28,6 +28,8 @@ class RemovePlayer {
             })
             return
         }
+        const removedPlayerName = interaction.guild.members.cache.get(player.userId)?.displayName || player.name;
+        const discardedCardCount = player.hands.main.length;
 
         // Discard all cards from player's hand
         if (player.hands.main.length > 0) {
@@ -49,14 +51,32 @@ class RemovePlayer {
             gameData.players[i].order = i
         }
 
+        // Record history for removing a player
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username;
+
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.PLAYER,
+                GameDB.ACTION_TYPES.REMOVE,
+                `${actorDisplayName} removed ${removedPlayerName} from the game.`,
+                {
+                    removedUserId: playerToRemove.id,
+                    removedUsername: removedPlayerName,
+                    discardedCardCount: discardedCardCount
+                }
+            );
+        } catch (error) {
+            console.warn('Failed to record remove player in history:', error);
+        }
+
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
-                content: `Removed ${playerToRemove} from the game and discarded their cards`
-            })
-        )
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData, {
+            content: `Removed ${playerToRemove} from the game and discarded their cards`
+        })
     }
 }
 
-module.exports = new RemovePlayer() 
+module.exports = new RemovePlayer()

@@ -1,20 +1,12 @@
 const GameDB = require("../../db/anygame.js");
 const GameHelper = require('../../modules/GlobalGameHelper');
 const { cloneDeep, shuffle } = require("lodash");
-const Formatter = require("../../modules/GameFormatter");
-const { EmbedBuilder } = require('discord.js');
-const { XMLParser } = require('fast-xml-parser');
+const GameStatusHelper = require('../../modules/GameStatusHelper');
 const fetch = require("node-fetch");
 const BoardGameGeek = require('../../modules/BoardGameGeek');
 
 class NewGame {
   async execute(interaction, client) {
-    let gameData = Object.assign(
-      {},
-      cloneDeep(GameDB.defaultGameData),
-      await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
-    );
-
     const search = interaction.options.getString("game");
     if (interaction.isAutocomplete()) {
       if (!search) {
@@ -31,14 +23,6 @@ class NewGame {
           headers: {
             accept: 'application/json, text/plain, */*',
             'accept-language': 'en-US,en;q=0.9',
-            'sec-ch-ua': '"Google Chrome";v="105", "Not)A;Brand";v="8", "Chromium";v="105"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-origin',
-            Referer: 'https://boardgamegeek.com/',
-            'Referrer-Policy': 'strict-origin-when-cross-origin',
           },
         }
       );
@@ -53,79 +37,48 @@ class NewGame {
       return;
     }
 
-    if (!search) {
+    if (!search || isNaN(search)){
       await interaction.reply({
-        content: `Please provide a game name or ID`,
+        content: `Please provide a game name or ID from the available options.`,
         ephemeral: true
       });
       return;
     }
 
-    if (isNaN(search)){
-      await interaction.reply({
-        content: `Please choose from the available options`,
-        ephemeral: true
-      });
-      return;
-    }
+    await interaction.deferReply();
+    let gameData = await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId);
 
-    if (!gameData.isdeleted) {
-      //convert to new game plus!
+    if (gameData && !gameData.isdeleted) {
       gameData.bggGameId = search;
-      
-      // Record this action in game history
       try {
         const actorDisplayName = interaction.member?.displayName || interaction.user.username
         GameHelper.recordMove(
           gameData,
           interaction.user,
           GameDB.ACTION_CATEGORIES.GAME,
-          GameDB.ACTION_TYPES.BGG_LINK,
-          `${actorDisplayName} linked the game to BGG: ${gameData.name}`,
-          {
-            bggGameId: search,
-            action: 'bgg_link_added'
-          },
-          actorDisplayName
+          'bgg_link',
+          `${actorDisplayName} linked the game to BGG ID: ${search}`,
+          { bggGameId: search }
         )
       } catch (error) {
         console.warn('Failed to record BGG link action in history:', error)
       }
       
-      await client.setGameDataV2(
-        interaction.guildId,
-        "game",
-        interaction.channelId,
-        gameData
-      );
+      await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
       
-      await interaction.reply({
-        content: `There is an existing game in this channel. I've assigned the game, but did not change players.`,
+      await interaction.editReply({
+        content: `There is an existing game in this channel. I've assigned the BGG ID, but did not change players.`,
         ephemeral: true,
       });
     } else {
-      await interaction.deferReply();
-
       gameData = Object.assign({}, cloneDeep(GameDB.defaultGameData));
       gameData.bggGameId = search;
       let players = [];
 
-      if (interaction.options.getUser("player1"))
-        players.push(interaction.options.getUser("player1"));
-      if (interaction.options.getUser("player2"))
-        players.push(interaction.options.getUser("player2"));
-      if (interaction.options.getUser("player3"))
-        players.push(interaction.options.getUser("player3"));
-      if (interaction.options.getUser("player4"))
-        players.push(interaction.options.getUser("player4"));
-      if (interaction.options.getUser("player5"))
-        players.push(interaction.options.getUser("player5"));
-      if (interaction.options.getUser("player6"))
-        players.push(interaction.options.getUser("player6"));
-      if (interaction.options.getUser("player7"))
-        players.push(interaction.options.getUser("player7"));
-      if (interaction.options.getUser("player8"))
-        players.push(interaction.options.getUser("player8"));
+      for (let i = 1; i <= 8; i++) {
+          const playerUser = interaction.options.getUser(`player${i}`);
+          if (playerUser) players.push(playerUser);
+      }
 
       let content = `Player Order Randomized!\n`;
       gameData.isdeleted = false;
@@ -146,7 +99,6 @@ class NewGame {
       let bgg = await BoardGameGeek.CreateAndLoad(search, client, interaction);
       await bgg.LoadEmbeds(BoardGameGeek.DetailsEnum.ALL);
 
-      // Record this action in game history
       try {
         const actorDisplayName = interaction.member?.displayName || interaction.user.username
         GameHelper.recordMove(
@@ -154,40 +106,36 @@ class NewGame {
           interaction.user,
           GameDB.ACTION_CATEGORIES.GAME,
           GameDB.ACTION_TYPES.CREATE,
-          `${actorDisplayName} created a new game with ${players.length} player${players.length !== 1 ? 's' : ''}`,
-          {
-            playerCount: players.length,
-            bggGameId: search,
-            players: players.map(p => ({ userId: p.id, username: p.username }))
-          },
-          actorDisplayName
+          `${actorDisplayName} created a new game with ${players.length} player(s)`,
+          { playerCount: players.length, bggGameId: search }
         )
       } catch (error) {
         console.warn('Failed to record game creation action in history:', error)
       }
 
-      await client.setGameDataV2(
-        interaction.guildId,
-        "game",
-        interaction.channelId,
-        gameData
-      );
+      // Save game data before sending status messages
+      await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
-      // First send the BGG game info
       await interaction.editReply({
         content: `New Game Created!`,
         embeds: bgg.embeds,
         files: bgg.attachments,
       });
 
-      // Then send the game status
-      await interaction.followUp(
-        await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
-          content: content
-        })
-      );
+      // Game Status Logic using the helper
+      const publicUpdateResult = await GameStatusHelper.sendPublicStatusUpdate(interaction.channel, client, gameData, {
+        content: content,
+        // Since this is a followup, we need to pass the interaction object to the helper
+        // This is a slight modification to the helper to handle followups
+        interaction: interaction
+      });
 
-      // Finally send any other attachments
+      if (publicUpdateResult) {
+          gameData.lastStatusMessageId = publicUpdateResult.lastStatusMessageId;
+          gameData.lastStatusMessageTimestamp = publicUpdateResult.lastStatusMessageTimestamp;
+          await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
+      }
+
       if (bgg.otherAttachments.length > 0) {
         await interaction.followUp({
           files: bgg.otherAttachments,

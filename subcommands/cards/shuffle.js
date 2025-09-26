@@ -1,7 +1,7 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const { shuffle } = require('lodash')
-const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class Shuffle {
     async execute(interaction, client) {
@@ -52,11 +52,8 @@ class Shuffle {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-        await interaction.editReply({ 
-            content: `Shuffled ${deck.name}`,
-            embeds: [
-                Formatter.deckStatus(deck),
-            ]
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData, {
+            content: `Shuffled ${deck.name}`
         })
     }
 

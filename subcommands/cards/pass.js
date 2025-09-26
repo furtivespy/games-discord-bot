@@ -2,6 +2,7 @@ const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js')
 
 class Pass {
@@ -72,23 +73,16 @@ class Pass {
             passedCardsObjects.push(card)
         })
 
-        // Record history
         try {
             const actorDisplayName = interaction.member?.displayName || interaction.user.username
             const targetDisplayName = interaction.guild.members.cache.get(selectedPlayer.id)?.displayName || selectedPlayer.username
-            
             GameHelper.recordMove(
                 gameData,
                 interaction.user,
                 GameDB.ACTION_CATEGORIES.CARD,
                 GameDB.ACTION_TYPES.PASS,
                 `${actorDisplayName} passed ${passedCardsObjects.length} cards to ${targetDisplayName}`,
-                {
-                    targetUserId: selectedPlayer.id,
-                    targetUsername: targetDisplayName,
-                    cardCount: passedCardsObjects.length,
-                    cardIds: passedCardsObjects.map(card => card.id)
-                }
+                { cardCount: passedCardsObjects.length, targetUserId: selectedPlayer.id }
             )
         } catch (error) {
             console.warn('Failed to record card pass in history:', error)
@@ -96,51 +90,33 @@ class Pass {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-        // Public message: only number of cards
-        const gameStatusReply = await Formatter.createGameStatusReply(
-            gameData,
-            interaction.guild,
-            client.user.id,
-            { content: `${interaction.member.displayName} passed ${passedCardsObjects.length} card(s) to ${selectedPlayer}.` }
-        );
-        await interaction.channel.send(gameStatusReply)
+        const publicUpdateResult = await GameStatusHelper.sendPublicStatusUpdate(interaction.channel, client, gameData, {
+            content: `${interaction.member.displayName} passed ${passedCardsObjects.length} card(s) to ${selectedPlayer}.`
+        });
 
-        // Private hand update for sender
+        if (publicUpdateResult) {
+            gameData.lastStatusMessageId = publicUpdateResult.lastStatusMessageId;
+            gameData.lastStatusMessageTimestamp = publicUpdateResult.lastStatusMessageTimestamp;
+            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
+        }
+
         var senderHandInfo = await Formatter.playerSecretHandAndImages(gameData, player)
-        if (senderHandInfo.attachments.length > 0){
-            await interaction.followUp({ 
-                content: `You passed ${passedCardsObjects.length} card(s) to ${selectedPlayer.username}.`,
-                embeds: [...senderHandInfo.embeds],
-                files: [...senderHandInfo.attachments],
-                ephemeral: true
-            })  
-        } else {
-            await interaction.followUp({ 
-                content: `You passed ${passedCardsObjects.length} card(s) to ${selectedPlayer.username}.`,
-                embeds: [...senderHandInfo.embeds],
-                ephemeral: true
-            })  
-        }
+        await interaction.followUp({
+            content: `You passed ${passedCardsObjects.length} card(s) to ${selectedPlayer.username}. Your hand is now:`,
+            embeds: [...senderHandInfo.embeds],
+            files: [...senderHandInfo.attachments],
+            ephemeral: true
+        });
 
-        // Private hand update for receiver
         var receiverHandInfo = await Formatter.playerSecretHandAndImages(gameData, targetPlayer)
-        if (receiverHandInfo.attachments.length > 0){
-            await interaction.guild.members.fetch(selectedPlayer.id).then(member => {
-                member.send({ 
-                    content: `You received ${passedCardsObjects.length} card(s) from ${interaction.member.displayName}.`,
-                    embeds: [...receiverHandInfo.embeds],
-                    files: [...receiverHandInfo.attachments]
-                }).catch(() => {})
-            })
-        } else {
-            await interaction.guild.members.fetch(selectedPlayer.id).then(member => {
-                member.send({ 
-                    content: `You received ${passedCardsObjects.length} card(s) from ${interaction.member.displayName}.`,
-                    embeds: [...receiverHandInfo.embeds]
-                }).catch(() => {})
-            })
-        }
+        await interaction.guild.members.fetch(selectedPlayer.id).then(member => {
+            member.send({
+                content: `You received ${passedCardsObjects.length} card(s) from ${interaction.member.displayName}. Your hand is now:`,
+                embeds: [...receiverHandInfo.embeds],
+                files: [...receiverHandInfo.attachments]
+            }).catch(() => {})
+        });
     }
 }
 
-module.exports = new Pass() 
+module.exports = new Pass()

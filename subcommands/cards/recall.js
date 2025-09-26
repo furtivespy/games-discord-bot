@@ -1,7 +1,7 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const { find, remove, cloneDeep, shuffle } = require('lodash')
-const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class Recall {
     async execute(interaction, client) {
@@ -77,11 +77,9 @@ class Recall {
         }
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id,
-              { content: `All cards recalled to ${deck.name}` }
-            )
-          );
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData,
+          { content: `All cards recalled to ${deck.name}` }
+        );
     }
 }
 
