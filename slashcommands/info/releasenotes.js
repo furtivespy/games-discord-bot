@@ -57,7 +57,7 @@ class ReleaseNotes extends SlashCommand {
         .setTitle(release.name)
         .setURL(release.html_url)
         .setTimestamp(new Date(release.published_at))
-        .setDescription(release.body.length > 4096 ? release.body.substring(0, 4093) + "..." : release.body)
+        .setDescription(release.body?.length > 4096 ? release.body.substring(0, 4093) + "..." : (release.body || "No release notes provided."))
         .setColor("#0099ff")
         .setAuthor({ name: release.author.login, iconURL: release.author.avatar_url, url: release.author.html_url })
         .setFooter({ text: `Version: ${release.tag_name}` });
