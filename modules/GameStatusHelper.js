@@ -11,20 +11,14 @@ class GameStatusHelper {
         const previousMessage = await channel.messages.fetch(gameData.lastStatusMessageId);
 
         if (previousMessage) {
-          const textOnlyReply = Formatter.createGameStatusTextOnly(gameData, interaction.guild);
-
-          let combinedContent = '';
-          if (options.content) {
-            combinedContent += options.content + '\n';
-          }
-          combinedContent += textOnlyReply.content;
-
+          // Edit the previous message with the new action's content, and remove embeds/attachments
           await previousMessage.edit({
-            content: combinedContent,
+            content: options.content || 'Game status updated.',
             attachments: [],
             embeds: []
           });
 
+          // Send an ephemeral confirmation to the user who triggered the command
           const confirmationMessage = { content: 'Game status has been updated in the message above.', ephemeral: true };
           if (interaction.deferred || interaction.replied) {
               await interaction.editReply(confirmationMessage).catch(() => {});
@@ -32,13 +26,15 @@ class GameStatusHelper {
               await interaction.reply(confirmationMessage).catch(() => {});
           }
 
-          return;
+          return; // We are done, no new message needed.
         }
       } catch (error) {
         console.error("Error editing previous status message, sending a new one instead.", error);
+        // If editing fails, fall through to send a new message.
       }
     }
 
+    // If we're here, it's been >60s or editing failed. Send a new message.
     const fullReply = await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, options);
 
     const replyOptions = {
@@ -53,6 +49,7 @@ class GameStatusHelper {
         sentMessage = await interaction.reply(replyOptions);
     }
 
+    // If a new message was sent, update gameData with its ID and timestamp.
     if (sentMessage) {
         gameData.lastStatusMessageId = sentMessage.id;
         gameData.lastStatusMessageTimestamp = Date.now();
@@ -68,19 +65,25 @@ class GameStatusHelper {
         try {
             const previousMessage = await channel.messages.fetch(gameData.lastStatusMessageId);
             if (previousMessage) {
-                const textOnlyReply = Formatter.createGameStatusTextOnly(gameData, channel.guild);
-                let combinedContent = (options.content ? options.content + '\n' : '') + textOnlyReply.content;
-                await previousMessage.edit({ content: combinedContent, attachments: [], embeds: [] });
+                // Edit the previous message with the new action's content, and remove embeds/attachments
+                await previousMessage.edit({
+                  content: options.content || 'Game status updated.',
+                  attachments: [],
+                  embeds: []
+                });
                 return null; // Return null to indicate no update to gameData is needed
             }
         } catch (error) {
-            console.error("Error editing status, sending new one.", error);
+            console.error("Error editing public status, sending new one.", error);
+             // If editing fails, fall through to send a new message.
         }
     }
 
+    // If we're here, it's been >60s or editing failed. Send a new message.
     const fullReply = await Formatter.createGameStatusReply(gameData, channel.guild, client.user.id, options);
     const sentMessage = await channel.send({ ...fullReply, fetchReply: true });
 
+    // Return the new message data so the calling command can update gameData
     return {
         lastStatusMessageId: sentMessage.id,
         lastStatusMessageTimestamp: Date.now()

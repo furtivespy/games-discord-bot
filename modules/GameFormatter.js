@@ -1121,28 +1121,6 @@ class GameFormatter {
     });
     return playAreaString;
   }
-  static createGameStatusTextOnly(gameData, guild) {
-    let content = `**${gameData.name} Status**\n`;
-    if (gameData.reverseOrder) {
-      content += "(Turn Order Reversed)\n";
-    }
-
-    const players = sortBy(gameData.players, ["order"]);
-    players.forEach(player => {
-      const member = guild.members.cache.get(player.userId);
-      const playerName = member ? member.displayName : (player.name || `Player ${player.userId}`);
-      content += `\n**${playerName}**`;
-      if (player.score) {
-        content += ` - Score: ${player.score}`;
-      }
-      if (gameData.decks.length > 0) {
-        const cardCount = this.CountCards(gameData, player);
-        content += ` - Cards: ${cardCount}`;
-      }
-    });
-
-    return { content: content, attachments: [], embeds: [] };
-  }
 }
 
 module.exports = GameFormatter;
