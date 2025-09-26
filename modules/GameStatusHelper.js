@@ -11,22 +11,28 @@ class GameStatusHelper {
         const previousMessage = await channel.messages.fetch(gameData.lastStatusMessageId);
 
         if (previousMessage) {
-          // Edit the previous message with the new action's content, and remove embeds/attachments
+          // Edit the public message to be text-only
           await previousMessage.edit({
             content: options.content || 'Game status updated.',
             attachments: [],
             embeds: []
           });
 
-          // Send an ephemeral confirmation to the user who triggered the command
-          const confirmationMessage = { content: 'Game status has been updated in the message above.', ephemeral: true };
+          // But send a full, new, ephemeral status to the user who ran the command
+          const ephemeralReplyPayload = await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, options);
+
+          const ephemeralReplyOptions = {
+              ...ephemeralReplyPayload,
+              ephemeral: true,
+          };
+
           if (interaction.deferred || interaction.replied) {
-              await interaction.editReply(confirmationMessage).catch(() => {});
+              await interaction.editReply(ephemeralReplyOptions).catch(() => {});
           } else {
-              await interaction.reply(confirmationMessage).catch(() => {});
+              await interaction.reply(ephemeralReplyOptions).catch(() => {});
           }
 
-          return; // We are done, no new message needed.
+          return; // We are done.
         }
       } catch (error) {
         console.error("Error editing previous status message, sending a new one instead.", error);
