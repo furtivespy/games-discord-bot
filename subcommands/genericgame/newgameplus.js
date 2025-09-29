@@ -123,18 +123,9 @@ class NewGame {
       });
 
       // Game Status Logic using the helper
-      const publicUpdateResult = await GameStatusHelper.sendPublicStatusUpdate(interaction.channel, client, gameData, {
-        content: content,
-        // Since this is a followup, we need to pass the interaction object to the helper
-        // This is a slight modification to the helper to handle followups
-        interaction: interaction
+      await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
+        content: content
       });
-
-      if (publicUpdateResult) {
-          gameData.lastStatusMessageId = publicUpdateResult.lastStatusMessageId;
-          gameData.lastStatusMessageTimestamp = publicUpdateResult.lastStatusMessageTimestamp;
-          await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
-      }
 
       if (bgg.otherAttachments.length > 0) {
         await interaction.followUp({

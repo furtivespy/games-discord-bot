@@ -16,7 +16,7 @@ class Status {
         const player = find(gameData.players, { userId: interaction.user.id })
         const secretTokensEmbed = player ? await Formatter.playerSecretTokens(gameData, player) : null
 
-        await GameStatusHelper.sendGameStatus(interaction, client, gameData);
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData, { content: "📊" });
 
         // If the player has secret tokens, send them in an ephemeral followup
         if (secretTokensEmbed) {

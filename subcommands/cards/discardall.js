@@ -73,16 +73,9 @@ class DiscardAll {
       });
 
       // Now, handle the public status update using the helper.
-      const publicUpdateResult = await GameStatusHelper.sendPublicStatusUpdate(interaction.channel, client, gameData, {
+      await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
         content: `${interaction.member.displayName} has discarded all ${discardedCount} cards from their hand.`
       });
-
-      // If the helper sent a new message, it returns the new data. Update and save.
-      if (publicUpdateResult) {
-          gameData.lastStatusMessageId = publicUpdateResult.lastStatusMessageId;
-          gameData.lastStatusMessageTimestamp = publicUpdateResult.lastStatusMessageTimestamp;
-          await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
-      }
 
     } catch (e) {
       console.error(e);

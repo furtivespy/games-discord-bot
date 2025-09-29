@@ -90,15 +90,9 @@ class Pass {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-        const publicUpdateResult = await GameStatusHelper.sendPublicStatusUpdate(interaction.channel, client, gameData, {
+        await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
             content: `${interaction.member.displayName} passed ${passedCardsObjects.length} card(s) to ${selectedPlayer}.`
         });
-
-        if (publicUpdateResult) {
-            gameData.lastStatusMessageId = publicUpdateResult.lastStatusMessageId;
-            gameData.lastStatusMessageTimestamp = publicUpdateResult.lastStatusMessageTimestamp;
-            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
-        }
 
         var senderHandInfo = await Formatter.playerSecretHandAndImages(gameData, player)
         await interaction.followUp({

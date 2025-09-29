@@ -56,15 +56,9 @@ class Rturn {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
-        const publicUpdateResult = await GameStatusHelper.sendPublicStatusUpdate(interaction.channel, client, gameData, {
+        await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
             content: `${interaction.member.displayName} returned a card`
         });
-
-        if (publicUpdateResult) {
-            gameData.lastStatusMessageId = publicUpdateResult.lastStatusMessageId;
-            gameData.lastStatusMessageTimestamp = publicUpdateResult.lastStatusMessageTimestamp;
-            await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
-        }
 
         await interaction.editReply({ content: `You returned ${Formatter.cardShortName(card)}.` });
 
