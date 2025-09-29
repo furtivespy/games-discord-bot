@@ -334,6 +334,7 @@ const init = async () => {
   klaw("./events").on("data", (item) => {
     const cmdFile = path.parse(item.path);
     if (!cmdFile.ext || cmdFile.ext !== ".js") return;
+    if (cmdFile.name === "modalSubmission") return;
     const response = client.loadEvent(
       cmdFile.dir,
       `${cmdFile.name}${cmdFile.ext}`
