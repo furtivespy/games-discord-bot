@@ -1,18 +1,14 @@
 const { find } = require('lodash')
-const { AttachmentBuilder } = require('discord.js')
 const GameDB = require('../../db/anygame')
 const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class Status {
     static async execute(interaction, client) {
         await interaction.deferReply()
-        const gameData = Object.assign(
-            {},
-            GameDB.defaultGameData,
-            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
-        )
+        const gameData = await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
 
-        if (gameData.isdeleted) {
+        if (!gameData || gameData.isdeleted) {
             return await interaction.editReply({ content: "No game in progress!", ephemeral: true })
         }
 
@@ -20,16 +16,14 @@ class Status {
         const player = find(gameData.players, { userId: interaction.user.id })
         const secretTokensEmbed = player ? await Formatter.playerSecretTokens(gameData, player) : null
 
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id)
-        );
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData, { content: "📊" });
 
         // If the player has secret tokens, send them in an ephemeral followup
         if (secretTokensEmbed) {
             await interaction.followUp({
                 embeds: [secretTokensEmbed],
                 ephemeral: true
-            })
+            }).catch(e => console.error("Error sending secret token followup:", e));
         }
     }
 }

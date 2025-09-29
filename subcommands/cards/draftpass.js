@@ -1,7 +1,7 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const { cloneDeep, orderBy } = require('lodash')
-const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class Pass {
     async execute(interaction, client) {
@@ -68,16 +68,13 @@ class Pass {
             console.warn('Failed to record draft pass in history:', error)
         }
 
-        //client.setGameData(`game-${interaction.channel.id}`, gameData)
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         let content = `New Draft Round Has Started! Draft Round Passed ${inputDir == 'asc' ? 'Clockwise' : 'Counter-Clockwise'}\n`
         gameData.players.forEach(play => { content += `<@${play.userId}> ` })
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id,
-              { content: content }
-            )
-          );
         
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData,
+          { content: content }
+        );
     }
 }
 

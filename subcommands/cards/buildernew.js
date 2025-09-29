@@ -1,7 +1,7 @@
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { find, cloneDeep, shuffle } = require('lodash')
-const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 const haiku = require('haikunator')
 
 class builderNew {
@@ -94,17 +94,11 @@ class builderNew {
         gameData
       );
 
-
-      await interaction.editReply(
-        await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id,
-          { content: `Added and shuffled the new decks` }
-        )
+      await GameStatusHelper.sendGameStatus(interaction, client, gameData,
+        { content: `Added and shuffled the new decks` }
       );
-
     }
   }
 }
     
 module.exports = new builderNew()
-
-

@@ -1,35 +1,27 @@
-const GameDB = require('../../db/anygame.js'); // Included for context, but defaultGameData might not be used.
-const { cloneDeep } = require('lodash'); // Included for context, cloneDeep might not be used if data is static.
+const GameDB = require('../../db/anygame.js');
+const { find } = require('lodash');
 const Formatter = require('../../modules/GameFormatter');
+const GameStatusHelper = require('../../modules/GameStatusHelper');
 
 class Test {
-    async execute(interaction, client) { // interaction and client might be undefined or partially mocked in a direct test execution.
+    async execute(interaction, client) {
+        await interaction.deferReply();
+        const gameData = await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId);
 
-        await interaction.deferReply()
-        const gameData = Object.assign(
-            {},
-            GameDB.defaultGameData,
-            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
-        )
-
-        if (gameData.isdeleted) {
-            return await interaction.editReply({ content: "No game in progress!", ephemeral: true })
+        if (!gameData || gameData.isdeleted) {
+            return await interaction.editReply({ content: "No game in progress!", ephemeral: true });
         }
 
-        // Get secret tokens for the command caller
-        const player = find(gameData.players, { userId: interaction.user.id })
-        const secretTokensEmbed = player ? await Formatter.playerSecretTokens(gameData, player) : null
+        const player = find(gameData.players, { userId: interaction.user.id });
+        const secretTokensEmbed = player ? await Formatter.playerSecretTokens(gameData, player) : null;
 
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id)
-        );
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData);
 
-        // If the player has secret tokens, send them in an ephemeral followup
         if (secretTokensEmbed) {
             await interaction.followUp({
                 embeds: [secretTokensEmbed],
                 ephemeral: true
-            })
+            }).catch(e => console.error("Error sending secret token followup in test command:", e));
         }
     }
 }

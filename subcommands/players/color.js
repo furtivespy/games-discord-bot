@@ -1,7 +1,7 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const { find } = require('lodash')
-const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class Color {
     async execute(interaction, client) {
@@ -69,11 +69,9 @@ class Color {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
-                content: `Set color for ${targetPlayer.username} to **${colorInput}**.`
-            })
-        )
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData, {
+            content: `Set color for ${targetPlayer.username} to **${colorInput}**.`
+        })
     }
 }
 

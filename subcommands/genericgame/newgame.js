@@ -1,18 +1,14 @@
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, shuffle } = require('lodash')
-const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class NewGame {
     async execute(interaction, client) {
 
-        let gameData = Object.assign(
-            {},
-            cloneDeep(GameDB.defaultGameData), 
-            await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
-        )
+        let gameData = await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId);
 
-        if (!gameData.isdeleted) {
+        if (gameData && !gameData.isdeleted) {
             await interaction.reply({ content: `There is an existing game in this channel. Delete it if you want to start a new one.`, ephemeral: true })
         } else {
             gameData = Object.assign(
@@ -78,13 +74,15 @@ class NewGame {
                 console.warn('Failed to record new game creation in history:', error)
             }
 
+            // The initial message for a new game should not be editable.
+            // Therefore, we save the game data first, then send the status.
+            // The helper will see no last message and post a new one.
+            // Crucially, we don't save the game data *again* after the helper runs.
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
             
-            await interaction.reply(
-                await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
-                    content: content
-                })
-            )
+            await GameStatusHelper.sendGameStatus(interaction, client, gameData, {
+                content: content
+            })
         }
     }
 }

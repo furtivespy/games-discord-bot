@@ -1,6 +1,6 @@
 const GameHelper = require('../modules/GlobalGameHelper');
 const GameDB = require('../db/anygame.js');
-const Formatter = require('../modules/GameFormatter');
+const GameStatusHelper = require('../modules/GameStatusHelper');
 
 module.exports = {
     async execute(interaction) {
@@ -50,11 +50,9 @@ module.exports = {
                 await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
             }
 
-            await interaction.editReply(
-                await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
-                    content: `Player colors updated successfully.`
-                })
-            );
+            await GameStatusHelper.sendGameStatus(interaction, interaction.client, gameData, {
+                content: `Player colors updated successfully.`
+            });
         } else if (interaction.customId === 'scoreall-modal') {
             await interaction.deferReply();
             let gameData = await GameHelper.getGameData(client, interaction);
@@ -97,11 +95,9 @@ module.exports = {
                 await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
             }
 
-            await interaction.editReply(
-                await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
-                    content: `Player scores updated successfully.`
-                })
-            );
+            await GameStatusHelper.sendGameStatus(interaction, interaction.client, gameData, {
+                content: `Player scores updated successfully.`
+            });
         }
     }
 };

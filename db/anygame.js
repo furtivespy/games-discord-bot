@@ -156,6 +156,8 @@ class GameDatabase {
         tokens: [],
         playToPlayArea: false, // Added for play area feature
         history: [], // Added for history tracking feature
+        lastStatusMessageId: null,
+        lastStatusMessageTimestamp: null,
     }
 
     defaultBGGGameData = {

@@ -1,7 +1,7 @@
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find } = require('lodash')
-const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class AddPlayer {
     async execute(interaction, client) {
@@ -43,14 +43,33 @@ class AddPlayer {
             )
         )
 
+        // Record history for adding a player
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const newPlayerName = interaction.guild.members.cache.get(newPlayer.id)?.displayName || newPlayer.username
+
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.PLAYER,
+                GameDB.ACTION_TYPES.ADD,
+                `${actorDisplayName} added ${newPlayerName} to the game`,
+                {
+                    addedUserId: newPlayer.id,
+                    addedUsername: newPlayerName,
+                    newPlayerOrder: newOrder
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record add player in history:', error)
+        }
+
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, {
-                content: `Added ${newPlayer} to the game at position ${newOrder + 1}`
-            })
-        )
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData, {
+            content: `Added ${newPlayer} to the game at position ${newOrder + 1}`
+        })
     }
 }
 
-module.exports = new AddPlayer() 
+module.exports = new AddPlayer()

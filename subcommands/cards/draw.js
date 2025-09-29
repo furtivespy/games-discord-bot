@@ -2,6 +2,7 @@ const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class Draw {
     async execute(interaction, client) {
@@ -69,14 +70,12 @@ class Draw {
             console.warn('Failed to record card draw in history:', error)
         }
         
-        //client.setGameData(`game-${interaction.channel.id}`, gameData)
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
                         
-        await interaction.editReply(
-            await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id,
-              { content: `${interaction.member.displayName} drew a card from ${deck.name}` }
-            )
-          );
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData,
+          { content: `${interaction.member.displayName} drew a card from ${deck.name}` }
+        );
+
         var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
         if (handInfo.attachments.length >0){
             await interaction.followUp({ 
