@@ -31,13 +31,13 @@ class GameFormatter {
     }
 
     // Add cards column if needed
-    if (gameData.decks.length > 0) {
+    if (gameData.decks && gameData.decks.length > 0) {
       columns.push({ title: "Cards in Hand", options: { textAlign: "right" } });
     }
 
     // Add Play Area column if any player has a play area (even if empty, to show the column)
     // or if the playToPlayArea setting is enabled.
-    const showPlayAreaColumn = gameData.players.some(p => p.playArea !== undefined) || gameData.playToPlayArea;
+    const showPlayAreaColumn = (gameData.players && gameData.players.some(p => p.playArea !== undefined)) || gameData.playToPlayArea;
     if (showPlayAreaColumn) {
       columns.push({ title: "Play Area", options: { textAlign: "right" } });
     }
@@ -127,7 +127,7 @@ class GameFormatter {
       }
 
       // Add cards if needed
-      if (gameData.decks.length > 0) {
+      if (gameData.decks && gameData.decks.length > 0) {
         const cards = GameFormatter.CountCards(gameData, play);
         rowData.push(String(cards)); // Ensure card count is a string
       }
@@ -158,7 +158,7 @@ class GameFormatter {
       });
     }
     let displayTotalCards = anyPlayerCardCountIsHidden ? '?' : String(totalCards); // Ensure total cards is a string
-    if (gameData.decks.length > 0) {
+    if (gameData.decks && gameData.decks.length > 0) {
       totalsRowData.push(displayTotalCards);
     }
 
@@ -659,6 +659,7 @@ class GameFormatter {
 
   static CountCards(game, player) {
     if (!player) return 0;
+    if (!game.decks) return 0;
     const noshow = game.decks.find((deck) => deck.hiddenInfo == "hand" || deck.hiddenInfo == "all")
     if (noshow) return "?";
     return player.hands.main.length;

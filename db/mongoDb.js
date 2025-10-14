@@ -51,7 +51,7 @@ class MongoDb {
       if (result) {
         return result;
       } else {
-        return {};
+        return null; // Return null instead of {} when no game found
       }
     } catch (err) {
       console.log(err);

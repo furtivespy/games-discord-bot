@@ -210,8 +210,8 @@ class DiscordBot extends Client {
   }
   async getGameData(gameName) {
     //await this.db.testConnection();
-    const guildData = this.gamedata.get(gameName) || {};
-    return guildData;
+    const guildData = this.gamedata.get(gameName);
+    return guildData || null; // Return null instead of {} when no game found
   }
   setGameData(gameName, updatedData) {
     //this.db.testConnection();
@@ -226,10 +226,84 @@ class DiscordBot extends Client {
     if (!_.isEmpty(guildData)) {
       //console.log("got data from db");
       //console.log(guildData);
-      return guildData;
+      return this.migrateGameData(guildData);
     }
     guildData = this.getGameData(`${gameName}-${channelId}`);
-    return guildData;
+    return this.migrateGameData(guildData);
+  }
+  
+  // Migrate legacy game data to ensure all required properties exist
+  migrateGameData(gameData) {
+    if (!gameData) return gameData;
+    
+    // Check if this is an empty object or has no meaningful data
+    // Don't migrate empty objects - they're not real games
+    const hasData = Object.keys(gameData).length > 0 && (
+      gameData.players !== undefined || 
+      gameData.name !== undefined ||
+      gameData.decks !== undefined ||
+      gameData.tokens !== undefined
+    );
+    
+    if (!hasData) {
+      // This is an empty object from a "no game found" query, don't migrate it
+      return gameData;
+    }
+    
+    // Ensure isdeleted exists - legacy games that exist should be active
+    if (gameData.isdeleted === undefined) {
+      gameData.isdeleted = false;
+    }
+    
+    // Ensure players array exists
+    if (gameData.players === undefined) {
+      gameData.players = [];
+    }
+    
+    // Ensure decks array exists
+    if (gameData.decks === undefined) {
+      gameData.decks = [];
+    }
+    
+    // Ensure tokens array exists
+    if (gameData.tokens === undefined) {
+      gameData.tokens = [];
+    }
+    
+    // Ensure history array exists
+    if (gameData.history === undefined) {
+      gameData.history = [];
+    }
+    
+    // Ensure playToPlayArea exists
+    if (gameData.playToPlayArea === undefined) {
+      gameData.playToPlayArea = false;
+    }
+    
+    // Ensure reverseOrder exists
+    if (gameData.reverseOrder === undefined) {
+      gameData.reverseOrder = false;
+    }
+    
+    // Ensure name exists
+    if (gameData.name === undefined) {
+      gameData.name = "";
+    }
+    
+    // Ensure winner exists
+    if (gameData.winner === undefined) {
+      gameData.winner = null;
+    }
+    
+    // Ensure lastStatusMessage fields exist
+    if (gameData.lastStatusMessageId === undefined) {
+      gameData.lastStatusMessageId = null;
+    }
+    if (gameData.lastStatusMessageTimestamp === undefined) {
+      gameData.lastStatusMessageTimestamp = null;
+    }
+    
+    return gameData;
   }
   async queryGameData(serverId, gameName, query) {
     return await this.db.queryGameData(serverId, gameName, query);
@@ -243,13 +317,13 @@ class DiscordBot extends Client {
     msg.reply(`Oh, I really love ${response} too!`);
     */
   async awaitReply(msg, question, limit = 60000) {
-    const filter = (m) => (m.author.id = msg.author.id);
+    const filter = (m) => m.author.id === msg.author.id;
     await msg.channel.send(question);
     try {
-      const collected = await msg.channel.awaitMessages(filter, {
-        max: 1,
-        time: limit,
-        errors: ["time"],
+      const collected = await msg.channel.awaitMessages({ 
+        filter, 
+        max: 1, 
+        time: limit 
       });
       return collected.first().content;
     } catch (e) {
@@ -309,7 +383,7 @@ class DiscordBot extends Client {
 }
 
 const client = new DiscordBot({
-  partials: ["Partials.Guild", "Partials.Channel", "Partials.Reaction"],
+  partials: [Partials.Guild, Partials.Channel, Partials.Reaction],
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
@@ -370,7 +444,7 @@ const init = async () => {
     client.levelCache[thisLevel.name] = thisLevel.level;
   }
 
-  client.on("ready", async () => {
+  client.on("clientReady", async () => {
     //nice to wait a sec before really being ready
     await client.wait(1000);
 
@@ -464,7 +538,7 @@ const init = async () => {
 
     // If the member on a guild is invisible or not cached, fetch them.
     if (message.guild && !message.member)
-      await message.guild.fetchMember(message.author);
+      await message.guild.members.fetch(message.author.id);
 
     client.TryExecuteCommand(command, message, args);
   });
@@ -493,7 +567,7 @@ client.on("messageCreate", async (message) => {
   const args = message.content.trim().split(/ +/g);
   // If the member on a guild is invisible or not cached, fetch them.
   if (message.guild && !message.member)
-    await message.guild.fetchMember(message.author);
+    await message.guild.members.fetch(message.author.id);
   // Get the user or member's permission level from the elevation
   const level = client.permlevel(message);
   const exclusions = client.getExclusions(message.guild);
