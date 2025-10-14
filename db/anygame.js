@@ -58,7 +58,8 @@ class GameDatabase {
         CARD: 'card', 
         TOKEN: 'token',
         MONEY: 'money',
-        SECRET: 'secret'
+        SECRET: 'secret',
+        TEAM: 'team'
     }
 
     ACTION_TYPES = {
@@ -148,6 +149,7 @@ class GameDatabase {
     defaultGameData = {
         decks: [],
         players: [],
+        teams: [], // Added for team feature
         name: "",
         isdeleted: true,
         winner: null,
@@ -211,6 +213,7 @@ class GameDatabase {
         playArea: [], // Added for play area feature
         color: null,
         tokens: {},
+        teamId: null, // Added for team feature
     }
     
     defaultHand = {
@@ -225,6 +228,12 @@ class GameDatabase {
         isSecret: false,
         created: "",
         createdBy: "",
+    }
+
+    defaultTeam = {
+        id: "",
+        name: "",
+        color: null,
     }
 
     createCard(deck, name, description = "", type = "", suit = "", value = "", format = "A", image){

@@ -14,10 +14,19 @@ const HiddenEnum = {
 
 class GameFormatter {
   static async GameStatusV2(gameData, guild, clientUserId) {
+    // Check if teams exist to determine if we need a team column
+    const hasTeams = gameData.teams && gameData.teams.length > 0;
+
     const columns = [
       { title: "Player" },
-      { title: "Score", options: { textAlign: "right" } },
     ];
+
+    // Add Team column if teams exist
+    if (hasTeams) {
+      columns.push({ title: "Team" });
+    }
+
+    columns.push({ title: "Score", options: { textAlign: "right" } });
 
     // Add token columns for each token in the game
     if (gameData.tokens && gameData.tokens.length > 0) {
@@ -105,8 +114,15 @@ class GameFormatter {
       const name = guild.members.cache.get(play.userId)?.displayName;
       let rowData = [
         `(${play.order + 1}) ${name ?? play.name ?? play.userId}`,
-        String(play.score), // Ensure score is a string
       ];
+
+      // Add team name if teams exist
+      if (hasTeams) {
+        const playerTeam = gameData.teams.find(t => t.id === play.teamId);
+        rowData.push(playerTeam ? playerTeam.name : '');
+      }
+
+      rowData.push(String(play.score)); // Ensure score is a string
 
       // Add token values
       if (gameData.tokens && gameData.tokens.length > 0) {
@@ -142,7 +158,15 @@ class GameFormatter {
     });
 
     
-    const totalsRowData = ['Totals', '']; // Initial parts are strings
+    const totalsRowData = ['Totals'];
+    
+    // Add empty team column in totals if teams exist
+    if (hasTeams) {
+      totalsRowData.push('');
+    }
+    
+    totalsRowData.push(''); // Empty score column
+    
     if (gameData.tokens && gameData.tokens.length > 0) {
       gameData.tokens.forEach(token => {
         const currentTotal = tokenTotals[token.id];
@@ -191,6 +215,13 @@ class GameFormatter {
                 if (cellIndex === 0 && player.color) {
                     cellProperties.color = player.color; // Set text color
                 }
+                // If this is the team column (second column when teams exist) and player has a team with a color
+                if (hasTeams && cellIndex === 1 && player.teamId) {
+                    const playerTeam = gameData.teams.find(t => t.id === player.teamId);
+                    if (playerTeam && playerTeam.color) {
+                        cellProperties.color = playerTeam.color; // Set team color
+                    }
+                }
                 return cellProperties;
             });
         }
@@ -205,7 +236,11 @@ class GameFormatter {
     });
 
     const hasTokens = gameData.tokens && gameData.tokens.length > 0;
-    const canvasWidth = hasTokens ? 1200 : 800;
+    // Increase canvas width if teams column is present
+    let canvasWidth = hasTokens ? 1200 : 800;
+    if (hasTeams) {
+      canvasWidth += 150; // Add extra width for team column
+    }
     const additionalRows = 1; // totals row
     const canvas = createCanvas(canvasWidth, 100 + 45 * (gameData.players.length + additionalRows));
     let ctx = canvas.getContext("2d");
@@ -892,7 +927,8 @@ class GameFormatter {
       'card': '🃏',
       'token': '🔹',
       'money': '💰',
-      'secret': '🤐'
+      'secret': '🤐',
+      'team': '👥'
     };
     return emojiMap[category] || '📝';
   }
