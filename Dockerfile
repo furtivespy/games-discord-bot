@@ -34,9 +34,12 @@ COPY --link . .
 # Final stage for app image
 FROM base
 
-# Install runtime dependencies for canvas
+# Install runtime dependencies for canvas and color emoji fonts
 RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y libcairo2 libpango-1.0-0 libjpeg62-turbo libgif7 librsvg2-2 libpixman-1-0 && \
+    apt-get install --no-install-recommends -y \
+    libcairo2 libpango-1.0-0 libjpeg62-turbo libgif7 librsvg2-2 libpixman-1-0 \
+    fonts-noto-color-emoji fontconfig && \
+    fc-cache -fv && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
