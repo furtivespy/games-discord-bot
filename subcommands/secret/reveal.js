@@ -48,9 +48,17 @@ class Reveal {
                 //client.setGameData(`secret-${interaction.channel.id}`, secretData)
                 await client.setGameDataV2(interaction.guildId, "secret", interaction.channelId, secretData)
 
+                // Get game data for team grouping
+                let gameData = null
+                try {
+                    gameData = await GameHelper.getGameData(client, interaction)
+                } catch (error) {
+                    // Game data might not exist, that's okay
+                }
+
                 await interaction.reply({ 
                     content: `Your Secrets!`,
-                    embeds: [await Formatter.SecretStatus(secretData, interaction.guild)]
+                    embeds: [await Formatter.SecretStatus(secretData, interaction.guild, gameData)]
                 })
             } else {
                 await interaction.reply({ content: `Nothing to reveal...`, ephemeral: true })

@@ -169,7 +169,8 @@ class GameDatabase {
     
     defaultSecretData = {
         isrevealed: true,
-        players: []
+        players: [],
+        mode: 'normal' // 'normal' or 'super-secret'
     }
 
     defaultDeck = {

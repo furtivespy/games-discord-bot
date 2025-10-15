@@ -1,4 +1,5 @@
 const GameDB = require('../../db/anygame.js')
+const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 
@@ -12,10 +13,18 @@ class AnonReveal {
                 await client.getGameDataV2(interaction.guildId, 'secret', interaction.channelId)
             )
 
+            // Get game data for team grouping
+            let gameData = null
+            try {
+                gameData = await GameHelper.getGameData(client, interaction)
+            } catch (error) {
+                // Game data might not exist, that's okay
+            }
+
             if (secretData.players.length > 0){
                 await interaction.reply({
                     content: `Your Secrets! Anonymously!`,
-                    embeds: [await Formatter.SecretStatusAnon(secretData, interaction.guild)]
+                    embeds: [await Formatter.SecretStatusAnon(secretData, interaction.guild, gameData)]
                 })
             } else {
                 await interaction.reply({ content: `Nothing to reveal...`, ephemeral: true })
