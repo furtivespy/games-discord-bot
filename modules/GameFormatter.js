@@ -271,16 +271,122 @@ class GameFormatter {
     return newEmbed;
   }
 
-  static async SecretStatusAnon(secretData, guild) {
+  static async SecretStatusAnon(secretData, guild, gameData = null) {
     const newEmbed = new EmbedBuilder().setColor(0x360280).setTitle(`Anonymous Secrets`);
+    const isSuperSecret = secretData.mode === 'super-secret';
 
-    const secrets = secretData.players.filter(p => p.hassecret).map(p => `• ${p.secret}`);
-    const shuffledSecrets = shuffle(secrets);
+    // For super-secret mode: find max length
+    let maxLength = 0;
+    if (isSuperSecret) {
+      secretData.players.filter(p => p.hassecret).forEach((play) => {
+        maxLength = Math.max(maxLength, play.secret.length);
+      });
+    }
 
-    if (shuffledSecrets.length > 0){
-      newEmbed.setDescription(shuffledSecrets.join('\n'));
+    // Check if teams exist and are being used
+    const hasTeams = gameData && gameData.teams && gameData.teams.length > 0;
+    const playersHaveTeams = hasTeams && secretData.players.some(p => p.teamId);
+
+    if (hasTeams && playersHaveTeams) {
+      // Group secrets by team
+      const teamGroups = {};
+      const noTeamPlayers = [];
+
+      secretData.players.filter(p => p.hassecret).forEach((player) => {
+        if (player.teamId) {
+          if (!teamGroups[player.teamId]) {
+            teamGroups[player.teamId] = [];
+          }
+          teamGroups[player.teamId].push(player);
+        } else {
+          noTeamPlayers.push(player);
+        }
+      });
+
+      // Display teams with shuffled secrets
+      gameData.teams.forEach((team) => {
+        if (teamGroups[team.id] && teamGroups[team.id].length > 0) {
+          // Count duplicates within this team only
+          const teamSecretCounts = {};
+          if (isSuperSecret) {
+            teamGroups[team.id].forEach((player) => {
+              teamSecretCounts[player.secret] = (teamSecretCounts[player.secret] || 0) + 1;
+            });
+          }
+
+          const teamSecrets = teamGroups[team.id].map((player) => {
+            const secret = player.secret;
+            if (isSuperSecret) {
+              const paddedSecret = secret.padEnd(maxLength, ' ');
+              const isDuplicate = teamSecretCounts[secret] > 1;
+              return `${isDuplicate ? '⚠️ ' : ''}• ||${paddedSecret}||`;
+            } else {
+              return `• ${secret}`;
+            }
+          });
+
+          const shuffledTeamSecrets = shuffle(teamSecrets);
+          newEmbed.addFields({
+            name: `${team.name}`,
+            value: shuffledTeamSecrets.join('\n'),
+          });
+        }
+      });
+
+      // Display secrets from players without teams (shuffled)
+      if (noTeamPlayers.length > 0) {
+        // Count duplicates within no-team players only
+        const noTeamSecretCounts = {};
+        if (isSuperSecret) {
+          noTeamPlayers.forEach((player) => {
+            noTeamSecretCounts[player.secret] = (noTeamSecretCounts[player.secret] || 0) + 1;
+          });
+        }
+
+        const noTeamSecrets = noTeamPlayers.map((player) => {
+          const secret = player.secret;
+          if (isSuperSecret) {
+            const paddedSecret = secret.padEnd(maxLength, ' ');
+            const isDuplicate = noTeamSecretCounts[secret] > 1;
+            return `${isDuplicate ? '⚠️ ' : ''}• ||${paddedSecret}||`;
+          } else {
+            return `• ${secret}`;
+          }
+        });
+
+        const shuffledNoTeamSecrets = shuffle(noTeamSecrets);
+        newEmbed.addFields({
+          name: `No Team`,
+          value: shuffledNoTeamSecrets.join('\n'),
+        });
+      }
     } else {
-      newEmbed.setDescription('No secrets to reveal.');
+      // Original behavior - no team grouping, count all duplicates
+      const secretCounts = {};
+      if (isSuperSecret) {
+        secretData.players.filter(p => p.hassecret).forEach((play) => {
+          secretCounts[play.secret] = (secretCounts[play.secret] || 0) + 1;
+        });
+      }
+
+      const secrets = secretData.players.filter(p => p.hassecret).map(p => {
+        const secret = p.secret;
+        // Wrap in spoilers if super-secret mode
+        if (isSuperSecret) {
+          const paddedSecret = secret.padEnd(maxLength, ' ');
+          const isDuplicate = secretCounts[secret] > 1;
+          return `${isDuplicate ? '⚠️ ' : ''}• ||${paddedSecret}||`;
+        } else {
+          return `• ${secret}`;
+        }
+      });
+      const shuffledSecrets = shuffle(secrets);
+
+      if (shuffledSecrets.length > 0){
+        newEmbed.setDescription(shuffledSecrets.join('\n'));
+      } else {
+        newEmbed.setDescription('No secrets to reveal.');
+      }
     }
 
     return newEmbed;
@@ -510,21 +616,137 @@ class GameFormatter {
     return newEmbed;
   }
 
-  static async SecretStatus(secretData, guild) {
+  static async SecretStatus(secretData, guild, gameData = null) {
     const newEmbed = new EmbedBuilder().setColor(0x360280).setTitle(`Secrets`);
-
-    secretData.players.forEach((play) => {
-      const name = guild.members.cache.get(play.userId)?.displayName;
-      const scrt = secretData.isrevealed
-        ? play.secret
-        : play.hassecret
-        ? `*Secret hidden*`
-        : `**No Secrets**`;
-      newEmbed.addFields({
-        name: `${name ?? play.name ?? play.userId}`,
-        value: scrt,
+    const isSuperSecret = secretData.mode === 'super-secret';
+    
+    // For super-secret mode: find max length
+    let maxLength = 0;
+    if (isSuperSecret && secretData.isrevealed) {
+      secretData.players.filter(p => p.hassecret).forEach((play) => {
+        maxLength = Math.max(maxLength, play.secret.length);
       });
-    });
+    }
+    
+    // Check if teams exist and are being used
+    const hasTeams = gameData && gameData.teams && gameData.teams.length > 0;
+    const playersHaveTeams = hasTeams && secretData.players.some(p => p.teamId);
+
+    if (hasTeams && playersHaveTeams) {
+      // Group secrets by team
+      const teamGroups = {};
+      const noTeamPlayers = [];
+
+      secretData.players.forEach((play) => {
+        if (play.teamId) {
+          if (!teamGroups[play.teamId]) {
+            teamGroups[play.teamId] = [];
+          }
+          teamGroups[play.teamId].push(play);
+        } else {
+          noTeamPlayers.push(play);
+        }
+      });
+
+      // Display teams
+      gameData.teams.forEach((team) => {
+        if (teamGroups[team.id]) {
+          // Count duplicates within this team only
+          const teamSecretCounts = {};
+          if (isSuperSecret && secretData.isrevealed) {
+            teamGroups[team.id].filter(p => p.hassecret).forEach((play) => {
+              teamSecretCounts[play.secret] = (teamSecretCounts[play.secret] || 0) + 1;
+            });
+          }
+
+          const teamSecrets = teamGroups[team.id].map((play) => {
+            const name = guild.members.cache.get(play.userId)?.displayName;
+            let scrt = secretData.isrevealed
+              ? play.secret
+              : play.hassecret
+              ? `*Secret hidden*`
+              : `**No Secrets**`;
+            
+            // Wrap in spoilers if super-secret mode and revealed
+            if (isSuperSecret && secretData.isrevealed && play.hassecret) {
+              const paddedSecret = play.secret.padEnd(maxLength, ' ');
+              const isDuplicate = teamSecretCounts[play.secret] > 1;
+              scrt = `${isDuplicate ? '⚠️ ' : ''}||${paddedSecret}||`;
+            }
+            
+            return `**${name ?? play.name ?? play.userId}:** ${scrt}`;
+          }).join('\n');
+
+          newEmbed.addFields({
+            name: `${team.name}`,
+            value: teamSecrets || 'No players',
+          });
+        }
+      });
+
+      // Display players without teams
+      if (noTeamPlayers.length > 0) {
+        // Count duplicates within no-team players only
+        const noTeamSecretCounts = {};
+        if (isSuperSecret && secretData.isrevealed) {
+          noTeamPlayers.filter(p => p.hassecret).forEach((play) => {
+            noTeamSecretCounts[play.secret] = (noTeamSecretCounts[play.secret] || 0) + 1;
+          });
+        }
+
+        const noTeamSecrets = noTeamPlayers.map((play) => {
+          const name = guild.members.cache.get(play.userId)?.displayName;
+          let scrt = secretData.isrevealed
+            ? play.secret
+            : play.hassecret
+            ? `*Secret hidden*`
+            : `**No Secrets**`;
+          
+          // Wrap in spoilers if super-secret mode and revealed
+          if (isSuperSecret && secretData.isrevealed && play.hassecret) {
+            const paddedSecret = play.secret.padEnd(maxLength, ' ');
+            const isDuplicate = noTeamSecretCounts[play.secret] > 1;
+            scrt = `${isDuplicate ? '⚠️ ' : ''}||${paddedSecret}||`;
+          }
+          
+          return `**${name ?? play.name ?? play.userId}:** ${scrt}`;
+        }).join('\n');
+
+        newEmbed.addFields({
+          name: `No Team`,
+          value: noTeamSecrets,
+        });
+      }
+    } else {
+      // Original behavior - no team grouping, count all duplicates
+      const secretCounts = {};
+      if (isSuperSecret && secretData.isrevealed) {
+        secretData.players.filter(p => p.hassecret).forEach((play) => {
+          secretCounts[play.secret] = (secretCounts[play.secret] || 0) + 1;
+        });
+      }
+
+      secretData.players.forEach((play) => {
+        const name = guild.members.cache.get(play.userId)?.displayName;
+        let scrt = secretData.isrevealed
+          ? play.secret
+          : play.hassecret
+          ? `*Secret hidden*`
+          : `**No Secrets**`;
+        
+        // Wrap in spoilers if super-secret mode and revealed
+        if (isSuperSecret && secretData.isrevealed && play.hassecret) {
+          const paddedSecret = play.secret.padEnd(maxLength, ' ');
+          const isDuplicate = secretCounts[play.secret] > 1;
+          scrt = `${isDuplicate ? '⚠️ ' : ''}||${paddedSecret}||`;
+        }
+        
+        newEmbed.addFields({
+          name: `${name ?? play.name ?? play.userId}`,
+          value: scrt,
+        });
+      });
+    }
 
     return newEmbed;
   }

@@ -5,6 +5,8 @@ const Add = require(`../../subcommands/secret/add`)
 const Check = require(`../../subcommands/secret/check`)
 const Reveal = require(`../../subcommands/secret/reveal`)
 const AnonReveal = require(`../../subcommands/secret/anonreveal`)
+const Mode = require(`../../subcommands/secret/mode`)
+const Status = require(`../../subcommands/secret/status`)
 const Help = require('../../subcommands/secret/help.js')
 
 class Secret extends SlashCommand {
@@ -47,6 +49,25 @@ class Secret extends SlashCommand {
                     .setDescription("Reveals all the secrets anonymously")
                     .addStringOption(option => option.setName('confirm').setDescription('Type "reveal" to confirm secrets reveal').setRequired(true))
                 )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("mode")
+                    .setDescription("Change secret mode settings")
+                    .addStringOption(option => 
+                        option.setName('mode')
+                            .setDescription('Secret mode')
+                            .setRequired(true)
+                            .addChoices(
+                                { name: 'Normal', value: 'normal' },
+                                { name: 'Super Secret', value: 'super-secret' }
+                            )
+                    )
+                )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("status")
+                    .setDescription("Show the current secret status")
+                )
     }
 
     async execute(interaction) {
@@ -63,6 +84,12 @@ class Secret extends SlashCommand {
                     break
                 case "anonreveal":
                     await AnonReveal.execute(interaction, this.client)
+                    break
+                case "mode":
+                    await Mode.execute(interaction, this.client)
+                    break
+                case "status":
+                    await Status.execute(interaction, this.client)
                     break
                 case "help":
                     await Help.execute(interaction, this.client)

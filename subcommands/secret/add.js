@@ -13,10 +13,11 @@ class Add {
         )
 
         if (secretData.isrevealed) { //All New Secrets
+            const preservedMode = secretData.mode || 'normal'
             secretData = Object.assign(
                 {},
                 cloneDeep(GameDB.defaultSecretData),
-                {isrevealed: false}
+                {isrevealed: false, mode: preservedMode}
             )
 
             let gameData = Object.assign(
@@ -45,7 +46,9 @@ class Add {
                 {
                     guildId: interaction.guild.id,
                     userId: interaction.user.id,
-                    name: interaction.username,
+                    name: interaction.user.username,
+                    hassecret: false,
+                    secret: "--"
                 } 
             ))
 
@@ -87,11 +90,35 @@ class Add {
         //client.setGameData(`secret-${interaction.channel.id}`, secretData)
         await client.setGameDataV2(interaction.guildId, "secret", interaction.channelId, secretData)
 
+        const isSuperSecret = secretData.mode === 'super-secret'
 
-        await interaction.reply({ 
-            content: `Your secret is safe with me!`,
-            embeds: [await Formatter.SecretStatus(secretData, interaction.guild)]
-        })
+        // Get game data for team grouping and player count
+        let gameData = null
+        try {
+            gameData = await GameHelper.getGameData(client, interaction)
+        } catch (error) {
+            // Game data might not exist, that's okay
+        }
+
+        if (isSuperSecret) {
+            // In super-secret mode, show only count and make it ephemeral
+            const secretCount = secretData.players.filter(p => p.hassecret).length
+            // Get total players from game data if secret players list is empty
+            const totalPlayers = secretData.players.length > 0 
+                ? secretData.players.length 
+                : (gameData && gameData.players ? gameData.players.length : 0)
+            
+            await interaction.reply({ 
+                content: `🤐 Your secret is safe with me!\n${secretCount} of ${totalPlayers} players have entered secrets`,
+                ephemeral: true
+            })
+        } else {
+            // In normal mode, show full status
+            await interaction.reply({ 
+                content: `Your secret is safe with me!`,
+                embeds: [await Formatter.SecretStatus(secretData, interaction.guild, gameData)]
+            })
+        }
         
     }
 }
