@@ -32,14 +32,15 @@ class TableRenderer {
     
     // Merge options with defaults
     this.settings = { ...this.defaults, ...this.options };
+    // Keep section-specific settings separate without polluting them with general defaults
     if (this.options.header) {
-      this.settings.header = { ...this.defaults, ...this.options.header };
+      this.settings.header = { ...this.options.header };
     }
     if (this.options.title) {
-      this.settings.title = { ...this.defaults, ...this.options.title };
+      this.settings.title = { ...this.options.title };
     }
     if (this.options.cell) {
-      this.settings.cell = { ...this.defaults, ...this.options.cell };
+      this.settings.cell = { ...this.options.cell };
     }
     if (this.options.borders) {
       this.settings.borders = this.options.borders;
