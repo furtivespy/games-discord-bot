@@ -3,7 +3,7 @@ const Emoji = require("./EmojiAssitant");
 const { sortBy, floor, isArray, find, shuffle } = require("lodash");
 var AsciiTable = require("ascii-table");
 const { createCanvas, Image, loadImage } = require("canvas");
-const { CanvasTable, CTColumn } = require("canvas-table");
+const TableRenderer = require("./TableRenderer");
 
 const HiddenEnum = {
   "visible": "All counts are visible",
@@ -55,7 +55,7 @@ class GameFormatter {
       borders: {
         table: { color: "#aaa", width: 1 },
       },
-      fit: true,
+      fit: false, // Disable fit to prevent column scaling issues
       // title object removed here
       // cell object removed here
       header: {
@@ -235,27 +235,24 @@ class GameFormatter {
         }
     });
 
-    const hasTokens = gameData.tokens && gameData.tokens.length > 0;
-    // Increase canvas width if teams column is present
-    let canvasWidth = hasTokens ? 1200 : 800;
-    if (hasTeams) {
-      canvasWidth += 150; // Add extra width for team column
-    }
-    const additionalRows = 1; // totals row
-    const canvas = createCanvas(canvasWidth, 100 + 45 * (gameData.players.length + additionalRows));
+    // Calculate actual required dimensions based on content
+    const dimensions = TableRenderer.calculateRequiredDimensions(columns, processedData, options);
+    
+    // Create canvas with the exact size needed
+    const canvas = createCanvas(dimensions.canvasWidth, dimensions.canvasHeight);
     let ctx = canvas.getContext("2d");
     ctx.textDrawingMode = "glyph";
 
     const config = { columns, data: processedData, options };
-    const ct = new CanvasTable(canvas, config);
-    await ct.generateTable();
+    const tableRenderer = new TableRenderer(canvas, config);
+    await tableRenderer.generateTable();
 
     const embeds = []; 
     // we previously had a special embed for secret tokens, but we removed it
     // the logic for additional embeds is still here if needed.
 
     return {
-      attachment: new AttachmentBuilder(await ct.renderToBuffer(), {name: `status-table.png`}),
+      attachment: new AttachmentBuilder(await tableRenderer.renderToBuffer(), {name: `status-table.png`}),
       embed: embeds.length > 0 ? embeds[0] : null // This will effectively be null
     };
   }
