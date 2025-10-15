@@ -306,11 +306,12 @@ class GameFormatter {
       // Display teams with shuffled secrets
       gameData.teams.forEach((team) => {
         if (teamGroups[team.id] && teamGroups[team.id].length > 0) {
-          // Count duplicates within this team only
+          // Count duplicates within this team only (case-insensitive)
           const teamSecretCounts = {};
           if (isSuperSecret) {
             teamGroups[team.id].forEach((player) => {
-              teamSecretCounts[player.secret] = (teamSecretCounts[player.secret] || 0) + 1;
+              const lowerSecret = player.secret.toLowerCase();
+              teamSecretCounts[lowerSecret] = (teamSecretCounts[lowerSecret] || 0) + 1;
             });
           }
 
@@ -318,7 +319,7 @@ class GameFormatter {
             const secret = player.secret;
             if (isSuperSecret) {
               const paddedSecret = secret.padEnd(maxLength, ' ');
-              const isDuplicate = teamSecretCounts[secret] > 1;
+              const isDuplicate = teamSecretCounts[secret.toLowerCase()] > 1;
               return `${isDuplicate ? '⚠️ ' : ''}• ||${paddedSecret}||`;
             } else {
               return `• ${secret}`;
@@ -335,11 +336,12 @@ class GameFormatter {
 
       // Display secrets from players without teams (shuffled)
       if (noTeamPlayers.length > 0) {
-        // Count duplicates within no-team players only
+        // Count duplicates within no-team players only (case-insensitive)
         const noTeamSecretCounts = {};
         if (isSuperSecret) {
           noTeamPlayers.forEach((player) => {
-            noTeamSecretCounts[player.secret] = (noTeamSecretCounts[player.secret] || 0) + 1;
+            const lowerSecret = player.secret.toLowerCase();
+            noTeamSecretCounts[lowerSecret] = (noTeamSecretCounts[lowerSecret] || 0) + 1;
           });
         }
 
@@ -347,7 +349,7 @@ class GameFormatter {
           const secret = player.secret;
           if (isSuperSecret) {
             const paddedSecret = secret.padEnd(maxLength, ' ');
-            const isDuplicate = noTeamSecretCounts[secret] > 1;
+            const isDuplicate = noTeamSecretCounts[secret.toLowerCase()] > 1;
             return `${isDuplicate ? '⚠️ ' : ''}• ||${paddedSecret}||`;
           } else {
             return `• ${secret}`;
@@ -361,11 +363,12 @@ class GameFormatter {
         });
       }
     } else {
-      // Original behavior - no team grouping, count all duplicates
+      // Original behavior - no team grouping, count all duplicates (case-insensitive)
       const secretCounts = {};
       if (isSuperSecret) {
         secretData.players.filter(p => p.hassecret).forEach((play) => {
-          secretCounts[play.secret] = (secretCounts[play.secret] || 0) + 1;
+          const lowerSecret = play.secret.toLowerCase();
+          secretCounts[lowerSecret] = (secretCounts[lowerSecret] || 0) + 1;
         });
       }
 
@@ -374,7 +377,7 @@ class GameFormatter {
         // Wrap in spoilers if super-secret mode
         if (isSuperSecret) {
           const paddedSecret = secret.padEnd(maxLength, ' ');
-          const isDuplicate = secretCounts[secret] > 1;
+          const isDuplicate = secretCounts[secret.toLowerCase()] > 1;
           return `${isDuplicate ? '⚠️ ' : ''}• ||${paddedSecret}||`;
         } else {
           return `• ${secret}`;
@@ -651,11 +654,12 @@ class GameFormatter {
       // Display teams
       gameData.teams.forEach((team) => {
         if (teamGroups[team.id]) {
-          // Count duplicates within this team only
+          // Count duplicates within this team only (case-insensitive)
           const teamSecretCounts = {};
           if (isSuperSecret && secretData.isrevealed) {
             teamGroups[team.id].filter(p => p.hassecret).forEach((play) => {
-              teamSecretCounts[play.secret] = (teamSecretCounts[play.secret] || 0) + 1;
+              const lowerSecret = play.secret.toLowerCase();
+              teamSecretCounts[lowerSecret] = (teamSecretCounts[lowerSecret] || 0) + 1;
             });
           }
 
@@ -670,7 +674,7 @@ class GameFormatter {
             // Wrap in spoilers if super-secret mode and revealed
             if (isSuperSecret && secretData.isrevealed && play.hassecret) {
               const paddedSecret = play.secret.padEnd(maxLength, ' ');
-              const isDuplicate = teamSecretCounts[play.secret] > 1;
+              const isDuplicate = teamSecretCounts[play.secret.toLowerCase()] > 1;
               scrt = `${isDuplicate ? '⚠️ ' : ''}||${paddedSecret}||`;
             }
             
@@ -686,11 +690,12 @@ class GameFormatter {
 
       // Display players without teams
       if (noTeamPlayers.length > 0) {
-        // Count duplicates within no-team players only
+        // Count duplicates within no-team players only (case-insensitive)
         const noTeamSecretCounts = {};
         if (isSuperSecret && secretData.isrevealed) {
           noTeamPlayers.filter(p => p.hassecret).forEach((play) => {
-            noTeamSecretCounts[play.secret] = (noTeamSecretCounts[play.secret] || 0) + 1;
+            const lowerSecret = play.secret.toLowerCase();
+            noTeamSecretCounts[lowerSecret] = (noTeamSecretCounts[lowerSecret] || 0) + 1;
           });
         }
 
@@ -705,7 +710,7 @@ class GameFormatter {
           // Wrap in spoilers if super-secret mode and revealed
           if (isSuperSecret && secretData.isrevealed && play.hassecret) {
             const paddedSecret = play.secret.padEnd(maxLength, ' ');
-            const isDuplicate = noTeamSecretCounts[play.secret] > 1;
+            const isDuplicate = noTeamSecretCounts[play.secret.toLowerCase()] > 1;
             scrt = `${isDuplicate ? '⚠️ ' : ''}||${paddedSecret}||`;
           }
           
@@ -718,11 +723,12 @@ class GameFormatter {
         });
       }
     } else {
-      // Original behavior - no team grouping, count all duplicates
+      // Original behavior - no team grouping, count all duplicates (case-insensitive)
       const secretCounts = {};
       if (isSuperSecret && secretData.isrevealed) {
         secretData.players.filter(p => p.hassecret).forEach((play) => {
-          secretCounts[play.secret] = (secretCounts[play.secret] || 0) + 1;
+          const lowerSecret = play.secret.toLowerCase();
+          secretCounts[lowerSecret] = (secretCounts[lowerSecret] || 0) + 1;
         });
       }
 
@@ -737,7 +743,7 @@ class GameFormatter {
         // Wrap in spoilers if super-secret mode and revealed
         if (isSuperSecret && secretData.isrevealed && play.hassecret) {
           const paddedSecret = play.secret.padEnd(maxLength, ' ');
-          const isDuplicate = secretCounts[play.secret] > 1;
+          const isDuplicate = secretCounts[play.secret.toLowerCase()] > 1;
           scrt = `${isDuplicate ? '⚠️ ' : ''}||${paddedSecret}||`;
         }
         
