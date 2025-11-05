@@ -47,7 +47,12 @@ class BoardGameGeek {
 
   async LoadBggData() {
     let gameInfoResp = await fetch(
-      `https://api.geekdo.com/xmlapi/boardgame/${this.gameId}?stats=1`
+      `https://api.geekdo.com/xmlapi/boardgame/${this.gameId}?stats=1`,
+      {
+        headers: {
+          'Authorization': `Bearer ${this.discordClient.config.BGGToken}`
+        }
+      }
     );
     const text = await gameInfoResp.text();
     const parser = new XMLParser({
