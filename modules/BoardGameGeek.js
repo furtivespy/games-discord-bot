@@ -19,6 +19,145 @@ class BoardGameGeek {
     this.otherAttachments = [];
   }
 
+  /**
+   * Calculate total character count of an embed
+   * Discord's limit is 6000 characters total per embed
+   */
+  static calculateEmbedSize(embed) {
+    let total = 0;
+    const data = embed.data;
+    
+    if (data.title) total += data.title.length;
+    if (data.description) total += data.description.length;
+    if (data.footer?.text) total += data.footer.text.length;
+    if (data.author?.name) total += data.author.name.length;
+    
+    if (data.fields) {
+      data.fields.forEach(field => {
+        if (field.name) total += field.name.length;
+        if (field.value) total += field.value.length;
+      });
+    }
+    
+    return total;
+  }
+
+  /**
+   * Trim embed content to stay under Discord's 6000 character limit
+   */
+  static trimEmbedToLimit(embed, maxSize = 6000) {
+    let currentSize = this.calculateEmbedSize(embed);
+    
+    if (currentSize <= maxSize) {
+      return embed;
+    }
+
+    const data = embed.data;
+    const trimMarker = '\n\n...(trimmed for length)';
+    
+    // Strategy: trim description first, then field values
+    if (data.description && data.description.length > 500) {
+      const overhead = currentSize - maxSize;
+      const targetDescLength = Math.max(500, data.description.length - overhead - trimMarker.length);
+      data.description = data.description.substring(0, targetDescLength) + trimMarker;
+      currentSize = this.calculateEmbedSize(embed);
+    }
+    
+    // If still too large, trim field values
+    if (currentSize > maxSize && data.fields) {
+      for (let field of data.fields) {
+        if (currentSize <= maxSize) break;
+        
+        if (field.value && field.value.length > 200) {
+          const overhead = currentSize - maxSize;
+          const targetLength = Math.max(200, field.value.length - overhead - trimMarker.length);
+          const originalLength = field.value.length;
+          field.value = field.value.substring(0, targetLength) + trimMarker;
+          currentSize -= (originalLength - field.value.length);
+        }
+      }
+    }
+    
+    return embed;
+  }
+
+  /**
+   * Trim all embeds to ensure total size stays under Discord's 6000 character limit
+   * This checks the combined total of all embeds in the message
+   */
+  trimAllEmbedsToLimit(maxTotalSize = 6000) {
+    let totalSize = 0;
+    this.embeds.forEach(embed => {
+      totalSize += BoardGameGeek.calculateEmbedSize(embed);
+    });
+
+    if (totalSize <= maxTotalSize) {
+      return; // Already under limit
+    }
+
+    const trimMarker = '\n\n...(trimmed for length)';
+    const overhead = totalSize - maxTotalSize;
+    
+    // Priority order for trimming (trim less important content first):
+    // 1. Awards/Honors - can be very long
+    // 2. Description - can be very long
+    // 3. History - local data
+    // 4. Details - important stats
+    // 5. Useful Links - keep intact if possible
+    // 6. Image embed - keep intact (usually just title + URL)
+    
+    const trimOrder = [
+      { title: 'Awards and Honors', minLength: 300 },
+      { title: 'Description', minLength: 800 },
+      { title: `${this.gameName} in ${this.interaction?.guild?.name}`, minLength: 200 },
+      { title: 'Details', minLength: 400 },
+      { title: 'Useful Links', minLength: 200 }
+    ];
+
+    let remainingOverhead = overhead;
+
+    for (const trimTarget of trimOrder) {
+      if (remainingOverhead <= 0) break;
+
+      const embed = this.embeds.find(e => e.data.title === trimTarget.title);
+      if (!embed) continue;
+
+      const embedData = embed.data;
+      
+      // Trim description if present
+      if (embedData.description && embedData.description.length > trimTarget.minLength) {
+        const currentLength = embedData.description.length;
+        const maxTrim = currentLength - trimTarget.minLength;
+        const trimAmount = Math.min(maxTrim, remainingOverhead);
+        
+        if (trimAmount > trimMarker.length) {
+          const newLength = currentLength - trimAmount;
+          embedData.description = embedData.description.substring(0, newLength - trimMarker.length) + trimMarker;
+          remainingOverhead -= trimAmount;
+        }
+      }
+      
+      // Trim field values if still over limit
+      if (remainingOverhead > 0 && embedData.fields) {
+        for (let field of embedData.fields) {
+          if (remainingOverhead <= 0) break;
+          
+          if (field.value && field.value.length > 200) {
+            const currentLength = field.value.length;
+            const maxTrim = currentLength - 200;
+            const trimAmount = Math.min(maxTrim, remainingOverhead);
+            
+            if (trimAmount > trimMarker.length) {
+              const newLength = currentLength - trimAmount;
+              field.value = field.value.substring(0, newLength - trimMarker.length) + trimMarker;
+              remainingOverhead -= trimAmount;
+            }
+          }
+        }
+      }
+    }
+  }
+
   static async CreateAndLoad(gameId, discordClient, interaction) {
     let bgg = new BoardGameGeek(gameId, discordClient, interaction);
     await bgg.LoadBggData();
@@ -108,6 +247,9 @@ class BoardGameGeek {
         await this.GetHistoryEmbed()
         break;
     }
+    
+    // Ensure total size of all embeds doesn't exceed Discord's 6000 character limit
+    this.trimAllEmbedsToLimit();
   }
 
   async GetGameImageEmbed() {
