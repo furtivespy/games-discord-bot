@@ -156,6 +156,7 @@ class GameDatabase {
         bggGameId: null,
         reverseOrder: false,
         tokens: [],
+        customDice: [], // Added for custom dice feature
         playToPlayArea: false, // Added for play area feature
         history: [], // Added for history tracking feature
         lastStatusMessageId: null,

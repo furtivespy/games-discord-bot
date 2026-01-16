@@ -39,6 +39,12 @@ class DiscordBot extends Client {
       fetchAll: false,
       autoFetch: true,
     });
+    this.guilddata = new Enmap({
+      name: "guilddata",
+      cloneLevel: "deep",
+      fetchAll: false,
+      autoFetch: true,
+    });
 
     this.commands = new Collection();
     this.slashcommands = new Collection();
@@ -231,6 +237,28 @@ class DiscordBot extends Client {
     guildData = this.getGameData(`${gameName}-${channelId}`);
     return this.migrateGameData(guildData);
   }
+
+  async setGuildData(guildId, data) {
+    this.guilddata.set(guildId, data);
+    await this.db.upsertGameData(guildId, "custom_data", "main", data);
+  }
+
+  async getGuildData(guildId) {
+    let data = this.guilddata.get(guildId);
+    if (data) {
+      // Ensure customDice exists even in cached data
+      if (!data.customDice) data.customDice = [];
+      return data;
+    }
+
+    data = await this.db.getSpecificGameData(guildId, "custom_data", "main");
+    if (!_.isEmpty(data)) {
+      if (!data.customDice) data.customDice = [];
+      this.guilddata.set(guildId, data); // Cache it for future use
+      return data;
+    }
+    return { customDice: [] };
+  }
   
   // Migrate legacy game data to ensure all required properties exist
   migrateGameData(gameData) {
@@ -268,6 +296,11 @@ class DiscordBot extends Client {
     // Ensure tokens array exists
     if (gameData.tokens === undefined) {
       gameData.tokens = [];
+    }
+
+    // Ensure customDice array exists
+    if (gameData.customDice === undefined) {
+      gameData.customDice = [];
     }
     
     // Ensure history array exists
