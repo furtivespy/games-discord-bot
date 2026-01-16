@@ -245,10 +245,16 @@ class DiscordBot extends Client {
 
   async getGuildData(guildId) {
     let data = this.guilddata.get(guildId);
-    if (data) return data;
+    if (data) {
+      // Ensure customDice exists even in cached data
+      if (!data.customDice) data.customDice = [];
+      return data;
+    }
 
     data = await this.db.getSpecificGameData(guildId, "custom_data", "main");
     if (!_.isEmpty(data)) {
+      if (!data.customDice) data.customDice = [];
+      this.guilddata.set(guildId, data); // Cache it for future use
       return data;
     }
     return { customDice: [] };

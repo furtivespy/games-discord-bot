@@ -206,19 +206,41 @@ class Dice extends SlashCommand {
       .setTitle("Custom Dice List")
       .setColor(0x00AE86);
 
-    let serverList = "";
-    if (guildData.customDice && guildData.customDice.length > 0) {
-        serverList = guildData.customDice.map(d => `**${d.name}**: [${d.sides.join(", ")}]`).join("\n");
-    } else {
-        serverList = "No server dice.";
+    // Helper function to format dice list with truncation
+    const formatDiceList = (dice, maxLength = 1000) => {
+      if (!dice || dice.length === 0) return null;
+      
+      let result = "";
+      let truncated = false;
+      
+      for (const die of dice) {
+        const dieStr = `**${die.name}**: [${die.sides.join(", ")}]\n`;
+        if (result.length + dieStr.length > maxLength) {
+          truncated = true;
+          break;
+        }
+        result += dieStr;
+      }
+      
+      if (truncated) {
+        result += `\n*...and ${dice.length - result.split("\n").filter(l => l.trim()).length} more dice*`;
+      }
+      
+      return result.trim();
+    };
+
+    let serverList = formatDiceList(guildData.customDice);
+    if (!serverList) {
+      serverList = "No server dice.";
     }
     embed.addFields({ name: "Server Dice", value: serverList });
 
-    let gameList = "";
-    if (gameData && !gameData.isdeleted && gameData.customDice && gameData.customDice.length > 0) {
-        gameList = gameData.customDice.map(d => `**${d.name}**: [${d.sides.join(", ")}]`).join("\n");
-    } else {
-        gameList = "No active game or no game dice.";
+    let gameList = null;
+    if (gameData && !gameData.isdeleted && gameData.customDice) {
+      gameList = formatDiceList(gameData.customDice);
+    }
+    if (!gameList) {
+      gameList = "No active game or no game dice.";
     }
     embed.addFields({ name: "Channel/Game Dice", value: gameList });
 
