@@ -44,6 +44,13 @@ class Reminder extends SlashCommand {
       }
 
       const now = new Date();
+      const oneYear = 365 * 24 * 60 * 60 * 1000;
+      if (parsedDate.getTime() - now.getTime() > oneYear) {
+        return interaction.reply({
+            content: `Please set a reminder less than 1 year in the future.`,
+            ephemeral: true
+        });
+      }
       if (parsedDate <= now) {
          return interaction.reply({
           content: `That time (${parsedDate.toLocaleString()}) is in the past! Please choose a future time.`,
