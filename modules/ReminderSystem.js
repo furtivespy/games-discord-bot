@@ -1,5 +1,7 @@
 const { PermissionsBitField } = require("discord.js");
 
+const processing = new Set();
+
 module.exports = {
   start: (client) => {
     // Check every 30 seconds
@@ -20,10 +22,15 @@ async function checkReminders(client) {
 
   // Enmap/Map iteration yields [key, value] pairs.
   for (const [key, reminder] of reminders) {
+      if (processing.has(reminder.id)) continue;
+
+      processing.add(reminder.id);
       try {
         await processReminder(client, reminder);
       } catch (e) {
         client.logger.error(`Error processing reminder ${reminder.id}: ${e}`);
+      } finally {
+        processing.delete(reminder.id);
       }
   }
 }

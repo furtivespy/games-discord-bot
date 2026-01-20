@@ -1,7 +1,7 @@
 const SlashCommand = require('../../base/SlashCommand.js');
 const { SlashCommandBuilder } = require('discord.js');
 const chrono = require('chrono-node');
-const { nanoid } = require('nanoid');
+const { randomUUID } = require('crypto');
 
 class Reminder extends SlashCommand {
   constructor(client) {
@@ -36,7 +36,7 @@ class Reminder extends SlashCommand {
       // We pass { forwardDate: true } to prefer future dates (e.g. "Friday" means next Friday, not last Friday)
       const parsedDate = chrono.parseDate(when, new Date(), { forwardDate: true });
 
-      if (!parsedDate) {
+      if (!parsedDate || isNaN(parsedDate.getTime())) {
         return interaction.reply({
           content: `I couldn't understand when "${when}" is. Please try a different format like "in 5 minutes" or "tomorrow at 3pm".`,
           ephemeral: true
@@ -51,7 +51,7 @@ class Reminder extends SlashCommand {
         });
       }
 
-      const id = nanoid();
+      const id = randomUUID();
       const reminder = {
         id,
         userId: interaction.user.id,
