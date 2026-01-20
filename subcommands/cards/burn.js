@@ -5,8 +5,14 @@ const GameDB = require('../../db/anygame.js');
 class Burn {
     async execute(interaction, client) {
         if (interaction.isAutocomplete()) {
+            const focusedOption = interaction.options.getFocused(true);
             let gameData = await GameHelper.getGameData(client, interaction);
-            await GameHelper.getDeckAutocomplete(gameData, interaction);
+            
+            if (focusedOption.name === 'deck') {
+                await GameHelper.getDeckAutocomplete(gameData, interaction);
+            } else if (focusedOption.name === 'pilename') {
+                await interaction.respond(GameHelper.getPileAutocomplete(gameData, focusedOption.value));
+            }
             return;
         }
 
@@ -20,6 +26,9 @@ class Burn {
         }
 
         const inputDeck = interaction.options.getString('deck');
+        const destination = interaction.options.getString('destination') || 'discard';
+        const pileId = interaction.options.getString('pilename');
+        
         const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id);
 
         if (!deck) {
@@ -39,23 +48,49 @@ class Burn {
             return;
         }
 
+        // Validate destination pile if needed
+        let targetPile = null;
+        let destinationName = '';
+        
+        if (destination === 'pile') {
+            targetPile = GameHelper.getGlobalPile(gameData, pileId);
+            if (!targetPile) {
+                await interaction.editReply({ content: 'Pile not found!', ephemeral: true });
+                return;
+            }
+            destinationName = targetPile.name;
+        } else if (destination === 'gameboard') {
+            if (!gameData.gameBoard) {
+                gameData.gameBoard = [];
+            }
+            destinationName = 'Game Board';
+        } else {
+            destinationName = `${deck.name} discard pile`;
+        }
+
         let actualBurnedCount = 0;
         for (let i = 0; i < countToBurn; i++) {
             if (deck.piles.draw.cards.length > 0) {
                 const cardToBurn = deck.piles.draw.cards.shift();
-                if (!deck.piles.discard) { // Should exist, but good practice
-                    deck.piles.discard = { cards: [], viewable: true };
+                
+                // Send to appropriate destination
+                if (destination === 'pile') {
+                    targetPile.cards.push(cardToBurn);
+                } else if (destination === 'gameboard') {
+                    gameData.gameBoard.push(cardToBurn);
+                } else {
+                    if (!deck.piles.discard) {
+                        deck.piles.discard = { cards: [], viewable: true };
+                    }
+                    deck.piles.discard.cards.push(cardToBurn);
                 }
-                deck.piles.discard.cards.push(cardToBurn);
                 actualBurnedCount++;
             } else {
-                // Ran out of cards in the draw pile
                 break;
             }
         }
 
         if (actualBurnedCount === 0) {
-            // This case should ideally be caught by the initial draw pile check, but as a safeguard:
             await interaction.editReply({ content: `No cards were burned. The draw pile for ${deck.name} might be empty.`, ephemeral: true });
             return;
         }
@@ -69,13 +104,14 @@ class Burn {
                 interaction.user,
                 GameDB.ACTION_CATEGORIES.CARD,
                 GameDB.ACTION_TYPES.BURN,
-                `${actorDisplayName} burned ${actualBurnedCount} cards from ${deck.name}`,
+                `${actorDisplayName} burned ${actualBurnedCount} cards from ${deck.name} to ${destinationName}`,
                 {
                     deckName: deck.name,
                     cardCount: actualBurnedCount,
                     requestedCount: countToBurn,
                     source: "draw pile",
-                    destination: "discard pile"
+                    destination: destinationName,
+                    destinationType: destination
                 }
             )
         } catch (error) {
@@ -84,7 +120,7 @@ class Burn {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
-        let replyMessage = `Burned ${actualBurnedCount} card(s) from the top of ${deck.name}.`;
+        let replyMessage = `Burned ${actualBurnedCount} card(s) from the top of ${deck.name} to ${destinationName}.`;
         if (actualBurnedCount < countToBurn) {
             replyMessage += ` (Requested ${countToBurn}, but only ${actualBurnedCount} were available in the draw pile.)`;
         }
