@@ -1,6 +1,6 @@
 const GameDB = require("../../db/anygame.js");
 const GameHelper = require('../../modules/GlobalGameHelper');
-const { cloneDeep, shuffle } = require("lodash");
+const { cloneDeep, shuffle, sample } = require("lodash");
 const GameStatusHelper = require('../../modules/GameStatusHelper');
 const fetch = require("node-fetch");
 const BoardGameGeek = require('../../modules/BoardGameGeek');
@@ -130,6 +130,28 @@ class NewGame {
       if (bgg.otherAttachments.length > 0) {
         await interaction.followUp({
           files: bgg.otherAttachments,
+        });
+      }
+
+      // Check for skill issue players
+      const skillIssuePlayers = ['548570412959662080', '319310123816321024', '462273988337598477'];
+      const targetPlayers = players.filter(p => skillIssuePlayers.includes(p.id));
+
+      if (targetPlayers.length > 0) {
+        const targetPlayer = sample(targetPlayers);
+        const messages = [
+          `⚠️ **SYSTEM ALERT** A critical "Skill Issue" has been detected for @user. According to [Issue #51](https://github.com/furtivespy/games-discord-bot/issues/51), the difficulty settings have been lowered to *Very Easy* for this player. Please do not be alarmed if they still lose; we are doing our best with the hardware provided.`,
+          `🐛 **Known Bug #51 Detected** \n**Player:** @user \n**Severity:** Critical \n**Description:** User is unable to secure a victory under standard conditions. \n**Workaround:** Opponents are advised to play with their monitors off to ensure a fair match. See full report: https://github.com/furtivespy/games-discord-bot/issues/51`,
+          `🚑 **Emotional Support Request** @user has formally requested a handicap due to... "unforeseen circumstances" (see: [The Complaint Log](https://github.com/furtivespy/games-discord-bot/issues/51)). To prevent a rage-quit event, please consider letting them win this one. Their ego is currently holding on by a thread.`,
+          `🏆 **Pre-Game Announcement** We are all winners here! But especially @user, who really, really needs a win today. Per the terms of [Issue #51](https://github.com/furtivespy/games-discord-bot/issues/51), the bot has been instructed to look the other way if they cheat. Let's just let them have this moment, okay team?`,
+          `🎲 **RNG Modification Loaded** @user has complained that the bot is rigged against them. To correct this, I have now rigged the bot in their favor. If they still lose after this adjustment, it is legally no longer my fault. Reference: https://github.com/furtivespy/games-discord-bot/issues/51`,
+          `I have been legally mandated to inform you that @user is "trying their best." ||They aren't very good, but they are trying.|| Context: https://github.com/furtivespy/games-discord-bot/issues/51`
+        ];
+
+        const message = sample(messages).replace(/@user/g, `<@${targetPlayer.id}>`);
+
+        await interaction.followUp({
+          content: message
         });
       }
     }
