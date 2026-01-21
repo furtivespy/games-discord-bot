@@ -154,52 +154,82 @@ class BoardGameGeek {
     }
     let suggestedPlayers = ""
     const suggestedPlayerPoll = find(this.gameInfo.poll, {name: "suggested_numplayers"})
-    suggestedPlayerPoll.results.forEach(r => {
-      r.result.sort((a, b) => b.numvotes - a.numvotes)
-      suggestedPlayers += `\n**${r.numplayers}**: ${r.result[0].value}`
-    })
+    if (suggestedPlayerPoll && suggestedPlayerPoll.results) {
+      suggestedPlayerPoll.results.forEach(r => {
+        r.result.sort((a, b) => b.numvotes - a.numvotes)
+        suggestedPlayers += `\n**${r.numplayers}**: ${r.result[0].value}`
+      })
+    }
+    
+    // Helper function to ensure field values are valid (non-empty, max 1024 chars)
+    const sanitizeFieldValue = (value, fallback = "N/A") => {
+      if (!value || value.trim().length === 0) return fallback;
+      return value.length > 1024 ? value.substring(0, 1021) + "..." : value;
+    };
     
     const detailEmbed = new EmbedBuilder().setTitle(`Details`).addFields(
       {
         name: "Game Data",
-        value: `**Published:** ${this.gameInfo.yearpublished}\n**Players:** ${this.gameInfo.minplayers} - ${this.gameInfo.maxplayers}\n**Playing Time:** ${this.gameInfo.minplaytime} - ${this.gameInfo.maxplaytime}\n**Age:** ${this.gameInfo.age}+`,
+        value: sanitizeFieldValue(`**Published:** ${this.gameInfo.yearpublished || 'N/A'}\n**Players:** ${this.gameInfo.minplayers || '?'} - ${this.gameInfo.maxplayers || '?'}\n**Playing Time:** ${this.gameInfo.minplaytime || '?'} - ${this.gameInfo.maxplaytime || '?'}\n**Age:** ${this.gameInfo.age || '?'}+`),
         inline: true,
       },
       {
         name: `Ranks & Ratings`,
-        value: `**Average Rating:** ${this.gameInfo.statistics.ratings.average}\n**Weight:** ${this.gameInfo.statistics.ratings.averageweight}${ranks}`,
+        value: sanitizeFieldValue(`**Average Rating:** ${this.gameInfo.statistics?.ratings?.average || 'N/A'}\n**Weight:** ${this.gameInfo.statistics?.ratings?.averageweight || 'N/A'}${ranks}`),
         inline: true,
       },
       {
         name: `Suggested Player Count`,
-        value: `${suggestedPlayers}`,
+        value: sanitizeFieldValue(suggestedPlayers),
         inline: true,
       },
       {
         name: `Designer(s)`,
-        value: this.gameInfo.boardgamedesigner ? Array.isArray(this.gameInfo.boardgamedesigner) ? this.gameInfo.boardgamedesigner.map(d => d.text).join("\n") : this.gameInfo.boardgamedesigner.text : "N/A",
+        value: sanitizeFieldValue(
+          this.gameInfo.boardgamedesigner 
+            ? Array.isArray(this.gameInfo.boardgamedesigner) 
+              ? this.gameInfo.boardgamedesigner.map(d => d.text).join("\n") 
+              : this.gameInfo.boardgamedesigner.text 
+            : null
+        ),
         inline: true
       },
       {
         name: `Publisher(s)`,
-        value: Array.isArray(this.gameInfo.boardgamepublisher) ? this.gameInfo.boardgamepublisher.map(d => d.text).join("\n") : this.gameInfo.boardgamepublisher.text,
+        value: sanitizeFieldValue(
+          this.gameInfo.boardgamepublisher 
+            ? Array.isArray(this.gameInfo.boardgamepublisher) 
+              ? this.gameInfo.boardgamepublisher.map(d => d.text).join("\n") 
+              : this.gameInfo.boardgamepublisher.text 
+            : null
+        ),
         inline: true
       }
     );
     if (this.gameInfo.boardgamemechanic) {
+      const mechanicsValue = sanitizeFieldValue(
+        Array.isArray(this.gameInfo.boardgamemechanic) 
+          ? this.gameInfo.boardgamemechanic.map(d => d.text).join("\n") 
+          : this.gameInfo.boardgamemechanic.text
+      );
       detailEmbed.addFields(
         {
           name: `Mechanics`,
-          value: Array.isArray(this.gameInfo.boardgamemechanic) ? this.gameInfo.boardgamemechanic.map(d => d.text).join("\n") : this.gameInfo.boardgamemechanic.text,
+          value: mechanicsValue,
           inline: true
         }
       );
     }
     if (this.gameInfo.boardgameexpansion) {
+      const expansionsValue = sanitizeFieldValue(
+        Array.isArray(this.gameInfo.boardgameexpansion) 
+          ? take(this.gameInfo.boardgameexpansion, 10).map(d => `[${d.text}](https://boardgamegeek.com/boardgame/${d.objectid})`).join("\n") 
+          : `[${this.gameInfo.boardgameexpansion.text}](https://boardgamegeek.com/boardgame/${this.gameInfo.boardgameexpansion.objectid})`
+      );
       detailEmbed.addFields(
         {
           name: `Expansions`,
-          value: Array.isArray(this.gameInfo.boardgameexpansion) ? take(this.gameInfo.boardgameexpansion,10).map(d => `[${d.text}](https://boardgamegeek.com/boardgame/${d.objectid})`).join("\n") : `[${this.gameInfo.boardgameexpansion.text}](https://boardgamegeek.com/boardgame/${this.gameInfo.boardgameexpansion.objectid})`,
+          value: expansionsValue,
           inline: true
         }
       )
