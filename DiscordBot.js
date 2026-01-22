@@ -15,6 +15,7 @@ const mongoDb = require("./db/mongoDb.js");
 const GoogleSearch = require("./modules/GoogleSearch.js");
 const _ = require("lodash");
 const modalSubmission = require('./events/modalSubmission.js');
+const ReminderSystem = require("./modules/ReminderSystem.js");
 
 class DiscordBot extends Client {
   constructor(options) {
@@ -43,6 +44,12 @@ class DiscordBot extends Client {
       name: "guilddata",
       cloneLevel: "deep",
       fetchAll: false,
+      autoFetch: true,
+    });
+    this.reminders = new Enmap({
+      name: "reminders",
+      cloneLevel: "deep",
+      fetchAll: true,
       autoFetch: true,
     });
 
@@ -480,6 +487,8 @@ const init = async () => {
   client.on("clientReady", async () => {
     //nice to wait a sec before really being ready
     await client.wait(1000);
+
+    ReminderSystem.start(client);
 
     client.user.setActivity(client.config.activity, {
       type: client.config.activityType,
