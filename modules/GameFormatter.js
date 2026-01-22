@@ -1035,6 +1035,21 @@ class GameFormatter {
     const consolidatedPlayAreaData = await this.generateConsolidatedPlayAreaEmbedsAndAttachments(gameData, guild);
     finalEmbeds.push(...consolidatedPlayAreaData.embeds);
 
+    // Add game board display
+    const gameBoardData = await this.formatGameBoard(gameData, guild);
+    if (gameBoardData) {
+      finalEmbeds.push(gameBoardData.embed);
+      if (gameBoardData.attachment) {
+        consolidatedPlayAreaData.attachments.push(gameBoardData.attachment);
+      }
+    }
+
+    // Add global piles display
+    const globalPilesEmbed = this.formatGlobalPiles(gameData);
+    if (globalPilesEmbed) {
+      finalEmbeds.push(globalPilesEmbed);
+    }
+
     // Add recent history embed
     const historyEmbed = this.createHistoryEmbed(gameData, { 
       limit: 15, 
@@ -1049,7 +1064,7 @@ class GameFormatter {
     }
 
     const replyOptions = {
-        files: [attachment, ...consolidatedPlayAreaData.attachments], // Add main status table + consolidated play area images
+        files: [attachment, ...consolidatedPlayAreaData.attachments], // Add main status table + consolidated play area images + gameboard
         embeds: finalEmbeds // Use the constructed finalEmbeds array
     };
 
@@ -1397,6 +1412,78 @@ class GameFormatter {
       playAreaString += `${index + 1}. ${cardNameFormatted}\n`;
     });
     return playAreaString;
+  }
+
+  /**
+   * Format the game board display
+   * @param {Object} gameData - The game data
+   * @param {Object} guild - The Discord guild
+   * @returns {Object|null} Embed and attachment for game board, or null if empty
+   */
+  static async formatGameBoard(gameData, guild) {
+    if (!gameData.gameBoard || gameData.gameBoard.length === 0) {
+      return null;
+    }
+
+    const { EmbedBuilder } = require('discord.js');
+    const gameBoardEmbed = new EmbedBuilder()
+      .setColor(0x3498db)
+      .setTitle(`Game Board (${gameData.gameBoard.length} cards)`)
+      .setDescription('Shared play area for all players');
+
+    // Create card list (formatted like play areas - one card per line)
+    const cardsList = gameData.gameBoard.map(card => this.cardShortName(card)).join('\n');
+    gameBoardEmbed.addFields({
+      name: 'Cards on Board',
+      value: cardsList || 'No cards',
+      inline: false
+    });
+
+    // Create image if cards have URLs
+    const imageUrls = gameData.gameBoard.filter(c => c.url).map(c => c.url);
+    let attachment = null;
+    if (imageUrls.length > 0) {
+      const imageBuffer = await this.ImagefromUrlList(imageUrls);
+      const { AttachmentBuilder } = require('discord.js');
+      attachment = new AttachmentBuilder(imageBuffer, { name: `gameboard-${Date.now()}.png` });
+      gameBoardEmbed.setImage(`attachment://${attachment.name}`);
+    }
+
+    return { embed: gameBoardEmbed, attachment };
+  }
+
+  /**
+   * Format global piles summary
+   * @param {Object} gameData - The game data
+   * @returns {Object|null} Embed for global piles, or null if no piles
+   */
+  static formatGlobalPiles(gameData) {
+    if (!gameData.globalPiles || gameData.globalPiles.length === 0) {
+      return null;
+    }
+
+    const { EmbedBuilder } = require('discord.js');
+    const pilesEmbed = new EmbedBuilder()
+      .setColor(0x9b59b6)
+      .setTitle(`Card Piles (${gameData.globalPiles.length})`);
+
+    let description = '';
+    gameData.globalPiles.forEach(pile => {
+      const secretBadge = pile.isSecret ? '🔒 ' : '';
+      const cardCount = pile.cards.length;
+      let pileInfo = `${secretBadge}**${pile.name}**: ${cardCount} cards`;
+      
+      // Show top card if enabled and pile has cards
+      if (pile.showTopCard && pile.cards.length > 0) {
+        const topCard = pile.cards[pile.cards.length - 1];
+        pileInfo += ` - Top: ${this.cardShortName(topCard)}`;
+      }
+      
+      description += pileInfo + '\n';
+    });
+
+    pilesEmbed.setDescription(description || 'No piles created yet');
+    return pilesEmbed;
   }
 }
 

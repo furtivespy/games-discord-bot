@@ -50,6 +50,84 @@ class GameHelper {
   }
 
   /**
+   * Get global pile by ID or name
+   * @param {Object} gameData - The game data object
+   * @param {string} identifier - Pile ID or name
+   * @returns {Object|null} The pile object or null if not found
+   */
+  static getGlobalPile(gameData, identifier) {
+    if (!gameData.globalPiles || gameData.globalPiles.length === 0) {
+      return null;
+    }
+    
+    // Try to find by ID first, then by name
+    return gameData.globalPiles.find(p => p.id === identifier) || 
+           gameData.globalPiles.find(p => p.name === identifier);
+  }
+
+  /**
+   * Create a new global pile
+   * @param {Object} gameData - The game data object
+   * @param {string} name - Name of the pile
+   * @param {boolean} isSecret - Whether the pile is secret
+   * @param {string} userId - User ID of creator
+   * @returns {Object} The created pile
+   */
+  static createGlobalPile(gameData, name, isSecret, userId) {
+    if (!gameData.globalPiles) {
+      gameData.globalPiles = [];
+    }
+
+    const pile = cloneDeep(GameDB.defaultGlobalPile);
+    pile.id = nanoid();
+    pile.name = name;
+    pile.isSecret = isSecret;
+    pile.created = new Date().toISOString();
+    pile.createdBy = userId;
+    pile.cards = [];
+
+    gameData.globalPiles.push(pile);
+    return pile;
+  }
+
+  /**
+   * Delete a global pile
+   * @param {Object} gameData - The game data object
+   * @param {string} pileId - ID of the pile to delete
+   * @returns {boolean} True if deleted, false if not found
+   */
+  static deleteGlobalPile(gameData, pileId) {
+    if (!gameData.globalPiles) {
+      return false;
+    }
+
+    const index = gameData.globalPiles.findIndex(p => p.id === pileId);
+    if (index === -1) {
+      return false;
+    }
+
+    gameData.globalPiles.splice(index, 1);
+    return true;
+  }
+
+  /**
+   * Get autocomplete options for global piles
+   * @param {Object} gameData - The game data object
+   * @param {string} searchTerm - Current search term
+   * @returns {Array} Array of autocomplete options
+   */
+  static getPileAutocomplete(gameData, searchTerm = '') {
+    if (!gameData.globalPiles || gameData.globalPiles.length === 0) {
+      return [];
+    }
+
+    return gameData.globalPiles
+      .filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
+      .map(p => ({ name: p.name, value: p.id }))
+      .slice(0, 25);
+  }
+
+  /**
    * Records a game action in the history log
    * @param {Object} gameData - The game data object to add history to
    * @param {Object} actor - The user who performed the action (must have id and username)

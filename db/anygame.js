@@ -161,6 +161,8 @@ class GameDatabase {
         history: [], // Added for history tracking feature
         lastStatusMessageId: null,
         lastStatusMessageTimestamp: null,
+        gameBoard: [], // Added for game board feature - shared play area for all players
+        globalPiles: [], // Added for global piles feature - configurable card piles
     }
 
     defaultBGGGameData = {
@@ -236,6 +238,17 @@ class GameDatabase {
         id: "",
         name: "",
         color: null,
+    }
+
+    defaultGlobalPile = {
+        id: "",
+        name: "",
+        cards: [],
+        isSecret: false,
+        viewable: true,
+        showTopCard: false,
+        created: "",
+        createdBy: "",
     }
 
     createCard(deck, name, description = "", type = "", suit = "", value = "", format = "A", image){

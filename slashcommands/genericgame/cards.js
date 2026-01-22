@@ -38,6 +38,24 @@ const PlayAreaClearAll = require('../../subcommands/cards/playareaclearall')
 const Burn = require('../../subcommands/cards/burn')
 const DeckPeek = require('../../subcommands/cards/deckpeek')
 const DeckRemove = require('../../subcommands/cards/deckremove')
+// Global Piles
+const PileCreate = require('../../subcommands/cards/pilecreate')
+const PileDelete = require('../../subcommands/cards/piledelete')
+const PileList = require('../../subcommands/cards/pilelist')
+const PileConfigure = require('../../subcommands/cards/pileconfigure')
+const PilePlay = require('../../subcommands/cards/pileplay')
+const PileTake = require('../../subcommands/cards/piletake')
+const PilePeek = require('../../subcommands/cards/pilepeek')
+const PileView = require('../../subcommands/cards/pileview')
+const PileShuffle = require('../../subcommands/cards/pileshuffle')
+const PileDraw = require('../../subcommands/cards/piledraw')
+const PileDrawMultiple = require('../../subcommands/cards/piledrawmultiple')
+const PileFlip = require('../../subcommands/cards/pileflip')
+// Game Board
+const GameBoardTake = require('../../subcommands/cards/gameboardtake')
+const GameBoardDiscard = require('../../subcommands/cards/gameboarddiscard')
+const GameBoardView = require('../../subcommands/cards/gameboardview')
+const GameBoardClear = require('../../subcommands/cards/gameboardclear')
 
 class Cards extends SlashCommand {
     constructor(client){
@@ -101,6 +119,13 @@ class Cards extends SlashCommand {
                     .setName("flipcard")
                     .setDescription("Flip the top card of the deck")
                     .addStringOption(option => option.setName('deck').setDescription('Deck to flip from').setAutocomplete(true))
+                    .addStringOption(option => option.setName('destination').setDescription('Where to flip the card')
+                        .addChoices(
+                            {name: 'Discard Pile (default)', value: 'discard'},
+                            {name: 'Game Board', value: 'gameboard'},
+                            {name: 'Custom Pile', value: 'pile'}
+                        ))
+                    .addStringOption(option => option.setName('pilename').setDescription('Which pile (if destination is Custom Pile)').setAutocomplete(true))
                 ) 
             .addSubcommand(subcommand =>
                 subcommand
@@ -143,7 +168,7 @@ class Cards extends SlashCommand {
             .addSubcommand(subcommand =>
                 subcommand
                     .setName("burn")
-                    .setDescription("Move a specified number of cards from the top of a deck to the discard pile without revealing them.")
+                    .setDescription("Move a specified number of cards from the top of a deck to a destination without revealing them.")
                     .addIntegerOption(option =>
                         option.setName('count')
                               .setDescription('Number of cards to burn.')
@@ -153,6 +178,13 @@ class Cards extends SlashCommand {
                         option.setName('deck')
                               .setDescription('Deck to burn from.')
                               .setAutocomplete(true))
+                    .addStringOption(option => option.setName('destination').setDescription('Where to burn the cards')
+                        .addChoices(
+                            {name: 'Discard Pile (default)', value: 'discard'},
+                            {name: 'Game Board', value: 'gameboard'},
+                            {name: 'Custom Pile', value: 'pile'}
+                        ))
+                    .addStringOption(option => option.setName('pilename').setDescription('Which pile (if destination is Custom Pile)').setAutocomplete(true))
             )
             .addSubcommand(subcommand =>
                 subcommand
@@ -169,6 +201,13 @@ class Cards extends SlashCommand {
                         .setName("discard")
                         .setDescription("discard a card (not shown to everyone)")
                         .addStringOption(option => option.setName('card').setDescription('Card to discard').setAutocomplete(true).setRequired(true))
+                        .addStringOption(option => option.setName('destination').setDescription('Where to discard the card')
+                            .addChoices(
+                                {name: 'Discard Pile (default)', value: 'discard'},
+                                {name: 'Game Board', value: 'gameboard'},
+                                {name: 'Custom Pile', value: 'pile'}
+                            ))
+                        .addStringOption(option => option.setName('pilename').setDescription('Which pile (if destination is Custom Pile)').setAutocomplete(true))
                 )
                 .addSubcommand(subcommand =>
                     subcommand
@@ -183,8 +222,16 @@ class Cards extends SlashCommand {
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName("play")
-                        .setDescription("Play a card from your hand (to discard or your play area).")
+                        .setDescription("Play a card from your hand.")
                         .addStringOption(option => option.setName('card').setDescription('Card to play').setAutocomplete(true).setRequired(true))
+                        .addStringOption(option => option.setName('destination').setDescription('Where to play the card')
+                            .addChoices(
+                                {name: 'Play Area', value: 'playarea'},
+                                {name: 'Discard Pile', value: 'discard'},
+                                {name: 'Game Board', value: 'gameboard'},
+                                {name: 'Custom Pile', value: 'pile'}
+                            ))
+                        .addStringOption(option => option.setName('pilename').setDescription('Which pile (if destination is Custom Pile)').setAutocomplete(true))
                 )
                 .addSubcommand(subcommand =>
                     subcommand  
@@ -210,8 +257,14 @@ class Cards extends SlashCommand {
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName("return")
-                        .setDescription("return a card from your hand to the top of the draw pile")
+                        .setDescription("return a card from your hand to the top of a deck or pile")
                         .addStringOption(option => option.setName('card').setDescription('Card to return').setAutocomplete(true).setRequired(true))
+                        .addStringOption(option => option.setName('destination').setDescription('Where to return the card')
+                            .addChoices(
+                                {name: 'Deck (default)', value: 'deck'},
+                                {name: 'Custom Pile', value: 'pile'}
+                            ))
+                        .addStringOption(option => option.setName('pilename').setDescription('Which pile (if destination is Custom Pile)').setAutocomplete(true))
                 )    
                 .addSubcommand(subcommand =>
                     subcommand
@@ -308,6 +361,128 @@ class Cards extends SlashCommand {
                 subcommand
                     .setName("clearall")
                     .setDescription("Move all cards from all play areas to the discard pile(s).")
+            )
+        );
+        this.data.addSubcommandGroup(group =>
+            group.setName("pile").setDescription("Manage global card piles")
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("create")
+                    .setDescription("Create a new global pile")
+                    .addStringOption(option => option.setName('name').setDescription('Name of the pile').setRequired(true))
+                    .addBooleanOption(option => option.setName('secret').setDescription('Make this pile secret (cards hidden)'))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("delete")
+                    .setDescription("Delete a global pile")
+                    .addStringOption(option => option.setName('pile').setDescription('Pile to delete').setAutocomplete(true).setRequired(true))
+                    .addStringOption(option => option.setName('confirm').setDescription("Type 'delete' to confirm").setRequired(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("list")
+                    .setDescription("List all global piles")
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("configure")
+                    .setDescription("Configure a pile's settings")
+                    .addStringOption(option => option.setName('pile').setDescription('Pile to configure').setAutocomplete(true).setRequired(true))
+                    .addStringOption(option => option.setName('config').setDescription('Setting to configure').setRequired(true)
+                        .addChoices(
+                            {name: "Secret (hide cards)", value: "secret"},
+                            {name: "Show Top Card", value: "showtopcard"}
+                        ))
+                    .addBooleanOption(option => option.setName('value').setDescription('True or False').setRequired(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("play")
+                    .setDescription("Play a card from your hand to a pile")
+                    .addStringOption(option => option.setName('card').setDescription('Card to play').setAutocomplete(true).setRequired(true))
+                    .addStringOption(option => option.setName('pile').setDescription('Pile to play to').setAutocomplete(true).setRequired(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("take")
+                    .setDescription("Take cards from a pile to your hand")
+                    .addStringOption(option => option.setName('pile').setDescription('Pile to take from').setAutocomplete(true).setRequired(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("peek")
+                    .setDescription("Privately view cards in a pile")
+                    .addStringOption(option => option.setName('pile').setDescription('Pile to peek at').setAutocomplete(true).setRequired(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("view")
+                    .setDescription("Publicly view cards in a pile")
+                    .addStringOption(option => option.setName('pile').setDescription('Pile to view').setAutocomplete(true).setRequired(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("shuffle")
+                    .setDescription("Shuffle a pile")
+                    .addStringOption(option => option.setName('pile').setDescription('Pile to shuffle').setAutocomplete(true).setRequired(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("draw")
+                    .setDescription("Draw top card from a pile")
+                    .addStringOption(option => option.setName('pile').setDescription('Pile to draw from').setAutocomplete(true).setRequired(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("drawmultiple")
+                    .setDescription("Draw multiple cards from a pile")
+                    .addIntegerOption(option => option.setName('count').setDescription('Number of cards to draw').setRequired(true).setMinValue(1))
+                    .addStringOption(option => option.setName('pile').setDescription('Pile to draw from').setAutocomplete(true).setRequired(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("flip")
+                    .setDescription("Flip top card from a pile")
+                    .addStringOption(option => option.setName('pile').setDescription('Pile to flip from').setAutocomplete(true).setRequired(true))
+            )
+        );
+        this.data.addSubcommandGroup(group =>
+            group.setName("gameboard").setDescription("Manage the shared game board")
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("take")
+                    .setDescription("Take a card from the game board")
+                    .addStringOption(option => option.setName('card').setDescription('Card to take').setAutocomplete(true).setRequired(true))
+                    .addStringOption(option => option.setName('destination').setDescription('Where to take the card')
+                        .addChoices(
+                            {name: 'Hand (default)', value: 'hand'},
+                            {name: 'Play Area', value: 'playarea'},
+                            {name: 'Custom Pile', value: 'pile'}
+                        ))
+                    .addStringOption(option => option.setName('pilename').setDescription('Which pile (if destination is Custom Pile)').setAutocomplete(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("discard")
+                    .setDescription("Discard a card from the game board")
+                    .addStringOption(option => option.setName('card').setDescription('Card to discard').setAutocomplete(true).setRequired(true))
+                    .addStringOption(option => option.setName('destination').setDescription('Where to discard the card')
+                        .addChoices(
+                            {name: 'Discard Pile (default)', value: 'discard'},
+                            {name: 'Custom Pile', value: 'pile'}
+                        ))
+                    .addStringOption(option => option.setName('pilename').setDescription('Which pile (if destination is Custom Pile)').setAutocomplete(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("view")
+                    .setDescription("View all cards on the game board")
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("clear")
+                    .setDescription("Clear all cards from the game board to discard piles")
             )
         );
     }
@@ -462,6 +637,66 @@ class Cards extends SlashCommand {
                             break
                         default:
                             await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
+                    }
+                    break
+                case "pile":
+                    switch (interaction.options.getSubcommand()) {
+                        case "create":
+                            await PileCreate.execute(interaction, this.client)
+                            break
+                        case "delete":
+                            await PileDelete.execute(interaction, this.client)
+                            break
+                        case "list":
+                            await PileList.execute(interaction, this.client)
+                            break
+                        case "configure":
+                            await PileConfigure.execute(interaction, this.client)
+                            break
+                        case "play":
+                            await PilePlay.execute(interaction, this.client)
+                            break
+                        case "take":
+                            await PileTake.execute(interaction, this.client)
+                            break
+                        case "peek":
+                            await PilePeek.execute(interaction, this.client)
+                            break
+                        case "view":
+                            await PileView.execute(interaction, this.client)
+                            break
+                        case "shuffle":
+                            await PileShuffle.execute(interaction, this.client)
+                            break
+                        case "draw":
+                            await PileDraw.execute(interaction, this.client)
+                            break
+                        case "drawmultiple":
+                            await PileDrawMultiple.execute(interaction, this.client)
+                            break
+                        case "flip":
+                            await PileFlip.execute(interaction, this.client)
+                            break
+                        default:
+                            await interaction.reply({ content: "Unknown pile command.", ephemeral: true })
+                    }
+                    break
+                case "gameboard":
+                    switch (interaction.options.getSubcommand()) {
+                        case "take":
+                            await GameBoardTake.execute(interaction, this.client)
+                            break
+                        case "discard":
+                            await GameBoardDiscard.execute(interaction, this.client)
+                            break
+                        case "view":
+                            await GameBoardView.execute(interaction, this.client)
+                            break
+                        case "clear":
+                            await GameBoardClear.execute(interaction, this.client)
+                            break
+                        default:
+                            await interaction.reply({ content: "Unknown gameboard command.", ephemeral: true })
                     }
                     break
                 default: // Handles commands without a group, like /cards help
