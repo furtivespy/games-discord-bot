@@ -1431,11 +1431,11 @@ class GameFormatter {
       .setTitle(`Game Board (${gameData.gameBoard.length} cards)`)
       .setDescription('Shared play area for all players');
 
-    // Create card list
-    const cardNames = gameData.gameBoard.map(card => this.cardShortName(card));
+    // Create card list (formatted like play areas - one card per line)
+    const cardsList = gameData.gameBoard.map(card => this.cardShortName(card)).join('\n');
     gameBoardEmbed.addFields({
-      name: 'Cards',
-      value: cardNames.join(', ') || 'No cards',
+      name: 'Cards on Board',
+      value: cardsList || 'No cards',
       inline: false
     });
 

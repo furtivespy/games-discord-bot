@@ -34,8 +34,7 @@ class PileFlip {
             return
         }
 
-        // Flip from the end (top) of the pile
-        const flippedCard = pile.cards[pile.cards.length - 1]
+        const flippedCard = pile.cards.shift()
 
         // Record history
         try {

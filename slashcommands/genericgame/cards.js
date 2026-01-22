@@ -437,7 +437,7 @@ class Cards extends SlashCommand {
                 subcommand
                     .setName("drawmultiple")
                     .setDescription("Draw multiple cards from a pile")
-                    .addIntegerOption(option => option.setName('count').setDescription('Number of cards to draw').setRequired(true))
+                    .addIntegerOption(option => option.setName('count').setDescription('Number of cards to draw').setRequired(true).setMinValue(1))
                     .addStringOption(option => option.setName('pile').setDescription('Pile to draw from').setAutocomplete(true).setRequired(true))
             )
             .addSubcommand(subcommand =>

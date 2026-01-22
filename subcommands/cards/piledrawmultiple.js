@@ -31,6 +31,11 @@ class PileDrawMultiple {
             return
         }
 
+        if (count < 1) {
+            await interaction.editReply({ content: `Count must be at least 1!`, ephemeral: true })
+            return
+        }
+
         if (pile.cards.length < count) {
             await interaction.editReply({ 
                 content: `Not enough cards in ${pile.name}! (has ${pile.cards.length}, requested ${count})`, 

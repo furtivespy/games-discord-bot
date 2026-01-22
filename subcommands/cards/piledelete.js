@@ -1,6 +1,7 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
+const { find } = require('lodash')
 
 class PileDelete {
     async execute(interaction, client) {
@@ -40,8 +41,18 @@ class PileDelete {
 
         const cardCount = pile.cards.length
 
+        // Move all cards to their respective discard piles
+        if (cardCount > 0) {
+            for (const card of pile.cards) {
+                const deck = find(gameData.decks, {name: card.origin})
+                if (deck) {
+                    deck.piles.discard.cards.push(card)
+                }
+            }
+        }
+
         // Delete the pile
-        GameHelper.deleteGlobalPile(gameData, pileId)
+        GameHelper.deleteGlobalPile(gameData, pile.id)
 
         // Record history
         try {
@@ -66,8 +77,9 @@ class PileDelete {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
+        const cardMessage = cardCount > 0 ? ` (${cardCount} cards moved to discard)` : ''
         await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
-            content: `${interaction.member.displayName} deleted pile: **${pile.name}** (had ${cardCount} cards)`
+            content: `${interaction.member.displayName} deleted pile: **${pile.name}**${cardMessage}`
         })
     }
 }
