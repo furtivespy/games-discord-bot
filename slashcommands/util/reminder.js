@@ -36,15 +36,19 @@ class Reminder extends SlashCommand {
       const userPrefs = this.client.userPreferences.get(interaction.user.id) || {};
       const userTimezone = userPrefs.timezone || 'America/New_York';
 
-      // Get current time in user's timezone
+      // Get current time in user's timezone and calculate the timezone offset in minutes
       const nowInUserTz = moment.tz(userTimezone);
       const referenceDate = nowInUserTz.toDate();
+      const timezoneOffsetMinutes = nowInUserTz.utcOffset(); // Positive = ahead of UTC, negative = behind UTC
 
-      // Use chrono to parse the date, using "forward" logic if implied (though parseDate defaults to closest)
+      // Use chrono to parse the date with timezone-aware parsing
       // chrono.parseDate returns a Date object or null
-      // We pass { forwardDate: true } to prefer future dates (e.g. "Friday" means next Friday, not last Friday)
-      // Use the reference date in user's timezone so parsing is relative to their local time
-      const parsedDate = chrono.parseDate(when, referenceDate, { forwardDate: true });
+      // We pass a ParsingReference object with both instant and timezone so chrono
+      // interprets times like "noon" or "5pm" in the user's timezone, not the server's
+      const parsedDate = chrono.parseDate(when, {
+        instant: referenceDate,
+        timezone: timezoneOffsetMinutes
+      }, { forwardDate: true });
 
       if (!parsedDate || isNaN(parsedDate.getTime())) {
         return interaction.reply({
