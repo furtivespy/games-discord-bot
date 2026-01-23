@@ -52,6 +52,12 @@ class DiscordBot extends Client {
       fetchAll: true,
       autoFetch: true,
     });
+    this.userPreferences = new Enmap({
+      name: "userPreferences",
+      cloneLevel: "deep",
+      fetchAll: false,
+      autoFetch: true,
+    });
 
     this.commands = new Collection();
     this.slashcommands = new Collection();

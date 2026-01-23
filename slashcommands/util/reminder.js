@@ -2,6 +2,7 @@ const SlashCommand = require('../../base/SlashCommand.js');
 const { SlashCommandBuilder } = require('discord.js');
 const chrono = require('chrono-node');
 const { randomUUID } = require('crypto');
+const moment = require('moment-timezone');
 
 class Reminder extends SlashCommand {
   constructor(client) {
@@ -31,10 +32,19 @@ class Reminder extends SlashCommand {
       const when = interaction.options.getString('when');
       const message = interaction.options.getString('message');
 
+      // Get user's timezone preference (default to America/New_York)
+      const userPrefs = this.client.userPreferences.get(interaction.user.id) || {};
+      const userTimezone = userPrefs.timezone || 'America/New_York';
+
+      // Get current time in user's timezone
+      const nowInUserTz = moment.tz(userTimezone);
+      const referenceDate = nowInUserTz.toDate();
+
       // Use chrono to parse the date, using "forward" logic if implied (though parseDate defaults to closest)
       // chrono.parseDate returns a Date object or null
       // We pass { forwardDate: true } to prefer future dates (e.g. "Friday" means next Friday, not last Friday)
-      const parsedDate = chrono.parseDate(when, new Date(), { forwardDate: true });
+      // Use the reference date in user's timezone so parsing is relative to their local time
+      const parsedDate = chrono.parseDate(when, referenceDate, { forwardDate: true });
 
       if (!parsedDate || isNaN(parsedDate.getTime())) {
         return interaction.reply({
@@ -51,9 +61,10 @@ class Reminder extends SlashCommand {
             ephemeral: true
         });
       }
-      if (parsedDate <= now) {
-         return interaction.reply({
-          content: `That time (${parsedDate.toLocaleString()}) is in the past! Please choose a future time.`,
+      if (parsedDate <= referenceDate) {
+        const parsedInUserTz = moment(parsedDate).tz(userTimezone).format('LLLL z');
+        return interaction.reply({
+          content: `That time (${parsedInUserTz}) is in the past! Please choose a future time.`,
           ephemeral: true
         });
       }
@@ -77,8 +88,7 @@ class Reminder extends SlashCommand {
       const unixTime = Math.floor(parsedDate.getTime() / 1000);
 
       await interaction.reply({
-        content: `I've set a reminder for **${message}** on <t:${unixTime}:F> (<t:${unixTime}:R>).`,
-        ephemeral: true
+        content: `<@${interaction.user.id}> I've scheduled a reminder for <t:${unixTime}:F> (<t:${unixTime}:R>).`
       });
 
     } catch (e) {
