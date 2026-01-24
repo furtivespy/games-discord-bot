@@ -69,10 +69,8 @@ async function processReminder(client, reminder) {
                  error.userId = reminder.userId;
                  client.logger.error(error);
              }
-        } else {
-            // Channel doesn't exist - log as warning (not critical, user may have deleted channel)
-            client.logger.warn(`Channel ${reminder.channelId} for reminder ${reminder.id} no longer exists/accessible.`);
         }
+        // Note: If channel is null, error was already logged in the catch handler above
     } catch (error) {
         // Catch-all for any unexpected errors
         const wrappedError = new Error(`Unexpected error processing reminder ${reminder.id}: ${error.message}`);
