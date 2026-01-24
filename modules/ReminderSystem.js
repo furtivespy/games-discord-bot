@@ -37,7 +37,11 @@ async function checkReminders(client) {
 
 async function processReminder(client, reminder) {
     try {
-        const channel = await client.channels.fetch(reminder.channelId).catch(() => null);
+        const channel = await client.channels.fetch(reminder.channelId).catch((err) => {
+            // Log channel fetch failures to Bugsnag
+            client.logger.error(new Error(`Failed to fetch channel ${reminder.channelId} for reminder ${reminder.id}: ${err.message}`));
+            return null;
+        });
 
         if (channel) {
              // Check permissions
@@ -46,19 +50,36 @@ async function processReminder(client, reminder) {
              // But usually for guild channels it returns permissions.
              // If perms is missing (DMs), we just try to send.
              if (!perms || perms.has(PermissionsBitField.Flags.SendMessages)) {
-                 await channel.send({
-                     content: `<@${reminder.userId}> Reminder: ${reminder.message}`
-                 });
+                 try {
+                     await channel.send({
+                         content: `<@${reminder.userId}> Reminder: ${reminder.message}`
+                     });
+                 } catch (sendError) {
+                     // Log actual send failures to Bugsnag with full context
+                     const error = new Error(`Failed to send reminder message in channel ${reminder.channelId}`);
+                     error.originalError = sendError;
+                     error.reminderId = reminder.id;
+                     error.userId = reminder.userId;
+                     client.logger.error(error);
+                 }
              } else {
-                 client.logger.warn(`Missing permissions to send reminder in channel ${reminder.channelId}`);
+                 // Log permission issues to Bugsnag as they prevent reminder delivery
+                 const error = new Error(`Missing permissions to send reminder in channel ${reminder.channelId}`);
+                 error.reminderId = reminder.id;
+                 error.userId = reminder.userId;
+                 client.logger.error(error);
              }
-        } else {
-            client.logger.warn(`Channel ${reminder.channelId} for reminder ${reminder.id} no longer exists/accessible.`);
         }
+        // Note: If channel is null, error was already logged in the catch handler above
     } catch (error) {
-        client.logger.error(`Failed to send reminder ${reminder.id}: ${error}`);
+        // Catch-all for any unexpected errors
+        const wrappedError = new Error(`Unexpected error processing reminder ${reminder.id}: ${error.message}`);
+        wrappedError.originalError = error;
+        wrappedError.reminder = reminder;
+        client.logger.error(wrappedError);
     } finally {
         // Delete the reminder after attempting to send
+        // This ensures we don't retry indefinitely even if there's a persistent error
         client.reminders.delete(reminder.id);
     }
 }
