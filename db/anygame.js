@@ -48,6 +48,7 @@ const { loveLetterBase, loveLetterExpansion } = require('./decks/loveLetter');
 const { spectralGlyphCards, spectralLetterCards }  = require('./decks/spectral');
 const rebirth = require('./decks/rebirth');
 const candylandCards = require('./decks/candyland');
+const botswanaCards = require('./decks/botswana');
 
 class GameDatabase {
     
@@ -144,6 +145,7 @@ class GameDatabase {
         [ "Spectral Letters", "spectral-letters" ],
         [ "Rebirth Missions", "rebirth" ],
         [ "Candyland", "candyland" ],
+        [ "Botswana", "botswana" ],
     ]
 
     defaultGameData = {
@@ -420,6 +422,8 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "B", rebirth);
             case "candyland":
                 return this.createCardFromObjList(deckName, "A", candylandCards);
+            case "botswana":
+                return this.createCardFromObjList(deckName, "B", botswanaCards);
             default:
                 return []
         }
