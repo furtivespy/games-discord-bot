@@ -137,7 +137,7 @@ class NewGame {
       const skillIssuePlayers = ['548570412959662080', '319310123816321024', '462273988337598477'];
       const targetPlayers = players.filter(p => skillIssuePlayers.includes(p.id));
 
-      if (targetPlayers.length > 0) {
+      if (targetPlayers.length > 0 && Math.random() < 0.5) {
         const targetPlayer = sample(targetPlayers);
         const messages = [
           `⚠️ **SYSTEM ALERT** A critical "Skill Issue" has been detected for @user. According to [Issue #51](<https://github.com/furtivespy/games-discord-bot/issues/51>), the difficulty settings have been lowered to *Very Easy* for this player. Please do not be alarmed if they still lose; we are doing our best with the hardware provided.`,
