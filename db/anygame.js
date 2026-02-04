@@ -49,6 +49,7 @@ const { spectralGlyphCards, spectralLetterCards }  = require('./decks/spectral')
 const rebirth = require('./decks/rebirth');
 const candylandCards = require('./decks/candyland');
 const botswanaCards = require('./decks/botswana');
+const {mollyVice, mollyLoyalty, mollyMinor, mollyMajor, mollyItem} = require('./decks/mollyhouse');
 
 class GameDatabase {
     
@@ -146,6 +147,11 @@ class GameDatabase {
         [ "Rebirth Missions", "rebirth" ],
         [ "Candyland", "candyland" ],
         [ "Botswana", "botswana" ],
+        [ "Molly House - Vice", "molly-vice" ],
+        [ "Molly House - Loyalty", "molly-loyalty" ],
+        [ "Molly House - Minor Indictment", "molly-minor" ],
+        [ "Molly House - Major Indictment", "molly-major" ],
+        [ "Molly House - Items", "molly-item" ],
     ]
 
     defaultGameData = {
@@ -424,6 +430,16 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "A", candylandCards);
             case "botswana":
                 return this.createCardFromObjList(deckName, "B", botswanaCards);
+            case "molly-vice":
+                return this.createCardFromObjList(deckName, "B", mollyVice);
+            case "molly-loyalty":
+                return this.createCardFromObjList(deckName, "B", mollyLoyalty);
+            case "molly-minor":
+                return this.createCardFromObjList(deckName, "B", mollyMinor);
+            case "molly-major":
+                return this.createCardFromObjList(deckName, "B", mollyMajor);
+            case "molly-item":
+                return this.createCardFromObjList(deckName, "B", mollyItem);
             default:
                 return []
         }
