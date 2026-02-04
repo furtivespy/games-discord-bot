@@ -38,6 +38,7 @@ const PlayAreaClearAll = require('../../subcommands/cards/playareaclearall')
 const Burn = require('../../subcommands/cards/burn')
 const DeckPeek = require('../../subcommands/cards/deckpeek')
 const DeckRemove = require('../../subcommands/cards/deckremove')
+const DeckPrune = require('../../subcommands/cards/deckprune')
 // Global Piles
 const PileCreate = require('../../subcommands/cards/pilecreate')
 const PileDelete = require('../../subcommands/cards/piledelete')
@@ -192,6 +193,12 @@ class Cards extends SlashCommand {
                     .setDescription("Remove a deck from the game entirely.")
                     .addStringOption(option => option.setName('deckname').setDescription('Name of the deck to remove').setRequired(true).setAutocomplete(true))
                     .addStringOption(option => option.setName('confirm').setDescription("Type 'delete' to confirm").setRequired(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("prune")
+                    .setDescription("Remove specific cards from a deck's complete card list and reshuffle.")
+                    .addStringOption(option => option.setName('deck').setDescription('Deck to prune').setAutocomplete(true))
             );
         });
         this.data.addSubcommandGroup(group =>
@@ -533,6 +540,9 @@ class Cards extends SlashCommand {
                             break
                         case "remove":
                             await DeckRemove.execute(interaction, this.client)
+                            break
+                        case "prune":
+                            await DeckPrune.execute(interaction, this.client)
                             break
                         default:
                             await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
