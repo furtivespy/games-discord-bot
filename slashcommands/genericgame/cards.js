@@ -34,6 +34,7 @@ const PlayAreaDiscard = require('../../subcommands/cards/playareadiscard') // Re
 const PlayAreaPick = require('../../subcommands/cards/playareapick') // Restoring
 const PlayAreaTake = require('../../subcommands/cards/playareatake') // Restoring
 const PlayAreaGive = require('../../subcommands/cards/playareagive') // Restoring
+const PlayAreaMove = require('../../subcommands/cards/playareamove')
 const PlayAreaClearAll = require('../../subcommands/cards/playareaclearall')
 const Burn = require('../../subcommands/cards/burn')
 const DeckPeek = require('../../subcommands/cards/deckpeek')
@@ -366,6 +367,21 @@ class Cards extends SlashCommand {
             )
             .addSubcommand(subcommand =>
                 subcommand
+                    .setName("move")
+                    .setDescription("Move cards from any player's play area to a specific destination.")
+                    .addUserOption(option => option.setName('source').setDescription('The player whose play area to take cards from').setRequired(true))
+                    .addStringOption(option => option.setName('destination').setDescription('Where to move the cards').setRequired(true)
+                        .addChoices(
+                            {name: 'Discard Pile', value: 'discard'},
+                            {name: 'Game Board', value: 'gameboard'},
+                            {name: 'Custom Pile', value: 'pile'},
+                            {name: 'Play Area', value: 'playarea'}
+                        ))
+                    .addStringOption(option => option.setName('pilename').setDescription('Which pile (if destination is Custom Pile)').setAutocomplete(true))
+                    .addStringOption(option => option.setName('destinationplayer').setDescription('Which player\'s play area (if destination is Play Area)').setAutocomplete(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
                     .setName("clearall")
                     .setDescription("Move all cards from all play areas to the discard pile(s).")
             )
@@ -604,6 +620,9 @@ class Cards extends SlashCommand {
                             break
                         case "give":
                             await PlayAreaGive.execute(interaction, this.client)
+                            break
+                        case "move":
+                            await PlayAreaMove.execute(interaction, this.client)
                             break
                         case "clearall":
                             await PlayAreaClearAll.execute(interaction, this.client)
