@@ -29,7 +29,7 @@ class GameBoardTake {
             return
         }
 
-        await interaction.deferReply({ ephemeral: true })
+        await interaction.deferReply({ ephemeral: false })
         
         const gameData = await GameHelper.getGameData(client, interaction)
         
@@ -81,11 +81,11 @@ class GameBoardTake {
             destinationName = 'your hand'
         }
 
+        const actorDisplayName = interaction.member?.displayName || interaction.user.username
+        const cardName = Formatter.cardShortName(takenCard)
+
         // Record history
         try {
-            const actorDisplayName = interaction.member?.displayName || interaction.user.username
-            const cardName = Formatter.cardShortName(takenCard)
-            
             GameHelper.recordMove(
                 gameData,
                 interaction.user,
@@ -106,13 +106,23 @@ class GameBoardTake {
         }
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+        
+        // Public message showing the action
+        let publicMessage = `${actorDisplayName} took ${cardName} from Game Board`
+        if (destination === 'hand') {
+            publicMessage += ` to their hand`
+        } else if (destination === 'playarea') {
+            publicMessage += ` to their play area`
+        } else if (destination === 'pile') {
+            publicMessage += ` to ${destinationName}`
+        }
 
         await interaction.editReply({ 
-            content: `You took ${Formatter.cardShortName(takenCard)} from Game Board to ${destinationName}`,
-            ephemeral: true
+            content: publicMessage,
+            ephemeral: false
         })
 
-        // Show updated hand if destination was hand
+        // Show updated hand privately if destination was hand
         if (destination === 'hand') {
             const handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
             const privateFollowup = { embeds: [...handInfo.embeds], ephemeral: true }
