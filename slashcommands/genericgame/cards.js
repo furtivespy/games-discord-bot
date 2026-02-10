@@ -47,6 +47,7 @@ const PileList = require('../../subcommands/cards/pilelist')
 const PileConfigure = require('../../subcommands/cards/pileconfigure')
 const PilePlay = require('../../subcommands/cards/pileplay')
 const PileTake = require('../../subcommands/cards/piletake')
+const PileMove = require('../../subcommands/cards/pilemove')
 const PilePeek = require('../../subcommands/cards/pilepeek')
 const PileView = require('../../subcommands/cards/pileview')
 const PileShuffle = require('../../subcommands/cards/pileshuffle')
@@ -56,6 +57,7 @@ const PileFlip = require('../../subcommands/cards/pileflip')
 // Game Board
 const GameBoardTake = require('../../subcommands/cards/gameboardtake')
 const GameBoardDiscard = require('../../subcommands/cards/gameboarddiscard')
+const GameBoardMove = require('../../subcommands/cards/gameboardmove')
 const GameBoardView = require('../../subcommands/cards/gameboardview')
 const GameBoardClear = require('../../subcommands/cards/gameboardclear')
 
@@ -434,6 +436,22 @@ class Cards extends SlashCommand {
             )
             .addSubcommand(subcommand =>
                 subcommand
+                    .setName("move")
+                    .setDescription("Move cards from a pile to a specific destination")
+                    .addStringOption(option => option.setName('sourcepile').setDescription('Pile to move cards from').setAutocomplete(true).setRequired(true))
+                    .addStringOption(option => option.setName('destination').setDescription('Where to move the cards').setRequired(true)
+                        .addChoices(
+                            {name: 'Hand', value: 'hand'},
+                            {name: 'Discard Pile', value: 'discard'},
+                            {name: 'Game Board', value: 'gameboard'},
+                            {name: 'Custom Pile', value: 'pile'},
+                            {name: 'Play Area', value: 'playarea'}
+                        ))
+                    .addStringOption(option => option.setName('destinationpile').setDescription('Which pile (if destination is Custom Pile)').setAutocomplete(true))
+                    .addStringOption(option => option.setName('destinationplayer').setDescription('Which player\'s play area (if destination is Play Area)').setAutocomplete(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
                     .setName("peek")
                     .setDescription("Privately view cards in a pile")
                     .addStringOption(option => option.setName('pile').setDescription('Pile to peek at').setAutocomplete(true).setRequired(true))
@@ -496,6 +514,20 @@ class Cards extends SlashCommand {
                             {name: 'Custom Pile', value: 'pile'}
                         ))
                     .addStringOption(option => option.setName('pilename').setDescription('Which pile (if destination is Custom Pile)').setAutocomplete(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("move")
+                    .setDescription("Move cards from the game board to a specific destination")
+                    .addStringOption(option => option.setName('destination').setDescription('Where to move the cards').setRequired(true)
+                        .addChoices(
+                            {name: 'Hand', value: 'hand'},
+                            {name: 'Discard Pile', value: 'discard'},
+                            {name: 'Custom Pile', value: 'pile'},
+                            {name: 'Play Area', value: 'playarea'}
+                        ))
+                    .addStringOption(option => option.setName('pilename').setDescription('Which pile (if destination is Custom Pile)').setAutocomplete(true))
+                    .addStringOption(option => option.setName('destinationplayer').setDescription('Which player\'s play area (if destination is Play Area)').setAutocomplete(true))
             )
             .addSubcommand(subcommand =>
                 subcommand
@@ -688,6 +720,9 @@ class Cards extends SlashCommand {
                         case "take":
                             await PileTake.execute(interaction, this.client)
                             break
+                        case "move":
+                            await PileMove.execute(interaction, this.client)
+                            break
                         case "peek":
                             await PilePeek.execute(interaction, this.client)
                             break
@@ -717,6 +752,9 @@ class Cards extends SlashCommand {
                             break
                         case "discard":
                             await GameBoardDiscard.execute(interaction, this.client)
+                            break
+                        case "move":
+                            await GameBoardMove.execute(interaction, this.client)
                             break
                         case "view":
                             await GameBoardView.execute(interaction, this.client)
