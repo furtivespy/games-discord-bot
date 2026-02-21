@@ -16,6 +16,7 @@ const DraftReturn = require(`../../subcommands/cards/draftreturn`)
 const Draw = require(`../../subcommands/cards/draw`)
 const DrawMulti = require(`../../subcommands/cards/drawmulti`)
 const Flip = require(`../../subcommands/cards/flip`)
+const FlipMulti = require(`../../subcommands/cards/flipmulti`)
 const NewDeck = require(`../../subcommands/cards/newdeck`)
 const Pick = require(`../../subcommands/cards/pick`)
 const Play = require(`../../subcommands/cards/play`)
@@ -54,6 +55,7 @@ const PileShuffle = require('../../subcommands/cards/pileshuffle')
 const PileDraw = require('../../subcommands/cards/piledraw')
 const PileDrawMultiple = require('../../subcommands/cards/piledrawmultiple')
 const PileFlip = require('../../subcommands/cards/pileflip')
+const PileFlipMultiple = require('../../subcommands/cards/pileflipmultiple')
 // Game Board
 const GameBoardTake = require('../../subcommands/cards/gameboardtake')
 const GameBoardDiscard = require('../../subcommands/cards/gameboarddiscard')
@@ -131,6 +133,20 @@ class Cards extends SlashCommand {
                         ))
                     .addStringOption(option => option.setName('pilename').setDescription('Which pile (if destination is Custom Pile)').setAutocomplete(true))
                 ) 
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("flipmultiple")
+                    .setDescription("Flip multiple cards from the top of the deck at once")
+                    .addIntegerOption(option => option.setName('count').setDescription('Number of cards to flip').setRequired(true).setMinValue(1))
+                    .addStringOption(option => option.setName('deck').setDescription('Deck to flip from').setAutocomplete(true))
+                    .addStringOption(option => option.setName('destination').setDescription('Where to flip the cards')
+                        .addChoices(
+                            {name: 'Discard Pile (default)', value: 'discard'},
+                            {name: 'Game Board', value: 'gameboard'},
+                            {name: 'Custom Pile', value: 'pile'}
+                        ))
+                    .addStringOption(option => option.setName('pilename').setDescription('Which pile (if destination is Custom Pile)').setAutocomplete(true))
+                )
             .addSubcommand(subcommand =>
                 subcommand
                     .setName("peek")
@@ -486,6 +502,27 @@ class Cards extends SlashCommand {
                     .setName("flip")
                     .setDescription("Flip top card from a pile")
                     .addStringOption(option => option.setName('pile').setDescription('Pile to flip from').setAutocomplete(true).setRequired(true))
+                    .addStringOption(option => option.setName('destination').setDescription('Where to send the flipped card (default: Game Board)')
+                        .addChoices(
+                            {name: 'Game Board (default)', value: 'gameboard'},
+                            {name: 'Discard Pile', value: 'discard'},
+                            {name: 'Custom Pile', value: 'pile'}
+                        ))
+                    .addStringOption(option => option.setName('destinationpile').setDescription('Which pile (if destination is Custom Pile)').setAutocomplete(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("flipmultiple")
+                    .setDescription("Flip multiple cards from the top of a pile at once")
+                    .addIntegerOption(option => option.setName('count').setDescription('Number of cards to flip').setRequired(true).setMinValue(1))
+                    .addStringOption(option => option.setName('pile').setDescription('Pile to flip from').setAutocomplete(true).setRequired(true))
+                    .addStringOption(option => option.setName('destination').setDescription('Where to send the flipped cards (default: Game Board)')
+                        .addChoices(
+                            {name: 'Game Board (default)', value: 'gameboard'},
+                            {name: 'Discard Pile', value: 'discard'},
+                            {name: 'Custom Pile', value: 'pile'}
+                        ))
+                    .addStringOption(option => option.setName('destinationpile').setDescription('Which pile (if destination is Custom Pile)').setAutocomplete(true))
             )
         );
         this.data.addSubcommandGroup(group =>
@@ -564,6 +601,9 @@ class Cards extends SlashCommand {
                             break
                         case "flipcard":
                             await Flip.execute(interaction, this.client)
+                            break
+                        case "flipmultiple":
+                            await FlipMulti.execute(interaction, this.client)
                             break
                         case "new":
                             await NewDeck.execute(interaction, this.client)
@@ -740,6 +780,9 @@ class Cards extends SlashCommand {
                             break
                         case "flip":
                             await PileFlip.execute(interaction, this.client)
+                            break
+                        case "flipmultiple":
+                            await PileFlipMultiple.execute(interaction, this.client)
                             break
                         default:
                             await interaction.reply({ content: "Unknown pile command.", ephemeral: true })
