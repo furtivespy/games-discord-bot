@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const SlashCommand = require('../../base/SlashCommand.js')
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const Sample = require('lodash/sample')
@@ -38,7 +39,7 @@ class Yahtzee extends SlashCommand {
 
                 await interaction.reply({content: `${results}` })
             } else {
-                await interaction.reply({content: `I don't know how to roll that many dice`, ephemeral: true})
+                await interaction.reply({content: `I don't know how to roll that many dice`, flags: MessageFlags.Ephemeral})
             }
         } catch (e) {
             this.client.logger.log(e,'error')

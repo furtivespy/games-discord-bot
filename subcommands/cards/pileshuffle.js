@@ -17,7 +17,7 @@ class PileShuffle {
         const gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
@@ -25,12 +25,12 @@ class PileShuffle {
         const pile = GameHelper.getGlobalPile(gameData, pileId)
         
         if (!pile) {
-            await interaction.editReply({ content: `Pile not found!`, ephemeral: true })
+            await interaction.editReply({ content: `Pile not found!`})
             return
         }
 
         if (pile.cards.length === 0) {
-            await interaction.editReply({ content: `${pile.name} is empty, nothing to shuffle.`, ephemeral: true })
+            await interaction.editReply({ content: `${pile.name} is empty, nothing to shuffle.`})
             return
         }
 

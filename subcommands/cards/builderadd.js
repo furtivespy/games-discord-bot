@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const Formatter = require('../../modules/GameFormatter')
@@ -21,7 +22,7 @@ class Add {
     } else {
 
       if (gameData.isdeleted || !supplyDeck) {
-          await interaction.reply({ content: `There is no game or deckbuilder in this channel.`, ephemeral: true })
+          await interaction.reply({ content: `There is no game or deckbuilder in this channel.`, flags: MessageFlags.Ephemeral })
           return
       }
 
@@ -30,7 +31,7 @@ class Add {
       const card = find(supplyDeck.allCards, {id: cardid})
 
       if (!card || !playerDeck){
-          await interaction.reply({ content: "Something is broken!?", ephemeral: true })
+          await interaction.reply({ content: "Something is broken!?", flags: MessageFlags.Ephemeral })
           return
       }
 

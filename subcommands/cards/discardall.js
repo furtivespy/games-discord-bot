@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const {SlashCommandBuilder, MessageFlags} = require('discord.js');
 const GameHelper = require('../../modules/GlobalGameHelper');
 const GameStatusHelper = require('../../modules/GameStatusHelper');
 const GameDB = require('../../db/anygame.js');
@@ -12,26 +12,26 @@ class DiscardAll {
   }
 
   async execute(interaction, client) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
       let gameData = await GameHelper.getGameData(client, interaction);
 
       if (gameData.isdeleted) {
-        await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true });
+        await interaction.editReply({ content: `There is no game in this channel.`});
         return;
       }
 
       let player = find(gameData.players, { userId: interaction.user.id });
 
       if (!player) {
-        await interaction.editReply({ content: "Something went wrong, I couldn't find you in the game.", ephemeral: true });
+        await interaction.editReply({ content: "Something went wrong, I couldn't find you in the game."});
         return;
       }
 
       const playerHand = player.hands.main;
       if (!playerHand || playerHand.length === 0) {
-        await interaction.editReply({ content: "Your hand is already empty.", ephemeral: true });
+        await interaction.editReply({ content: "Your hand is already empty."});
         return;
       }
 
@@ -68,9 +68,7 @@ class DiscardAll {
 
       // First, send the private confirmation to the user.
       await interaction.editReply({
-          content: `You have discarded all ${discardedCount} cards from your hand. Your hand is now empty.`,
-          ephemeral: true
-      });
+          content: `You have discarded all ${discardedCount} cards from your hand. Your hand is now empty.`});
 
       // Now, handle the public status update using the helper.
       await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
@@ -80,9 +78,9 @@ class DiscardAll {
     } catch (e) {
       console.error(e);
       if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({ content: "An error occurred. Check logs.", ephemeral: true }).catch(() => {});
+        await interaction.reply({ content: "An error occurred. Check logs.", flags: MessageFlags.Ephemeral }).catch(() => {});
       } else {
-        await interaction.editReply({ content: "An error occurred. Check logs.", ephemeral: true }).catch(() => {});
+        await interaction.editReply({ content: "An error occurred. Check logs."}).catch(() => {});
       }
       if (client.logger) {
         client.logger.log(e, 'error');

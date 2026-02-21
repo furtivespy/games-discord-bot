@@ -11,17 +11,13 @@ class SimultaneousReveal {
 
     if (gameData.isdeleted) {
       return interaction.editReply({
-        content: `There is no game in this channel.`,
-        ephemeral: true,
-      });
+        content: `There is no game in this channel.`});
     }
 
     let player = find(gameData.players, { userId: interaction.user.id });
     if (!player) {
       return interaction.editReply({
-        content: "You're not in this game!",
-        ephemeral: true,
-      });
+        content: "You're not in this game!"});
     }
 
     let revealMessage = `**Simultaneous Play Results:**\n`;
@@ -139,8 +135,7 @@ class SimultaneousReveal {
     // Main reveal summary
     if (revealMessage.length > 2000) revealMessage = revealMessage.substring(0, 1997) + "...";
     await interaction.editReply({
-      content: revealMessage,
-    });
+      content: revealMessage});
 
     // Follow-up with Play Area statuses if cards went there
     if (playedToPlayArea) {
@@ -165,7 +160,7 @@ class SimultaneousReveal {
                     `PlayAreaSimultaneous-${p.userId}`
                 );
 
-                const followupOptions = { embeds: [playAreaEmbed], ephemeral: false }; // Public status
+                const followupOptions = { embeds: [playAreaEmbed]}; // Public status
                 if (playAreaAttachment) {
                     followupOptions.files = [playAreaAttachment];
                 }

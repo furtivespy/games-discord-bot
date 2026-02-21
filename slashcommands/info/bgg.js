@@ -1,5 +1,5 @@
 const SlashCommand = require("../../base/SlashCommand.js");
-const { SlashCommandBuilder } = require("discord.js");
+const {SlashCommandBuilder, MessageFlags} = require("discord.js");
 const fetch = require("node-fetch");
 const BoardGameGeek = require('../../modules/BoardGameGeek')
 
@@ -84,7 +84,7 @@ class BGG extends SlashCommand {
         if (isNaN(search)){
           await interaction.reply({
             content: `Please choose from the available options`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           })
           return
         }

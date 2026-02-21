@@ -1,5 +1,5 @@
 const SlashCommand = require("../../base/SlashCommand.js");
-const { SlashCommandBuilder, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require("discord.js");
+const {SlashCommandBuilder, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, MessageFlags} = require("discord.js");
 const SampleSize = require('lodash/sampleSize');
 
 class Choose extends SlashCommand {
@@ -48,7 +48,7 @@ class Choose extends SlashCommand {
       const row2 = new ActionRowBuilder()
           .addComponents(publicButton, privateButton)
       
-      const ChooseOptions = await interaction.reply({ content: `Choose how many to pick:`, components: [row, row2], ephemeral: true, fetchReply: true })
+      const ChooseOptions = await interaction.reply({ content: `Choose how many to pick:`, components: [row, row2], flags: MessageFlags.Ephemeral, fetchReply: true })
       let selectedCount = 1
       const selectCollect = ChooseOptions.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 120000 })
       const buttonCollect = ChooseOptions.createMessageComponentCollector({ componentType: ComponentType.Button, time: 120000 })

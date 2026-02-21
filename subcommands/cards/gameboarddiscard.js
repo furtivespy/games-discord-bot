@@ -35,7 +35,7 @@ class GameBoardDiscard {
         const gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
@@ -44,13 +44,13 @@ class GameBoardDiscard {
         const pileId = interaction.options.getString('pilename')
 
         if (!gameData.gameBoard || gameData.gameBoard.length < 1) {
-            await interaction.editReply({ content: `No cards on the Game Board!`, ephemeral: true })
+            await interaction.editReply({ content: `No cards on the Game Board!`})
             return
         }
 
         const cardIndex = findIndex(gameData.gameBoard, {id: cardId})
         if (cardIndex === -1) {
-            await interaction.editReply({ content: "Card not found on game board!", ephemeral: true })
+            await interaction.editReply({ content: "Card not found on game board!"})
             return
         }
 
@@ -63,7 +63,7 @@ class GameBoardDiscard {
             if (!pile) {
                 // Return card to board if pile not found
                 gameData.gameBoard.splice(cardIndex, 0, discardedCard)
-                await interaction.editReply({ content: 'Pile not found!', ephemeral: true })
+                await interaction.editReply({ content: 'Pile not found!'})
                 return
             }
             pile.cards.push(discardedCard)
@@ -77,7 +77,7 @@ class GameBoardDiscard {
             } else {
                 // Return card to board if deck not found
                 gameData.gameBoard.splice(cardIndex, 0, discardedCard)
-                await interaction.editReply({ content: "Could not find deck's discard pile!", ephemeral: true })
+                await interaction.editReply({ content: "Could not find deck's discard pile!"})
                 return
             }
         }

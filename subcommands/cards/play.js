@@ -1,5 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
-const { sortBy, find, filter, findIndex } = require('lodash')
+const {sortBy, find, filter, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameDB = require('../../db/anygame')
 
@@ -32,7 +32,7 @@ class Play {
         let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
@@ -42,7 +42,7 @@ class Play {
         
         let player = find(gameData.players, {userId: interaction.user.id})
         if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
-            await interaction.editReply({ content: "Something is broken!?", ephemeral: true })
+            await interaction.editReply({ content: "Something is broken!?"})
             return
         }
         
@@ -62,7 +62,7 @@ class Play {
             const pile = GameHelper.getGlobalPile(gameData, pileId)
             if (!pile) {
                 player.hands.main.splice(cardIndex, 0, playedCard)
-                await interaction.editReply({ content: 'Pile not found!', ephemeral: true })
+                await interaction.editReply({ content: 'Pile not found!'})
                 return
             }
             pile.cards.push(playedCard)
@@ -88,7 +88,7 @@ class Play {
             } else {
                 player.hands.main.splice(cardIndex, 0, playedCard)
                 client.logger.log(`Error: Deck or discard pile not found for card origin '${playedCard.origin}' in /cards play.`, 'error')
-                await interaction.editReply({ content: `Error: Could not find the discard pile. Card returned to hand.`, ephemeral: true })
+                await interaction.editReply({ content: `Error: Could not find the discard pile. Card returned to hand.`})
                 return
             }
         }
@@ -126,7 +126,7 @@ class Play {
         const replyFiles = [];
 
         if (actualDestination === 'playarea' && player.playArea && player.playArea.length > 0) {
-            const { EmbedBuilder } = require('discord.js');
+            const { EmbedBuilder, MessageFlags} = require('discord.js');
             const playAreaEmbed = new EmbedBuilder()
                 .setColor(player.color || 13502711)
                 .setTitle(`${interaction.member.displayName}'s Updated Play Area`);
@@ -156,12 +156,12 @@ class Play {
             await interaction.followUp({ 
                 embeds: [...handInfo.embeds],
                 files: [...handInfo.attachments],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })  
         } else {
             await interaction.followUp({ 
                 embeds: [...handInfo.embeds],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })  
         }
     }

@@ -10,18 +10,14 @@ class FirstPlayer {
       const newFirstPlayer = interaction.options.getUser("player");
       if (!newFirstPlayer) {
         return interaction.editReply({
-          content: "Please mention a player to set as first player.",
-          ephemeral: true,
-        });
+          content: "Please mention a player to set as first player."});
       }
 
       let gameData = await GameHelper.getGameData(client, interaction);
 
       if (gameData.isdeleted) {
         return interaction.editReply({
-          content: "No game happening in this channel.",
-          ephemeral: true,
-        });
+          content: "No game happening in this channel."});
       }
 
       const player = gameData.players.find(
@@ -29,9 +25,7 @@ class FirstPlayer {
       );
       if (!player) {
         return interaction.editReply({
-          content: "That player is not in the game.",
-          ephemeral: true,
-        });
+          content: "That player is not in the game."});
       }
 
       // Adjust player order
@@ -82,9 +76,7 @@ class FirstPlayer {
     } catch (e) {
       console.error(e);
       await interaction.editReply({
-        content: "An error occurred while setting the first player.",
-        ephemeral: true,
-      }).catch(()=>{}); // Ignore error if interaction is no longer available
+        content: "An error occurred while setting the first player."}).catch(()=>{}); // Ignore error if interaction is no longer available
     }
   }
 }

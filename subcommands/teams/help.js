@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js')
+const {EmbedBuilder, MessageFlags} = require('discord.js')
 
 class Help {
     async execute(interaction, client) {
@@ -37,7 +37,7 @@ class Help {
 
         await interaction.reply({
             embeds: [helpEmbed],
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         })
     }
 }

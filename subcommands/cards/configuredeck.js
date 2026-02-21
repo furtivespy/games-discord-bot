@@ -15,7 +15,7 @@ class Configure {
             await interaction.deferReply()
             let gameData = await GameHelper.getGameData(client, interaction)
             if (gameData.isdeleted) {
-                await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+                await interaction.editReply({ content: `There is no game in this channel.`})
                 return
             }
 
@@ -24,7 +24,7 @@ class Configure {
             
             const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
             if (!deck){
-                await interaction.editReply({ content: `No deck found.`, ephemeral: true })
+                await interaction.editReply({ content: `No deck found.`})
                 return
             } 
             
@@ -80,7 +80,7 @@ class Configure {
                     }
                 break
                 default:
-                    await interaction.editReply({ content: `Invalid config type.`, ephemeral: true })
+                    await interaction.editReply({ content: `Invalid config type.`})
                     return
             }
 

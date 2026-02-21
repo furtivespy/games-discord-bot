@@ -1,26 +1,26 @@
 const GameHelper = require('../../modules/GlobalGameHelper');
 const GameDB = require('../../db/anygame.js');
 const Formatter = require('../../modules/GameFormatter');
-const { find, findIndex, pullAt } = require('lodash');
-const { EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js');
+const {find, findIndex, pullAt } = require('lodash');
+const { EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder, MessageFlags} = require('discord.js');
 
 module.exports = {
     // data for subcommand group is in main cards.js
     async execute(interaction, client) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const gameData = await GameHelper.getGameData(client, interaction);
         if (gameData.isdeleted) {
-            return interaction.editReply({ content: "No active game found in this channel.", ephemeral: true });
+            return interaction.editReply({ content: "No active game found in this channel."});
         }
 
         const player = find(gameData.players, { userId: interaction.user.id });
         if (!player) {
-            return interaction.editReply({ content: "You don't seem to be a player in the current game.", ephemeral: true });
+            return interaction.editReply({ content: "You don't seem to be a player in the current game."});
         }
 
         if (!player.playArea || player.playArea.length === 0) {
-            return interaction.editReply({ content: "Your play area is currently empty. Nothing to pick.", ephemeral: true });
+            return interaction.editReply({ content: "Your play area is currently empty. Nothing to pick."});
         }
 
         const options = player.playArea.map((card, index) => ({
@@ -30,13 +30,13 @@ module.exports = {
         }));
 
         if (options.length === 0) {
-            return interaction.editReply({ content: "No cards available in your play area to select.", ephemeral: true });
+            return interaction.editReply({ content: "No cards available in your play area to select."});
         }
 
         // StringSelectMenu can have max 25 options.
         if (options.length > 25) {
              // Truncate for now, or could implement pagination if many cards are common.
-            await interaction.editReply({ content: "Your play area has too many cards to display in a single list for now. Only the first 25 are shown.", ephemeral: true});
+            await interaction.editReply({ content: "Your play area has too many cards to display in a single list for now. Only the first 25 are shown."});
             // No return, allow picking from the first 25.
         }
 
@@ -51,9 +51,7 @@ module.exports = {
 
         const selectionMessage = await interaction.editReply({
             content: 'Which card(s) would you like to pick up from your play area?',
-            components: [row],
-            ephemeral: true
-        });
+            components: [row]});
 
         const collectorFilter = i => i.user.id === interaction.user.id && i.customId === 'playarea_pick_select';
         try {
@@ -72,7 +70,7 @@ module.exports = {
             });
 
             if (pickedCards.length === 0) {
-                await selectionInteraction.update({ content: "No valid cards were selected or an error occurred.", components: [], ephemeral: true });
+                await selectionInteraction.update({ content: "No valid cards were selected or an error occurred.", components: []});
                 return;
             }
 
@@ -118,9 +116,7 @@ module.exports = {
 
             // Public follow-up message
             await interaction.followUp({
-                content: `${interaction.member.displayName} picked up ${pickedCards.length} card(s) from their play area.`,
-                ephemeral: false
-            });
+                content: `${interaction.member.displayName} picked up ${pickedCards.length} card(s) from their play area.`});
 
             // Display updated hand and play area to the player (ephemeral)
             const handShowReply = await Formatter.playerSecretHandAndImages(gameData, player);
@@ -128,15 +124,15 @@ module.exports = {
                 content: "Your updated hand and play area:",
                 embeds: handShowReply.embeds,
                 files: handShowReply.attachments,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
 
         } catch (e) {
             if (e.code === 'InteractionCollectorError') { // Timeout
-                await interaction.editReply({ content: 'Card selection timed out. Please try the command again.', components: [], ephemeral: true });
+                await interaction.editReply({ content: 'Card selection timed out. Please try the command again.', components: []});
             } else {
                 client.logger.log(e, 'error');
-                await interaction.editReply({ content: 'An error occurred during card selection for picking.', components: [], ephemeral: true });
+                await interaction.editReply({ content: 'An error occurred during card selection for picking.', components: []});
             }
         }
     }

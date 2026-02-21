@@ -1,8 +1,8 @@
 const GameHelper = require('../../modules/GlobalGameHelper');
 const GameDB = require('../../db/anygame.js');
 const Formatter = require('../../modules/GameFormatter');
-const { find } = require('lodash');
-const { EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js');
+const {find } = require('lodash');
+const { EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder, MessageFlags} = require('discord.js');
 
 module.exports = {
     async execute(interaction, client) {
@@ -36,35 +36,35 @@ module.exports = {
             return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const gameData = await GameHelper.getGameData(client, interaction);
         if (gameData.isdeleted) {
-            return interaction.editReply({ content: "No active game found in this channel.", ephemeral: true });
+            return interaction.editReply({ content: "No active game found in this channel."});
         }
 
         const initiator = find(gameData.players, { userId: interaction.user.id });
         if (!initiator) {
-            return interaction.editReply({ content: "You don't seem to be a player in the current game.", ephemeral: true });
+            return interaction.editReply({ content: "You don't seem to be a player in the current game."});
         }
 
         const sourceUser = interaction.options.getUser('source');
         if (!sourceUser) {
-            return interaction.editReply({ content: "You must specify a source player.", ephemeral: true });
+            return interaction.editReply({ content: "You must specify a source player."});
         }
 
         const sourcePlayer = find(gameData.players, { userId: sourceUser.id });
         if (!sourcePlayer) {
-            return interaction.editReply({ content: `${sourceUser.username} is not a player in the current game.`, ephemeral: true });
+            return interaction.editReply({ content: `${sourceUser.username} is not a player in the current game.`});
         }
 
         if (!sourcePlayer.playArea || sourcePlayer.playArea.length === 0) {
-            return interaction.editReply({ content: `${sourceUser.username}'s play area is currently empty. Nothing to move.`, ephemeral: true });
+            return interaction.editReply({ content: `${sourceUser.username}'s play area is currently empty. Nothing to move.`});
         }
 
         const destination = interaction.options.getString('destination');
         if (!destination) {
-            return interaction.editReply({ content: "You must specify a destination.", ephemeral: true });
+            return interaction.editReply({ content: "You must specify a destination."});
         }
 
         const pileId = interaction.options.getString('pilename');
@@ -72,20 +72,20 @@ module.exports = {
 
         // Validate destination-specific requirements
         if (destination === 'pile' && !pileId) {
-            return interaction.editReply({ content: "You must specify a pile name when destination is 'Custom Pile'.", ephemeral: true });
+            return interaction.editReply({ content: "You must specify a pile name when destination is 'Custom Pile'."});
         }
 
         if (destination === 'playarea' && !destinationPlayerId) {
-            return interaction.editReply({ content: "You must specify a destination player when destination is 'Play Area'.", ephemeral: true });
+            return interaction.editReply({ content: "You must specify a destination player when destination is 'Play Area'."});
         }
 
         if (destination === 'playarea') {
             const destinationPlayer = find(gameData.players, { userId: destinationPlayerId });
             if (!destinationPlayer) {
-                return interaction.editReply({ content: "Destination player not found in the game.", ephemeral: true });
+                return interaction.editReply({ content: "Destination player not found in the game."});
             }
             if (destinationPlayerId === sourceUser.id) {
-                return interaction.editReply({ content: "Cannot move cards to the same play area they came from. Use `/cards playarea pick` to move cards from your play area to your hand.", ephemeral: true });
+                return interaction.editReply({ content: "Cannot move cards to the same play area they came from. Use `/cards playarea pick` to move cards from your play area to your hand."});
             }
         }
 
@@ -97,7 +97,7 @@ module.exports = {
         }));
 
         if (options.length > 25) {
-            await interaction.editReply({ content: `${sourceUser.username}'s play area has too many cards to display in a single list. Only the first 25 are shown.`, ephemeral: true });
+            await interaction.editReply({ content: `${sourceUser.username}'s play area has too many cards to display in a single list. Only the first 25 are shown.`});
         }
 
         const selectMenu = new StringSelectMenuBuilder()
@@ -111,9 +111,7 @@ module.exports = {
 
         const selectionMessage = await interaction.editReply({
             content: `Which card(s) would you like to move from ${sourceUser.username}'s play area?`,
-            components: [row],
-            ephemeral: true
-        });
+            components: [row]});
 
         const collectorFilter = i => i.user.id === interaction.user.id && i.customId === 'playarea_move_select';
         try {
@@ -134,7 +132,7 @@ module.exports = {
             sourcePlayer.playArea = newSourcePlayArea;
 
             if (movedCards.length === 0) {
-                await selectionInteraction.update({ content: "No valid cards were selected or an error occurred.", components: [], ephemeral: true });
+                await selectionInteraction.update({ content: "No valid cards were selected or an error occurred.", components: []});
                 return;
             }
 
@@ -147,7 +145,7 @@ module.exports = {
                 if (!pile) {
                     // Return cards to source play area if pile not found
                     sourcePlayer.playArea.push(...movedCards);
-                    await selectionInteraction.update({ content: 'Pile not found! Cards returned to source play area.', components: [], ephemeral: true });
+                    await selectionInteraction.update({ content: 'Pile not found! Cards returned to source play area.', components: []});
                     return;
                 }
                 pile.cards.push(...movedCards);
@@ -156,7 +154,7 @@ module.exports = {
                 const destinationPlayer = find(gameData.players, { userId: destinationPlayerId });
                 if (!destinationPlayer) {
                     sourcePlayer.playArea.push(...movedCards);
-                    await selectionInteraction.update({ content: 'Destination player not found! Cards returned to source play area.', components: [], ephemeral: true });
+                    await selectionInteraction.update({ content: 'Destination player not found! Cards returned to source play area.', components: []});
                     return;
                 }
                 if (!destinationPlayer.playArea) {
@@ -235,9 +233,7 @@ module.exports = {
                     publicFollowUpContent = `${interaction.member.displayName} moved ${successfullyMovedCards.length} card(s) from ${sourceUser.username}'s play area to ${destinationName}. (Card list too long to display).`;
                 }
                 await interaction.followUp({
-                    content: publicFollowUpContent,
-                    ephemeral: false
-                });
+                    content: publicFollowUpContent});
             } else {
                 await selectionInteraction.update({
                     content: `No cards were moved due to errors.`,
@@ -284,18 +280,16 @@ module.exports = {
                     await interaction.followUp({
                         content: "Updated play area statuses:",
                         embeds: embeds.filter(e => e.data.fields && e.data.fields.length > 0 || e.data.image),
-                        files: statusFiles,
-                        ephemeral: false
-                    });
+                        files: statusFiles});
                 }
             }
 
         } catch (e) {
             if (e.code === 'InteractionCollectorError') {
-                await interaction.editReply({ content: 'Card selection timed out.', components: [], ephemeral: true });
+                await interaction.editReply({ content: 'Card selection timed out.', components: []});
             } else {
                 client.logger.log(e, 'error');
-                await interaction.editReply({ content: 'An error occurred during card selection for moving.', components: [], ephemeral: true });
+                await interaction.editReply({ content: 'An error occurred during card selection for moving.', components: []});
             }
         }
     }

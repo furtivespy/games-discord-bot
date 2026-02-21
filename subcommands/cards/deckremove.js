@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const { find, remove } = require('lodash')
@@ -16,7 +17,7 @@ class DeckRemove {
         }
 
         if (interaction.options.getString('confirm') !== 'delete') {
-            await interaction.reply({ content: `Deck not deleted. You must confirm by typing 'delete' in the confirm option.`, ephemeral: true })
+            await interaction.reply({ content: `Deck not deleted. You must confirm by typing 'delete' in the confirm option.`, flags: MessageFlags.Ephemeral })
             return
         }
 
@@ -25,14 +26,14 @@ class DeckRemove {
         let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
         const inputDeck = interaction.options.getString('deckname')
         const deck = find(gameData.decks, {name: inputDeck})
         if (!deck){
-            await interaction.editReply({ content: `Could not find a deck named "${inputDeck}".`, ephemeral: true })
+            await interaction.editReply({ content: `Could not find a deck named "${inputDeck}".`})
             return
         }
 

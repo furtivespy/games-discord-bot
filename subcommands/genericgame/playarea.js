@@ -20,7 +20,7 @@ module.exports = {
             const gameData = await GlobalGameHelper.getGameData(interaction.client, interaction);
 
             if (gameData.isdeleted) {
-                return interaction.editReply({ content: "No active game found in this channel. Start a new game first.", ephemeral: true });
+                return interaction.editReply({ content: "No active game found in this channel. Start a new game first."});
             }
 
             const desiredMode = interaction.options.getString('mode');
@@ -69,7 +69,7 @@ module.exports = {
 
         } catch (e) {
             interaction.client.logger.log(e, 'error');
-            await interaction.editReply({ content: "An error occurred while trying to toggle the play area setting.", ephemeral: true });
+            await interaction.editReply({ content: "An error occurred while trying to toggle the play area setting."});
         }
     }
 };

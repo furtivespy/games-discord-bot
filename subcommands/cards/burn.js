@@ -21,7 +21,7 @@ class Burn {
         let gameData = await GameHelper.getGameData(client, interaction);
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true });
+            await interaction.editReply({ content: `There is no game in this channel.`});
             return;
         }
 
@@ -32,19 +32,19 @@ class Burn {
         const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id);
 
         if (!deck) {
-            await interaction.editReply({ content: "Specified deck not found or no default deck available.", ephemeral: true });
+            await interaction.editReply({ content: "Specified deck not found or no default deck available."});
             return;
         }
 
         if (!deck.piles || !deck.piles.draw || deck.piles.draw.cards.length < 1) {
-            await interaction.editReply({ content: `The draw pile for ${deck.name} is empty.`, ephemeral: true });
+            await interaction.editReply({ content: `The draw pile for ${deck.name} is empty.`});
             return;
         }
 
         const countToBurn = interaction.options.getInteger('count');
 
         if (countToBurn <= 0) {
-            await interaction.editReply({ content: "Number of cards to burn must be greater than 0.", ephemeral: true });
+            await interaction.editReply({ content: "Number of cards to burn must be greater than 0."});
             return;
         }
 
@@ -55,7 +55,7 @@ class Burn {
         if (destination === 'pile') {
             targetPile = GameHelper.getGlobalPile(gameData, pileId);
             if (!targetPile) {
-                await interaction.editReply({ content: 'Pile not found!', ephemeral: true });
+                await interaction.editReply({ content: 'Pile not found!'});
                 return;
             }
             destinationName = targetPile.name;
@@ -91,7 +91,7 @@ class Burn {
         }
 
         if (actualBurnedCount === 0) {
-            await interaction.editReply({ content: `No cards were burned. The draw pile for ${deck.name} might be empty.`, ephemeral: true });
+            await interaction.editReply({ content: `No cards were burned. The draw pile for ${deck.name} might be empty.`});
             return;
         }
 

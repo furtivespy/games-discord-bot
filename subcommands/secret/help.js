@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 class Help {
     async execute(interaction, client) {
         await interaction.reply({
@@ -36,7 +37,7 @@ If you get caught, don't blame the bot! I'm just the messenger. 🤖
 
 Now go forth and be secretive (or not)! The choice is yours, agent. Good luck! 🕵️‍♀️
 `,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 }

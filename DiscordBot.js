@@ -1,13 +1,11 @@
-const {
-  Client,
+const {Client,
   Collection,
   Partials,
   GatewayIntentBits,
   PermissionsBitField,
   REST,
-  Routes
-} = require("discord.js");
-const Enmap = require("enmap");
+  Routes, MessageFlags} = require("discord.js");
+const Enmap = require("./modules/BunEnmap.js");
 const klaw = require("klaw");
 const path = require("path");
 const database = require("./db/db.js");
@@ -719,7 +717,7 @@ client.on("interactionCreate", async (interaction) => {
       console.error(error);
       return interaction.reply({
         content: "There was an error while executing this command!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   } else if (interaction.isModalSubmit()) {
@@ -729,7 +727,7 @@ client.on("interactionCreate", async (interaction) => {
       console.error(error);
       return interaction.reply({
         content: "There was an error while processing this modal!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   }

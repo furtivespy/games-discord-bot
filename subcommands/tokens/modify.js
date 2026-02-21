@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame');
 const GameHelper = require('../../modules/GlobalGameHelper');
 const { find } = require('lodash');
@@ -11,18 +12,18 @@ class Modify {
         );
 
         if (gameData.isdeleted) {
-            return await interaction.reply({ content: "No game in progress!", ephemeral: true });
+            return await interaction.reply({ content: "No game in progress!", flags: MessageFlags.Ephemeral });
         }
 
         if (!gameData.tokens || !gameData.tokens.length) {
-            return await interaction.reply({ content: "No tokens exist in this game to modify!", ephemeral: true });
+            return await interaction.reply({ content: "No tokens exist in this game to modify!", flags: MessageFlags.Ephemeral });
         }
 
         const tokenNameToModify = interaction.options.getString('name');
         const token = find(gameData.tokens, { name: tokenNameToModify });
 
         if (!token) {
-            return await interaction.reply({ content: `Token "${tokenNameToModify}" not found!`, ephemeral: true });
+            return await interaction.reply({ content: `Token "${tokenNameToModify}" not found!`, flags: MessageFlags.Ephemeral });
         }
 
         const newNameOpt = interaction.options.getString('new_name');
@@ -43,7 +44,7 @@ class Modify {
         // 1. New Name
         if (newNameOpt !== null && newNameOpt !== token.name) {
             if (find(gameData.tokens, t => t.name === newNameOpt && t.id !== token.id)) {
-                return await interaction.reply({ content: `Another token named "${newNameOpt}" already exists! Cannot rename.`, ephemeral: true });
+                return await interaction.reply({ content: `Another token named "${newNameOpt}" already exists! Cannot rename.`, flags: MessageFlags.Ephemeral });
             }
             token.name = newNameOpt;
             changesMade.push(`Name changed from "${originalTokenForComparison.name}" to "${newNameOpt}"`);
@@ -83,7 +84,7 @@ class Modify {
             if (capOpt < totalTokensHeldByAllPlayers) {
                 return await interaction.reply({
                     content: `Cannot set cap to ${capOpt}. This is lower than the current amount in circulation (${totalTokensHeldByAllPlayers}).`,
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
             token.cap = capOpt;
@@ -91,7 +92,7 @@ class Modify {
         }
 
         if (changesMade.length === 0) {
-            return await interaction.reply({ content: "No changes specified, or provided values match current token settings.", ephemeral: true });
+            return await interaction.reply({ content: "No changes specified, or provided values match current token settings.", flags: MessageFlags.Ephemeral });
         }
 
         // Record history
@@ -122,9 +123,7 @@ class Modify {
         await client.setGameDataV2(interaction.guildId, 'game', interaction.channelId, gameData);
 
         return await interaction.reply({
-            content: `Token "${originalTokenForComparison.name}" successfully modified:\n- ${changesMade.join("\n- ")}`,
-            ephemeral: false
-        });
+            content: `Token "${originalTokenForComparison.name}" successfully modified:\n- ${changesMade.join("\n- ")}`});
     }
 }
 

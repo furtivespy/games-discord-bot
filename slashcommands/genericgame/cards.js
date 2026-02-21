@@ -1,5 +1,5 @@
 const SlashCommand = require('../../base/SlashCommand.js')
-const { SlashCommandBuilder } = require('discord.js');
+const {SlashCommandBuilder, MessageFlags} = require('discord.js');
 const GameDB = require('../../db/anygame.js')
 const BuildNew = require('../../subcommands/cards/buildernew')
 const BuildAdd = require('../../subcommands/cards/builderadd')
@@ -561,7 +561,7 @@ class Cards extends SlashCommand {
                             await DeckPrune.execute(interaction, this.client)
                             break
                         default:
-                            await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
+                            await interaction.reply({ content: "Command not fully written yet :(", flags: MessageFlags.Ephemeral })
                     }
                     break
                 case "draft":
@@ -579,7 +579,7 @@ class Cards extends SlashCommand {
                             await DraftReturn.execute(interaction, this.client)
                             break
                         default:
-                            await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
+                            await interaction.reply({ content: "Command not fully written yet :(", flags: MessageFlags.Ephemeral })
                     }
                     break
                 case "player":
@@ -588,7 +588,7 @@ class Cards extends SlashCommand {
                             await Steal.execute(interaction, this.client)
                             break
                         default:
-                            await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
+                            await interaction.reply({ content: "Command not fully written yet :(", flags: MessageFlags.Ephemeral })
                     }
                     break
                 case "builder":
@@ -603,7 +603,7 @@ class Cards extends SlashCommand {
                             await BuildRemove.execute(interaction, this.client)
                             break
                         default:
-                            await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
+                            await interaction.reply({ content: "Command not fully written yet :(", flags: MessageFlags.Ephemeral })
                     }
                     break
                 // Restoring playarea group handling
@@ -628,7 +628,7 @@ class Cards extends SlashCommand {
                             await PlayAreaClearAll.execute(interaction, this.client)
                             break
                         default:
-                            await interaction.reply({ content: "Unknown playarea command.", ephemeral: true })
+                            await interaction.reply({ content: "Unknown playarea command.", flags: MessageFlags.Ephemeral })
                     }
                     break
                 case "hand":
@@ -665,7 +665,7 @@ class Cards extends SlashCommand {
                             await Pass.execute(interaction, this.client)
                             break
                         default:
-                            await interaction.reply({ content: "Command not fully written yet :(", ephemeral: true })
+                            await interaction.reply({ content: "Command not fully written yet :(", flags: MessageFlags.Ephemeral })
                     }
                     break
                 case "pile":
@@ -707,7 +707,7 @@ class Cards extends SlashCommand {
                             await PileFlip.execute(interaction, this.client)
                             break
                         default:
-                            await interaction.reply({ content: "Unknown pile command.", ephemeral: true })
+                            await interaction.reply({ content: "Unknown pile command.", flags: MessageFlags.Ephemeral })
                     }
                     break
                 case "gameboard":
@@ -725,7 +725,7 @@ class Cards extends SlashCommand {
                             await GameBoardClear.execute(interaction, this.client)
                             break
                         default:
-                            await interaction.reply({ content: "Unknown gameboard command.", ephemeral: true })
+                            await interaction.reply({ content: "Unknown gameboard command.", flags: MessageFlags.Ephemeral })
                     }
                     break
                 default: // Handles commands without a group, like /cards help
@@ -737,7 +737,7 @@ class Cards extends SlashCommand {
                             // This case should ideally not be reached if getSubcommandGroup() is null for non-grouped commands
                             // However, if a command has no group and is not 'help', it might fall here.
                             // Or if getSubcommandGroup(false) returns null and it's not 'help'.
-                            await interaction.reply({ content: "This command structure is not recognized or the command is incomplete.", ephemeral: true })
+                            await interaction.reply({ content: "This command structure is not recognized or the command is incomplete.", flags: MessageFlags.Ephemeral })
                     }
                     break
             }

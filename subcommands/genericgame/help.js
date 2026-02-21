@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 class Help {
     async execute(interaction, client) {
         const introduction_content = `🎲 **Welcome to the Generic Game Zone!** 🎲
@@ -9,7 +10,7 @@ Here's a list of commands to get you started. Don't worry, they're super easy to
 
         await interaction.reply({ 
             content: introduction_content,
-            ephemeral: true 
+            flags: MessageFlags.Ephemeral 
         });
 
         const commands_chunk_1 = `*   **/game newgame** 🎮 - Let's get this party started! Starts a brand new game. 🥳
@@ -20,7 +21,7 @@ Here's a list of commands to get you started. Don't worry, they're super easy to
 
         await interaction.followUp({
             content: commands_chunk_1,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
 
         const commands_chunk_2_intro = `\n**Game Commands (Part 2):**`;
@@ -37,7 +38,7 @@ Here's a list of commands to get you started. Don't worry, they're super easy to
 
         await interaction.followUp({
             content: `${commands_chunk_2_intro}\n${commands_chunk_2}`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
 
         const conclusion_content = `\nRemember, the most important rule is to have FUN! If you have any questions, don't hesitate to ask (though I'm just a bot, I'll try my best 🤖). 
@@ -46,7 +47,7 @@ Now go forth and conquer the game! 💪`;
 
         await interaction.followUp({
             content: conclusion_content,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 }

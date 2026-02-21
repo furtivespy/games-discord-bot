@@ -1,8 +1,8 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
-const { find, findIndex, sortBy, filter } = require('lodash')
+const {find, findIndex, sortBy, filter } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
-const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js')
+const { StringSelectMenuBuilder, ActionRowBuilder, MessageFlags} = require('discord.js')
 
 class GameBoardTake {
     async execute(interaction, client) {
@@ -29,7 +29,7 @@ class GameBoardTake {
             return
         }
 
-        await interaction.deferReply({ ephemeral: false })
+        await interaction.deferReply({})
         
         const gameData = await GameHelper.getGameData(client, interaction)
         
@@ -40,18 +40,18 @@ class GameBoardTake {
         const player = find(gameData.players, {userId: interaction.user.id})
         
         if (!player) {
-            await interaction.editReply({ content: "You must be a player in this game!", ephemeral: true })
+            await interaction.editReply({ content: "You must be a player in this game!"})
             return
         }
 
         if (!gameData.gameBoard || gameData.gameBoard.length < 1) {
-            await interaction.editReply({ content: `No cards on the Game Board!`, ephemeral: true })
+            await interaction.editReply({ content: `No cards on the Game Board!`})
             return
         }
 
         const cardIndex = findIndex(gameData.gameBoard, {id: cardId})
         if (cardIndex === -1) {
-            await interaction.editReply({ content: "Card not found on game board!", ephemeral: true })
+            await interaction.editReply({ content: "Card not found on game board!"})
             return
         }
 
@@ -64,7 +64,7 @@ class GameBoardTake {
             if (!pile) {
                 // Return card to board if pile not found
                 gameData.gameBoard.splice(cardIndex, 0, takenCard)
-                await interaction.editReply({ content: 'Pile not found!', ephemeral: true })
+                await interaction.editReply({ content: 'Pile not found!'})
                 return
             }
             pile.cards.push(takenCard)
@@ -118,14 +118,12 @@ class GameBoardTake {
         }
 
         await interaction.editReply({ 
-            content: publicMessage,
-            ephemeral: false
-        })
+            content: publicMessage})
 
         // Show updated hand privately if destination was hand
         if (destination === 'hand') {
             const handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
-            const privateFollowup = { embeds: [...handInfo.embeds], ephemeral: true }
+            const privateFollowup = { embeds: [...handInfo.embeds], flags: MessageFlags.Ephemeral }
             if (handInfo.attachments.length > 0) {
                 privateFollowup.files = [...handInfo.attachments]
             }

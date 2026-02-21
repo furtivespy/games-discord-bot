@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 
 class Help {
     async execute(interaction, client) {
@@ -9,7 +10,7 @@ class Help {
 
         await interaction.reply({ 
             content: introduction_content,
-            ephemeral: true 
+            flags: MessageFlags.Ephemeral 
         });
 
         const deck_commands_header = `\n**Deck Commands:**`;
@@ -22,7 +23,7 @@ class Help {
 
         await interaction.followUp({
             content: `${deck_commands_header}\n${deck_commands_content}`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
 
         const hand_and_game_commands_header = `\n**Hand & Game Commands:**`;
@@ -42,7 +43,7 @@ Thank you, and please let me know if I can make any of these clearer`;
 
         await interaction.followUp({
             content: `${hand_and_game_commands_header}\n${hand_and_game_commands_content}`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
 
         const play_area_commands_header = `\n**Play Area Commands:** (Used when Play Area mode is ON)`;
@@ -53,7 +54,7 @@ Thank you, and please let me know if I can make any of these clearer`;
 
         await interaction.followUp({
             content: `${play_area_commands_header}\n${play_area_commands_content}`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 }

@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const { sortBy, find, filter, findIndex } = require('lodash')
@@ -21,19 +22,19 @@ class Take {
             return
         }
 
-        await interaction.deferReply({ ephemeral: true })
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
         
         let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
         const cardid = interaction.options.getString('card')
         let player = find(gameData.players, {userId: interaction.user.id})
         if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
-            await interaction.editReply({ content: "Something is broken!?", ephemeral: true })
+            await interaction.editReply({ content: "Something is broken!?"})
             return
         }
         
@@ -77,13 +78,13 @@ class Take {
                 content: `You un-drafted:`, 
                 embeds: [Formatter.oneCard(theCard), ...handInfo.embeds],
                 files: [...handInfo.attachments],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })  
         } else {
             await interaction.followUp({ 
                 content: `You un-drafted:`, 
                 embeds: [Formatter.oneCard(theCard), ...handInfo.embeds],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })  
         }
     }

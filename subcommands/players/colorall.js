@@ -1,5 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const {ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags} = require('discord.js');
 
 class ColorAll {
     async execute(interaction, client) {
@@ -8,7 +8,7 @@ class ColorAll {
         if (gameData.isdeleted) {
             await interaction.reply({
                 content: `No active game in this channel.`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })
             return
         }
@@ -16,7 +16,7 @@ class ColorAll {
         if (!gameData.players || gameData.players.length === 0) {
             await interaction.reply({
                 content: `No players in the game.`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -24,7 +24,7 @@ class ColorAll {
         if (gameData.players.length > 5) {
             await interaction.reply({
                 content: `There are too many players in the game to use this command. The maximum is 5.`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }

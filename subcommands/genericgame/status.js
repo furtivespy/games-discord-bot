@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const { find } = require('lodash')
 const GameDB = require('../../db/anygame')
 const Formatter = require('../../modules/GameFormatter')
@@ -9,7 +10,7 @@ class Status {
         const gameData = await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
 
         if (!gameData || gameData.isdeleted) {
-            return await interaction.editReply({ content: "No game in progress!", ephemeral: true })
+            return await interaction.editReply({ content: "No game in progress!"})
         }
 
         // Get secret tokens for the command caller
@@ -22,7 +23,7 @@ class Status {
         if (secretTokensEmbed) {
             await interaction.followUp({
                 embeds: [secretTokensEmbed],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             }).catch(e => console.error("Error sending secret token followup:", e));
         }
     }

@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 class Help {
     async execute(interaction, client) {
         const introduction_content = `🪙 **Welcome to the Token Treasury!** 🪙
@@ -7,7 +8,7 @@ Here's your handy guide to all the \`/tokens\` commands. Let the token games beg
 
         await interaction.reply({ 
             content: introduction_content,
-            ephemeral: true 
+            flags: MessageFlags.Ephemeral 
         });
 
         const commands_chunk_1_header = `\n**Token Commands (Part 1):**`;
@@ -19,7 +20,7 @@ Here's your handy guide to all the \`/tokens\` commands. Let the token games beg
 
         await interaction.followUp({
             content: `${commands_chunk_1_header}\n${commands_chunk_1}`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
 
         const commands_chunk_2_header = `\n**Token Commands (Part 2):**`;
@@ -30,7 +31,7 @@ Here's your handy guide to all the \`/tokens\` commands. Let the token games beg
 
         await interaction.followUp({
             content: `${commands_chunk_2_header}\n${commands_chunk_2}`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         
         const conclusion_content = `\nRemember, tokens are what you make of them! Use them to power up, keep score, or just for fun!
@@ -40,7 +41,7 @@ May your token pouch always be full! 🎉`;
 
         await interaction.followUp({
             content: conclusion_content,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 }

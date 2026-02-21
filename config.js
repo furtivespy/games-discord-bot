@@ -1,6 +1,6 @@
 const onChange = require('on-change')
 const jsonfile = require('jsonfile')
-const configFileName = process.env.IS_ON_FLY ? "/data/config.json" : "./config.json";
+const configFileName = "./config.json";
 
 const configFile = jsonfile.readFileSync(configFileName);
 

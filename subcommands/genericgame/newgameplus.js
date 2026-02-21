@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require("../../db/anygame.js");
 const GameHelper = require('../../modules/GlobalGameHelper');
 const { cloneDeep, shuffle, sample } = require("lodash");
@@ -40,7 +41,7 @@ class NewGame {
     if (!search || isNaN(search)){
       await interaction.reply({
         content: `Please provide a game name or ID from the available options.`,
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
       return;
     }
@@ -67,9 +68,7 @@ class NewGame {
       await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
       
       await interaction.editReply({
-        content: `There is an existing game in this channel. I've assigned the BGG ID, but did not change players.`,
-        ephemeral: true,
-      });
+        content: `There is an existing game in this channel. I've assigned the BGG ID, but did not change players.`});
     } else {
       gameData = Object.assign({}, cloneDeep(GameDB.defaultGameData));
       gameData.bggGameId = search;
@@ -119,8 +118,7 @@ class NewGame {
       await interaction.editReply({
         content: `New Game Created!`,
         embeds: bgg.embeds,
-        files: bgg.attachments,
-      });
+        files: bgg.attachments});
 
       // Game Status Logic using the helper
       await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {

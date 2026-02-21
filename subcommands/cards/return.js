@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { find, findIndex } = require('lodash')
@@ -25,13 +26,13 @@ class Rturn {
             return
         }
 
-        await interaction.deferReply({ ephemeral: true })
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
         
         let gameData = await GameHelper.getGameData(client, interaction)
         let player = find(gameData.players, {userId: interaction.user.id})
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
@@ -40,7 +41,7 @@ class Rturn {
         const pileId = interaction.options.getString('pilename')
         
         if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
-            await interaction.editReply({ content: "Something is broken! You don't have that card.", ephemeral: true })
+            await interaction.editReply({ content: "Something is broken! You don't have that card."})
             return
         }
         
@@ -55,7 +56,7 @@ class Rturn {
             if (!pile) {
                 // Return card to hand if pile not found
                 player.hands.main.push(card)
-                await interaction.editReply({ content: 'Pile not found!', ephemeral: true })
+                await interaction.editReply({ content: 'Pile not found!'})
                 return
             }
             // Return to top of pile
@@ -95,7 +96,7 @@ class Rturn {
         await interaction.editReply({ content: `You returned ${Formatter.cardShortName(card)} to ${destinationName}.` });
 
         var handInfo = await Formatter.playerSecretHandAndImages(gameData, player);
-        const privateFollowup = { embeds: [...handInfo.embeds], ephemeral: true };
+        const privateFollowup = { embeds: [...handInfo.embeds], flags: MessageFlags.Ephemeral };
         if (handInfo.attachments.length > 0) {
             privateFollowup.files = [...handInfo.attachments];
         }

@@ -11,9 +11,7 @@ class Remove {
 
         if (gameData.isdeleted) {
             await interaction.editReply({
-                content: `No active game in this channel`,
-                ephemeral: true
-            })
+                content: `No active game in this channel`})
             return
         }
 
@@ -23,9 +21,7 @@ class Remove {
         const player = find(gameData.players, { userId: playerToRemove.id })
         if (!player) {
             await interaction.editReply({
-                content: `${playerToRemove} is not in this game!`,
-                ephemeral: true
-            })
+                content: `${playerToRemove} is not in this game!`})
             return
         }
 

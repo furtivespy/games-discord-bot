@@ -20,14 +20,14 @@ class Recall {
         let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
         const inputDeck = interaction.options.getString('deck')
         const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
         if (!deck){
-            await interaction.editReply({ content: `No Deck`, ephemeral: true })
+            await interaction.editReply({ content: `No Deck`})
             return
         } 
 

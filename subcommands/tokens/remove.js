@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js')
+const {EmbedBuilder, MessageFlags} = require('discord.js')
 const { find } = require('lodash')
 const GameDB = require('../../db/anygame')
 const GameHelper = require('../../modules/GlobalGameHelper')
@@ -12,20 +12,20 @@ class Remove {
         )
 
         if (gameData.isdeleted) {
-            return await interaction.reply({ content: "No game in progress!", ephemeral: true })
+            return await interaction.reply({ content: "No game in progress!", flags: MessageFlags.Ephemeral })
         }
 
         const name = interaction.options.getString('name')
 
         // Check if tokens exist
         if (!gameData.tokens || !gameData.tokens.length) {
-            return await interaction.reply({ content: "No tokens exist in this game!", ephemeral: true })
+            return await interaction.reply({ content: "No tokens exist in this game!", flags: MessageFlags.Ephemeral })
         }
 
         // Find the token
         const tokenIndex = gameData.tokens.findIndex(t => t.name === name)
         if (tokenIndex === -1) {
-            return await interaction.reply({ content: `Token "${name}" not found!`, ephemeral: true })
+            return await interaction.reply({ content: `Token "${name}" not found!`, flags: MessageFlags.Ephemeral })
         }
 
         const token = gameData.tokens[tokenIndex]

@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameHelper = require('../../modules/GlobalGameHelper');
 const GameDB = require('../../db/anygame.js');
 const { find, cloneDeep } = require('lodash');
@@ -9,12 +10,12 @@ module.exports = {
             const gameData = await GameHelper.getGameData(client, interaction);
 
             if (!gameData || gameData.isdeleted) {
-                await interaction.reply({ content: "There is no game active in this channel, or the game data is unavailable.", ephemeral: true });
+                await interaction.reply({ content: "There is no game active in this channel, or the game data is unavailable.", flags: MessageFlags.Ephemeral });
                 return;
             }
 
             if (!gameData.players || gameData.players.length === 0) {
-                await interaction.reply({ content: "There are no players in the game to clear play areas for.", ephemeral: true });
+                await interaction.reply({ content: "There are no players in the game to clear play areas for.", flags: MessageFlags.Ephemeral });
                 return;
             }
 
@@ -47,7 +48,7 @@ module.exports = {
             }
 
             if (cardsMovedCount === 0) {
-                await interaction.reply({ content: "All player play areas were already empty. No cards were moved.", ephemeral: false });
+                await interaction.reply({ content: "All player play areas were already empty. No cards were moved."});
                 return;
             }
 
@@ -72,11 +73,11 @@ module.exports = {
             }
 
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, updatedGameData);
-            await interaction.reply({ content: `Successfully moved ${cardsMovedCount} card(s) from all player play areas to their respective discard pile(s).`, ephemeral: false });
+            await interaction.reply({ content: `Successfully moved ${cardsMovedCount} card(s) from all player play areas to their respective discard pile(s).`});
 
         } catch (e) {
             console.error("Error in /cards playarea clearall:", e);
-            await interaction.reply({ content: "An error occurred while trying to clear all play areas. Please try again later.", ephemeral: true });
+            await interaction.reply({ content: "An error occurred while trying to clear all play areas. Please try again later.", flags: MessageFlags.Ephemeral });
         }
     }
 };

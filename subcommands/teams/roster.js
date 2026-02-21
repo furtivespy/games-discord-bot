@@ -1,5 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const {ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags} = require('discord.js');
 
 class Roster {
     async execute(interaction, client) {
@@ -8,7 +8,7 @@ class Roster {
         if (gameData.isdeleted) {
             await interaction.reply({
                 content: `No active game in this channel.`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })
             return
         }

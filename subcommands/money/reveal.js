@@ -19,9 +19,7 @@ class Reveal {
 
       if (gameData.isdeleted) {
         await interaction.editReply({
-          content: `There is no game in this channel.`,
-          ephemeral: true,
-        });
+          content: `There is no game in this channel.`});
         return;
       }
 
@@ -30,7 +28,7 @@ class Reveal {
       await interaction.editReply({content: `Here's the money:\n${moneies}`})
 
     } else {
-      await interaction.editReply({ content: `Nothing revealed...`, ephemeral: true })
+      await interaction.editReply({ content: `Nothing revealed...`})
     }
   }
 }

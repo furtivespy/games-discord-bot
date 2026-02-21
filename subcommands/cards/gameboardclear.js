@@ -11,12 +11,12 @@ class GameBoardClear {
         const gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
         if (!gameData.gameBoard || gameData.gameBoard.length === 0) {
-            await interaction.editReply({ content: `The Game Board is already empty.`, ephemeral: true })
+            await interaction.editReply({ content: `The Game Board is already empty.`})
             return
         }
 

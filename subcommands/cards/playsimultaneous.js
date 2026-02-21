@@ -1,31 +1,26 @@
 const GameHelper = require("../../modules/GlobalGameHelper");
 const GameDB = require("../../db/anygame.js");
-const { find, findIndex } = require("lodash");
+const {find, findIndex } = require("lodash");
 const Formatter = require("../../modules/GameFormatter");
 const {
   StringSelectMenuBuilder,
-  ActionRowBuilder,
-} = require("discord.js");
+  ActionRowBuilder,, MessageFlags} = require("discord.js");
 
 class PlaySimultaneous {
   async execute(interaction, client) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     let gameData = await GameHelper.getGameData(client, interaction);
 
     if (gameData.isdeleted) {
       return interaction.editReply({
-        content: `There is no game in this channel.`,
-        ephemeral: true,
-      });
+        content: `There is no game in this channel.`});
     }
 
     let player = find(gameData.players, { userId: interaction.user.id });
     if (!player) {
       return interaction.editReply({
-        content: "You're not in this game!",
-        ephemeral: true,
-      });
+        content: "You're not in this game!"});
     }
 
     if (player.hands.simultaneous && player.hands.simultaneous.length > 0) {
@@ -39,9 +34,7 @@ class PlaySimultaneous {
     // Prompt the user to select cards
     if (player.hands.main.length < 1) {
       return interaction.editReply({
-        content: "You have no cards in your hand to play.",
-        ephemeral: true,
-      });
+        content: "You have no cards in your hand to play."});
     }
 
     const select = new StringSelectMenuBuilder()
@@ -60,8 +53,7 @@ class PlaySimultaneous {
     const CardsSelected = await interaction.editReply({
       content: `Choose cards to play simultaneously:`,
       components: [row],
-      fetchReply: true,
-    });
+      fetchReply: true});
 
     const filter = (i) =>
       i.user.id === interaction.user.id && i.customId === "card";
@@ -76,15 +68,13 @@ class PlaySimultaneous {
     } catch (error) {
       return await interaction.editReply({
         content: "No cards selected, simultaneous play canceled.",
-        components: [],
-      });
+        components: []});
     }
 
     if (playedCards.length < 1) {
       await interaction.editReply({
         content: "No cards selected, simultaneous play canceled.",
-        components: [],
-      });
+        components: []});
       return;
     }
 
@@ -143,14 +133,11 @@ class PlaySimultaneous {
     await interaction.followUp({
       content: allPlayersSelected 
         ? `${interaction.user} has selected their cards for simultaneous play! All players have now made their selections - time to reveal!`
-        : `${interaction.user} has selected their cards for simultaneous play!`,
-      ephemeral: false
-    });
+        : `${interaction.user} has selected their cards for simultaneous play!`});
 
     await interaction.editReply({
       content: `You have selected your cards for simultaneous play. Waiting for the reveal.`,
-      components: [],
-    });
+      components: []});
 
     // Show the player their current hand
     var handInfo = await Formatter.playerSecretHandAndImages(gameData, player);
@@ -158,12 +145,12 @@ class PlaySimultaneous {
       await interaction.followUp({ 
         embeds: [...handInfo.embeds],
         files: [...handInfo.attachments],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     } else {
       await interaction.followUp({ 
         embeds: [...handInfo.embeds],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
   }

@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const { nanoid } = require('nanoid')
 const GameDB = require('../../db/anygame')
 const GameHelper = require('../../modules/GlobalGameHelper')
@@ -11,7 +12,7 @@ class Add {
         )
 
         if (gameData.isdeleted) {
-            return await interaction.reply({ content: "No game in progress!", ephemeral: true })
+            return await interaction.reply({ content: "No game in progress!", flags: MessageFlags.Ephemeral })
         }
 
         const name = interaction.options.getString('name')
@@ -26,7 +27,7 @@ class Add {
 
         // Check if token with same name already exists
         if (gameData.tokens.some(t => t.name === name)) {
-            return await interaction.reply({ content: `A token named "${name}" already exists!`, ephemeral: true })
+            return await interaction.reply({ content: `A token named "${name}" already exists!`, flags: MessageFlags.Ephemeral })
         }
 
         // Create new token
@@ -69,9 +70,7 @@ class Add {
         await client.setGameDataV2(interaction.guildId, 'game', interaction.channelId, gameData)
 
         return await interaction.reply({ 
-            content: `Added new ${token.isSecret ? 'secret ' : ''}token: ${token.name}${token.description ? ` - ${token.description}` : ''}${token.cap !== null ? ` (Cap: ${token.cap})` : ''}`,
-            ephemeral: false
-        })
+            content: `Added new ${token.isSecret ? 'secret ' : ''}token: ${token.name}${token.description ? ` - ${token.description}` : ''}${token.cap !== null ? ` (Cap: ${token.cap})` : ''}`})
     }
 }
 

@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const SlashCommand = require('../../base/SlashCommand.js')
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const AddLink = require(`../../subcommands/genericgame/addlink`)
@@ -249,7 +250,7 @@ class Game extends SlashCommand {
                     await PlayArea.execute(interaction)
                     break
                 default:
-                    await interaction.reply({ content: "Something Went Wrong!?!?!?", ephemeral: true })
+                    await interaction.reply({ content: "Something Went Wrong!?!?!?", flags: MessageFlags.Ephemeral })
             }
             
             
