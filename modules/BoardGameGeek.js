@@ -25,6 +25,40 @@ class BoardGameGeek {
     return bgg;
   }
 
+  static async Search(query, bggToken) {
+    const resp = await fetch(
+      `https://api.geekdo.com/xmlapi2/search.cgi?type=boardgame&query=${encodeURIComponent(query)}`,
+      { headers: { 'Authorization': `Bearer ${bggToken}` } }
+    );
+    const text = await resp.text();
+    const parser = new XMLParser({
+      attributeNamePrefix: "",
+      ignoreAttributes: false,
+      ignoreNameSpace: true,
+      allowBooleanAttributes: true,
+    });
+    const parsed = parser.parse(text);
+    let items = parsed.items?.item || [];
+    if (!Array.isArray(items)) items = [items];
+
+    items.sort((a, b) => (b.yearpublished?.value || 0) - (a.yearpublished?.value || 0));
+    const top25 = items.slice(0, 25);
+    top25.sort((a, b) => {
+      const nameA = Array.isArray(a.name) ? (a.name.find(n => n.type === 'primary') || a.name[0])?.value : a.name?.value;
+      const nameB = Array.isArray(b.name) ? (b.name.find(n => n.type === 'primary') || b.name[0])?.value : b.name?.value;
+      return String(nameA || '').localeCompare(String(nameB || ''));
+    });
+
+    return top25.map((item) => {
+      const names = Array.isArray(item.name) ? item.name : [item.name];
+      const primary = names.find(n => n.type === 'primary') || names[0];
+      return {
+        name: `${he.decode(String(primary?.value || 'Unknown'))} (${item.yearpublished?.value || '?'})`.slice(0, 100),
+        value: String(item.id),
+      };
+    });
+  }
+
   static DetailsEnum = {
     ALL: 'all',
     BASIC: 'basic',

@@ -2,7 +2,6 @@ const GameDB = require("../../db/anygame.js");
 const GameHelper = require('../../modules/GlobalGameHelper');
 const { cloneDeep, shuffle, sample } = require("lodash");
 const GameStatusHelper = require('../../modules/GameStatusHelper');
-const fetch = require("node-fetch");
 const BoardGameGeek = require('../../modules/BoardGameGeek');
 
 class NewGame {
@@ -13,26 +12,8 @@ class NewGame {
         await interaction.respond([]);
         return;
       }
-      let query = new URLSearchParams();
-      query.set('q', search);
-      query.set('nosession', 1);
-      query.set('showcount', 20);
-      let results = await fetch(
-        `https://boardgamegeek.com/search/boardgame?${query.toString()}`,
-        {
-          headers: {
-            accept: 'application/json, text/plain, */*',
-            'accept-language': 'en-US,en;q=0.9',
-          },
-        }
-      );
-      let games = await results.json();
-      
       await interaction.respond(
-        games.items.map((gameItem) => ({
-          name: `${gameItem.name.substring(0, 95)} (${gameItem.yearpublished})`.substring(0, 100),
-          value: gameItem.objectid,
-        }))
+        await BoardGameGeek.Search(search, client.config.BGGToken)
       );
       return;
     }
