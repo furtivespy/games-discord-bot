@@ -12,8 +12,8 @@ class PileMove {
             
             if (focusedOption.name === 'sourcepile') {
                 await interaction.respond(GameHelper.getPileAutocomplete(gameData, focusedOption.value))
-            } else if (focusedOption.name === 'destinationpile') {
-                await interaction.respond(GameHelper.getPileAutocomplete(gameData, focusedOption.value))
+            } else if (focusedOption.name === 'destination') {
+                await interaction.respond(GameHelper.getDestinationAutocomplete(gameData, focusedOption.value, ['hand', 'discard', 'gameboard', 'pile', 'playarea']))
             } else if (focusedOption.name === 'destinationplayer') {
                 const players = gameData.players || []
                 const focusedValue = focusedOption.value.toLowerCase()
@@ -71,15 +71,9 @@ class PileMove {
             return
         }
 
-        const destinationPileId = interaction.options.getString('destinationpile')
         const destinationPlayerId = interaction.options.getString('destinationplayer')
 
         // Validate destination-specific requirements
-        if (destination === 'pile' && !destinationPileId) {
-            await interaction.editReply({ content: "You must specify a destination pile when destination is 'Custom Pile'.", ephemeral: true })
-            return
-        }
-
         if (destination === 'playarea' && !destinationPlayerId) {
             await interaction.editReply({ content: "You must specify a destination player when destination is 'Play Area'.", ephemeral: true })
             return
@@ -93,12 +87,25 @@ class PileMove {
             }
         }
 
-        if (destination === 'pile' && sourcePileId === destinationPileId) {
+        if (sourcePileId === destination) {
             await interaction.editReply({ content: "Cannot move cards to the same pile they came from.", ephemeral: true })
             return
         }
 
         // Card selection menu - show last 25 cards from pile
+        // If pile is secret, we shouldn't show card details in ephemeral select menu if it's not the creator?
+        // But the command is ephemeral: false? Wait, no.
+        // original code: await interaction.deferReply({ ephemeral: false })
+        // So this interaction is public.
+        // If pile is secret, showing cards in a select menu publicly is bad.
+        // But the select menu is attached to a message that is ephemeral?
+        // "const selectionMessage = await interaction.editReply({ ... ephemeral: false })"
+        // So everyone can see it.
+        // If the pile is secret, this command might expose cards.
+        // However, I'm just refactoring, not fixing security issues unless related.
+        // The original code uses `Formatter.cardSort` and displays cards.
+        // I will keep original behavior but noting it.
+
         const options = Formatter.cardSort(sourcePile.cards.slice(-25)).map((card, index) => ({
             label: Formatter.cardShortName(card).substring(0, 100),
             description: (card.description || `Card ${index + 1}`).substring(0, 100),
@@ -127,14 +134,18 @@ class PileMove {
             const selectedCardIds = selectionInteraction.values
             const movedCards = []
 
-            // Remove from source pile
-            selectedCardIds.forEach(cardId => {
-                const cardIndex = findIndex(sourcePile.cards, {id: cardId})
-                if (cardIndex !== -1) {
-                    const [card] = sourcePile.cards.splice(cardIndex, 1)
+            // Remove from source pile - we need to remove them CAREFULLY
+            // We can map ids to objects first
+
+            const newSourceCards = []
+            sourcePile.cards.forEach(card => {
+                if (selectedCardIds.includes(card.id)) {
                     movedCards.push(card)
+                } else {
+                    newSourceCards.push(card)
                 }
             })
+            sourcePile.cards = newSourceCards
 
             if (movedCards.length === 0) {
                 await selectionInteraction.update({ content: "No valid cards were selected or an error occurred.", components: [], ephemeral: true })
@@ -145,17 +156,7 @@ class PileMove {
             let allMovesSuccessful = true
 
             // Handle different destinations
-            if (destination === 'pile') {
-                const destinationPile = GameHelper.getGlobalPile(gameData, destinationPileId)
-                if (!destinationPile) {
-                    // Return cards to source pile if destination pile not found
-                    sourcePile.cards.push(...movedCards)
-                    await selectionInteraction.update({ content: 'Destination pile not found! Cards returned to source pile.', components: [], ephemeral: true })
-                    return
-                }
-                destinationPile.cards.push(...movedCards)
-                destinationName = destinationPile.name
-            } else if (destination === 'playarea') {
+            if (destination === 'playarea') {
                 const destinationPlayer = find(gameData.players, { userId: destinationPlayerId })
                 if (!destinationPlayer) {
                     sourcePile.cards.push(...movedCards)
@@ -192,6 +193,17 @@ class PileMove {
                     }
                 }
                 destinationName = 'discard pile(s)'
+            } else {
+                // Assume pile
+                const destinationPile = GameHelper.getGlobalPile(gameData, destination)
+                if (!destinationPile) {
+                    // Return cards to source pile if destination pile not found
+                    sourcePile.cards.push(...movedCards)
+                    await selectionInteraction.update({ content: 'Destination pile not found! Cards returned to source pile.', components: [], ephemeral: true })
+                    return
+                }
+                destinationPile.cards.push(...movedCards)
+                destinationName = destinationPile.name
             }
 
             // Record history

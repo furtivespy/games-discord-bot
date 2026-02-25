@@ -10,8 +10,8 @@ class GameBoardMove {
             const focusedOption = interaction.options.getFocused(true)
             const gameData = await GameHelper.getGameData(client, interaction)
             
-            if (focusedOption.name === 'pilename') {
-                await interaction.respond(GameHelper.getPileAutocomplete(gameData, focusedOption.value))
+            if (focusedOption.name === 'destination') {
+                await interaction.respond(GameHelper.getDestinationAutocomplete(gameData, focusedOption.value, ['hand', 'playarea', 'discard', 'pile']))
             } else if (focusedOption.name === 'destinationplayer') {
                 const players = gameData.players || []
                 const focusedValue = focusedOption.value.toLowerCase()
@@ -61,15 +61,9 @@ class GameBoardMove {
             return
         }
 
-        const pileId = interaction.options.getString('pilename')
         const destinationPlayerId = interaction.options.getString('destinationplayer')
 
         // Validate destination-specific requirements
-        if (destination === 'pile' && !pileId) {
-            await interaction.editReply({ content: "You must specify a pile name when destination is 'Custom Pile'.", ephemeral: true })
-            return
-        }
-
         if (destination === 'playarea' && !destinationPlayerId) {
             await interaction.editReply({ content: "You must specify a destination player when destination is 'Play Area'.", ephemeral: true })
             return
@@ -136,17 +130,7 @@ class GameBoardMove {
             let allMovesSuccessful = true
 
             // Handle different destinations
-            if (destination === 'pile') {
-                const pile = GameHelper.getGlobalPile(gameData, pileId)
-                if (!pile) {
-                    // Return cards to gameboard if pile not found
-                    gameData.gameBoard.push(...movedCards)
-                    await selectionInteraction.update({ content: 'Pile not found! Cards returned to Game Board.', components: [], ephemeral: true })
-                    return
-                }
-                pile.cards.push(...movedCards)
-                destinationName = pile.name
-            } else if (destination === 'playarea') {
+            if (destination === 'playarea') {
                 const destinationPlayer = find(gameData.players, { userId: destinationPlayerId })
                 if (!destinationPlayer) {
                     gameData.gameBoard.push(...movedCards)
@@ -177,6 +161,17 @@ class GameBoardMove {
                     }
                 }
                 destinationName = 'discard pile(s)'
+            } else {
+                // Assume pile
+                const pile = GameHelper.getGlobalPile(gameData, destination)
+                if (!pile) {
+                    // Return cards to gameboard if pile not found
+                    gameData.gameBoard.push(...movedCards)
+                    await selectionInteraction.update({ content: 'Pile not found! Cards returned to Game Board.', components: [], ephemeral: true })
+                    return
+                }
+                pile.cards.push(...movedCards)
+                destinationName = pile.name
             }
 
             // Record history

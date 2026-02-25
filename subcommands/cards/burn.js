@@ -10,8 +10,8 @@ class Burn {
             
             if (focusedOption.name === 'deck') {
                 await GameHelper.getDeckAutocomplete(gameData, interaction);
-            } else if (focusedOption.name === 'pilename') {
-                await interaction.respond(GameHelper.getPileAutocomplete(gameData, focusedOption.value));
+            } else if (focusedOption.name === 'destination') {
+                await interaction.respond(GameHelper.getDestinationAutocomplete(gameData, focusedOption.value, ['discard', 'gameboard', 'pile']));
             }
             return;
         }
@@ -27,7 +27,6 @@ class Burn {
 
         const inputDeck = interaction.options.getString('deck');
         const destination = interaction.options.getString('destination') || 'discard';
-        const pileId = interaction.options.getString('pilename');
         
         const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id);
 
@@ -52,20 +51,20 @@ class Burn {
         let targetPile = null;
         let destinationName = '';
         
-        if (destination === 'pile') {
-            targetPile = GameHelper.getGlobalPile(gameData, pileId);
-            if (!targetPile) {
-                await interaction.editReply({ content: 'Pile not found!', ephemeral: true });
-                return;
-            }
-            destinationName = targetPile.name;
-        } else if (destination === 'gameboard') {
+        if (destination === 'gameboard') {
             if (!gameData.gameBoard) {
                 gameData.gameBoard = [];
             }
             destinationName = 'Game Board';
+        } else if (destination === 'discard') {
+             destinationName = `${deck.name} discard pile`;
         } else {
-            destinationName = `${deck.name} discard pile`;
+             targetPile = GameHelper.getGlobalPile(gameData, destination);
+             if (!targetPile) {
+                 await interaction.editReply({ content: 'Pile not found!', ephemeral: true });
+                 return;
+             }
+             destinationName = targetPile.name;
         }
 
         let actualBurnedCount = 0;
@@ -74,7 +73,7 @@ class Burn {
                 const cardToBurn = deck.piles.draw.cards.shift();
                 
                 // Send to appropriate destination
-                if (destination === 'pile') {
+                if (targetPile) {
                     targetPile.cards.push(cardToBurn);
                 } else if (destination === 'gameboard') {
                     gameData.gameBoard.push(cardToBurn);

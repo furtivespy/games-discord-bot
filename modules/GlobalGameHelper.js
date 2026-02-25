@@ -128,6 +128,39 @@ class GameHelper {
   }
 
   /**
+   * Get autocomplete options for destinations (standard + piles)
+   * @param {Object} gameData - The game data object
+   * @param {string} searchTerm - Current search term
+   * @param {Array<string>} allowedOptions - List of allowed standard destinations ('discard', 'gameboard', 'playarea', 'hand', 'deck', 'pile')
+   * @returns {Array} Array of autocomplete options
+   */
+  static getDestinationAutocomplete(gameData, searchTerm = '', allowedOptions = []) {
+    const standardDestinations = [
+      { name: 'Discard Pile', value: 'discard' },
+      { name: 'Game Board', value: 'gameboard' },
+      { name: 'Play Area', value: 'playarea' },
+      { name: 'Hand', value: 'hand' },
+      { name: 'Deck', value: 'deck' }
+    ];
+
+    // Filter standard destinations based on what's allowed for the command
+    let destinations = standardDestinations.filter(d => allowedOptions.includes(d.value));
+
+    // Add piles if 'pile' is in options
+    if (allowedOptions.includes('pile') && gameData.globalPiles && gameData.globalPiles.length > 0) {
+        const piles = gameData.globalPiles.map(p => ({
+            name: `Pile: ${p.name}`,
+            value: p.id
+        }));
+        destinations = destinations.concat(piles);
+    }
+
+    return destinations
+      .filter(d => d.name.toLowerCase().includes(searchTerm.toLowerCase()))
+      .slice(0, 25);
+  }
+
+  /**
    * Records a game action in the history log
    * @param {Object} gameData - The game data object to add history to
    * @param {Object} actor - The user who performed the action (must have id and username)

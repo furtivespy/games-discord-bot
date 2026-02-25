@@ -24,8 +24,8 @@ class GameBoardDiscard {
                         ), ['suit', 'value', 'name']).map(crd => 
                         ({name: Formatter.cardShortName(crd), value: crd.id}))
                 )
-            } else if (focusedOption.name === 'pilename') {
-                await interaction.respond(GameHelper.getPileAutocomplete(gameData, focusedOption.value))
+            } else if (focusedOption.name === 'destination') {
+                await interaction.respond(GameHelper.getDestinationAutocomplete(gameData, focusedOption.value, ['discard', 'pile']))
             }
             return
         }
@@ -41,7 +41,6 @@ class GameBoardDiscard {
 
         const cardId = interaction.options.getString('card')
         const destination = interaction.options.getString('destination') || 'discard'
-        const pileId = interaction.options.getString('pilename')
 
         if (!gameData.gameBoard || gameData.gameBoard.length < 1) {
             await interaction.editReply({ content: `No cards on the Game Board!`, ephemeral: true })
@@ -58,17 +57,7 @@ class GameBoardDiscard {
         let destinationName = ''
 
         // Handle different destinations
-        if (destination === 'pile') {
-            const pile = GameHelper.getGlobalPile(gameData, pileId)
-            if (!pile) {
-                // Return card to board if pile not found
-                gameData.gameBoard.splice(cardIndex, 0, discardedCard)
-                await interaction.editReply({ content: 'Pile not found!', ephemeral: true })
-                return
-            }
-            pile.cards.push(discardedCard)
-            destinationName = pile.name
-        } else {
+        if (destination === 'discard') {
             // Default to origin deck's discard pile
             let deck = find(gameData.decks, {name: discardedCard.origin})
             if (deck && deck.piles && deck.piles.discard) {
@@ -80,6 +69,17 @@ class GameBoardDiscard {
                 await interaction.editReply({ content: "Could not find deck's discard pile!", ephemeral: true })
                 return
             }
+        } else {
+            // Assume pile
+            const pile = GameHelper.getGlobalPile(gameData, destination)
+            if (!pile) {
+                // Return card to board if pile not found
+                gameData.gameBoard.splice(cardIndex, 0, discardedCard)
+                await interaction.editReply({ content: 'Pile not found!', ephemeral: true })
+                return
+            }
+            pile.cards.push(discardedCard)
+            destinationName = pile.name
         }
 
         // Record history

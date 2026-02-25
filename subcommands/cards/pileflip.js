@@ -9,8 +9,8 @@ class PileFlip {
             const focusedValue = interaction.options.getFocused(true)
             if (focusedValue.name === 'pile') {
                 await interaction.respond(GameHelper.getPileAutocomplete(gameData, focusedValue.value))
-            } else if (focusedValue.name === 'destinationpile') {
-                await interaction.respond(GameHelper.getPileAutocomplete(gameData, focusedValue.value))
+            } else if (focusedValue.name === 'destination') {
+                await interaction.respond(GameHelper.getDestinationAutocomplete(gameData, focusedValue.value, ['gameboard', 'discard', 'pile']))
             }
             return
         }
@@ -26,7 +26,6 @@ class PileFlip {
 
         const pileId = interaction.options.getString('pile')
         const destination = interaction.options.getString('destination') || 'gameboard'
-        const destinationPileId = interaction.options.getString('destinationpile')
         const pile = GameHelper.getGlobalPile(gameData, pileId)
         
         if (!pile) {
@@ -48,18 +47,18 @@ class PileFlip {
             }
             gameData.gameBoard.push(flippedCard)
             destinationName = 'Game Board'
-        } else if (destination === 'pile') {
-            const destPile = GameHelper.getGlobalPile(gameData, destinationPileId)
-            if (!destPile) {
-                pile.cards.unshift(flippedCard)
-                await interaction.editReply({ content: 'Destination pile not found!', ephemeral: true })
-                return
-            }
-            destPile.cards.push(flippedCard)
-            destinationName = destPile.name
-        } else {
+        } else if (destination === 'discard') {
             // discard — find the first available deck's discard pile
-            const deck = gameData.decks?.[0]
+            // Ideally should find deck by card origin
+            let deck = null;
+            if (flippedCard.origin) {
+                deck = gameData.decks.find(d => d.name === flippedCard.origin);
+            }
+
+            if (!deck) {
+                deck = gameData.decks?.[0]
+            }
+
             if (!deck) {
                 pile.cards.unshift(flippedCard)
                 await interaction.editReply({ content: 'No deck found to discard to. Use Game Board or a Custom Pile as destination.', ephemeral: true })
@@ -67,6 +66,16 @@ class PileFlip {
             }
             deck.piles.discard.cards.push(flippedCard)
             destinationName = `${deck.name} discard pile`
+        } else {
+            // Assume pile
+            const destPile = GameHelper.getGlobalPile(gameData, destination)
+            if (!destPile) {
+                pile.cards.unshift(flippedCard)
+                await interaction.editReply({ content: 'Destination pile not found!', ephemeral: true })
+                return
+            }
+            destPile.cards.push(flippedCard)
+            destinationName = destPile.name
         }
 
         try {
