@@ -10,8 +10,8 @@ module.exports = {
             const focusedOption = interaction.options.getFocused(true);
             const gameData = await GameHelper.getGameData(client, interaction);
             
-            if (focusedOption.name === 'pilename') {
-                await interaction.respond(GameHelper.getPileAutocomplete(gameData, focusedOption.value));
+            if (focusedOption.name === 'destination') {
+                await interaction.respond(GameHelper.getDestinationAutocomplete(gameData, focusedOption.value, ['playarea', 'discard', 'gameboard', 'pile']));
             } else if (focusedOption.name === 'destinationplayer') {
                 // Autocomplete for destination player (when destination is playarea)
                 const players = gameData.players || [];
@@ -63,18 +63,9 @@ module.exports = {
         }
 
         const destination = interaction.options.getString('destination');
-        if (!destination) {
-            return interaction.editReply({ content: "You must specify a destination.", ephemeral: true });
-        }
-
-        const pileId = interaction.options.getString('pilename');
         const destinationPlayerId = interaction.options.getString('destinationplayer');
 
         // Validate destination-specific requirements
-        if (destination === 'pile' && !pileId) {
-            return interaction.editReply({ content: "You must specify a pile name when destination is 'Custom Pile'.", ephemeral: true });
-        }
-
         if (destination === 'playarea' && !destinationPlayerId) {
             return interaction.editReply({ content: "You must specify a destination player when destination is 'Play Area'.", ephemeral: true });
         }
@@ -142,17 +133,7 @@ module.exports = {
             let allMovesSuccessful = true;
 
             // Handle different destinations
-            if (destination === 'pile') {
-                const pile = GameHelper.getGlobalPile(gameData, pileId);
-                if (!pile) {
-                    // Return cards to source play area if pile not found
-                    sourcePlayer.playArea.push(...movedCards);
-                    await selectionInteraction.update({ content: 'Pile not found! Cards returned to source play area.', components: [], ephemeral: true });
-                    return;
-                }
-                pile.cards.push(...movedCards);
-                destinationName = pile.name;
-            } else if (destination === 'playarea') {
+            if (destination === 'playarea') {
                 const destinationPlayer = find(gameData.players, { userId: destinationPlayerId });
                 if (!destinationPlayer) {
                     sourcePlayer.playArea.push(...movedCards);
@@ -186,6 +167,17 @@ module.exports = {
                     }
                 }
                 destinationName = 'discard pile(s)';
+            } else {
+                // Assume pile
+                const pile = GameHelper.getGlobalPile(gameData, destination);
+                if (!pile) {
+                    // Return cards to source play area if pile not found
+                    sourcePlayer.playArea.push(...movedCards);
+                    await selectionInteraction.update({ content: 'Pile not found! Cards returned to source play area.', components: [], ephemeral: true });
+                    return;
+                }
+                pile.cards.push(...movedCards);
+                destinationName = pile.name;
             }
 
             // Record history

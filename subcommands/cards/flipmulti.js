@@ -10,8 +10,8 @@ class FlipMulti {
 
             if (focusedOption.name === 'deck') {
                 await GameHelper.getDeckAutocomplete(gameData, interaction)
-            } else if (focusedOption.name === 'pilename') {
-                await interaction.respond(GameHelper.getPileAutocomplete(gameData, focusedOption.value))
+            } else if (focusedOption.name === 'destination') {
+                await interaction.respond(GameHelper.getDestinationAutocomplete(gameData, focusedOption.value, ['discard', 'gameboard', 'pile']))
             }
             return
         }
@@ -28,7 +28,6 @@ class FlipMulti {
         const inputDeck = interaction.options.getString('deck')
         const count = interaction.options.getInteger('count')
         const destination = interaction.options.getString('destination') || 'discard'
-        const pileId = interaction.options.getString('pilename')
 
         const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
 
@@ -48,8 +47,17 @@ class FlipMulti {
         const flippedCards = deck.piles.draw.cards.splice(0, count)
         let destinationName = ''
 
-        if (destination === 'pile') {
-            const pile = GameHelper.getGlobalPile(gameData, pileId)
+        if (destination === 'gameboard') {
+            if (!gameData.gameBoard) {
+                gameData.gameBoard = []
+            }
+            gameData.gameBoard.push(...flippedCards)
+            destinationName = 'Game Board'
+        } else if (destination === 'discard') {
+            deck.piles.discard.cards.push(...flippedCards)
+            destinationName = `${deck.name} discard pile`
+        } else {
+            const pile = GameHelper.getGlobalPile(gameData, destination)
             if (!pile) {
                 deck.piles.draw.cards.unshift(...flippedCards)
                 await interaction.editReply({ content: 'Pile not found!', ephemeral: true })
@@ -57,15 +65,6 @@ class FlipMulti {
             }
             pile.cards.push(...flippedCards)
             destinationName = pile.name
-        } else if (destination === 'gameboard') {
-            if (!gameData.gameBoard) {
-                gameData.gameBoard = []
-            }
-            gameData.gameBoard.push(...flippedCards)
-            destinationName = 'Game Board'
-        } else {
-            deck.piles.discard.cards.push(...flippedCards)
-            destinationName = `${deck.name} discard pile`
         }
 
         try {

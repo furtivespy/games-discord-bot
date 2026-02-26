@@ -23,8 +23,8 @@ class GameBoardTake {
                         ), ['suit', 'value', 'name']).map(crd => 
                         ({name: Formatter.cardShortName(crd), value: crd.id}))
                 )
-            } else if (focusedOption.name === 'pilename') {
-                await interaction.respond(GameHelper.getPileAutocomplete(gameData, focusedOption.value))
+            } else if (focusedOption.name === 'destination') {
+                await interaction.respond(GameHelper.getDestinationAutocomplete(gameData, focusedOption.value, ['hand', 'playarea', 'pile']))
             }
             return
         }
@@ -35,7 +35,6 @@ class GameBoardTake {
         
         const cardId = interaction.options.getString('card')
         const destination = interaction.options.getString('destination') || 'hand'
-        const pileId = interaction.options.getString('pilename')
         
         const player = find(gameData.players, {userId: interaction.user.id})
         
@@ -55,12 +54,24 @@ class GameBoardTake {
             return
         }
 
-        const [takenCard] = gameData.gameBoard.splice(cardIndex, 1)
+        const takenCard = gameData.gameBoard[cardIndex] // Get ref
+        gameData.gameBoard.splice(cardIndex, 1) // Remove
+
         let destinationName = ''
 
         // Handle different destinations
-        if (destination === 'pile') {
-            const pile = GameHelper.getGlobalPile(gameData, pileId)
+        if (destination === 'playarea') {
+            if (!player.playArea) {
+                player.playArea = []
+            }
+            player.playArea.push(takenCard)
+            destinationName = 'your play area'
+        } else if (destination === 'hand') {
+            player.hands.main.push(takenCard)
+            destinationName = 'your hand'
+        } else {
+            // Assume pile
+            const pile = GameHelper.getGlobalPile(gameData, destination)
             if (!pile) {
                 // Return card to board if pile not found
                 gameData.gameBoard.splice(cardIndex, 0, takenCard)
@@ -69,16 +80,6 @@ class GameBoardTake {
             }
             pile.cards.push(takenCard)
             destinationName = pile.name
-        } else if (destination === 'playarea') {
-            if (!player.playArea) {
-                player.playArea = []
-            }
-            player.playArea.push(takenCard)
-            destinationName = 'your play area'
-        } else {
-            // Default to hand
-            player.hands.main.push(takenCard)
-            destinationName = 'your hand'
         }
 
         const actorDisplayName = interaction.member?.displayName || interaction.user.username
@@ -113,7 +114,7 @@ class GameBoardTake {
             publicMessage += ` to their hand`
         } else if (destination === 'playarea') {
             publicMessage += ` to their play area`
-        } else if (destination === 'pile') {
+        } else {
             publicMessage += ` to ${destinationName}`
         }
 
