@@ -274,21 +274,30 @@ class BoardGameGeek {
   GetGameDescriptionEmbed() {
     //Embed 3 - Description
     const turndownService = new TurndownService();
+    const MAX_DESC = 2000;
+    let description = turndownService.turndown(he.decode(this.gameInfo.description));
+    if (description.length > MAX_DESC) {
+      description = description.substring(0, MAX_DESC - 3) + "...";
+    }
     const descriptionEmbed = new EmbedBuilder()
       .setTitle("Description")
-      .setDescription(
-        turndownService.turndown(he.decode(this.gameInfo.description))
-      );
+      .setDescription(description);
     this.embeds.push(descriptionEmbed);
   }
 
   GetGameAwardsEmbed() {
     //Embed 4 - awards and honors
     if (this.gameInfo.boardgamehonor && Array.isArray(this.gameInfo.boardgamehonor)) {
+      const MAX_DESC = 1024;
       let honors = "";
-      this.gameInfo.boardgamehonor.forEach((honor) => {
-        honors += `${he.decode(honor.text)}\n`;
-      });
+      for (const honor of this.gameInfo.boardgamehonor) {
+        const line = `${he.decode(honor.text)}\n`;
+        if (honors.length + line.length > MAX_DESC - 3) {
+          honors += "...";
+          break;
+        }
+        honors += line;
+      }
       const awardEmbed = new EmbedBuilder()
         .setTitle(`Awards and Honors`)
         .setDescription(honors);
@@ -311,6 +320,10 @@ class BoardGameGeek {
       });
 
       if (history.length > 0) {
+        const MAX_DESC = 1024;
+        if (history.length > MAX_DESC) {
+          history = history.substring(0, MAX_DESC - 3) + "...";
+        }
         const localEmbed = new EmbedBuilder()
           .setTitle(`${this.gameName} in ${this.interaction.guild.name}`)
           .setDescription(history)
