@@ -25,6 +25,40 @@ class BoardGameGeek {
     return bgg;
   }
 
+  static async Search(query, bggToken) {
+    const resp = await fetch(
+      `https://api.geekdo.com/xmlapi2/search.cgi?type=boardgame&query=${encodeURIComponent(query)}`,
+      { headers: { 'Authorization': `Bearer ${bggToken}` } }
+    );
+    const text = await resp.text();
+    const parser = new XMLParser({
+      attributeNamePrefix: "",
+      ignoreAttributes: false,
+      ignoreNameSpace: true,
+      allowBooleanAttributes: true,
+    });
+    const parsed = parser.parse(text);
+    let items = parsed.items?.item || [];
+    if (!Array.isArray(items)) items = [items];
+
+    items.sort((a, b) => (b.yearpublished?.value || 0) - (a.yearpublished?.value || 0));
+    const top25 = items.slice(0, 25);
+    top25.sort((a, b) => {
+      const nameA = Array.isArray(a.name) ? (a.name.find(n => n.type === 'primary') || a.name[0])?.value : a.name?.value;
+      const nameB = Array.isArray(b.name) ? (b.name.find(n => n.type === 'primary') || b.name[0])?.value : b.name?.value;
+      return String(nameA || '').localeCompare(String(nameB || ''));
+    });
+
+    return top25.map((item) => {
+      const names = Array.isArray(item.name) ? item.name : [item.name];
+      const primary = names.find(n => n.type === 'primary') || names[0];
+      return {
+        name: `${he.decode(String(primary?.value || 'Unknown'))} (${item.yearpublished?.value || '?'})`.slice(0, 100),
+        value: String(item.id),
+      };
+    });
+  }
+
   static DetailsEnum = {
     ALL: 'all',
     BASIC: 'basic',
@@ -240,21 +274,30 @@ class BoardGameGeek {
   GetGameDescriptionEmbed() {
     //Embed 3 - Description
     const turndownService = new TurndownService();
+    const MAX_DESC = 2000;
+    let description = turndownService.turndown(he.decode(this.gameInfo.description));
+    if (description.length > MAX_DESC) {
+      description = description.substring(0, MAX_DESC - 3) + "...";
+    }
     const descriptionEmbed = new EmbedBuilder()
       .setTitle("Description")
-      .setDescription(
-        turndownService.turndown(he.decode(this.gameInfo.description))
-      );
+      .setDescription(description);
     this.embeds.push(descriptionEmbed);
   }
 
   GetGameAwardsEmbed() {
     //Embed 4 - awards and honors
     if (this.gameInfo.boardgamehonor && Array.isArray(this.gameInfo.boardgamehonor)) {
+      const MAX_DESC = 1024;
       let honors = "";
-      this.gameInfo.boardgamehonor.forEach((honor) => {
-        honors += `${he.decode(honor.text)}\n`;
-      });
+      for (const honor of this.gameInfo.boardgamehonor) {
+        const line = `${he.decode(honor.text)}\n`;
+        if (honors.length + line.length > MAX_DESC - 3) {
+          honors += "...";
+          break;
+        }
+        honors += line;
+      }
       const awardEmbed = new EmbedBuilder()
         .setTitle(`Awards and Honors`)
         .setDescription(honors);
@@ -277,6 +320,10 @@ class BoardGameGeek {
       });
 
       if (history.length > 0) {
+        const MAX_DESC = 1024;
+        if (history.length > MAX_DESC) {
+          history = history.substring(0, MAX_DESC - 3) + "...";
+        }
         const localEmbed = new EmbedBuilder()
           .setTitle(`${this.gameName} in ${this.interaction.guild.name}`)
           .setDescription(history)

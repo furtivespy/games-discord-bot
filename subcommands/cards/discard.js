@@ -20,8 +20,8 @@ class Discard {
                 await interaction.respond(
                     GameHelper.getCardsAutocomplete(focusedOption.value, currentPlayer.hands.main)
                 );
-            } else if (focusedOption.name === 'pilename') {
-                await interaction.respond(GameHelper.getPileAutocomplete(gameData, focusedOption.value))
+            } else if (focusedOption.name === 'destination') {
+                await interaction.respond(GameHelper.getDestinationAutocomplete(gameData, focusedOption.value, ['discard', 'gameboard', 'pile']))
             }
             return
         }
@@ -38,7 +38,6 @@ class Discard {
 
         const cardid = interaction.options.getString('card')
         const destination = interaction.options.getString('destination') || 'discard'
-        const pileId = interaction.options.getString('pilename')
         
         if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
             await interaction.editReply({ content: "Something is broken! You don't have that card."})
@@ -50,9 +49,20 @@ class Discard {
         
         let destinationName = ''
 
-        // Handle different destinations
-        if (destination === 'pile') {
-            const pile = GameHelper.getGlobalPile(gameData, pileId)
+        if (destination === 'gameboard') {
+            if (!gameData.gameBoard) {
+                gameData.gameBoard = []
+            }
+            gameData.gameBoard.push(card)
+            destinationName = 'Game Board'
+        } else if (destination === 'discard') {
+            // Default to deck's discard pile
+            let deck = find(gameData.decks, {name: card.origin})
+            deck.piles.discard.cards.push(card)
+            destinationName = `${deck.name} discard pile`
+        } else {
+            // Assume pile
+            const pile = GameHelper.getGlobalPile(gameData, destination)
             if (!pile) {
                 // Return card to hand if pile not found
                 player.hands.main.push(card)
@@ -61,17 +71,6 @@ class Discard {
             }
             pile.cards.push(card)
             destinationName = pile.name
-        } else if (destination === 'gameboard') {
-            if (!gameData.gameBoard) {
-                gameData.gameBoard = []
-            }
-            gameData.gameBoard.push(card)
-            destinationName = 'Game Board'
-        } else {
-            // Default to deck's discard pile
-            let deck = find(gameData.decks, {name: card.origin})
-            deck.piles.discard.cards.push(card)
-            destinationName = `${deck.name} discard pile`
         }
 
         try {

@@ -50,6 +50,7 @@ const rebirth = require('./decks/rebirth');
 const candylandCards = require('./decks/candyland');
 const botswanaCards = require('./decks/botswana');
 const {mollyVice, mollyLoyalty, mollyMinor, mollyMajor, mollyItem} = require('./decks/mollyhouse');
+const { arcsActionBase, arcsActionFull } = require('./decks/arcs');
 
 class GameDatabase {
     
@@ -152,6 +153,8 @@ class GameDatabase {
         [ "Molly House - Minor Indictment", "molly-minor" ],
         [ "Molly House - Major Indictment", "molly-major" ],
         [ "Molly House - Items", "molly-item" ],
+        [ "Arcs Action Cards (2-3 Players)", "arcs-2-3" ],
+        [ "Arcs Action Cards (4 Players)", "arcs-4" ],
     ]
 
     defaultGameData = {
@@ -440,6 +443,10 @@ class GameDatabase {
                 return this.createCardFromObjList(deckName, "B", mollyMajor);
             case "molly-item":
                 return this.createCardFromObjList(deckName, "B", mollyItem);
+            case "arcs-2-3":
+                return this.createCardFromObjList(deckName, "A", arcsActionBase);
+            case "arcs-4":
+                return this.createCardFromObjList(deckName, "A", arcsActionFull);
             default:
                 return []
         }

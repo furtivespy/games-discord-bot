@@ -76,11 +76,16 @@ module.exports = {
 
             player.playArea = cardsToKeepInPlayArea; // Update play area
 
-            // Add to player's main hand
+            // Add to player's main hand (hands.main is an array of cards everywhere else in this bot)
             if (!player.hands) player.hands = {};
-            if (!player.hands.main) player.hands.main = { deck: "Hand", cards: [] }; // Default hand name
-            player.hands.main.cards.push(...pickedCards);
-            // Consider sorting hand if that's a convention: player.hands.main.cards = Formatter.cardSort(player.hands.main.cards);
+            if (!player.hands.main) {
+                player.hands.main = [];
+            } else if (!Array.isArray(player.hands.main)) {
+                player.hands.main = Array.isArray(player.hands.main.cards)
+                    ? player.hands.main.cards
+                    : [];
+            }
+            player.hands.main.push(...pickedCards);
 
 
             // Record history

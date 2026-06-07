@@ -2,6 +2,7 @@ const GameHelper = require('../../modules/GlobalGameHelper')
 const {sortBy, find, filter, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameDB = require('../../db/anygame')
+const { EmbedBuilder, MessageFlags } = require('discord.js')
 
 class Play {
     async execute(interaction, client) {
@@ -21,8 +22,8 @@ class Play {
                             ),  ['suit', 'value', 'name']).map(crd => 
                         ({name: Formatter.cardShortName(crd), value: crd.id}))
                 )
-            } else if (focusedOption.name === 'pilename') {
-                await interaction.respond(GameHelper.getPileAutocomplete(gameData, focusedOption.value))
+            } else if (focusedOption.name === 'destination') {
+                await interaction.respond(GameHelper.getDestinationAutocomplete(gameData, focusedOption.value, ['playarea', 'discard', 'gameboard', 'pile']))
             }
             return
         }
@@ -38,7 +39,6 @@ class Play {
 
         const cardid = interaction.options.getString('card')
         const destination = interaction.options.getString('destination')
-        const pileId = interaction.options.getString('pilename')
         
         let player = find(gameData.players, {userId: interaction.user.id})
         if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
@@ -47,7 +47,8 @@ class Play {
         }
         
         const cardIndex = findIndex(player.hands.main, {id: cardid})
-        const [playedCard] = player.hands.main.splice(cardIndex, 1)
+        const cardToPlay = player.hands.main[cardIndex] // Get card ref first
+        player.hands.main.splice(cardIndex, 1) // Remove from hand
 
         let destinationName = ''
         let actualDestination = destination
@@ -57,38 +58,45 @@ class Play {
             actualDestination = gameData.playToPlayArea ? 'playarea' : 'discard'
         }
 
+        let destinationTypeForHistory = actualDestination
+
         // Handle different destinations
-        if (actualDestination === 'pile') {
-            const pile = GameHelper.getGlobalPile(gameData, pileId)
-            if (!pile) {
-                player.hands.main.splice(cardIndex, 0, playedCard)
-                await interaction.editReply({ content: 'Pile not found!'})
-                return
-            }
-            pile.cards.push(playedCard)
-            destinationName = pile.name
-        } else if (actualDestination === 'gameboard') {
+        if (actualDestination === 'gameboard') {
             if (!gameData.gameBoard) {
                 gameData.gameBoard = []
             }
-            gameData.gameBoard.push(playedCard)
+            gameData.gameBoard.push(cardToPlay)
             destinationName = 'Game Board'
         } else if (actualDestination === 'playarea') {
             if (!player.playArea) {
                 player.playArea = []
             }
-            player.playArea.push(playedCard)
+            player.playArea.push(cardToPlay)
             destinationName = 'play area'
+        } else if (actualDestination === 'discard') {
+             let deck = find(gameData.decks, {name: cardToPlay.origin})
+             // Check if deck exists and has discard pile
+             if (deck && deck.piles && deck.piles.discard) {
+                 deck.piles.discard.cards.push(cardToPlay)
+                 destinationName = 'discard pile'
+             } else {
+                 // Fallback if deck/discard not found - return to hand
+                 player.hands.main.splice(cardIndex, 0, cardToPlay)
+                 client.logger.log(`Error: Deck or discard pile not found for card origin '${cardToPlay.origin}' in /cards play.`, 'error')
+                 await interaction.editReply({ content: `Error: Could not find the discard pile. Card returned to hand.`, flags: MessageFlags.Ephemeral })
+                 return
+             }
         } else {
-            // Default to discard
-            let deck = find(gameData.decks, {name: playedCard.origin})
-            if (deck && deck.piles && deck.piles.discard) {
-                deck.piles.discard.cards.push(playedCard)
-                destinationName = 'discard pile'
+            // Assume pile
+            const pile = GameHelper.getGlobalPile(gameData, actualDestination)
+            if (pile) {
+                pile.cards.push(cardToPlay)
+                destinationName = pile.name
+                destinationTypeForHistory = 'pile'
             } else {
-                player.hands.main.splice(cardIndex, 0, playedCard)
-                client.logger.log(`Error: Deck or discard pile not found for card origin '${playedCard.origin}' in /cards play.`, 'error')
-                await interaction.editReply({ content: `Error: Could not find the discard pile. Card returned to hand.`})
+                // Pile not found
+                player.hands.main.splice(cardIndex, 0, cardToPlay)
+                await interaction.editReply({ content: 'Destination not found (Pile or other)!', flags: MessageFlags.Ephemeral })
                 return
             }
         }
@@ -96,7 +104,7 @@ class Play {
         // Record this action in game history
         try {
             const actorDisplayName = interaction.member?.displayName || interaction.user.username
-            const cardName = Formatter.cardShortName(playedCard)
+            const cardName = Formatter.cardShortName(cardToPlay)
             
             GameHelper.recordMove(
                 gameData,
@@ -105,11 +113,11 @@ class Play {
                 GameDB.ACTION_TYPES.PLAY,
                 `${actorDisplayName} played ${cardName} to ${destinationName}`,
                 {
-                    cardId: playedCard.id,
+                    cardId: cardToPlay.id,
                     cardName: cardName,
                     destination: destinationName,
-                    destinationType: actualDestination,
-                    origin: playedCard.origin
+                    destinationType: destinationTypeForHistory,
+                    origin: cardToPlay.origin
                 },
                 actorDisplayName
             )
@@ -120,25 +128,31 @@ class Play {
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
         const replyEmbeds = [
-            Formatter.oneCard(playedCard),
+            Formatter.oneCard(cardToPlay),
             ...Formatter.deckStatus2(gameData)
         ];
         const replyFiles = [];
 
-        if (actualDestination === 'playarea' && player.playArea && player.playArea.length > 0) {
-            const { EmbedBuilder, MessageFlags} = require('discord.js');
+        // If played to playarea, show updated playarea
+        if ((actualDestination === 'playarea' || destinationTypeForHistory === 'playarea') && player.playArea && player.playArea.length > 0) {
             const playAreaEmbed = new EmbedBuilder()
                 .setColor(player.color || 13502711)
                 .setTitle(`${interaction.member.displayName}'s Updated Play Area`);
 
-            const cardNames = player.playArea.map(card => Formatter.cardShortName(card));
-            playAreaEmbed.addFields({
-                name: "Current Cards in Play Area",
-                value: cardNames.length > 0 ? cardNames.join(', ') : 'No cards in play area',
-                inline: false
-            });
+            const playAreaAttachment = await Formatter.genericCardZoneDisplay(
+                player.playArea,
+                playAreaEmbed,
+                "Current Cards in Play Area",
+                `PlayAreaUpdate-${player.userId}`
+            );
 
-            replyEmbeds.push(playAreaEmbed);
+            if (playAreaAttachment) {
+                replyFiles.push(playAreaAttachment);
+            }
+            // Only add if fields exist
+            if (playAreaEmbed.data.fields && playAreaEmbed.data.fields.length > 0) {
+                 replyEmbeds.push(playAreaEmbed);
+            }
         }
 
         const replyOptions = {
