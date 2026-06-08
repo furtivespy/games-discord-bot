@@ -1,3 +1,8 @@
+const dns = require("dns");
+
+// Bun on Windows defaults to 127.0.0.1 for DNS, which breaks mongodb+srv SRV lookups.
+//dns.setServers(["192.168.0.254"]);
+
 const { MongoClient } = require('mongodb');
 
 class MongoDb {

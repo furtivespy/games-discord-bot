@@ -4,7 +4,9 @@ const {find, findIndex } = require("lodash");
 const Formatter = require("../../modules/GameFormatter");
 const {
   StringSelectMenuBuilder,
-  ActionRowBuilder,, MessageFlags} = require("discord.js");
+  ActionRowBuilder,
+  MessageFlags,
+} = require("discord.js");
 
 class PlaySimultaneous {
   async execute(interaction, client) {
