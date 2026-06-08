@@ -15,12 +15,15 @@ FROM base AS build
 
 # Install packages needed to build native modules (canvas)
 RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev libpixman-1-dev git pkg-config python-is-python3 && \
+    apt-get install --no-install-recommends -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev libpixman-1-dev git ca-certificates pkg-config python-is-python3 && \
     rm -rf /var/lib/apt/lists/*
 
 # Install dependencies
 COPY --link package.json bun.lock ./
-RUN bun install --frozen-lockfile --production
+# bun.lock pins ascii-table to a git+ssh URL; rewrite to HTTPS for keyless CI/Docker builds
+RUN git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" && \
+    git config --global url."https://github.com/".insteadOf "git@github.com:" && \
+    bun install --frozen-lockfile --production
 
 # Copy application code
 COPY --link . .
