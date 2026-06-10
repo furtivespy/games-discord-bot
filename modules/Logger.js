@@ -25,8 +25,11 @@ class Logger {
       }
       case "ready": {
         return console.log(`${timestamp}: ${chalk.black.bgGreen(type.toUpperCase())} ${content}`);
-      } 
-      default: throw new TypeError("Logger type must be either warn, debug, log, ready, cmd or error.");
+      }
+      case "time": {
+        return console.log(`${timestamp}: ${chalk.black.bgCyan(type.toUpperCase())} ${content}`);
+      }
+      default: throw new TypeError("Logger type must be either warn, debug, log, ready, cmd, time or error.");
     } 
   }
   

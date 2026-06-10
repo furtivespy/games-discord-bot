@@ -712,7 +712,15 @@ client.on("interactionCreate", async (interaction) => {
     const command = client.slashcommands.get(interaction.commandName);
 
     if (!command) return;
-    client.logger.log(`Slash Command ${interaction.commandName}`);
+
+    const startedAt = Date.now();
+    const inboundMs = startedAt - interaction.createdTimestamp;
+    const subcommand = interaction.options?.getSubcommand?.(false);
+    const label = subcommand
+      ? `${interaction.commandName} ${subcommand}`
+      : interaction.commandName;
+    const prefix = interaction.isAutocomplete() ? "Autocomplete" : "Slash";
+
     try {
       await command.execute(interaction);
     } catch (error) {
@@ -721,6 +729,12 @@ client.on("interactionCreate", async (interaction) => {
         content: "There was an error while executing this command!",
         ephemeral: true,
       });
+    } finally {
+      const durationMs = Date.now() - startedAt;
+      client.logger.log(
+        `${prefix} /${label} | inbound ${inboundMs}ms | handler ${durationMs}ms`,
+        "time"
+      );
     }
   } else if (interaction.isModalSubmit()) {
     try {
