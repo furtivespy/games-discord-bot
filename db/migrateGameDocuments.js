@@ -317,51 +317,119 @@ function migrateGuilddataCache(store, guilddataCache) {
   };
 }
 
-async function migrateFromMongo(store, mongoUri) {
-  let MongoClient;
-  try {
-    ({ MongoClient } = require("mongodb"));
-  } catch {
-    throw new Error(
-      "mongodb package is required for Mongo migration. Install it temporarily with: bun add mongodb"
-    );
+function collectKnownGuildIds(dataDir) {
+  const guildIds = new Set();
+
+  const guilddata = readEnmapStoreRows(dataDir, "guilddata");
+  if (guilddata) {
+    for (const row of guilddata.rows) {
+      guildIds.add(String(row.key));
+    }
   }
+
+  const gamedata = readEnmapStoreRows(dataDir, "gamedata");
+  if (gamedata) {
+    for (const row of gamedata.rows) {
+      const data = parseStoredValue(row.value);
+      const guildId = inferGuildId(data);
+      if (guildId) guildIds.add(guildId);
+    }
+  }
+
+  const legacyGamedata = readLegacyEnmapRows(dataDir, "gamedata");
+  if (legacyGamedata) {
+    for (const row of legacyGamedata.rows) {
+      const data = parseStoredValue(row.value);
+      const guildId = inferGuildId(data);
+      if (guildId) guildIds.add(guildId);
+    }
+  }
+
+  const legacyGuilddata = readLegacyEnmapRows(dataDir, "guilddata");
+  if (legacyGuilddata) {
+    for (const row of legacyGuilddata.rows) {
+      guildIds.add(String(row.key));
+    }
+  }
+
+  return [...guildIds];
+}
+
+async function migrateMongoDatabase(client, store, dbName) {
+  const db = client.db(dbName);
+  const collections = await db.listCollections().toArray();
+  let migrated = 0;
+  let skipped = 0;
+
+  for (const collectionInfo of collections) {
+    const collectionName = collectionInfo.name;
+    const docs = await db.collection(collectionName).find({}).toArray();
+
+    for (const doc of docs) {
+      const channelId = doc.id != null ? String(doc.id) : null;
+      if (!channelId) {
+        skipped++;
+        continue;
+      }
+
+      const { _id, id, ...rest } = doc;
+      const data = { ...rest, id: channelId };
+      store.upsertGameData(dbName, collectionName, channelId, data);
+      migrated++;
+    }
+  }
+
+  return { migrated, skipped, collections: collections.length };
+}
+
+async function migrateFromMongo(store, mongoUri, { guildIds = [] } = {}) {
+  const { MongoClient } = require("mongodb");
 
   const client = new MongoClient(mongoUri);
   let migrated = 0;
+  let skipped = 0;
+  let databaseCount = 0;
+  const warnings = [];
 
   try {
     await client.connect();
-    const adminDb = client.db().admin();
-    const { databases } = await adminDb.listDatabases();
 
-    for (const entry of databases) {
-      const dbName = entry.name;
-      if (["admin", "local", "config"].includes(dbName)) continue;
+    let databaseNames = [];
+    try {
+      const { databases } = await client.db().admin().listDatabases();
+      databaseNames = databases
+        .map((entry) => entry.name)
+        .filter((name) => !["admin", "local", "config"].includes(name));
+    } catch (err) {
+      warnings.push(`listDatabases failed: ${err.message}`);
+    }
 
-      const db = client.db(dbName);
-      const collections = await db.listCollections().toArray();
+    if (databaseNames.length === 0 && guildIds.length > 0) {
+      databaseNames = [...new Set(guildIds.map(String))];
+      warnings.push(`using ${databaseNames.length} guild id(s) from local SQLite`);
+    }
 
-      for (const collectionInfo of collections) {
-        const collectionName = collectionInfo.name;
-        const docs = await db.collection(collectionName).find({}).toArray();
+    if (databaseNames.length === 0) {
+      throw new Error(
+        "No MongoDB databases found and no guild ids available for fallback import"
+      );
+    }
 
-        for (const doc of docs) {
-          const channelId = doc.id != null ? String(doc.id) : null;
-          if (!channelId) continue;
-
-          const { _id, id, ...rest } = doc;
-          const data = { ...rest, id: channelId };
-          store.upsertGameData(dbName, collectionName, channelId, data);
-          migrated++;
-        }
+    for (const dbName of databaseNames) {
+      try {
+        const result = await migrateMongoDatabase(client, store, dbName);
+        migrated += result.migrated;
+        skipped += result.skipped;
+        databaseCount++;
+      } catch (err) {
+        warnings.push(`Mongo db ${dbName}: ${err.message}`);
       }
     }
   } finally {
     await client.close();
   }
 
-  return { migrated, skipped: 0, warnings: [] };
+  return { migrated, skipped, databaseCount, warnings };
 }
 
 function formatMigrationSummary(result) {
@@ -406,7 +474,12 @@ function formatMigrationSummary(result) {
   }
 
   if (result.mongo) {
-    lines.push(`MongoDB: ${result.mongo.migrated} migrated`);
+    lines.push(
+      `MongoDB: ${result.mongo.migrated} migrated, ${result.mongo.skipped} skipped, ${result.mongo.databaseCount} database(s)`
+    );
+    for (const warning of (result.mongo.warnings ?? []).slice(0, 5)) {
+      lines.push(`  mongo: ${warning}`);
+    }
   } else if (result.mongoSkippedReason) {
     lines.push(`MongoDB: ${result.mongoSkippedReason}`);
   }
@@ -429,7 +502,9 @@ async function runGameDocumentsMigration({
   store,
   mode = "replace",
   mongoUri = null,
+  skipMongo = false,
   guildHint = null,
+  guildIds = null,
   caches = null,
 } = {}) {
   const dataDir = ensureDataDir();
@@ -460,10 +535,20 @@ async function runGameDocumentsMigration({
   let mongo = null;
   let mongoSkippedReason = null;
 
-  if (mongoUri) {
-    mongo = await migrateFromMongo(gameStore, mongoUri);
+  if (skipMongo) {
+    mongoSkippedReason = "skipped (skip_mongo=true)";
+  } else if (mongoUri) {
+    const knownGuildIds = [
+      ...new Set([
+        ...(guildIds ?? collectKnownGuildIds(dataDir)),
+        ...(guildHint ? [String(guildHint)] : []),
+      ]),
+    ];
+    mongo = await migrateFromMongo(gameStore, mongoUri, {
+      guildIds: knownGuildIds,
+    });
   } else {
-    mongoSkippedReason = "skipped (no mongo URI provided)";
+    mongoSkippedReason = "skipped (mongoConnectionString not configured)";
   }
 
   const result = {

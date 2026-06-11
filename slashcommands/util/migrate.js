@@ -8,7 +8,7 @@ class Migrate extends SlashCommand {
   constructor(client) {
     super(client, {
       name: "migrate",
-      description: "Migrate Enmap game data into game_documents SQLite",
+      description: "Migrate Enmap and Mongo game data into game_documents SQLite",
       permLevel: "Bot Owner",
     });
     this.data = new SlashCommandBuilder()
@@ -25,9 +25,9 @@ class Migrate extends SlashCommand {
       )
       .addBooleanOption((option) =>
         option
-          .setName("include_mongo")
+          .setName("skip_mongo")
           .setDescription(
-            "Also import from mongoConnectionString in config (requires mongodb package)"
+            "Skip importing from mongoConnectionString in config"
           )
           .setRequired(false)
       );
@@ -49,15 +49,13 @@ class Migrate extends SlashCommand {
     }
 
     const merge = interaction.options.getBoolean("merge") ?? false;
-    const includeMongo = interaction.options.getBoolean("include_mongo") ?? false;
-    const mongoUri = includeMongo
-      ? this.client.config.mongoConnectionString
-      : null;
+    const skipMongo = interaction.options.getBoolean("skip_mongo") ?? false;
+    const mongoUri = this.client.config.mongoConnectionString || null;
 
-    if (includeMongo && !mongoUri) {
+    if (!skipMongo && !mongoUri) {
       return interaction.reply({
         content:
-          "include_mongo was set but mongoConnectionString is missing from config.",
+          "mongoConnectionString is missing from config. Add it or run with skip_mongo:true.",
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -69,7 +67,8 @@ class Migrate extends SlashCommand {
       const result = await runGameDocumentsMigration({
         store: this.client.db,
         mode: merge ? "merge" : "replace",
-        mongoUri,
+        mongoUri: skipMongo ? null : mongoUri,
+        skipMongo,
         guildHint: interaction.guildId,
         caches: {
           gamedata: this.client.gamedata,
