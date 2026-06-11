@@ -1,6 +1,6 @@
-const fs = require("fs");
 const path = require("path");
 const { Database } = require("bun:sqlite");
+const { ensureDataDir } = require("../db/dataDir.js");
 
 function cloneValue(value) {
   if (value === undefined) return value;
@@ -57,8 +57,7 @@ class BunEnmap {
     this.cloneLevel = options.cloneLevel || "none";
     this.cache = new Map();
 
-    const dataDir = path.resolve("./data");
-    fs.mkdirSync(dataDir, { recursive: true });
+    const dataDir = ensureDataDir();
 
     this.db = new Database(path.join(dataDir, `${this.name}.sqlite`), { create: true });
     this.db.exec(`

@@ -70,6 +70,11 @@ class Migrate extends SlashCommand {
         store: this.client.db,
         mode: merge ? "merge" : "replace",
         mongoUri,
+        guildHint: interaction.guildId,
+        caches: {
+          gamedata: this.client.gamedata,
+          guilddata: this.client.guilddata,
+        },
       });
 
       const summary = result.summary;

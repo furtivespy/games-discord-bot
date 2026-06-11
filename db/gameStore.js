@@ -1,16 +1,12 @@
 const fs = require("fs");
 const path = require("path");
 const { Database } = require("bun:sqlite");
-
-function resolveDataDir() {
-  return path.resolve("./data");
-}
+const { resolveDataDir, ensureDataDir } = require("./dataDir.js");
 
 class GameStore {
   constructor(options = {}) {
     this.logger = options.logger;
-    const dataDir = resolveDataDir();
-    fs.mkdirSync(dataDir, { recursive: true });
+    const dataDir = ensureDataDir();
 
     this.db = new Database(path.join(dataDir, "game_documents.sqlite"), {
       create: true,
