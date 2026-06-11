@@ -7,7 +7,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "bun DiscordBot.js",
-    "migrate:enmap": "bun scripts/migrate-enmap-to-bun-sqlite.js"
+    "migrate:enmap": "bun scripts/migrate-enmap-to-bun-sqlite.js",
+    "migrate:game-documents": "bun scripts/migrate-to-game-documents.js"
   },
   "repository": {
     "type": "git",
@@ -38,7 +39,6 @@
     "lodash": "^4.17.21",
     "moment": "^2.29.1",
     "moment-timezone": "^0.5.48",
-    "mongodb": "^4.13.0",
     "nanoid": "^3.3.1",
     "node-fetch": "^2.6.1",
     "on-change": "^2.2.0",

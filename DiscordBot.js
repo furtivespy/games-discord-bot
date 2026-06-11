@@ -9,7 +9,7 @@ const Enmap = require("./modules/BunEnmap.js");
 const klaw = require("klaw");
 const path = require("path");
 const database = require("./db/db.js");
-const mongoDb = require("./db/mongoDb.js");
+const GameStore = require("./db/gameStore.js");
 const GoogleSearch = require("./modules/GoogleSearch.js");
 const _ = require("lodash");
 const modalSubmission = require('./events/modalSubmission.js');
@@ -69,11 +69,7 @@ class DiscordBot extends Client {
       releaseStage: this.config.environment,
     });
 
-    /* Mongo DB is a work in progress... */
-    this.db = new mongoDb({
-      uri: this.config.mongoConnectionString, 
-      logger: this.logger
-    });
+    this.db = new GameStore({ logger: this.logger });
     
     this.googleClient = new GoogleSearch({key: this.config.google_key, cx: this.config.google_cxid});
 
@@ -235,14 +231,11 @@ class DiscordBot extends Client {
     this.gamedata.set(gameName, updatedData);
   }
   async setGameDataV2(serverId, gameName, channelId, updatedData) {
-    this.setGameData(`${gameName}-${channelId}`, updatedData); //keep this updated for now...
-    await this.db.upsertGameData(serverId, gameName, channelId, updatedData);
+    this.db.upsertGameData(serverId, gameName, channelId, updatedData);
   }
   async getGameDataV2(serverId, gameName, channelId) {
-    let guildData = await this.db.getSpecificGameData(serverId, gameName, channelId);
+    let guildData = this.db.getSpecificGameData(serverId, gameName, channelId);
     if (!_.isEmpty(guildData)) {
-      //console.log("got data from db");
-      //console.log(guildData);
       return this.migrateGameData(guildData);
     }
     guildData = this.getGameData(`${gameName}-${channelId}`);
@@ -251,7 +244,7 @@ class DiscordBot extends Client {
 
   async setGuildData(guildId, data) {
     this.guilddata.set(guildId, data);
-    await this.db.upsertGameData(guildId, "custom_data", "main", data);
+    this.db.upsertGameData(guildId, "custom_data", "main", data);
   }
 
   async getGuildData(guildId) {
@@ -262,7 +255,7 @@ class DiscordBot extends Client {
       return data;
     }
 
-    data = await this.db.getSpecificGameData(guildId, "custom_data", "main");
+    data = this.db.getSpecificGameData(guildId, "custom_data", "main");
     if (!_.isEmpty(data)) {
       if (!data.customDice) data.customDice = [];
       this.guilddata.set(guildId, data); // Cache it for future use
@@ -349,8 +342,8 @@ class DiscordBot extends Client {
     
     return gameData;
   }
-  async queryGameData(serverId, gameName, query) {
-    return await this.db.queryGameData(serverId, gameName, query);
+  queryGameData(serverId, gameName, query) {
+    return this.db.queryGameData(serverId, gameName, query);
   }
   /*
     SINGLE-LINE AWAITMESSAGE
