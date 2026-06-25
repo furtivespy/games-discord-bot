@@ -2,7 +2,11 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: ["**"]
+    tags:
+      - "v*"
+    branches-ignore:
+      - master
+      - main
 
 env:
   REGISTRY: gitea.willsullivan.dev
@@ -29,13 +33,25 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_TOKEN }}
 
-      - name: Extract metadata
+      - name: Resolve image tags
         id: meta
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            {
+              echo "tags<<EOF"
+              echo "${REGISTRY}/${IMAGE_NAME}:${VERSION}"
+              echo "${REGISTRY}/${IMAGE_NAME}:latest"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            SHA="$(git rev-parse --short HEAD)"
+            echo "tags=${REGISTRY}/${IMAGE_NAME}:${SHA}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
           context: .
           push: true
-          tags: ${{ github.ref == 'refs/heads/main' && format('{0}/{1}:{2}\n{0}/{1}:latest', env.REGISTRY, env.IMAGE_NAME, steps.meta.outputs.sha_short) || format('{0}/{1}:{2}', env.REGISTRY, env.IMAGE_NAME, steps.meta.outputs.sha_short) }}
+          tags: ${{ steps.meta.outputs.tags }}

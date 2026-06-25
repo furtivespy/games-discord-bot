@@ -38,8 +38,26 @@ function parseLegacyValue(rawValue) {
   }
 }
 
+function tableExists(db, tableName) {
+  const row = db
+    .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(tableName);
+  return Boolean(row);
+}
+
 function migrateTable(sourceDb, mapping) {
   const { legacyTable, targetStore } = mapping;
+
+  if (!tableExists(sourceDb, legacyTable)) {
+    return {
+      legacyTable,
+      targetStore,
+      migrated: 0,
+      skipped: true,
+      backupPath: null,
+    };
+  }
+
   const rows = sourceDb.query(`SELECT key, value FROM ${legacyTable}`).all();
 
   const targetPath = path.join(DATA_DIR, `${targetStore}.sqlite`);
@@ -89,6 +107,10 @@ function main() {
 
   console.log(`Migration complete (mode: ${MODE}).`);
   for (const row of results) {
+    if (row.skipped) {
+      console.log(`- ${row.legacyTable} -> ${row.targetStore}: skipped (table not in source)`);
+      continue;
+    }
     const backupText = row.backupPath ? `, backup: ${row.backupPath}` : "";
     console.log(
       `- ${row.legacyTable} -> ${row.targetStore}: ${row.migrated} rows${backupText}`

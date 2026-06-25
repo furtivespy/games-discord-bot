@@ -6,13 +6,18 @@ on:
     types: [closed]
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
-
     if: github.event.pull_request.merged
-    
+
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Tag
+        id: tag
         uses: K-Phoen/semver-release-action@master
         with:
           release_branch: master
