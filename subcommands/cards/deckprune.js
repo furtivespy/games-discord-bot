@@ -1,9 +1,9 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
-const { find, findIndex, remove, cloneDeep, shuffle } = require('lodash')
+const {find, findIndex, remove, cloneDeep, shuffle } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
-const { StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js')
+const { StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags} = require('discord.js')
 
 class DeckPrune {
     async paginatedCardSelection(interaction, sortedCards, deckName) {
@@ -152,12 +152,12 @@ class DeckPrune {
             return
         }
 
-        await interaction.deferReply({ ephemeral: true })
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
         
         let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
@@ -165,12 +165,12 @@ class DeckPrune {
         const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
         
         if (!deck){
-            await interaction.editReply({ content: `No Deck Found`, ephemeral: true })
+            await interaction.editReply({ content: `No Deck Found`})
             return
         }
 
         if (!deck.allCards || deck.allCards.length < 1) {
-            await interaction.editReply({ content: `This deck has no cards to prune.`, ephemeral: true })
+            await interaction.editReply({ content: `This deck has no cards to prune.`})
             return
         }
 
@@ -259,7 +259,7 @@ class DeckPrune {
         await interaction.followUp({ 
             embeds: [...followup[0]], 
             files: [...followup[1]],
-            ephemeral: true 
+            flags: MessageFlags.Ephemeral 
         })
     }
 }

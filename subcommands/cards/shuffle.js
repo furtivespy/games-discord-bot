@@ -16,14 +16,14 @@ class Shuffle {
         let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
         const inputDeck = interaction.options.getString('deck')
         const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
         if (!deck || deck.piles.draw.cards.length + deck.piles.discard.cards.length < 1){
-            await interaction.editReply({ content: `No Deck to shuffle.`, ephemeral: true })
+            await interaction.editReply({ content: `No Deck to shuffle.`})
             return
         } 
 

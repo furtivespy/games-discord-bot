@@ -23,9 +23,7 @@ class NewDeck {
 
         if (gameData.isdeleted) {
             await interaction.editReply({
-                content: `Please use "/game newgame" command to create a game. I need a game in this channel to attach the deck to.`,
-                ephemeral: true,
-            });
+                content: `Please use "/game newgame" command to create a game. I need a game in this channel to attach the deck to.`});
             return
         }
 
@@ -35,16 +33,12 @@ class NewDeck {
 
         if (find(gameData.decks, { name: inputName })) {
             await interaction.editReply({
-                content: `There is already a deck with that name...`,
-                ephemeral: true,
-            });
+                content: `There is already a deck with that name...`});
             return;
         }
         if (inputSet == "custom-csv" && (!inputCustom || inputCustom.length == 0)) {
             await interaction.editReply({
-                content: `When choosing a custom deck, please include the "customlist" of cards`,
-                ephemeral: true,
-            });
+                content: `When choosing a custom deck, please include the "customlist" of cards`});
             return;
         }
 

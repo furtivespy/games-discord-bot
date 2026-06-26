@@ -1,5 +1,5 @@
 const SlashCommand = require("../../base/SlashCommand.js");
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const {SlashCommandBuilder, EmbedBuilder, MessageFlags} = require("discord.js");
 const _ = require("lodash");
 
 class Dice extends SlashCommand {
@@ -80,7 +80,7 @@ class Dice extends SlashCommand {
       this.client.logger.log(e, "error");
       await interaction.reply({
         content: `An error occurred: ${e.message}`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   }
@@ -94,7 +94,7 @@ class Dice extends SlashCommand {
     if (sides.length < 2) {
       return interaction.reply({
         content: "A die must have at least 2 sides.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -106,7 +106,7 @@ class Dice extends SlashCommand {
     if (guildData.customDice.find((d) => d.name.toLowerCase() === name.toLowerCase())) {
         return interaction.reply({
             content: `A server die with the name "${name}" already exists.`,
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
         });
     }
 
@@ -115,7 +115,7 @@ class Dice extends SlashCommand {
          if (gameData.customDice.find((d) => d.name.toLowerCase() === name.toLowerCase())) {
             return interaction.reply({
                 content: `A die with the name "${name}" already exists in this game.`,
-                ephemeral: true,
+                flags: MessageFlags.Ephemeral,
             });
         }
     }
@@ -136,7 +136,7 @@ class Dice extends SlashCommand {
         if (!gameData || gameData.isdeleted) {
              return interaction.reply({
                 content: `There is no active game in this channel. You can only add local dice to an active game.`,
-                ephemeral: true,
+                flags: MessageFlags.Ephemeral,
             });
         }
 
@@ -156,7 +156,7 @@ class Dice extends SlashCommand {
     if (confirm.toLowerCase() !== "confirm") {
       return interaction.reply({
         content: "You must type 'confirm' to remove a die.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -193,7 +193,7 @@ class Dice extends SlashCommand {
     } else {
         return interaction.reply({
             content: `Die "${name}" not found.`,
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
         });
     }
   }

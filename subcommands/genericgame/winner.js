@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find } = require('lodash')
@@ -13,7 +14,7 @@ class NewGame {
         )
 
         if (gameData.isdeleted) {
-            await interaction.reply({ content: `No active game in this channel`, ephemeral: true })
+            await interaction.reply({ content: `No active game in this channel`, flags: MessageFlags.Ephemeral })
         } else {
             let players = [];
 
@@ -64,7 +65,7 @@ class NewGame {
                     embeds: [winEmbed]
                 })
             } else {
-                await interaction.reply({ content: `I can't seem to find any of those players in this game...`, ephemeral: true })
+                await interaction.reply({ content: `I can't seem to find any of those players in this game...`, flags: MessageFlags.Ephemeral })
             }
 
         }

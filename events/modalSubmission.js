@@ -16,9 +16,7 @@ module.exports = {
 
             if (gameData.isdeleted) {
                 await interaction.editReply({
-                    content: `No active game in this channel.`,
-                    ephemeral: true
-                });
+                    content: `No active game in this channel.`});
                 return;
             }
 
@@ -61,9 +59,7 @@ module.exports = {
 
             if (gameData.isdeleted) {
                 await interaction.editReply({
-                    content: `No active game in this channel.`,
-                    ephemeral: true
-                });
+                    content: `No active game in this channel.`});
                 return;
             }
 
@@ -106,9 +102,7 @@ module.exports = {
 
             if (gameData.isdeleted) {
                 await interaction.editReply({
-                    content: `No active game in this channel.`,
-                    ephemeral: true
-                });
+                    content: `No active game in this channel.`});
                 return;
             }
 

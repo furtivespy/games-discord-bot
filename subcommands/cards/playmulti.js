@@ -1,23 +1,23 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
-const { find, findIndex } = require('lodash')
+const {find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
-const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js')
+const { StringSelectMenuBuilder, ActionRowBuilder, MessageFlags} = require('discord.js')
 const GameDB = require('../../db/anygame')
 
 class PlayMulti {
     async execute(interaction, client) {
-        await interaction.deferReply({ ephemeral: true })
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
         
         let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
         let player = find(gameData.players, {userId: interaction.user.id})
         if (!player){
-            await interaction.editReply({ content: "Something is broken!?", ephemeral: true })
+            await interaction.editReply({ content: "Something is broken!?"})
             return
         }
 
@@ -160,12 +160,12 @@ class PlayMulti {
             await interaction.followUp({ 
                 embeds: [...handInfo.embeds],
                 files: [...handInfo.attachments],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })  
         } else {
             await interaction.followUp({ 
                 embeds: [...handInfo.embeds],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })  
         }
     }

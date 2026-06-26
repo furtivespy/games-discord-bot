@@ -11,17 +11,13 @@ class JoinTeam {
 
         if (gameData.isdeleted) {
             await interaction.editReply({
-                content: `No active game in this channel.`,
-                ephemeral: true
-            })
+                content: `No active game in this channel.`})
             return
         }
 
         if (!gameData.teams || gameData.teams.length === 0) {
             await interaction.editReply({
-                content: `No teams exist in this game. Use /team roster to create teams first.`,
-                ephemeral: true
-            })
+                content: `No teams exist in this game. Use /team roster to create teams first.`})
             return
         }
 
@@ -32,9 +28,7 @@ class JoinTeam {
         const team = find(gameData.teams, { id: teamId })
         if (!team) {
             await interaction.editReply({
-                content: `Team not found!`,
-                ephemeral: true
-            })
+                content: `Team not found!`})
             return
         }
 
@@ -42,9 +36,7 @@ class JoinTeam {
         const player = find(gameData.players, { userId: targetUser.id })
         if (!player) {
             await interaction.editReply({
-                content: `${targetUser} is not in this game!`,
-                ephemeral: true
-            })
+                content: `${targetUser} is not in this game!`})
             return
         }
 

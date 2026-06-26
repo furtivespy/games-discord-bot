@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const { find } = require('lodash')
 const GameDB = require('../../db/anygame')
 const GameHelper = require('../../modules/GlobalGameHelper')
@@ -11,7 +12,7 @@ class Gain {
         )
 
         if (gameData.isdeleted) {
-            return await interaction.reply({ content: "No game in progress!", ephemeral: true })
+            return await interaction.reply({ content: "No game in progress!", flags: MessageFlags.Ephemeral })
         }
 
         const name = interaction.options.getString('name')
@@ -19,19 +20,19 @@ class Gain {
 
         // Check if tokens exist
         if (!gameData.tokens || !gameData.tokens.length) {
-            return await interaction.reply({ content: "No tokens exist in this game!", ephemeral: true })
+            return await interaction.reply({ content: "No tokens exist in this game!", flags: MessageFlags.Ephemeral })
         }
 
         // Find the token
         const token = find(gameData.tokens, { name })
         if (!token) {
-            return await interaction.reply({ content: `Token "${name}" not found!`, ephemeral: true })
+            return await interaction.reply({ content: `Token "${name}" not found!`, flags: MessageFlags.Ephemeral })
         }
 
         // Find the player
         const player = find(gameData.players, { userId: interaction.user.id })
         if (!player) {
-            return await interaction.reply({ content: "You're not in this game!", ephemeral: true })
+            return await interaction.reply({ content: "You're not in this game!", flags: MessageFlags.Ephemeral })
         }
 
         const tokenCap = token.cap; // Assuming 'cap' was added in the previous step
@@ -52,7 +53,7 @@ class Gain {
             if (amount > availableTokens) {
                 return await interaction.reply({
                     content: `Cannot gain ${amount} ${name} token(s). Doing so would exceed the cap of ${tokenCap}. Currently, ${totalTokensHeldByAllPlayers} are in circulation, so only ${availableTokens > 0 ? availableTokens : 0} more can be gained.`,
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
         }
@@ -95,9 +96,7 @@ class Gain {
         const displayName = interaction.guild.members.cache.get(player.userId)?.displayName ?? player.name ?? player.userId
 
         return await interaction.reply({ 
-            content: `${displayName} gained ${amount} ${name} token(s)`,
-            ephemeral: false
-        })
+            content: `${displayName} gained ${amount} ${name} token(s)`})
     }
 }
 

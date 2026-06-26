@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const { cloneDeep } = require('lodash')
 const fetch = require("node-fetch");
@@ -46,7 +47,7 @@ class AddLink {
         if (isNaN(search)){
           await interaction.reply({
             content: `Please choose from the available options`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           })
           return
         }
@@ -66,7 +67,7 @@ class AddLink {
 
         await interaction.reply({
           content: `Added link [${name}](${url})`,
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         })
       }
 

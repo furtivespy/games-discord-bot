@@ -9,7 +9,7 @@ class PileCreate {
         const gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
@@ -19,7 +19,7 @@ class PileCreate {
         // Check if pile with same name already exists
         const existingPile = GameHelper.getGlobalPile(gameData, pileName)
         if (existingPile) {
-            await interaction.editReply({ content: `A pile named "${pileName}" already exists!`, ephemeral: true })
+            await interaction.editReply({ content: `A pile named "${pileName}" already exists!`})
             return
         }
 

@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { find, cloneDeep, shuffle } = require('lodash')
@@ -19,7 +20,7 @@ class builderNew {
 
     } else {
       if (gameData.isdeleted) {
-        await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
+        await interaction.reply({ content: `There is no game in this channel.`, flags: MessageFlags.Ephemeral })
         return
       }
       await interaction.deferReply();

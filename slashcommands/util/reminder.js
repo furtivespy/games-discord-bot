@@ -1,5 +1,5 @@
 const SlashCommand = require('../../base/SlashCommand.js');
-const { SlashCommandBuilder } = require('discord.js');
+const {SlashCommandBuilder, MessageFlags} = require('discord.js');
 const chrono = require('chrono-node');
 const { randomUUID } = require('crypto');
 const moment = require('moment-timezone');
@@ -53,7 +53,7 @@ class Reminder extends SlashCommand {
       if (!parsedDate || isNaN(parsedDate.getTime())) {
         return interaction.reply({
           content: `I couldn't understand when "${when}" is. Please try a different format like "in 5 minutes" or "tomorrow at 3pm".`,
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -62,14 +62,14 @@ class Reminder extends SlashCommand {
       if (parsedDate.getTime() - now.getTime() > oneYear) {
         return interaction.reply({
             content: `Please set a reminder less than 1 year in the future.`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
       }
       if (parsedDate <= referenceDate) {
         const parsedInUserTz = moment(parsedDate).tz(userTimezone).format('LLLL z');
         return interaction.reply({
           content: `That time (${parsedInUserTz}) is in the past! Please choose a future time.`,
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -98,9 +98,9 @@ class Reminder extends SlashCommand {
     } catch (e) {
       this.client.logger.error(e);
       if (interaction.replied || interaction.deferred) {
-          await interaction.followUp({ content: 'An error occurred while setting the reminder.', ephemeral: true });
+          await interaction.followUp({ content: 'An error occurred while setting the reminder.', flags: MessageFlags.Ephemeral });
       } else {
-          await interaction.reply({ content: 'An error occurred while setting the reminder.', ephemeral: true });
+          await interaction.reply({ content: 'An error occurred while setting the reminder.', flags: MessageFlags.Ephemeral });
       }
     }
   }

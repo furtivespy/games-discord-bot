@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const { cloneDeep, find } = require('lodash')
 
@@ -13,9 +14,9 @@ class Check {
         let myData = find(secretData.players, {'userId': interaction.user.id})
 
         if (myData && myData.hassecret){
-            await interaction.reply({ content: `Your Secret Info:\n${myData.secret}`, ephemeral: true })
+            await interaction.reply({ content: `Your Secret Info:\n${myData.secret}`, flags: MessageFlags.Ephemeral })
         } else {
-            await interaction.reply({ content: `You don't have any secrets yet.`, ephemeral: true })
+            await interaction.reply({ content: `You don't have any secrets yet.`, flags: MessageFlags.Ephemeral })
         }
 
     }

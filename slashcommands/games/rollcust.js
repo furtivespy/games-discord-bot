@@ -1,5 +1,5 @@
 const SlashCommand = require("../../base/SlashCommand.js");
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const {SlashCommandBuilder, EmbedBuilder, MessageFlags} = require("discord.js");
 const _ = require("lodash");
 
 class RollCust extends SlashCommand {
@@ -65,7 +65,7 @@ class RollCust extends SlashCommand {
       if (!die) {
         return interaction.reply({
           content: `Custom die "${name}" not found.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -117,9 +117,9 @@ class RollCust extends SlashCommand {
       // Autocomplete shouldn't reply, but execute should
       if (!interaction.isAutocomplete()) {
           if (interaction.replied || interaction.deferred) {
-              await interaction.followUp({ content: `An error occurred: ${e.message}`, ephemeral: true });
+              await interaction.followUp({ content: `An error occurred: ${e.message}`, flags: MessageFlags.Ephemeral });
           } else {
-              await interaction.reply({ content: `An error occurred: ${e.message}`, ephemeral: true });
+              await interaction.reply({ content: `An error occurred: ${e.message}`, flags: MessageFlags.Ephemeral });
           }
       }
     }

@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const Formatter = require('../../modules/GameFormatter')
@@ -20,7 +21,7 @@ class Remove {
     } else {
 
       if (gameData.isdeleted) {
-        await interaction.reply({ content: `There is no game in this channel.`, ephemeral: true })
+        await interaction.reply({ content: `There is no game in this channel.`, flags: MessageFlags.Ephemeral })
         return
       }
       let playerDeck = GameHelper.getSpecificDeck(gameData, null, interaction.user.id)
@@ -29,7 +30,7 @@ class Remove {
       let handCard = find(currentPlayer.hands.main, {id: cardid})
       let deckCard = find(playerDeck.allCards, {id: cardid})
       if (!handCard || !deckCard){
-        await interaction.reply({ content: "Couldn't find card to remove", ephemeral: true })
+        await interaction.reply({ content: "Couldn't find card to remove", flags: MessageFlags.Ephemeral })
         return
       }
 
@@ -76,12 +77,12 @@ class Remove {
           await interaction.followUp({ 
               embeds: [...handInfo.embeds],
               files: [...handInfo.attachments],
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
           })  
       } else {
           await interaction.followUp({ 
               embeds: [...handInfo.embeds],
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
           })  
       }
     }

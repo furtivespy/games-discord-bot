@@ -1,5 +1,5 @@
 const SlashCommand = require("../../base/SlashCommand.js");
-const { SlashCommandBuilder } = require("discord.js");
+const {SlashCommandBuilder, MessageFlags} = require("discord.js");
 const { createGeminiAI } = require("../../modules/GoogleGemini.js");
 const GameHelper = require("../../modules/GlobalGameHelper.js");
 const BoardGameGeek = require('../../modules/BoardGameGeek')
@@ -70,7 +70,7 @@ class Rules extends SlashCommand {
       if (interaction.deferred) {
         await interaction.editReply({ content: errorMessage });
       } else {
-        await interaction.reply({ content: errorMessage, ephemeral: true });
+        await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
       }
     }
   }

@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js');
 const { find } = require('lodash');
 const Formatter = require('../../modules/GameFormatter');
@@ -9,7 +10,7 @@ class Test {
         const gameData = await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId);
 
         if (!gameData || gameData.isdeleted) {
-            return await interaction.editReply({ content: "No game in progress!", ephemeral: true });
+            return await interaction.editReply({ content: "No game in progress!"});
         }
 
         const player = find(gameData.players, { userId: interaction.user.id });
@@ -20,7 +21,7 @@ class Test {
         if (secretTokensEmbed) {
             await interaction.followUp({
                 embeds: [secretTokensEmbed],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             }).catch(e => console.error("Error sending secret token followup in test command:", e));
         }
     }

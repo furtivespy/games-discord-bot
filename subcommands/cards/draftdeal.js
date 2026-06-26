@@ -21,7 +21,7 @@ class Deal {
         let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
@@ -31,7 +31,7 @@ class Deal {
 
         const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
         if (!deck || deck.piles.draw.cards.length + deck.piles.discard.cards.length < 1){
-            await interaction.editReply({ content: `No cards to deal.`, ephemeral: true })
+            await interaction.editReply({ content: `No cards to deal.`})
             return
         } 
         

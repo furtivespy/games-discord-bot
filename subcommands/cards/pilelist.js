@@ -1,19 +1,19 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
-const { EmbedBuilder } = require('discord.js')
+const {EmbedBuilder, MessageFlags} = require('discord.js')
 
 class PileList {
     async execute(interaction, client) {
-        await interaction.deferReply({ ephemeral: true })
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
         
         const gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
         if (!gameData.globalPiles || gameData.globalPiles.length === 0) {
-            await interaction.editReply({ content: `No global piles have been created yet. Use \`/cards pile create\` to make one!`, ephemeral: true })
+            await interaction.editReply({ content: `No global piles have been created yet. Use \`/cards pile create\` to make one!`})
             return
         }
 
@@ -43,7 +43,7 @@ class PileList {
             })
         })
 
-        await interaction.editReply({ embeds: [embed], ephemeral: true })
+        await interaction.editReply({ embeds: [embed]})
     }
 }
 

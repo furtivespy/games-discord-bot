@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const SlashCommand = require('../../base/SlashCommand.js')
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const Add = require(`../../subcommands/players/add`)
@@ -127,7 +128,7 @@ class Players extends SlashCommand {
                     await Help.execute(interaction, this.client)
                     break
                 default:
-                    await interaction.reply({ content: "Something Went Wrong!?!?!?", ephemeral: true })
+                    await interaction.reply({ content: "Something Went Wrong!?!?!?", flags: MessageFlags.Ephemeral })
             }
         } catch (e) {
             this.client.logger.log(e,'error')

@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const { find } = require('lodash')
 const GameDB = require('../../db/anygame')
 const GameHelper = require('../../modules/GlobalGameHelper')
@@ -11,7 +12,7 @@ class Lose {
         )
 
         if (gameData.isdeleted) {
-            return await interaction.reply({ content: "No game in progress!", ephemeral: true })
+            return await interaction.reply({ content: "No game in progress!", flags: MessageFlags.Ephemeral })
         }
 
         const name = interaction.options.getString('name')
@@ -19,19 +20,19 @@ class Lose {
 
         // Check if tokens exist
         if (!gameData.tokens || !gameData.tokens.length) {
-            return await interaction.reply({ content: "No tokens exist in this game!", ephemeral: true })
+            return await interaction.reply({ content: "No tokens exist in this game!", flags: MessageFlags.Ephemeral })
         }
 
         // Find the token
         const token = find(gameData.tokens, { name })
         if (!token) {
-            return await interaction.reply({ content: `Token "${name}" not found!`, ephemeral: true })
+            return await interaction.reply({ content: `Token "${name}" not found!`, flags: MessageFlags.Ephemeral })
         }
 
         // Find the player
         const player = find(gameData.players, { userId: interaction.user.id })
         if (!player) {
-            return await interaction.reply({ content: "You're not in this game!", ephemeral: true })
+            return await interaction.reply({ content: "You're not in this game!", flags: MessageFlags.Ephemeral })
         }
 
         // Initialize tokens object if it doesn't exist
@@ -42,7 +43,7 @@ class Lose {
         if (currentAmount < amount) {
             return await interaction.reply({ 
                 content: `You don't have enough ${name} tokens! You have ${currentAmount}.`,
-                ephemeral: true 
+                flags: MessageFlags.Ephemeral 
             })
         }
 
@@ -78,9 +79,7 @@ class Lose {
         const displayName = interaction.guild.members.cache.get(player.userId)?.displayName ?? player.name ?? player.userId
 
         return await interaction.reply({ 
-            content: `${displayName} lost ${amount} ${name} token(s)`,
-            ephemeral: false
-        })
+            content: `${displayName} lost ${amount} ${name} token(s)`})
     }
 }
 

@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const { sortBy, find, filter, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
@@ -27,14 +28,14 @@ class Reveal {
         let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
         const cardid = interaction.options.getString('card')
         let player = find(gameData.players, {userId: interaction.user.id})
         if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
-            await interaction.editReply({ content: "Something is broken!?", ephemeral: true })
+            await interaction.editReply({ content: "Something is broken!?"})
             return
         }
         
@@ -75,12 +76,12 @@ class Reveal {
             await interaction.followUp({ 
                 embeds: [...handInfo.embeds],
                 files: [...handInfo.attachments],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })  
         } else {
             await interaction.followUp({ 
                 embeds: [...handInfo.embeds],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })  
         }
     }

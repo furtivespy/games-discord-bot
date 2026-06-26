@@ -50,9 +50,7 @@ class Mode {
                 mode === 'super-secret' 
                     ? '🔒 Super Secret Mode:\n• Secret entries are ephemeral (only you see them)\n• Shows count of secrets entered, not who entered them\n• Revealed secrets are wrapped in spoiler tags' 
                     : '👁️ Normal Mode:\n• Secret entries are visible to all\n• Shows who has entered secrets\n• Revealed secrets are shown normally'
-            }`,
-            ephemeral: false
-        })
+            }`})
     }
 }
 

@@ -21,7 +21,7 @@ class Flip {
         let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
@@ -31,7 +31,7 @@ class Flip {
         const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
 
         if (!deck || deck.piles.draw.cards.length < 1){
-            await interaction.editReply({ content: "No cards in draw pile", ephemeral: true })
+            await interaction.editReply({ content: "No cards in draw pile"})
             return
         } 
 
@@ -55,7 +55,7 @@ class Flip {
             if (!pile) {
                 // Return card to deck if pile not found
                 deck.piles.draw.cards.unshift(theCard)
-                await interaction.editReply({ content: 'Pile not found!', ephemeral: true })
+                await interaction.editReply({ content: 'Pile not found!'})
                 return
             }
             pile.cards.push(theCard)

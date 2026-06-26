@@ -11,9 +11,7 @@ class Color {
 
         if (gameData.isdeleted) {
             await interaction.editReply({
-                content: `No active game in this channel.`,
-                ephemeral: true
-            })
+                content: `No active game in this channel.`})
             return
         }
 
@@ -24,9 +22,7 @@ class Color {
         const player = find(gameData.players, { userId: targetPlayer.id })
         if (!player) {
             await interaction.editReply({
-                content: `${targetPlayer} is not in this game!`,
-                ephemeral: true
-            })
+                content: `${targetPlayer} is not in this game!`})
             return
         }
 

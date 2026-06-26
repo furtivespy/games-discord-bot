@@ -1,7 +1,7 @@
 const GameDB = require('../../db/anygame.js')
-const { cloneDeep, find, findIndex } = require('lodash')
+const {cloneDeep, find, findIndex } = require('lodash')
 const fetch = require("node-fetch");
-const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js')
+const { StringSelectMenuBuilder, ActionRowBuilder, MessageFlags} = require('discord.js')
 
 class RemoveImage {
     async execute(interaction, client) {
@@ -46,7 +46,7 @@ class RemoveImage {
         if (isNaN(search)){
           await interaction.reply({
             content: `Please choose from the available options`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           })
           return
         }
@@ -58,7 +58,7 @@ class RemoveImage {
         );
 
         if (gameData.attachments.length < 1){
-          await interaction.reply({ content: `There are no attachments to remove.`, ephemeral: true })
+          await interaction.reply({ content: `There are no attachments to remove.`, flags: MessageFlags.Ephemeral })
           return  
         }
         console.log(gameData.attachments)
@@ -76,7 +76,7 @@ class RemoveImage {
         const row = new ActionRowBuilder()
             .addComponents(select)
 
-        const LinksSelected = await interaction.reply({ content: `Choose Images to Remove:`, components: [row], ephemeral: true, fetchReply: true })
+        const LinksSelected = await interaction.reply({ content: `Choose Images to Remove:`, components: [row], flags: MessageFlags.Ephemeral, fetchReply: true })
         
         const filter = i => i.user.id === interaction.user.id && i.customId === 'images'
         let removal = []
@@ -106,7 +106,7 @@ class RemoveImage {
         await client.setGameDataV2(interaction.guildId, "bgg", search, gameData)
         await interaction.followUp({
           content: `Results:\n${removed}`,
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         })
       }
 

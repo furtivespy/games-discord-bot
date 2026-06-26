@@ -18,16 +18,12 @@ class History {
 
             if (gameData.isdeleted) {
                 return await interaction.editReply({ 
-                    content: "No active game found in this channel. Start a new game first!", 
-                    ephemeral: true 
-                })
+                    content: "No active game found in this channel. Start a new game first!"})
             }
 
             if (!gameData.history || gameData.history.length === 0) {
                 return await interaction.editReply({ 
-                    content: "No history available yet. Game actions will be recorded here as players take turns!", 
-                    ephemeral: true 
-                })
+                    content: "No history available yet. Game actions will be recorded here as players take turns!"})
             }
 
             // Get and validate filter options
@@ -40,18 +36,14 @@ class History {
 
             if (filteredHistory.length === 0) {
                 return await interaction.editReply({ 
-                    content: this.getNoResultsMessage(categoryFilter, playerFilter, interaction), 
-                    ephemeral: true 
-                })
+                    content: this.getNoResultsMessage(categoryFilter, playerFilter, interaction)})
             }
 
             // Validate page bounds against filtered results
             const totalPages = Math.ceil(filteredHistory.length / this.PAGE_SIZE)
             if (page > totalPages) {
                 return await interaction.editReply({
-                    content: `Page ${page} doesn't exist. This game has ${totalPages} page${totalPages !== 1 ? 's' : ''} of history.`,
-                    ephemeral: true
-                })
+                    content: `Page ${page} doesn't exist. This game has ${totalPages} page${totalPages !== 1 ? 's' : ''} of history.`})
             }
 
             // Paginate
@@ -70,9 +62,7 @@ class History {
 
             if (!historyEmbed) {
                 await interaction.editReply({ 
-                    content: "No history entries to display for this page.", 
-                    ephemeral: true 
-                })
+                    content: "No history entries to display for this page."})
                 return
             }
 
@@ -88,9 +78,7 @@ class History {
         } catch (error) {
             client.logger.log(`Error in history command: ${error.message}`, 'error')
             await interaction.editReply({
-                content: "An error occurred while retrieving game history. Please try again.",
-                ephemeral: true
-            })
+                content: "An error occurred while retrieving game history. Please try again."})
         }
     }
 

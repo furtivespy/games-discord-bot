@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find, random } = require('lodash')
@@ -11,20 +12,20 @@ class Steal {
         let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
         let player = find(gameData.players, {userId: interaction.user.id})
         if (!player){
-            await interaction.editReply({ content: "I don't think you're playing this game...", ephemeral: true })
+            await interaction.editReply({ content: "I don't think you're playing this game..."})
             return
         }
 
         let selectedPlayer = interaction.options.getUser('target')
         let targetPlayer = find(gameData.players, {userId: selectedPlayer.id})
         if (!targetPlayer || targetPlayer.hands.main.length < 1){
-            await interaction.editReply({ content: "I don't think you're target player is playing this game...", ephemeral: true })
+            await interaction.editReply({ content: "I don't think you're target player is playing this game..."})
             return
         }
 
@@ -65,13 +66,13 @@ class Steal {
                 content: `You Stole:`, 
                 embeds: [Formatter.oneCard(stolen[0]), ...handInfo.embeds],
                 files: [...handInfo.attachments],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })  
         } else {
             await interaction.followUp({ 
                 content: `You Stole:`, 
                 embeds: [Formatter.oneCard(stolen[0]), ...handInfo.embeds],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })  
         }
     }

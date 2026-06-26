@@ -1,8 +1,8 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
-const { find, findIndex } = require('lodash')
+const {find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
-const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js')
+const { StringSelectMenuBuilder, ActionRowBuilder, MessageFlags} = require('discord.js')
 
 class Pick {
   async execute(interaction, client) {
@@ -12,7 +12,7 @@ class Pick {
         return
     }
 
-    await interaction.deferReply({ ephemeral: true })
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral })
     
     let gameData = await GameHelper.getGameData(client, interaction)
     const inputDeck = interaction.options.getString('deck')
@@ -20,12 +20,12 @@ class Pick {
     let player = find(gameData.players, {userId: interaction.user.id})
     
     if (!player){
-        await interaction.editReply({ content: "Something is broken!?", ephemeral: true })
+        await interaction.editReply({ content: "Something is broken!?"})
         return
     }
 
     if (deck.piles.discard.cards.length < 1) {
-        await interaction.editReply({ content: "No cards to pick up", ephemeral: true })
+        await interaction.editReply({ content: "No cards to pick up"})
         return
     }
 
@@ -42,7 +42,7 @@ class Pick {
 
     const row = new ActionRowBuilder().addComponents(select)
 
-    const CardsSelected = await interaction.editReply({ content: `Choose cards to pick:`, components: [row], ephemeral: true, fetchReply: true })
+    const CardsSelected = await interaction.editReply({ content: `Choose cards to pick:`, components: [row],  fetchReply: true })
     
     const filter = i => i.user.id === interaction.user.id && i.customId === 'card'
     let pickedCards = []

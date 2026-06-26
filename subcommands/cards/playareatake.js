@@ -1,41 +1,41 @@
 const GameHelper = require('../../modules/GlobalGameHelper');
 const GameDB = require('../../db/anygame.js');
 const Formatter = require('../../modules/GameFormatter');
-const { find, pullAllWith, isEqual } = require('lodash'); // Using pullAllWith for removing multiple items
-const { EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder, SlashCommandUserOption } = require('discord.js');
+const {find, pullAllWith, isEqual } = require('lodash'); // Using pullAllWith for removing multiple items
+const { EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder, SlashCommandUserOption, MessageFlags} = require('discord.js');
 
 module.exports = {
     // Subcommand data will be part of the main /cards command builder
     // It needs a user option: .addUserOption(option => option.setName('target').setDescription('The player to take cards from').setRequired(true))
 
     async execute(interaction, client) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const gameData = await GameHelper.getGameData(client, interaction);
         if (gameData.isdeleted) {
-            return interaction.editReply({ content: "No active game found in this channel.", ephemeral: true });
+            return interaction.editReply({ content: "No active game found in this channel."});
         }
 
         const initiator = find(gameData.players, { userId: interaction.user.id });
         if (!initiator) {
-            return interaction.editReply({ content: "You don't seem to be a player in the current game.", ephemeral: true });
+            return interaction.editReply({ content: "You don't seem to be a player in the current game."});
         }
 
         const targetUser = interaction.options.getUser('target');
         if (!targetUser) {
-            return interaction.editReply({ content: "You must specify a target player.", ephemeral: true });
+            return interaction.editReply({ content: "You must specify a target player."});
         }
         if (targetUser.id === interaction.user.id) {
-            return interaction.editReply({ content: "You cannot take cards from yourself. Use `/cards playarea pick` instead.", ephemeral: true });
+            return interaction.editReply({ content: "You cannot take cards from yourself. Use `/cards playarea pick` instead."});
         }
 
         const targetPlayer = find(gameData.players, { userId: targetUser.id });
         if (!targetPlayer) {
-            return interaction.editReply({ content: `${targetUser.username} is not a player in the current game.`, ephemeral: true });
+            return interaction.editReply({ content: `${targetUser.username} is not a player in the current game.`});
         }
 
         if (!targetPlayer.playArea || targetPlayer.playArea.length === 0) {
-            return interaction.editReply({ content: `${targetUser.username}'s play area is currently empty. Nothing to take.`, ephemeral: true });
+            return interaction.editReply({ content: `${targetUser.username}'s play area is currently empty. Nothing to take.`});
         }
 
         const options = targetPlayer.playArea.map((card, index) => ({
@@ -45,7 +45,7 @@ module.exports = {
         }));
 
         if (options.length > 25) {
-            await interaction.editReply({ content: `${targetUser.username}'s play area has too many cards to display in a single list for now. Only the first 25 are shown.`, ephemeral: true });
+            await interaction.editReply({ content: `${targetUser.username}'s play area has too many cards to display in a single list for now. Only the first 25 are shown.`});
             // No return, allow picking from the first 25.
         }
 
@@ -60,9 +60,7 @@ module.exports = {
 
         const selectionMessage = await interaction.editReply({
             content: `Which card(s) would you like to take from ${targetUser.username}'s play area?`,
-            components: [row],
-            ephemeral: true
-        });
+            components: [row]});
 
         const collectorFilter = i => i.user.id === interaction.user.id && i.customId === 'playarea_take_select';
         try {
@@ -84,7 +82,7 @@ module.exports = {
 
 
             if (takenCards.length === 0) {
-                await selectionInteraction.update({ content: "No valid cards were selected or an error occurred.", components: [], ephemeral: true });
+                await selectionInteraction.update({ content: "No valid cards were selected or an error occurred.", components: []});
                 return;
             }
 
@@ -134,9 +132,7 @@ module.exports = {
                 publicFollowUpContent = `${interaction.member.displayName} took ${takenCards.length} card(s) from ${targetUser.username}'s play area. (Card list too long to display).`;
             }
             await interaction.followUp({
-                content: publicFollowUpContent,
-                ephemeral: false
-            });
+                content: publicFollowUpContent});
 
             // Display updated play areas (could be combined or sent separately)
             const initiatorPlayAreaEmbed = new EmbedBuilder().setTitle("Your Updated Play Area").setColor(initiator.color || 13502711);
@@ -152,16 +148,15 @@ module.exports = {
             await interaction.followUp({
                 content: "Updated play area statuses:",
                 embeds: [initiatorPlayAreaEmbed, targetPlayAreaEmbed].filter(e => e.data.fields && e.data.fields.length > 0 || e.data.image), // Only send embeds with content
-                files: statusFiles,
-                ephemeral: false // Changed to public for transparency of game state change
+                files: statusFiles
             });
 
         } catch (e) {
             if (e.code === 'InteractionCollectorError') {
-                await interaction.editReply({ content: 'Card selection timed out.', components: [], ephemeral: true });
+                await interaction.editReply({ content: 'Card selection timed out.', components: []});
             } else {
                 client.logger.log(e, 'error');
-                await interaction.editReply({ content: 'An error occurred during card selection for taking.', components: [], ephemeral: true });
+                await interaction.editReply({ content: 'An error occurred during card selection for taking.', components: []});
             }
         }
     }

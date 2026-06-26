@@ -1,21 +1,22 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
+const { MessageFlags } = require('discord.js')
 
 class Show {
     async execute(interaction, client) {
-        await interaction.deferReply({ ephemeral: true })
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
         
         let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
         let player = find(gameData.players, {userId: interaction.user.id})
         if (!player){
-            await interaction.editReply({ content: "I don't think you're playing this game...", ephemeral: true })
+            await interaction.editReply({ content: "I don't think you're playing this game..."})
             return
         }
 
@@ -27,14 +28,11 @@ class Show {
         if (handInfo.attachments.length >0){
             await interaction.editReply({ 
                 embeds: handInfo.embeds, // Use potentially modified embeds array
-                files: [...handInfo.attachments],
-                ephemeral: true
-            })  
+                files: [...handInfo.attachments]})  
         } else {
             await interaction.editReply({ 
                 embeds: handInfo.embeds, // Use potentially modified embeds array
-                ephemeral: true
-            })  
+})  
         }
     }
 }

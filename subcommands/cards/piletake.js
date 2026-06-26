@@ -1,8 +1,8 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
-const { find, findIndex } = require('lodash')
+const {find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
-const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js')
+const { StringSelectMenuBuilder, ActionRowBuilder, MessageFlags} = require('discord.js')
 
 class PileTake {
     async execute(interaction, client) {
@@ -13,7 +13,7 @@ class PileTake {
             return
         }
 
-        await interaction.deferReply({ ephemeral: true })
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
         
         const gameData = await GameHelper.getGameData(client, interaction)
         const pileId = interaction.options.getString('pile')
@@ -21,18 +21,18 @@ class PileTake {
         const player = find(gameData.players, {userId: interaction.user.id})
         
         if (!player) {
-            await interaction.editReply({ content: "Something is broken!?", ephemeral: true })
+            await interaction.editReply({ content: "Something is broken!?"})
             return
         }
 
         const pile = GameHelper.getGlobalPile(gameData, pileId)
         if (!pile) {
-            await interaction.editReply({ content: `Pile not found!`, ephemeral: true })
+            await interaction.editReply({ content: `Pile not found!`})
             return
         }
 
         if (pile.cards.length < 1) {
-            await interaction.editReply({ content: `No cards in ${pile.name}!`, ephemeral: true })
+            await interaction.editReply({ content: `No cards in ${pile.name}!`})
             return
         }
 
@@ -51,8 +51,7 @@ class PileTake {
 
         const CardsSelected = await interaction.editReply({ 
             content: `Choose cards to take from ${pile.name}:`, 
-            components: [row], 
-            ephemeral: true, 
+            components: [row],  
             fetchReply: true 
         })
         

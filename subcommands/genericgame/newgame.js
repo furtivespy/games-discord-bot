@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, shuffle } = require('lodash')
@@ -9,7 +10,7 @@ class NewGame {
         let gameData = await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId);
 
         if (gameData && !gameData.isdeleted) {
-            await interaction.reply({ content: `There is an existing game in this channel. Delete it if you want to start a new one.`, ephemeral: true })
+            await interaction.reply({ content: `There is an existing game in this channel. Delete it if you want to start a new one.`, flags: MessageFlags.Ephemeral })
         } else {
             gameData = Object.assign(
                 {},

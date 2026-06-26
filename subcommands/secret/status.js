@@ -30,9 +30,7 @@ class Status {
                 : (gameData && gameData.players ? gameData.players.length : 0)
             
             await interaction.reply({ 
-                content: `🤐 **Super Secret Status:**\n${secretCount} of ${totalPlayers} players have entered secrets`,
-                ephemeral: false
-            })
+                content: `🤐 **Super Secret Status:**\n${secretCount} of ${totalPlayers} players have entered secrets`})
         } else {
             // In normal mode, show full status
             await interaction.reply({ 

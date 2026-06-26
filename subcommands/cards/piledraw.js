@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const { find } = require('lodash')
@@ -12,7 +13,7 @@ class PileDraw {
             return
         }
 
-        await interaction.deferReply({ ephemeral: true })
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
         
         const gameData = await GameHelper.getGameData(client, interaction)
         const pileId = interaction.options.getString('pile')
@@ -20,18 +21,18 @@ class PileDraw {
         const player = find(gameData.players, {userId: interaction.user.id})
         
         if (!player) {
-            await interaction.editReply({ content: "You must be a player in this game!", ephemeral: true })
+            await interaction.editReply({ content: "You must be a player in this game!"})
             return
         }
 
         const pile = GameHelper.getGlobalPile(gameData, pileId)
         if (!pile) {
-            await interaction.editReply({ content: `Pile not found!`, ephemeral: true })
+            await interaction.editReply({ content: `Pile not found!`})
             return
         }
 
         if (pile.cards.length < 1) {
-            await interaction.editReply({ content: `No cards in ${pile.name}!`, ephemeral: true })
+            await interaction.editReply({ content: `No cards in ${pile.name}!`})
             return
         }
 
@@ -69,13 +70,11 @@ class PileDraw {
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
         await interaction.editReply({ 
-            content: `You drew ${Formatter.cardShortName(drawnCard)} from ${pile.name}`,
-            ephemeral: true 
-        })
+            content: `You drew ${Formatter.cardShortName(drawnCard)} from ${pile.name}`})
 
         // Show updated hand
         const handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
-        const privateFollowup = { embeds: [...handInfo.embeds], ephemeral: true }
+        const privateFollowup = { embeds: [...handInfo.embeds], flags: MessageFlags.Ephemeral }
         if (handInfo.attachments.length > 0) {
             privateFollowup.files = [...handInfo.attachments]
         }

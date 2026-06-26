@@ -11,25 +11,19 @@ class HistoryAdd {
 
             if (gameData.isdeleted) {
                 return await interaction.editReply({ 
-                    content: "No active game found in this channel. Start a new game first!", 
-                    ephemeral: true 
-                })
+                    content: "No active game found in this channel. Start a new game first!"})
             }
 
             const text = interaction.options.getString('text')
             
             if (!text || text.trim().length === 0) {
                 return await interaction.editReply({
-                    content: "Please provide some text for the history entry.",
-                    ephemeral: true
-                })
+                    content: "Please provide some text for the history entry."})
             }
 
             if (text.length > 200) {
                 return await interaction.editReply({
-                    content: "History entry text must be 200 characters or less.",
-                    ephemeral: true
-                })
+                    content: "History entry text must be 200 characters or less."})
             }
 
             // Record the manual entry
@@ -50,18 +44,14 @@ class HistoryAdd {
             } catch (error) {
                 console.warn('Failed to record manual history entry:', error)
                 return await interaction.editReply({
-                    content: "Failed to add history entry. Please try again.",
-                    ephemeral: true
-                })
+                    content: "Failed to add history entry. Please try again."})
             }
 
             // Save game data
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
             await interaction.editReply({
-                content: `✅ Added to history: "${text.trim()}"`,
-                ephemeral: false
-            })
+                content: `✅ Added to history: "${text.trim()}"`})
 
         } catch (error) {
             console.error('Error in history add command:', error)
@@ -71,9 +61,7 @@ class HistoryAdd {
                 'An unexpected error occurred. Please try again.'
                 
             await interaction.editReply({
-                content: errorMessage,
-                ephemeral: true
-            })
+                content: errorMessage})
         }
     }
 }

@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 class Help {
     async execute(interaction, client) {
         const introduction_content = `🤑 **Welcome to the Money Zone!** 🤑
@@ -7,7 +8,7 @@ Here's a list of commands to help you navigate the world of moolah. Let's get th
 
         await interaction.reply({ 
             content: introduction_content,
-            ephemeral: true 
+            flags: MessageFlags.Ephemeral 
         });
 
         const commands_and_conclusion_content = `\n**Money Commands:**
@@ -25,7 +26,7 @@ Go forth and prosper (or at least have fun trying)! 🚀`;
 
         await interaction.followUp({
             content: commands_and_conclusion_content,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 }

@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 class Help {
     async execute(interaction, client) {
         const introduction_content = `👤 **Welcome to the Player Management Zone!** 👤
@@ -9,7 +10,7 @@ Here's a list of commands to get you started. They're super easy to use! 😉
 
         await interaction.reply({
             content: introduction_content,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
 
         const commands_chunk_1 = `*   **/players add** 🙋‍♀️ - The more the merrier! Adds a player to the game. Welcome aboard!
@@ -21,7 +22,7 @@ Here's a list of commands to get you started. They're super easy to use! 😉
 
         await interaction.followUp({
             content: commands_chunk_1,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
 
         const conclusion_content = `
@@ -29,7 +30,7 @@ Remember, managing players is key to a smooth game! If you have any questions, d
 
         await interaction.followUp({
             content: conclusion_content,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 }

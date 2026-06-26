@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const SlashCommand = require("../../base/SlashCommand.js");
 const { SlashCommandBuilder } = require("@discordjs/builders");
 const Roller = require("roll");
@@ -72,7 +73,7 @@ class Roll extends SlashCommand {
           content: `I don't know how to roll ${interaction.options.getString(
             "dice"
           )}`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
     } catch (e) {

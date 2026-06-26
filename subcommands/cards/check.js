@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const Formatter = require('../../modules/GameFormatter')
@@ -14,14 +15,14 @@ class Check {
 
             let gameData = await GameHelper.getGameData(client, interaction)
             if (gameData.isdeleted) {
-                await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+                await interaction.editReply({ content: `There is no game in this channel.`})
                 return
             }
 
             const inputDeck = interaction.options.getString('deck')
             const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
             if (!deck){
-                await interaction.editReply({ content: `No deck found.`, ephemeral: true })
+                await interaction.editReply({ content: `No deck found.`})
                 return
             } 
 
@@ -31,7 +32,7 @@ class Check {
                 content: `${interaction.member.displayName} is looking at the ${deck.name} discard pile`
             })
 
-            await interaction.followUp({ embeds: [...followup[0]], files: [...followup[1]], ephemeral: true })
+            await interaction.followUp({ embeds: [...followup[0]], files: [...followup[1]], flags: MessageFlags.Ephemeral })
         }
     }
 }

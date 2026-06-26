@@ -49,7 +49,7 @@ class ReleaseNotes extends SlashCommand {
       }
 
       if (release.message === "Not Found") {
-        await interaction.editReply({ content: `Release notes for version ${version} not found.`, ephemeral: true });
+        await interaction.editReply({ content: `Release notes for version ${version} not found.`});
         return;
       }
 
@@ -66,7 +66,7 @@ class ReleaseNotes extends SlashCommand {
 
     } catch (e) {
       this.client.logger.log(e, "error");
-      await interaction.editReply({ content: "An error occurred while fetching release notes.", ephemeral: true });
+      await interaction.editReply({ content: "An error occurred while fetching release notes."});
     }
   }
 }

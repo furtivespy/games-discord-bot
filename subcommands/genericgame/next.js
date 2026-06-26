@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 //Alerts the next player in turn order that it is their turn
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { find } = require('lodash')
@@ -11,7 +12,7 @@ class Next {
     if (gameData.isdeleted) {
       await interaction.reply({
         content: `No game in progress`,
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       })
       return
     }
@@ -20,7 +21,7 @@ class Next {
     if (!player){
       await interaction.reply({
         content: `You're not playing in this game!`,
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       })
       return
     }
@@ -41,7 +42,7 @@ class Next {
     if (!next){
       await interaction.reply({
         content: `Something went wrong!`,
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       })
       return
     }

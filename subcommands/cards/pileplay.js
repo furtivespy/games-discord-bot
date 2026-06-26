@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const { find, findIndex } = require('lodash')
@@ -28,7 +29,7 @@ class PilePlay {
         const gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
@@ -37,13 +38,13 @@ class PilePlay {
         
         const player = find(gameData.players, {userId: interaction.user.id})
         if (!player || findIndex(player.hands.main, {id: cardId}) === -1) {
-            await interaction.editReply({ content: "You don't have that card!", ephemeral: true })
+            await interaction.editReply({ content: "You don't have that card!"})
             return
         }
 
         const pile = GameHelper.getGlobalPile(gameData, pileId)
         if (!pile) {
-            await interaction.editReply({ content: `Pile not found!`, ephemeral: true })
+            await interaction.editReply({ content: `Pile not found!`})
             return
         }
 
@@ -98,7 +99,7 @@ class PilePlay {
 
         // Private follow-up with hand
         const handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
-        const privateFollowup = { embeds: [...handInfo.embeds], ephemeral: true }
+        const privateFollowup = { embeds: [...handInfo.embeds], flags: MessageFlags.Ephemeral }
         if (handInfo.attachments.length > 0) {
             privateFollowup.files = [...handInfo.attachments]
         }

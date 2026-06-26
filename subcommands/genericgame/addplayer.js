@@ -11,9 +11,7 @@ class AddPlayer {
 
         if (gameData.isdeleted) {
             await interaction.editReply({ 
-                content: `No active game in this channel`, 
-                ephemeral: true 
-            })
+                content: `No active game in this channel`})
             return
         }
 
@@ -22,9 +20,7 @@ class AddPlayer {
         // Check if player is already in the game
         if (find(gameData.players, { userId: newPlayer.id })) {
             await interaction.editReply({ 
-                content: `${newPlayer} is already in this game!`, 
-                ephemeral: true 
-            })
+                content: `${newPlayer} is already in this game!`})
             return
         }
 

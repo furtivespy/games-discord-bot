@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find } = require('lodash')
@@ -16,7 +17,7 @@ class Draw {
         let gameData = await GameHelper.getGameData(client, interaction)
         
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
@@ -24,7 +25,7 @@ class Draw {
         const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
 
         if (!deck || deck.piles.draw.cards.length < 1){
-            await interaction.editReply({ content: "No cards in draw pile", ephemeral: true })
+            await interaction.editReply({ content: "No cards in draw pile"})
             return
         } 
         const theCard = deck.piles.draw.cards.shift()
@@ -82,13 +83,13 @@ class Draw {
                 content: `You drew:`, 
                 embeds: [Formatter.oneCard(theCard), ...handInfo.embeds],
                 files: [...handInfo.attachments],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })  
         } else {
             await interaction.followUp({ 
                 content: `You drew:`, 
                 embeds: [Formatter.oneCard(theCard), ...handInfo.embeds],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })  
         }
     }

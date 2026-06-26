@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 
@@ -10,12 +11,12 @@ class PileConfigure {
             return
         }
 
-        await interaction.deferReply({ ephemeral: true })
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
         
         const gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
@@ -25,7 +26,7 @@ class PileConfigure {
 
         const pile = GameHelper.getGlobalPile(gameData, pileId)
         if (!pile) {
-            await interaction.editReply({ content: `Pile not found!`, ephemeral: true })
+            await interaction.editReply({ content: `Pile not found!`})
             return
         }
 
@@ -89,7 +90,7 @@ class PileConfigure {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-        await interaction.editReply({ content: `Pile "${pile.name}" is now **${changeDescription}**.`, ephemeral: true })
+        await interaction.editReply({ content: `Pile "${pile.name}" is now **${changeDescription}**.`})
     }
 }
 

@@ -1,36 +1,36 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
-const { find, findIndex } = require('lodash')
+const {find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
-const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js')
+const { StringSelectMenuBuilder, ActionRowBuilder, MessageFlags} = require('discord.js')
 
 class Pass {
     async execute(interaction, client) {
-        await interaction.deferReply({ ephemeral: true })
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
         
         let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
         let player = find(gameData.players, {userId: interaction.user.id})
         if (!player){
-            await interaction.editReply({ content: "You are not playing this game...", ephemeral: true })
+            await interaction.editReply({ content: "You are not playing this game..."})
             return
         }
 
         let selectedPlayer = interaction.options.getUser('target')
         let targetPlayer = find(gameData.players, {userId: selectedPlayer?.id})
         if (!targetPlayer || selectedPlayer.id === interaction.user.id) {
-            await interaction.editReply({ content: "The selected player is not in this game or is yourself.", ephemeral: true })
+            await interaction.editReply({ content: "The selected player is not in this game or is yourself."})
             return
         }
 
         if (player.hands.main.length < 1) {
-            await interaction.editReply({ content: "You have no cards to pass.", ephemeral: true })
+            await interaction.editReply({ content: "You have no cards to pass."})
             return
         }
 
@@ -99,7 +99,7 @@ class Pass {
             content: `You passed ${passedCardsObjects.length} card(s) to ${selectedPlayer.username}. Your hand is now:`,
             embeds: [...senderHandInfo.embeds],
             files: [...senderHandInfo.attachments],
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
 
         var receiverHandInfo = await Formatter.playerSecretHandAndImages(gameData, targetPlayer)

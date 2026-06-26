@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep } = require('lodash')
@@ -43,11 +44,11 @@ class Delete {
                 await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
                 await interaction.reply({ content: `Game Deleted!?` })
             } else {
-                await interaction.reply({ content: `No Active Game to Delete...`, ephemeral: true })
+                await interaction.reply({ content: `No Active Game to Delete...`, flags: MessageFlags.Ephemeral })
             }
 
         } else {
-            await interaction.reply({ content: `Nothing Deleted...`, ephemeral: true })
+            await interaction.reply({ content: `Nothing Deleted...`, flags: MessageFlags.Ephemeral })
         }
 
         

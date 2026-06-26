@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameHelper = require('../../modules/GlobalGameHelper')
 const Formatter = require('../../modules/GameFormatter')
 
@@ -10,12 +11,12 @@ class PilePeek {
             return
         }
 
-        await interaction.deferReply({ ephemeral: true })
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
         
         const gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
@@ -23,26 +24,24 @@ class PilePeek {
         const pile = GameHelper.getGlobalPile(gameData, pileId)
         
         if (!pile) {
-            await interaction.editReply({ content: `Pile not found!`, ephemeral: true })
+            await interaction.editReply({ content: `Pile not found!`})
             return
         }
 
         if (pile.cards.length === 0) {
-            await interaction.editReply({ content: `${pile.name} is empty.`, ephemeral: true })
+            await interaction.editReply({ content: `${pile.name} is empty.`})
             return
         }
 
         let followup = await Formatter.multiCard(pile.cards, `All Cards in ${pile.name}`)
 
         await interaction.editReply({ 
-            content: `Peeking at ${pile.name} (${pile.cards.length} cards)${pile.isSecret ? ' 🔒' : ''}`,
-            ephemeral: true 
-        })
+            content: `Peeking at ${pile.name} (${pile.cards.length} cards)${pile.isSecret ? ' 🔒' : ''}`})
 
         await interaction.followUp({ 
             embeds: [...followup[0]], 
             files: [...followup[1]], 
-            ephemeral: true 
+            flags: MessageFlags.Ephemeral 
         })
     }
 }

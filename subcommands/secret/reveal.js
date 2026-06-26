@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep } = require('lodash')
@@ -61,11 +62,11 @@ class Reveal {
                     embeds: [await Formatter.SecretStatus(secretData, interaction.guild, gameData)]
                 })
             } else {
-                await interaction.reply({ content: `Nothing to reveal...`, ephemeral: true })
+                await interaction.reply({ content: `Nothing to reveal...`, flags: MessageFlags.Ephemeral })
             }
 
         } else {
-            await interaction.reply({ content: `Nothing revealed...`, ephemeral: true })
+            await interaction.reply({ content: `Nothing revealed...`, flags: MessageFlags.Ephemeral })
         }
 
     }

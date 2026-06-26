@@ -1,7 +1,8 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
-const { sortBy, find, filter, findIndex } = require('lodash')
+const {sortBy, find, filter, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameDB = require('../../db/anygame')
+const { EmbedBuilder, MessageFlags } = require('discord.js')
 
 class Play {
     async execute(interaction, client) {
@@ -32,7 +33,7 @@ class Play {
         let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
@@ -41,7 +42,7 @@ class Play {
         
         let player = find(gameData.players, {userId: interaction.user.id})
         if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
-            await interaction.editReply({ content: "Something is broken!?", ephemeral: true })
+            await interaction.editReply({ content: "Something is broken!?"})
             return
         }
         
@@ -82,7 +83,7 @@ class Play {
                  // Fallback if deck/discard not found - return to hand
                  player.hands.main.splice(cardIndex, 0, cardToPlay)
                  client.logger.log(`Error: Deck or discard pile not found for card origin '${cardToPlay.origin}' in /cards play.`, 'error')
-                 await interaction.editReply({ content: `Error: Could not find the discard pile. Card returned to hand.`, ephemeral: true })
+                 await interaction.editReply({ content: `Error: Could not find the discard pile. Card returned to hand.`, flags: MessageFlags.Ephemeral })
                  return
              }
         } else {
@@ -95,7 +96,7 @@ class Play {
             } else {
                 // Pile not found
                 player.hands.main.splice(cardIndex, 0, cardToPlay)
-                await interaction.editReply({ content: 'Destination not found (Pile or other)!', ephemeral: true })
+                await interaction.editReply({ content: 'Destination not found (Pile or other)!', flags: MessageFlags.Ephemeral })
                 return
             }
         }
@@ -133,9 +134,7 @@ class Play {
         const replyFiles = [];
 
         // If played to playarea, show updated playarea
-        // Wait, if played to playarea, we should probably update the generic playarea display if possible or just show this player's playarea
         if ((actualDestination === 'playarea' || destinationTypeForHistory === 'playarea') && player.playArea && player.playArea.length > 0) {
-            const { EmbedBuilder } = require('discord.js');
             const playAreaEmbed = new EmbedBuilder()
                 .setColor(player.color || 13502711)
                 .setTitle(`${interaction.member.displayName}'s Updated Play Area`);
@@ -171,12 +170,12 @@ class Play {
             await interaction.followUp({ 
                 embeds: [...handInfo.embeds],
                 files: [...handInfo.attachments],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })  
         } else {
             await interaction.followUp({ 
                 embeds: [...handInfo.embeds],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })  
         }
     }

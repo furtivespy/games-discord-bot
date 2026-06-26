@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js')
+const {EmbedBuilder, MessageFlags} = require('discord.js')
 const { find } = require('lodash')
 const GameDB = require('../../db/anygame')
 const GameFormatter = require('../../modules/GameFormatter')
@@ -12,7 +12,7 @@ class Check {
         )
 
         if (gameData.isdeleted) {
-            return await interaction.reply({ content: "No game in progress!", ephemeral: true })
+            return await interaction.reply({ content: "No game in progress!", flags: MessageFlags.Ephemeral })
         }
 
         const name = interaction.options.getString('name')
@@ -20,19 +20,19 @@ class Check {
 
         // Check if tokens exist
         if (!gameData.tokens || !gameData.tokens.length) {
-            return await interaction.reply({ content: "No tokens exist in this game!", ephemeral: true })
+            return await interaction.reply({ content: "No tokens exist in this game!", flags: MessageFlags.Ephemeral })
         }
 
         const player = find(gameData.players, { userId: interaction.user.id })
         if (!player) {
-            return await interaction.reply({ content: "You're not in this game!", ephemeral: true })
+            return await interaction.reply({ content: "You're not in this game!", flags: MessageFlags.Ephemeral })
         }
 
         if (name) {
             // Check specific token
             const token = find(gameData.tokens, { name })
             if (!token) {
-                return await interaction.reply({ content: `Token "${name}" not found!`, ephemeral: true })
+                return await interaction.reply({ content: `Token "${name}" not found!`, flags: MessageFlags.Ephemeral })
             }
 
             if (token.isSecret && !showAll) {
@@ -63,7 +63,7 @@ class Check {
 
                 embed.setDescription(descriptionLines.join('\n'));
                 
-                return await interaction.reply({ embeds: [embed], ephemeral: true });
+                return await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
             } else {
                 // For public tokens or when showAll is true, show all players' counts
                 const embed = new EmbedBuilder()

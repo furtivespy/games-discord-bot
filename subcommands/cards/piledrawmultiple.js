@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const { find } = require('lodash')
@@ -12,7 +13,7 @@ class PileDrawMultiple {
             return
         }
 
-        await interaction.deferReply({ ephemeral: true })
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
         
         const gameData = await GameHelper.getGameData(client, interaction)
         const pileId = interaction.options.getString('pile')
@@ -21,26 +22,24 @@ class PileDrawMultiple {
         const player = find(gameData.players, {userId: interaction.user.id})
         
         if (!player) {
-            await interaction.editReply({ content: "You must be a player in this game!", ephemeral: true })
+            await interaction.editReply({ content: "You must be a player in this game!"})
             return
         }
 
         const pile = GameHelper.getGlobalPile(gameData, pileId)
         if (!pile) {
-            await interaction.editReply({ content: `Pile not found!`, ephemeral: true })
+            await interaction.editReply({ content: `Pile not found!`})
             return
         }
 
         if (count < 1) {
-            await interaction.editReply({ content: `Count must be at least 1!`, ephemeral: true })
+            await interaction.editReply({ content: `Count must be at least 1!`})
             return
         }
 
         if (pile.cards.length < count) {
             await interaction.editReply({ 
-                content: `Not enough cards in ${pile.name}! (has ${pile.cards.length}, requested ${count})`, 
-                ephemeral: true 
-            })
+                content: `Not enough cards in ${pile.name}! (has ${pile.cards.length}, requested ${count})`})
             return
         }
 
@@ -81,14 +80,12 @@ class PileDrawMultiple {
         let followup = await Formatter.multiCard(drawnCards, `Cards Drawn from ${pile.name}`)
         
         await interaction.editReply({ 
-            content: `You drew ${count} cards from ${pile.name}`,
-            ephemeral: true 
-        })
+            content: `You drew ${count} cards from ${pile.name}`})
 
         await interaction.followUp({ 
             embeds: [...followup[0]], 
             files: [...followup[1]], 
-            ephemeral: true 
+            flags: MessageFlags.Ephemeral 
         })
     }
 }

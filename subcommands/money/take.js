@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require("../../db/anygame.js");
 const { cloneDeep, find } = require("lodash");
 const Formatter = require("../../modules/GameFormatter");
@@ -19,22 +20,20 @@ class Take {
 
     if (gameData.isdeleted) {
       await interaction.editReply({
-        content: `There is no game in this channel.`,
-        ephemeral: true,
-      });
+        content: `There is no game in this channel.`});
       return;
     }
 
     let player = find(gameData.players, {userId: interaction.user.id})
     if (!player){
-        await interaction.editReply({ content: "You're not in this game!", ephemeral: true })
+        await interaction.editReply({ content: "You're not in this game!"})
         return
     }
 
     const whatToTake = interaction.options.getInteger('amount')
 
     if (whatToTake < 1) {
-        await interaction.editReply({ content: "You can't take less than $1!", ephemeral: true })
+        await interaction.editReply({ content: "You can't take less than $1!"})
         return
     }
     if (!player.money) { player.money = 0 }
@@ -66,7 +65,7 @@ class Take {
     await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
     await interaction.editReply({content: `${interaction.member.displayName} took $${whatToTake}`})
-    await interaction.followUp({content: `You now have $${player.money || "0"} in the bank.`, ephemeral: true })
+    await interaction.followUp({content: `You now have $${player.money || "0"} in the bank.`, flags: MessageFlags.Ephemeral })
   }
 }
 

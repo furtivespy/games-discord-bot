@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find } = require('lodash')
@@ -110,7 +111,7 @@ class Add {
             
             await interaction.reply({ 
                 content: `🤐 Your secret is safe with me!\n${secretCount} of ${totalPlayers} players have entered secrets`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })
         } else {
             // In normal mode, show full status

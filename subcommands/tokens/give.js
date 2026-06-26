@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js')
+const {EmbedBuilder, MessageFlags} = require('discord.js')
 const { find } = require('lodash')
 const GameDB = require('../../db/anygame')
 const GameHelper = require('../../modules/GlobalGameHelper')
@@ -12,7 +12,7 @@ class Give {
         )
 
         if (gameData.isdeleted) {
-            return await interaction.reply({ content: "No game in progress!", ephemeral: true })
+            return await interaction.reply({ content: "No game in progress!", flags: MessageFlags.Ephemeral })
         }
 
         const name = interaction.options.getString('name')
@@ -21,25 +21,25 @@ class Give {
 
         // Check if tokens exist
         if (!gameData.tokens || !gameData.tokens.length) {
-            return await interaction.reply({ content: "No tokens exist in this game!", ephemeral: true })
+            return await interaction.reply({ content: "No tokens exist in this game!", flags: MessageFlags.Ephemeral })
         }
 
         // Find the token
         const token = find(gameData.tokens, { name })
         if (!token) {
-            return await interaction.reply({ content: `Token "${name}" not found!`, ephemeral: true })
+            return await interaction.reply({ content: `Token "${name}" not found!`, flags: MessageFlags.Ephemeral })
         }
 
         // Find the source player (command user)
         const sourcePlayer = find(gameData.players, { userId: interaction.user.id })
         if (!sourcePlayer) {
-            return await interaction.reply({ content: "You're not in this game!", ephemeral: true })
+            return await interaction.reply({ content: "You're not in this game!", flags: MessageFlags.Ephemeral })
         }
 
         // Find the target player
         const targetPlayer = find(gameData.players, { userId: targetUser.id })
         if (!targetPlayer) {
-            return await interaction.reply({ content: `${targetUser} is not in this game!`, ephemeral: true })
+            return await interaction.reply({ content: `${targetUser} is not in this game!`, flags: MessageFlags.Ephemeral })
         }
 
         // Initialize tokens objects if they don't exist
@@ -51,7 +51,7 @@ class Give {
         if (sourceCount < amount) {
             return await interaction.reply({ 
                 content: `You don't have enough ${name} tokens! You have ${sourceCount}.`,
-                ephemeral: true 
+                flags: MessageFlags.Ephemeral 
             })
         }
 
@@ -93,9 +93,7 @@ class Give {
         const targetDisplay = interaction.guild.members.cache.get(targetPlayer.userId)?.displayName ?? targetPlayer.name ?? targetPlayer.userId
 
         return await interaction.reply({ 
-            content: `${sourceDisplay} gave ${amount} ${name} token(s) to ${targetDisplay}`,
-            ephemeral: false
-        })
+            content: `${sourceDisplay} gave ${amount} ${name} token(s) to ${targetDisplay}`})
     }
 }
 

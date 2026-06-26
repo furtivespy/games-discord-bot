@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const Formatter = require('../../modules/GameFormatter')
@@ -17,17 +18,17 @@ module.exports = {
                 // Fetch the deck from the DB
                 const deckData = GameHelper.getSpecificDeck(gameData, deckName, interaction.user.id);
                 if (!deckData) {
-                    await interaction.editReply({ content: `Deck "${deckName}" is empty or not set up correctly.`, ephemeral: true });
+                    await interaction.editReply({ content: `Deck "${deckName}" is empty or not set up correctly.`});
                     return;
                 }
 
                 const cardsArray = deckData.piles.draw.cards;
                 if(!Array.isArray(cardsArray) || cardsArray.length === 0) {
-                    await interaction.editReply({ content: `Deck "${deckName}" is empty or not set up correctly.`, ephemeral: true });
+                    await interaction.editReply({ content: `Deck "${deckName}" is empty or not set up correctly.`});
                     return;
                 }
                 if (depth < 1 || depth > cardsArray.length) {
-                    await interaction.editReply({ content: `Deck "${deckName}" has ${cardsArray.length} card(s). Cannot peek at position ${depth}.`, ephemeral: true });
+                    await interaction.editReply({ content: `Deck "${deckName}" has ${cardsArray.length} card(s). Cannot peek at position ${depth}.`});
                     return;
                 }
 
@@ -66,14 +67,14 @@ module.exports = {
                 await interaction.followUp({ 
                     content: `You peeked and saw:`, 
                     embeds: [Formatter.oneCard(theCard)],
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 })
             } catch (e) {
                 if (client && client.logger) {
                     client.logger.log(e, 'error');
                 }
                 if (interaction && interaction.editReply) {
-                    await interaction.editReply({ content: 'An error occurred while peeking at the deck.', ephemeral: true });
+                    await interaction.editReply({ content: 'An error occurred while peeking at the deck.'});
                 }
             }
         }

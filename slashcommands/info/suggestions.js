@@ -1,5 +1,5 @@
 const SlashCommand = require("../../base/SlashCommand.js");
-const { SlashCommandBuilder } = require("discord.js");
+const {SlashCommandBuilder, MessageFlags} = require("discord.js");
 const { cloneDeep } = require("lodash");
 const { nanoid } = require("nanoid");
 
@@ -250,7 +250,7 @@ class Suggest extends SlashCommand {
         return;
       }
 
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const subcommand = interaction.options.getSubcommand();
       
       let suggestionData = Object.assign(
@@ -301,7 +301,7 @@ class Suggest extends SlashCommand {
         // Find the suggestion
         const suggestionIndex = suggestionData.suggestions.findIndex(s => s.id === suggestionId);
         if (suggestionIndex === -1) {
-          await interaction.editReply({ content: 'Could not find that suggestion.', ephemeral: true });
+          await interaction.editReply({ content: 'Could not find that suggestion.'});
           return;
         }
 
@@ -313,13 +313,13 @@ class Suggest extends SlashCommand {
           suggestion.votes.voters = suggestion.votes.voters.filter(id => id !== userId);
           suggestion.votes.count = Math.max(0, suggestion.votes.count - 1);
           suggestion.updatedAt = new Date();
-          await interaction.editReply({ content: 'Your vote has been removed.', ephemeral: true });
+          await interaction.editReply({ content: 'Your vote has been removed.'});
         } else {
           // Add vote
           suggestion.votes.voters.push(userId);
           suggestion.votes.count = suggestion.votes.count + 1;
           suggestion.updatedAt = new Date();
-          await interaction.editReply({ content: 'Your vote has been added!', ephemeral: true });
+          await interaction.editReply({ content: 'Your vote has been added!'});
         }
 
         // Update the suggestion in the data
@@ -328,7 +328,7 @@ class Suggest extends SlashCommand {
       } else if (subcommand === 'status') {
         // Check if user is admin
         if (interaction.user.id !== ADMIN_USER_ID || interaction.member.permissions.level < 3) {
-          await interaction.editReply({ content: 'You do not have permission to change suggestion status.', ephemeral: true });
+          await interaction.editReply({ content: 'You do not have permission to change suggestion status.'});
           return;
         }
 
@@ -338,7 +338,7 @@ class Suggest extends SlashCommand {
         // Find the suggestion
         const suggestionIndex = suggestionData.suggestions.findIndex(s => s.id === suggestionId);
         if (suggestionIndex === -1) {
-          await interaction.editReply({ content: 'Could not find that suggestion.', ephemeral: true });
+          await interaction.editReply({ content: 'Could not find that suggestion.'});
           return;
         }
 
@@ -359,7 +359,7 @@ class Suggest extends SlashCommand {
           this.client.logger.log('Failed to send status update notification: ' + e, 'error');
         }
 
-        await interaction.editReply({ content: `Status updated from ${STATUS_EMOJIS[oldStatus]} ${oldStatus} to ${STATUS_EMOJIS[newStatus]} ${newStatus}`, ephemeral: true });
+        await interaction.editReply({ content: `Status updated from ${STATUS_EMOJIS[oldStatus]} ${oldStatus} to ${STATUS_EMOJIS[newStatus]} ${newStatus}`});
       }
 
       // Show suggestions list for all commands
@@ -421,9 +421,9 @@ class Suggest extends SlashCommand {
       
       // For vote command, we've already sent a response, so we need to follow up instead
       if (subcommand === 'vote' || subcommand === 'status') {
-        await interaction.followUp({ embeds: [embedItem], ephemeral: true });
+        await interaction.followUp({ embeds: [embedItem], flags: MessageFlags.Ephemeral });
       } else {
-        await interaction.editReply({ embeds: [embedItem], ephemeral: true });
+        await interaction.editReply({ embeds: [embedItem]});
       }
     } catch (e) { 
       this.client.logger.log(e,'error');

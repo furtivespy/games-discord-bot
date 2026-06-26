@@ -1,3 +1,4 @@
+const { MessageFlags } = require("discord.js");
 const SlashCommand = require('../../base/SlashCommand.js')
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { cloneDeep } = require('lodash')
@@ -38,7 +39,7 @@ class WinShare extends SlashCommand {
                 })
 
             } else {
-                await interaction.reply({ content: `${theChan.name} doesn't seem to have a winner specified...`, ephemeral: true })
+                await interaction.reply({ content: `${theChan.name} doesn't seem to have a winner specified...`, flags: MessageFlags.Ephemeral })
             }
 
         } catch (e) {

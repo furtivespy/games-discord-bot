@@ -10,13 +10,13 @@ class Pass {
         let gameData = await GameHelper.getGameData(client, interaction)
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
 
         const inputDir = interaction.options.getString('direction')
         if (inputDir != 'asc' && inputDir != 'desc') {
-            await interaction.editReply({ content: `I don't know how to pass in that direction`, ephemeral: true })
+            await interaction.editReply({ content: `I don't know how to pass in that direction`})
             return
         }
 

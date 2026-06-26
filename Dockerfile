@@ -1,35 +1,32 @@
 # syntax = docker/dockerfile:1
 
-# Adjust NODE_VERSION as desired
-ARG NODE_VERSION=20.19.4
-FROM node:${NODE_VERSION} as base
+ARG BUN_VERSION=1.3.14
+FROM oven/bun:${BUN_VERSION} AS base
 
-LABEL fly_launch_runtime="Node.js"
+LABEL fly_launch_runtime="Bun"
 
-# Node.js app lives here
 WORKDIR /app
 
-# Set production environment
 ENV NODE_ENV="production"
 
 
 # Throw-away build stage to reduce size of final image
-FROM base as build
+FROM base AS build
 
-# Install packages needed to build node modules
+# Install packages needed to build native modules (canvas)
 RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev libpixman-1-dev git node-gyp pkg-config python-is-python3
+    apt-get install --no-install-recommends -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev libpixman-1-dev git ca-certificates pkg-config python-is-python3 && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install Go-based magic-wormhole for downloading volume content for local development.
-# RUN curl -fsSL -o /usr/local/bin/wormhole https://github.com/psanford/wormhole-william/releases/download/v1.0.6/wormhole-william-linux-amd64 && chmod +x /usr/local/bin/wormhole
-
-# Install node modules
-COPY --link package-lock.json package.json ./
-RUN npm ci
+# Install dependencies
+COPY --link package.json bun.lock ./
+# bun.lock pins ascii-table to a git+ssh URL; rewrite to HTTPS for keyless CI/Docker builds
+RUN git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" && \
+    git config --global url."https://github.com/".insteadOf "git@github.com:" && \
+    bun install --frozen-lockfile --production
 
 # Copy application code
 COPY --link . .
-
 
 # Final stage for app image
 FROM base
@@ -45,13 +42,11 @@ RUN apt-get update -qq && \
 
 # Copy built application
 COPY --from=build /app /app
-# COPY --from=build /usr/local/bin/wormhole /usr/local/bin/wormhole
 
-# Setup sqlite3 on a separate volume
+# Setup sqlite on a separate volume
 RUN mkdir -p /data
 VOLUME /data
 
-# Start the server by default, this can be overwritten at runtime
 EXPOSE 3000
 ENV DATABASE_URL="file:///data/sqlite.db"
-CMD [ "npm", "run", "start" ]
+CMD [ "bun", "run", "start" ]
