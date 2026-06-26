@@ -231,7 +231,12 @@ class DiscordBot extends Client {
     this.gamedata.set(gameName, updatedData);
   }
   async setGameDataV2(serverId, gameName, channelId, updatedData) {
-    this.db.upsertGameData(serverId, gameName, channelId, updatedData);
+    try {
+      this.db.upsertGameData(serverId, gameName, channelId, updatedData);
+    } catch (err) {
+      this.logger.log(`setGameDataV2 failed [guild=${serverId} collection=${gameName} channel=${channelId}]: ${err}`, "error");
+      throw err;
+    }
   }
   async getGameDataV2(serverId, gameName, channelId) {
     let guildData = this.db.getSpecificGameData(serverId, gameName, channelId);
@@ -502,8 +507,9 @@ const init = async () => {
       client.settings.set("default", client.config.defaultSettings);
     }
     //client.user.setAvatar('')
+    const { resolveDataDir } = require("./db/dataDir.js");
     client.logger.log(
-      `Bot has started, in ${client.guilds.cache.size} guilds.`,
+      `Bot has started, in ${client.guilds.cache.size} guilds. Data dir: ${resolveDataDir()}`,
       "ready"
     );
 
@@ -751,6 +757,26 @@ client
   .on("warn", (info) =>
     client.logger.warn(info, __filename.slice(__dirname.length + 1))
   );
+
+function gracefulShutdown(signal) {
+  client.logger.log(`Received ${signal}, shutting down…`, "warn");
+  try {
+    // Checkpoint WAL and close all SQLite connections so data is fully flushed.
+    client.db?.db?.close();
+    client.gamedata?.db?.close();
+    client.guilddata?.db?.close();
+    client.settings?.db?.close();
+    client.exclusions?.db?.close();
+    client.reminders?.db?.close();
+    client.userPreferences?.db?.close();
+  } catch (e) {
+    console.error("Error closing databases on shutdown:", e);
+  }
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
 process.on("uncaughtException", (err) => {
   const errorMsg = err.stack.replace(new RegExp(`${__dirname}/`, "g"), "./");
