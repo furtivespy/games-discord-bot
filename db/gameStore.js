@@ -2,6 +2,9 @@ const fs = require("fs");
 const path = require("path");
 const { Database } = require("bun:sqlite");
 const { resolveDataDir, ensureDataDir } = require("./dataDir.js");
+const { trace, SpanStatusCode } = require("@opentelemetry/api");
+
+const tracer = trace.getTracer("discord-bot:db");
 
 class GameStore {
   constructor(options = {}) {
@@ -47,64 +50,114 @@ class GameStore {
   }
 
   upsertGameData(guildId, collection, channelId, data) {
-    const bggGameId =
-      collection === "game" ? this._extractBggGameId(data) : null;
-
-    this.db
-      .query(
-        `INSERT INTO game_documents (guild_id, collection, channel_id, bgg_game_id, data, updated_at)
-         VALUES (?, ?, ?, ?, ?, datetime('now'))
-         ON CONFLICT (guild_id, collection, channel_id) DO UPDATE SET
-           bgg_game_id = excluded.bgg_game_id,
-           data = excluded.data,
-           updated_at = datetime('now')`
-      )
-      .run(
-        String(guildId),
-        collection,
-        String(channelId),
-        bggGameId,
-        JSON.stringify(data)
-      );
+    return tracer.startActiveSpan("db.upsert game_documents", (span) => {
+      span.setAttributes({
+        "db.system": "sqlite",
+        "db.operation": "INSERT",
+        "db.sql.table": "game_documents",
+        "db.collection": collection,
+      });
+      try {
+        const bggGameId =
+          collection === "game" ? this._extractBggGameId(data) : null;
+        this.db
+          .query(
+            `INSERT INTO game_documents (guild_id, collection, channel_id, bgg_game_id, data, updated_at)
+             VALUES (?, ?, ?, ?, ?, datetime('now'))
+             ON CONFLICT (guild_id, collection, channel_id) DO UPDATE SET
+               bgg_game_id = excluded.bgg_game_id,
+               data = excluded.data,
+               updated_at = datetime('now')`
+          )
+          .run(
+            String(guildId),
+            collection,
+            String(channelId),
+            bggGameId,
+            JSON.stringify(data)
+          );
+      } catch (err) {
+        span.recordError(err);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
   }
 
   getSpecificGameData(guildId, collection, channelId) {
-    const row = this.db
-      .query(
-        `SELECT channel_id, data
-         FROM game_documents
-         WHERE guild_id = ? AND collection = ? AND channel_id = ?`
-      )
-      .get(String(guildId), collection, String(channelId));
+    return tracer.startActiveSpan("db.get game_documents", (span) => {
+      span.setAttributes({
+        "db.system": "sqlite",
+        "db.operation": "SELECT",
+        "db.sql.table": "game_documents",
+        "db.collection": collection,
+      });
+      try {
+        const row = this.db
+          .query(
+            `SELECT channel_id, data
+             FROM game_documents
+             WHERE guild_id = ? AND collection = ? AND channel_id = ?`
+          )
+          .get(String(guildId), collection, String(channelId));
 
-    if (!row) return null;
-    return this._parseRow(row);
+        span.setAttribute("db.found", row !== null);
+        return row ? this._parseRow(row) : null;
+      } catch (err) {
+        span.recordError(err);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
   }
 
   queryGameData(guildId, collection, query) {
-    if (query.bggGameId !== undefined) {
-      const rows = this.db
-        .query(
-          `SELECT channel_id, data
-           FROM game_documents
-           WHERE guild_id = ? AND collection = ? AND bgg_game_id = ?`
-        )
-        .all(String(guildId), collection, String(query.bggGameId));
+    return tracer.startActiveSpan("db.query game_documents", (span) => {
+      span.setAttributes({
+        "db.system": "sqlite",
+        "db.operation": "SELECT",
+        "db.sql.table": "game_documents",
+        "db.collection": collection,
+        "db.filter.bgg_game_id": query.bggGameId !== undefined,
+      });
+      try {
+        if (query.bggGameId !== undefined) {
+          const rows = this.db
+            .query(
+              `SELECT channel_id, data
+               FROM game_documents
+               WHERE guild_id = ? AND collection = ? AND bgg_game_id = ?`
+            )
+            .all(String(guildId), collection, String(query.bggGameId));
+          span.setAttribute("db.result_count", rows.length);
+          return rows.map((row) => this._parseRow(row));
+        }
 
-      return rows.map((row) => this._parseRow(row));
-    }
+        const rows = this.db
+          .query(
+            `SELECT channel_id, data
+             FROM game_documents
+             WHERE guild_id = ? AND collection = ?`
+          )
+          .all(String(guildId), collection);
 
-    const rows = this.db
-      .query(
-        `SELECT channel_id, data
-         FROM game_documents
-         WHERE guild_id = ? AND collection = ?`
-      )
-      .all(String(guildId), collection);
-
-    return rows
-      .map((row) => this._parseRow(row))
-      .filter((doc) => this._matchesQuery(doc, query));
+        const results = rows
+          .map((row) => this._parseRow(row))
+          .filter((doc) => this._matchesQuery(doc, query));
+        span.setAttribute("db.result_count", results.length);
+        return results;
+      } catch (err) {
+        span.recordError(err);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
   }
 
   getGameRawRow(guildId, collection, channelId) {

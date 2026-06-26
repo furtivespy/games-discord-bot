@@ -69,3 +69,6 @@ data/
 
 #cursor tools
 .cursor
+
+# local planning docs
+docs/
