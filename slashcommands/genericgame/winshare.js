@@ -44,6 +44,11 @@ class WinShare extends SlashCommand {
 
         } catch (e) {
             this.client.logger.log(e,'error')
+            try {
+                const reply = { content: "Something went wrong — please try again.", flags: MessageFlags.Ephemeral };
+                if (interaction.deferred || interaction.replied) await interaction.editReply(reply);
+                else await interaction.reply(reply);
+            } catch (_) {}
         }
     }
 }
