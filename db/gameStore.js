@@ -11,6 +11,7 @@ class GameStore {
     this.db = new Database(path.join(dataDir, "game_documents.sqlite"), {
       create: true,
     });
+    this.db.exec(`PRAGMA journal_mode = WAL`);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS game_documents (
         guild_id TEXT NOT NULL,
@@ -104,6 +105,43 @@ class GameStore {
     return rows
       .map((row) => this._parseRow(row))
       .filter((doc) => this._matchesQuery(doc, query));
+  }
+
+  getGameRawRow(guildId, collection, channelId) {
+    return this.db
+      .query(
+        `SELECT guild_id, collection, channel_id, data, updated_at
+         FROM game_documents
+         WHERE guild_id = ? AND collection = ? AND channel_id = ?`
+      )
+      .get(String(guildId), collection, String(channelId));
+  }
+
+  runDiagnostic() {
+    const result = {};
+
+    result.journalMode = this.db.query("PRAGMA journal_mode").get()?.journal_mode ?? "unknown";
+    result.synchronous = this.db.query("PRAGMA synchronous").get()?.synchronous ?? "unknown";
+
+    const g = "__diag__";
+    const testData = { _diag: true, ts: Date.now() };
+    try {
+      this.upsertGameData(g, g, g, testData);
+      const readBack = this.getSpecificGameData(g, g, g);
+      result.cycleOk = readBack?._diag === true && readBack?.ts === testData.ts;
+      result.cycleError = null;
+    } catch (e) {
+      result.cycleOk = false;
+      result.cycleError = e.message;
+    } finally {
+      try {
+        this.db
+          .query("DELETE FROM game_documents WHERE guild_id = ? AND collection = ? AND channel_id = ?")
+          .run(g, g, g);
+      } catch {}
+    }
+
+    return result;
   }
 
   reset() {

@@ -60,6 +60,7 @@ class BunEnmap {
     const dataDir = ensureDataDir();
 
     this.db = new Database(path.join(dataDir, `${this.name}.sqlite`), { create: true });
+    this.db.exec(`PRAGMA journal_mode = WAL`);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS enmap_store (
         key TEXT PRIMARY KEY,
@@ -152,6 +153,20 @@ class BunEnmap {
       this.db.query("DELETE FROM enmap_store WHERE key = ?").run(stringKey);
     }
     return deleted;
+  }
+
+  runDiagnostic() {
+    const testKey = "__diag__";
+    const testVal = { _diag: true, ts: Date.now() };
+    try {
+      this.set(testKey, testVal);
+      const readBack = this.get(testKey);
+      const ok = readBack?._diag === true && readBack?.ts === testVal.ts;
+      this.delete(testKey);
+      return { cycleOk: ok, cycleError: null };
+    } catch (e) {
+      return { cycleOk: false, cycleError: e.message };
+    }
   }
 
   filter(predicate) {
