@@ -6,17 +6,11 @@ const GameHelper = require("../../modules/GlobalGameHelper");
 
 class Take {
   async execute(interaction, client) {
-    await interaction.deferReply();
-    
-    let gameData = Object.assign(
-      {},
-      cloneDeep(GameDB.defaultGameData),
-      await client.getGameDataV2(
-        interaction.guildId,
-        "game",
-        interaction.channelId
-      )
-    );
+    const [, rawGameData] = await Promise.all([
+      interaction.deferReply(),
+      client.getGameDataV2(interaction.guildId, "game", interaction.channelId)
+    ]);
+    let gameData = Object.assign({}, cloneDeep(GameDB.defaultGameData), rawGameData);
 
     if (gameData.isdeleted) {
       await interaction.editReply({
