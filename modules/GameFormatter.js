@@ -587,36 +587,37 @@ class GameFormatter {
       try {
         const cardsInFirstRow = Math.min(imgList.length, 6);
         const canvasWidth = cardsInFirstRow * 200;
-
-        let canvas = createCanvas(canvasWidth, 1);
-        let ctx = canvas.getContext("2d");
         const cardWidth = 200;
+
+        // Fetch all images in parallel
+        const cardImages = await Promise.all(imgList.map(url => loadImage(url)));
+
+        // Layout pass: calculate row boundaries to determine final canvas height
         let rowstart = 0;
         let rowend = 0;
-        for (let i = 0; i < imgList.length; i++) {
-          const cardImage = await loadImage(imgList[i]);
+        const layout = [];
+        for (let i = 0; i < cardImages.length; i++) {
+          const cardImage = cardImages[i];
           const cardHeight = (cardWidth / cardImage.width) * cardImage.height;
           const spot = i % 6;
-          if (spot == 0) {
+          if (spot === 0) {
             rowstart = rowend;
           }
           if (rowstart + cardHeight > rowend) {
             rowend = rowstart + cardHeight;
           }
-          if (rowend > canvas.height) {
-            const oldCanvas = canvas;
-            canvas = createCanvas(canvasWidth, rowend);
-            ctx = canvas.getContext("2d");
-            ctx.drawImage(oldCanvas, 0, 0);
-          }
-          ctx.drawImage(
-            cardImage,
-            (i % 6) * cardWidth,
-            rowstart,
-            cardWidth,
-            cardHeight
-          );
+          layout.push({ rowstart, cardHeight });
         }
+
+        const canvas = createCanvas(canvasWidth, Math.max(rowend, 1));
+        const ctx = canvas.getContext("2d");
+
+        // Draw pass (sequential canvas ops using pre-loaded images)
+        for (let i = 0; i < cardImages.length; i++) {
+          const { rowstart, cardHeight } = layout[i];
+          ctx.drawImage(cardImages[i], (i % 6) * cardWidth, rowstart, cardWidth, cardHeight);
+        }
+
         return canvas.toBuffer();
       } catch (err) {
         span.recordError(err);
@@ -1274,29 +1275,62 @@ class GameFormatter {
     const padding = 20;
     const rowSpacing = 10;
 
-    // Calculate canvas dimensions
+    // Parallel fetch: card images for every player + every avatar in one shot.
+    // Each card entry resolves to { type: 'loaded', image, height } | { type: 'failed' } | { type: 'nourl' }
+    // so the layout pass can reproduce the original 280px fallback for failed-but-had-url cards.
+    const [allPlayerCardData, allAvatarImages] = await Promise.all([
+      Promise.all(
+        playersWithPlayAreas.map(player =>
+          Promise.all(
+            player.playArea.map(card => {
+              if (!card.url) return Promise.resolve({ type: 'nourl' });
+              return loadImage(card.url)
+                .then(img => ({ type: 'loaded', image: img, height: (cardWidth / img.width) * img.height }))
+                .catch(err => {
+                  console.error(`Failed to load card image: ${card.url}`);
+                  return { type: 'failed' };
+                });
+            })
+          )
+        )
+      ),
+      Promise.all(
+        playersWithPlayAreas.map(player => {
+          const member = guild.members.cache.get(player.userId);
+          if (member && member.user.displayAvatarURL) {
+            const playerName = member.displayName || player.name || `Player ${player.userId}`;
+            const avatarUrl = member.user.displayAvatarURL({ extension: 'png', size: 128 });
+            return loadImage(avatarUrl).catch(err => {
+              console.error(`Failed to load avatar for ${playerName}`);
+              return null;
+            });
+          }
+          return Promise.resolve(null);
+        })
+      )
+    ]);
+
+    // Layout pass: calculate row heights and total canvas height (no I/O)
     let maxCardsInRow = 0;
     let totalHeight = padding;
+    const playerRowHeights = [];
 
-    for (const player of playersWithPlayAreas) {
+    for (let playerIdx = 0; playerIdx < playersWithPlayAreas.length; playerIdx++) {
+      const player = playersWithPlayAreas[playerIdx];
       maxCardsInRow = Math.max(maxCardsInRow, player.playArea.length);
-      
-      // Calculate row height based on tallest card in this player's play area
+
       let maxCardHeight = 0;
-      for (const card of player.playArea) {
-        if (card.url) {
-          try {
-            const cardImage = await loadImage(card.url);
-            const cardHeight = (cardWidth / cardImage.width) * cardImage.height;
-            maxCardHeight = Math.max(maxCardHeight, cardHeight);
-          } catch (error) {
-            // If image fails to load, use default height
-            maxCardHeight = Math.max(maxCardHeight, 280); // default card height
-          }
+      for (const cardData of allPlayerCardData[playerIdx]) {
+        if (cardData.type === 'loaded') {
+          maxCardHeight = Math.max(maxCardHeight, cardData.height);
+        } else if (cardData.type === 'failed') {
+          maxCardHeight = Math.max(maxCardHeight, 280);
         }
+        // 'nourl': no contribution to row height (matches original behaviour)
       }
-      
+
       const rowHeight = Math.max(maxCardHeight, avatarSize);
+      playerRowHeights.push(rowHeight);
       totalHeight += rowHeight + rowSpacing;
     }
 
@@ -1305,56 +1339,32 @@ class GameFormatter {
     const ctx = canvas.getContext("2d");
     ctx.textDrawingMode = "glyph";
 
-    // Set background
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvasWidth, totalHeight);
 
+    // Draw pass: sequential canvas ops using pre-loaded images (no I/O)
     let currentY = padding;
 
-    for (const player of playersWithPlayAreas) {
+    for (let playerIdx = 0; playerIdx < playersWithPlayAreas.length; playerIdx++) {
+      const player = playersWithPlayAreas[playerIdx];
       const member = guild.members.cache.get(player.userId);
       const playerName = member ? member.displayName : (player.name || `Player ${player.userId}`);
+      const rowHeight = playerRowHeights[playerIdx];
 
-      // Calculate row height for this player
-      let maxCardHeight = 0;
-      const cardImages = [];
-      
-      for (const card of player.playArea) {
-        if (card.url) {
-          try {
-            const cardImage = await loadImage(card.url);
-            const cardHeight = (cardWidth / cardImage.width) * cardImage.height;
-            maxCardHeight = Math.max(maxCardHeight, cardHeight);
-            cardImages.push({ image: cardImage, height: cardHeight });
-          } catch (error) {
-            console.error(`Failed to load card image: ${card.url}`);
-            maxCardHeight = Math.max(maxCardHeight, 280);
-            cardImages.push(null);
-          }
-        } else {
-          cardImages.push(null);
-        }
-      }
+      const cardImages = allPlayerCardData[playerIdx].map(cardData =>
+        cardData.type === 'loaded' ? { image: cardData.image, height: cardData.height } : null
+      );
 
-      const rowHeight = Math.max(maxCardHeight, avatarSize);
-
-      // Draw player avatar if available
+      // Draw circular avatar if available
       let currentX = padding;
-      if (member && member.user.displayAvatarURL) {
-        try {
-          const avatarUrl = member.user.displayAvatarURL({ extension: 'png', size: 128 });
-          const avatarImage = await loadImage(avatarUrl);
-          
-          // Draw circular avatar
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(currentX + avatarSize/2, currentY + rowHeight/2, avatarSize/2, 0, Math.PI * 2);
-          ctx.clip();
-          ctx.drawImage(avatarImage, currentX, currentY + (rowHeight - avatarSize)/2, avatarSize, avatarSize);
-          ctx.restore();
-        } catch (error) {
-          console.error(`Failed to load avatar for ${playerName}`);
-        }
+      const avatarImage = allAvatarImages[playerIdx];
+      if (avatarImage) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(currentX + avatarSize / 2, currentY + rowHeight / 2, avatarSize / 2, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(avatarImage, currentX, currentY + (rowHeight - avatarSize) / 2, avatarSize, avatarSize);
+        ctx.restore();
       }
       currentX += avatarSize + 10;
 
@@ -1363,8 +1373,7 @@ class GameFormatter {
       ctx.font = "bold 24px Open Sans";
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.fillText(`${playerName}:`, currentX, currentY + rowHeight/2);
-      
+      ctx.fillText(`${playerName}:`, currentX, currentY + rowHeight / 2);
       currentX += nameWidth;
 
       // Draw cards
@@ -1380,9 +1389,9 @@ class GameFormatter {
           ctx.fillStyle = "#000000";
           ctx.font = "16px Open Sans";
           ctx.textAlign = "center";
-          ctx.fillText("No Image", currentX + cardWidth/2, currentY + rowHeight/2);
+          ctx.fillText("No Image", currentX + cardWidth / 2, currentY + rowHeight / 2);
         }
-        currentX += cardWidth + 5; // Small spacing between cards
+        currentX += cardWidth + 5;
       }
 
       currentY += rowHeight + rowSpacing;
