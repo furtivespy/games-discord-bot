@@ -234,20 +234,53 @@ class DiscordBot extends Client {
     this.gamedata.set(gameName, updatedData);
   }
   async setGameDataV2(serverId, gameName, channelId, updatedData) {
-    try {
-      this.db.upsertGameData(serverId, gameName, channelId, updatedData);
-    } catch (err) {
-      this.logger.log(`setGameDataV2 failed [guild=${serverId} collection=${gameName} channel=${channelId}]: ${err}`, "error");
-      throw err;
-    }
+    const tracer = trace.getTracer("discord-bot");
+    return tracer.startActiveSpan("game.save", (span) => {
+      span.setAttributes({
+        "game.collection": gameName,
+        "game.player_count": updatedData?.players?.length ?? 0,
+      });
+      try {
+        this.db.upsertGameData(serverId, gameName, channelId, updatedData);
+      } catch (err) {
+        span.recordError(err);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+        this.logger.log(`setGameDataV2 failed [guild=${serverId} collection=${gameName} channel=${channelId}]: ${err}`, "error");
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
   }
   async getGameDataV2(serverId, gameName, channelId) {
-    let guildData = this.db.getSpecificGameData(serverId, gameName, channelId);
-    if (!_.isEmpty(guildData)) {
-      return this.migrateGameData(guildData);
-    }
-    guildData = this.getGameData(`${gameName}-${channelId}`);
-    return this.migrateGameData(guildData);
+    const tracer = trace.getTracer("discord-bot");
+    return tracer.startActiveSpan("game.load", (span) => {
+      span.setAttribute("game.collection", gameName);
+      try {
+        let guildData = this.db.getSpecificGameData(serverId, gameName, channelId);
+        if (!_.isEmpty(guildData)) {
+          const result = this.migrateGameData(guildData);
+          span.setAttributes({
+            "game.found": true,
+            "game.player_count": result?.players?.length ?? 0,
+          });
+          return result;
+        }
+        guildData = this.getGameData(`${gameName}-${channelId}`);
+        const result = this.migrateGameData(guildData);
+        span.setAttributes({
+          "game.found": !_.isEmpty(guildData),
+          "game.player_count": result?.players?.length ?? 0,
+        });
+        return result;
+      } catch (err) {
+        span.recordError(err);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
   }
 
   async setGuildData(guildId, data) {
