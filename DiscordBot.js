@@ -1,3 +1,6 @@
+require("./tracing");
+const { trace, SpanStatusCode } = require("@opentelemetry/api");
+
 const {Client,
   Collection,
   Partials,
@@ -712,21 +715,37 @@ client.on("interactionCreate", async (interaction) => {
       : interaction.commandName;
     const prefix = interaction.isAutocomplete() ? "Autocomplete" : "Slash";
 
-    try {
-      await command.execute(interaction);
-    } catch (error) {
-      console.error(error);
-      return interaction.reply({
-        content: "There was an error while executing this command!",
-        flags: MessageFlags.Ephemeral,
+    const tracer = trace.getTracer("discord-bot");
+    await tracer.startActiveSpan(`discord.command /${label}`, async (span) => {
+      span.setAttributes({
+        "discord.command": interaction.commandName,
+        "discord.subcommand": subcommand ?? "",
+        "discord.interaction.type": prefix.toLowerCase(),
+        "discord.guild.id": interaction.guildId ?? "dm",
+        "discord.user.id": interaction.user.id,
+        "discord.inbound_ms": inboundMs,
       });
-    } finally {
-      const durationMs = Date.now() - startedAt;
-      client.logger.log(
-        `${prefix} /${label} | inbound ${inboundMs}ms | handler ${durationMs}ms`,
-        "time"
-      );
-    }
+
+      try {
+        await command.execute(interaction);
+      } catch (error) {
+        span.recordError(error);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+        console.error(error);
+        return interaction.reply({
+          content: "There was an error while executing this command!",
+          flags: MessageFlags.Ephemeral,
+        });
+      } finally {
+        const durationMs = Date.now() - startedAt;
+        span.setAttribute("discord.handler_ms", durationMs);
+        span.end();
+        client.logger.log(
+          `${prefix} /${label} | inbound ${inboundMs}ms | handler ${durationMs}ms`,
+          "time"
+        );
+      }
+    });
   } else if (interaction.isModalSubmit()) {
     try {
       await modalSubmission.execute(interaction);

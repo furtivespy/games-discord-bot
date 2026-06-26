@@ -4,6 +4,9 @@ const { sortBy, floor, isArray, find, shuffle } = require("lodash");
 var AsciiTable = require("ascii-table");
 const { createCanvas, Image, loadImage } = require("canvas");
 const TableRenderer = require("./TableRenderer");
+const { trace, SpanStatusCode } = require("@opentelemetry/api");
+
+const tracer = trace.getTracer("discord-bot:formatter");
 
 const HiddenEnum = {
   "visible": "All counts are visible",
@@ -237,23 +240,36 @@ class GameFormatter {
 
     // Calculate actual required dimensions based on content
     const dimensions = TableRenderer.calculateRequiredDimensions(columns, processedData, options);
-    
-    // Create canvas with the exact size needed
+
     const canvas = createCanvas(dimensions.canvasWidth, dimensions.canvasHeight);
     let ctx = canvas.getContext("2d");
     ctx.textDrawingMode = "glyph";
 
     const config = { columns, data: processedData, options };
     const tableRenderer = new TableRenderer(canvas, config);
-    await tableRenderer.generateTable();
 
-    const embeds = []; 
-    // we previously had a special embed for secret tokens, but we removed it
-    // the logic for additional embeds is still here if needed.
+    const attachment = await tracer.startActiveSpan("formatter.render game_status_table", async (span) => {
+      span.setAttributes({
+        "formatter.player_count": gameData.players.length,
+        "formatter.canvas_width": dimensions.canvasWidth,
+        "formatter.canvas_height": dimensions.canvasHeight,
+      });
+      try {
+        await tableRenderer.generateTable();
+        return new AttachmentBuilder(await tableRenderer.renderToBuffer(), { name: `status-table.png` });
+      } catch (err) {
+        span.recordError(err);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
 
+    const embeds = [];
     return {
-      attachment: new AttachmentBuilder(await tableRenderer.renderToBuffer(), {name: `status-table.png`}),
-      embed: embeds.length > 0 ? embeds[0] : null // This will effectively be null
+      attachment,
+      embed: embeds.length > 0 ? embeds[0] : null
     };
   }
 
@@ -566,40 +582,50 @@ class GameFormatter {
   }
 
   static async ImagefromUrlList(imgList) {
-    // Calculate canvas width based on number of cards (max 6 cards per row)
-    const cardsInFirstRow = Math.min(imgList.length, 6);
-    const canvasWidth = cardsInFirstRow * 200;
-    
-    let canvas = createCanvas(canvasWidth, 1);
-    let ctx = canvas.getContext("2d");
-    const cardWidth = 200;
-    let rowstart = 0;
-    let rowend = 0;
-    for (let i = 0; i < imgList.length; i++) {
-      const cardImage = await loadImage(imgList[i]);
-      const cardHeight = (cardWidth / cardImage.width) * cardImage.height;
-      const spot = i % 6;
-      if (spot == 0) {
-        rowstart = rowend;
+    return tracer.startActiveSpan("formatter.render card_images", async (span) => {
+      span.setAttribute("formatter.card_count", imgList.length);
+      try {
+        const cardsInFirstRow = Math.min(imgList.length, 6);
+        const canvasWidth = cardsInFirstRow * 200;
+
+        let canvas = createCanvas(canvasWidth, 1);
+        let ctx = canvas.getContext("2d");
+        const cardWidth = 200;
+        let rowstart = 0;
+        let rowend = 0;
+        for (let i = 0; i < imgList.length; i++) {
+          const cardImage = await loadImage(imgList[i]);
+          const cardHeight = (cardWidth / cardImage.width) * cardImage.height;
+          const spot = i % 6;
+          if (spot == 0) {
+            rowstart = rowend;
+          }
+          if (rowstart + cardHeight > rowend) {
+            rowend = rowstart + cardHeight;
+          }
+          if (rowend > canvas.height) {
+            const oldCanvas = canvas;
+            canvas = createCanvas(canvasWidth, rowend);
+            ctx = canvas.getContext("2d");
+            ctx.drawImage(oldCanvas, 0, 0);
+          }
+          ctx.drawImage(
+            cardImage,
+            (i % 6) * cardWidth,
+            rowstart,
+            cardWidth,
+            cardHeight
+          );
+        }
+        return canvas.toBuffer();
+      } catch (err) {
+        span.recordError(err);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+        throw err;
+      } finally {
+        span.end();
       }
-      if (rowstart + cardHeight > rowend) {
-        rowend = rowstart + cardHeight;
-      }
-      if (rowend > canvas.height) {
-        const oldCanvas = canvas;
-        canvas = createCanvas(canvasWidth, rowend);
-        ctx = canvas.getContext("2d");
-        ctx.drawImage(oldCanvas, 0, 0);
-      }
-      ctx.drawImage(
-        cardImage,
-        (i % 6) * cardWidth,
-        rowstart,
-        cardWidth,
-        cardHeight
-      );
-    }
-    return canvas.toBuffer();
+    });
   }
 
   static winnerName(gameData, guild) {
@@ -1226,6 +1252,21 @@ class GameFormatter {
     if (!playersWithPlayAreas || playersWithPlayAreas.length === 0) {
       return null;
     }
+    return tracer.startActiveSpan("formatter.render consolidated_play_area", async (span) => {
+      span.setAttribute("formatter.player_count", playersWithPlayAreas.length);
+      try {
+        return await this._generateConsolidatedPlayAreaImageInner(playersWithPlayAreas, guild);
+      } catch (err) {
+        span.recordError(err);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
+  }
+
+  static async _generateConsolidatedPlayAreaImageInner(playersWithPlayAreas, guild) {
 
     const cardWidth = 200;
     const avatarSize = 40;

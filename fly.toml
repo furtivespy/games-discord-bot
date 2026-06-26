@@ -10,6 +10,8 @@ primary_region = 'iad'
 
 [env]
   IS_ON_FLY = 'true'
+  OTEL_SERVICE_NAME = 'discord-bot-inis'
+  # HONEYCOMB_API_KEY is set via: fly secrets set HONEYCOMB_API_KEY=<your-key>
 
 [[mounts]]
   source = 'gamebot_data'
