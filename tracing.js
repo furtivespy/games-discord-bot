@@ -39,16 +39,19 @@ if (!apiKey) {
   sdk.start();
 
   // Patch @discordjs/rest so Discord API calls appear as child spans.
-  // Undici auto-instrumentation doesn't fire under Bun, so we instrument
-  // REST.prototype.request directly — all deferReply/editReply/followUp/etc.
-  // flow through this single method.
+  // We patch queueRequest (the real implementation) rather than request()
+  // to ensure we capture deferReply's interaction callback, which can bypass
+  // the request() wrapper in some Discord.js versions.
+  // REST.generateRouteData gives us clean parameterized routes like
+  // /interactions/:id/:token/callback instead of raw token-laden URLs.
   try {
     const { REST } = require("@discordjs/rest");
     const discordRestTracer = trace.getTracer("discord-bot:rest");
-    const originalRequest = REST.prototype.request;
-    REST.prototype.request = async function patchedRequest(options) {
+    const originalQueueRequest = REST.prototype.queueRequest;
+    REST.prototype.queueRequest = async function patchedQueueRequest(options) {
       const method = options.method ?? "UNKNOWN";
-      const route = options.fullRoute ?? options.route ?? "unknown";
+      const routeData = REST.generateRouteData(options.fullRoute, method);
+      const route = routeData.bucketRoute ?? options.fullRoute ?? "unknown";
       return discordRestTracer.startActiveSpan(
         `discord.rest ${method} ${route}`,
         async (span) => {
@@ -57,7 +60,7 @@ if (!apiKey) {
             "discord.rest.route": route,
           });
           try {
-            return await originalRequest.apply(this, arguments);
+            return await originalQueueRequest.apply(this, arguments);
           } catch (err) {
             span.recordError(err);
             span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
