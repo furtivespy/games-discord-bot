@@ -5,17 +5,11 @@ const Formatter = require("../../modules/GameFormatter");
 
 class Check {
   async execute(interaction, client) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    
-    let gameData = Object.assign(
-      {},
-      cloneDeep(GameDB.defaultGameData),
-      await client.getGameDataV2(
-        interaction.guildId,
-        "game",
-        interaction.channelId
-      )
-    );
+    const [, rawGameData] = await Promise.all([
+      interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+      client.getGameDataV2(interaction.guildId, "game", interaction.channelId)
+    ]);
+    let gameData = Object.assign({}, cloneDeep(GameDB.defaultGameData), rawGameData);
 
     if (gameData.isdeleted) {
       await interaction.editReply({
