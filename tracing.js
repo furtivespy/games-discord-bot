@@ -1,6 +1,10 @@
 const { NodeSDK } = require("@opentelemetry/sdk-node");
 const { OTLPTraceExporter } = require("@opentelemetry/exporter-trace-otlp-http");
-const { ConsoleSpanExporter, SimpleSpanProcessor } = require("@opentelemetry/sdk-trace-base");
+const {
+  ConsoleSpanExporter,
+  SimpleSpanProcessor,
+  BatchSpanProcessor,
+} = require("@opentelemetry/sdk-trace-base");
 const { getNodeAutoInstrumentations } = require("@opentelemetry/auto-instrumentations-node");
 const { trace, context, SpanStatusCode } = require("@opentelemetry/api");
 
@@ -11,7 +15,14 @@ const debugSpans = process.env.OTEL_DEBUG_SPANS === "true";
 if (!apiKey) {
   console.warn("[tracing] HONEYCOMB_API_KEY not set — OTel tracing disabled");
 } else {
-  const spanProcessors = [];
+  // Always register the OTLP exporter explicitly so the SDK never receives an
+  // empty spanProcessors array (which would silently skip TracerProvider setup).
+  const otlpExporter = new OTLPTraceExporter({
+    url: "https://api.honeycomb.io/v1/traces",
+    headers: { "x-honeycomb-team": apiKey },
+  });
+
+  const spanProcessors = [new BatchSpanProcessor(otlpExporter)];
 
   if (debugSpans) {
     spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
@@ -19,12 +30,6 @@ if (!apiKey) {
   }
 
   const sdk = new NodeSDK({
-    traceExporter: new OTLPTraceExporter({
-      url: "https://api.honeycomb.io/v1/traces",
-      headers: {
-        "x-honeycomb-team": apiKey,
-      },
-    }),
     spanProcessors,
     instrumentations: [
       getNodeAutoInstrumentations({
@@ -37,6 +42,33 @@ if (!apiKey) {
   });
 
   sdk.start();
+
+  // Verify the API key and network path to Honeycomb at startup so
+  // misconfiguration is surfaced immediately rather than silently dropping spans.
+  fetch("https://api.honeycomb.io/1/auth", {
+    headers: { "X-Honeycomb-Team": apiKey },
+    signal: AbortSignal.timeout(8000),
+  })
+    .then(async (res) => {
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const team = data.team?.name ?? "unknown";
+        const env = data.environment?.name ?? data.key_type ?? "unknown";
+        console.log(
+          `[tracing] Honeycomb reachable ✓  team="${team}"  environment="${env}"`
+        );
+      } else {
+        const body = await res.text().catch(() => "");
+        console.warn(
+          `[tracing] Honeycomb auth check failed: HTTP ${res.status} — traces will be dropped. Response: ${body.slice(0, 200)}`
+        );
+      }
+    })
+    .catch((err) => {
+      console.warn(
+        `[tracing] Honeycomb unreachable: ${err.message} — check HONEYCOMB_API_KEY and network. Traces will be dropped.`
+      );
+    });
 
   // Patch @discordjs/rest so Discord API calls appear as child spans.
   // We patch queueRequest (the real implementation) rather than request()
