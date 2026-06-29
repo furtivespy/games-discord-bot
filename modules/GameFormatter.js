@@ -5,6 +5,25 @@ var AsciiTable = require("ascii-table");
 const { createCanvas, Image, loadImage } = require("canvas");
 const TableRenderer = require("./TableRenderer");
 const { trace, SpanStatusCode } = require("@opentelemetry/api");
+const colorConvert = require("color-convert");
+
+/**
+ * Resolves a player color string to a format safe for Discord.js setColor().
+ * Discord.js only accepts hex strings (#RRGGBB), integers, or its own named
+ * enum — not CSS color names like "gold". This converts CSS named colors to
+ * hex so they don't trigger color-convert's "Unable to convert" error.
+ */
+function resolveEmbedColor(color, defaultColor = 13502711) {
+  if (!color) return defaultColor;
+  if (/^#[0-9A-Fa-f]{3,6}$/.test(color)) return color;
+  if (typeof color === "number") return color;
+  try {
+    const hex = colorConvert.keyword.hex(color.toLowerCase());
+    return `#${hex}`;
+  } catch (_) {
+    return defaultColor;
+  }
+}
 
 const tracer = trace.getTracer("discord-bot:formatter");
 
@@ -492,7 +511,7 @@ class GameFormatter {
     // Play Area Display
     if (player.playArea && player.playArea.length > 0) {
       const playAreaEmbed = new EmbedBuilder()
-        .setColor(player.color || 13502711) // Use player color or a default
+        .setColor(resolveEmbedColor(player.color, 13502711))
         .setTitle(`Your Play Area`)
         .setDescription(`Cards currently in your play area:`); // Initial description
 
@@ -1417,7 +1436,7 @@ class GameFormatter {
         const playerName = member ? member.displayName : (player.name || `Player ${player.userId}`);
 
         const playAreaEmbed = new EmbedBuilder()
-          .setColor(player.color || 386945) // Use player color or a default
+          .setColor(resolveEmbedColor(player.color, 386945))
           .setTitle(`${playerName}'s Play Area`);
           // Description will be set by genericCardZoneDisplay via fields.
           // If you want a general description above the fields, set it here.
