@@ -84,6 +84,13 @@ if (!apiKey) {
       const method = options.method ?? "UNKNOWN";
       const routeData = REST.generateRouteData(options.fullRoute, method);
       const route = routeData.bucketRoute ?? options.fullRoute ?? "unknown";
+
+      // The periodic client.application.fetch() call hits GET /applications/@me every 60 s.
+      // It has no parent span and adds heartbeat noise to every trace view — drop it.
+      if (method === "GET" && route === "/applications/@me") {
+        return originalQueueRequest.apply(this, arguments);
+      }
+
       return discordRestTracer.startActiveSpan(
         `discord.rest ${method} ${route}`,
         async (span) => {
