@@ -277,7 +277,7 @@ class GameFormatter {
         await tableRenderer.generateTable();
         return new AttachmentBuilder(await tableRenderer.renderToBuffer(), { name: `status-table.png` });
       } catch (err) {
-        span.recordError(err);
+        span.recordException(err);
         span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
         throw err;
       } finally {
@@ -639,7 +639,7 @@ class GameFormatter {
 
         return canvas.toBuffer();
       } catch (err) {
-        span.recordError(err);
+        span.recordException(err);
         span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
         throw err;
       } finally {
@@ -1277,7 +1277,7 @@ class GameFormatter {
       try {
         return await this._generateConsolidatedPlayAreaImageInner(playersWithPlayAreas, guild);
       } catch (err) {
-        span.recordError(err);
+        span.recordException(err);
         span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
         throw err;
       } finally {
