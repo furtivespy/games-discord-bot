@@ -1,5 +1,4 @@
 const { EmbedBuilder, AttachmentBuilder } = require("discord.js");
-const fetch = require("node-fetch");
 const { parse } = require("fast-xml-parser");
 const { find, cloneDeep, take } = require("lodash");
 const { createCanvas, Image, loadImage } = require("canvas");
@@ -8,6 +7,9 @@ const TurndownService = require("turndown");
 const Formatter = require('./GameFormatter')
 const GameDB = require('../db/anygame.js')
 const { XMLParser } = require("fast-xml-parser");
+const { trace, SpanStatusCode } = require("@opentelemetry/api");
+
+const tracer = trace.getTracer("discord-bot:bgg");
 
 class BoardGameGeek {
   constructor(gameId, discordClient, interaction) {
@@ -80,29 +82,45 @@ class BoardGameGeek {
   }
 
   async LoadBggData() {
-    let gameInfoResp = await fetch(
-      `https://api.geekdo.com/xmlapi/boardgame/${this.gameId}?stats=1`,
-      {
-        headers: {
-          'Authorization': `Bearer ${this.discordClient.config.BGGToken}`
-        }
+    return tracer.startActiveSpan("bgg.fetch_data", async (span) => {
+      span.setAttributes({
+        "bgg.game_id": String(this.gameId),
+        "bgg.url": `https://api.geekdo.com/xmlapi/boardgame/${this.gameId}?stats=1`,
+      });
+      try {
+        let gameInfoResp = await fetch(
+          `https://api.geekdo.com/xmlapi/boardgame/${this.gameId}?stats=1`,
+          {
+            headers: {
+              'Authorization': `Bearer ${this.discordClient.config.BGGToken}`
+            }
+          }
+        );
+        span.setAttribute("http.response.status_code", gameInfoResp.status);
+        const text = await gameInfoResp.text();
+        const parser = new XMLParser({
+          attributeNamePrefix: "",
+          textNodeName: "text",
+          ignoreAttributes: false,
+          ignoreNameSpace: true,
+          allowBooleanAttributes: true,
+        });
+        this.gameInfo = parser.parse(text).boardgames.boardgame;
+
+        const gameName = Array.isArray(this.gameInfo.name)
+          ? find(this.gameInfo.name, { primary: "true" }).text
+          : this.gameInfo.name.text;
+
+        this.gameName = he.decode(gameName);
+        span.setAttribute("bgg.game_name", this.gameName);
+      } catch (err) {
+        span.recordError(err);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+        throw err;
+      } finally {
+        span.end();
       }
-    );
-    const text = await gameInfoResp.text();
-    const parser = new XMLParser({
-      attributeNamePrefix: "",
-      textNodeName: "text",
-      ignoreAttributes: false,
-      ignoreNameSpace: true,
-      allowBooleanAttributes: true,
     });
-    this.gameInfo = parser.parse(text).boardgames.boardgame;
-
-    const gameName = Array.isArray(this.gameInfo.name)
-      ? find(this.gameInfo.name, { primary: "true" }).text
-      : this.gameInfo.name.text;
-
-    this.gameName = he.decode(gameName);
   }
 
   async LoadEmbeds(detailsType) {
@@ -146,7 +164,6 @@ class BoardGameGeek {
 
   async GetGameImageEmbed() {
     if (!this.gameInfo.image) {
-        // If no image is available, create a basic embed without an image
         const imageEmbed = new EmbedBuilder()
             .setTitle(this.gameName)
             .setURL(`https://boardgamegeek.com/boardgame/${this.gameId}`);
@@ -154,28 +171,44 @@ class BoardGameGeek {
         return;
     }
 
-    const gameImage = await loadImage(this.gameInfo.image);
-    const scaledWidth = 600;
-    const canvas = createCanvas(scaledWidth, (scaledWidth / gameImage.width) * gameImage.height);
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(gameImage, 0, 0, scaledWidth, (scaledWidth / gameImage.width) * gameImage.height);
-    
-    const imageAttach = new AttachmentBuilder(
-        canvas.toBuffer(),
-        {name: `gameImage.png`}
-    );
-    this.attachments.push(imageAttach);
+    return tracer.startActiveSpan("bgg.load_image", async (span) => {
+      span.setAttribute("bgg.image_url", this.gameInfo.image);
+      try {
+        const gameImage = await loadImage(this.gameInfo.image);
+        const scaledWidth = 600;
+        const canvas = createCanvas(scaledWidth, (scaledWidth / gameImage.width) * gameImage.height);
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(gameImage, 0, 0, scaledWidth, (scaledWidth / gameImage.width) * gameImage.height);
 
-    const imageEmbed = new EmbedBuilder()
-        .setTitle(this.gameName)
-        .setURL(`https://boardgamegeek.com/boardgame/${this.gameId}`)
-        .setImage(`attachment://gameImage.png`);
-    this.embeds.push(imageEmbed);
+        span.setAttributes({
+          "bgg.image.original_width": gameImage.width,
+          "bgg.image.original_height": gameImage.height,
+        });
 
-    // Explicitly free resources
-    canvas.width = 1;
-    canvas.height = 1;
-    ctx.clearRect(0, 0, 1, 1);
+        const imageAttach = new AttachmentBuilder(
+            canvas.toBuffer(),
+            {name: `gameImage.png`}
+        );
+        this.attachments.push(imageAttach);
+
+        const imageEmbed = new EmbedBuilder()
+            .setTitle(this.gameName)
+            .setURL(`https://boardgamegeek.com/boardgame/${this.gameId}`)
+            .setImage(`attachment://gameImage.png`);
+        this.embeds.push(imageEmbed);
+
+        // Explicitly free resources
+        canvas.width = 1;
+        canvas.height = 1;
+        ctx.clearRect(0, 0, 1, 1);
+      } catch (err) {
+        span.recordError(err);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
   }
 
   GetGameDetailsEmbed() {
