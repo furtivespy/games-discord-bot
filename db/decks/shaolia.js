@@ -153,4 +153,72 @@ const shaoiliaAncestralValleyVariants = [
     { name: "Ancestral Valley", value: "P", description: "Can't be destroyed. Gain 7 Culture on 4 or 5.", url: `${BASE_L2}ancestral_p_45.png` },
 ];
 
-module.exports = { shaoiliaLevel1, shaoiliaWSLevel2, shaoiliaWarElephantVariants, shaoiliaAncestralValleyVariants };
+// Shaolia - Trade War Level 2 Cards (43 cards)
+// Card Setting: use every Lv1 card + these 43 Lv2 cards
+// 10 types × 4 cards + 3 singletons (War Elephant, Ancestral Valley, Fortress)
+const shaoiliaTWLevel2 = [
+    // Fleet × 4
+    { name: "Fleet", value: "3", url: `${BASE_L2}fleet_3_5.png` },
+    { name: "Fleet", value: "4", url: `${BASE_L2}fleet_4_6.png` },
+    { name: "Fleet", value: "5", url: `${BASE_L2}fleet_5_1.png` },
+    { name: "Fleet", value: "6", url: `${BASE_L2}fleet_6_2.png` },
+
+    // Gym × 4 (P = permanent; 4 identical copies)
+    { name: "Gym", value: "P", description: "Place 1 ATK Token on an ATK card before rolling dice", url: `${BASE_L2}gym_p.png` },
+    { name: "Gym", value: "P", description: "Place 1 ATK Token on an ATK card before rolling dice", url: `${BASE_L2}gym_p.png` },
+    { name: "Gym", value: "P", description: "Place 1 ATK Token on an ATK card before rolling dice", url: `${BASE_L2}gym_p.png` },
+    { name: "Gym", value: "P", description: "Place 1 ATK Token on an ATK card before rolling dice", url: `${BASE_L2}gym_p.png` },
+
+    // Swamp × 4 (P = permanent; 4 identical copies)
+    { name: "Swamp", value: "P", url: `${BASE_L2}swamp_p_p.png` },
+    { name: "Swamp", value: "P", url: `${BASE_L2}swamp_p_p.png` },
+    { name: "Swamp", value: "P", url: `${BASE_L2}swamp_p_p.png` },
+    { name: "Swamp", value: "P", url: `${BASE_L2}swamp_p_p.png` },
+
+    // Port × 4
+    { name: "Port", value: "1", url: `${BASE_L2}port_1.png` },
+    { name: "Port", value: "2", url: `${BASE_L2}port_2.png` },
+    { name: "Port", value: "3", url: `${BASE_L2}port_3.png` },
+    { name: "Port", value: "4", url: `${BASE_L2}port_4.png` },
+
+    // Caravan × 4
+    { name: "Caravan", value: "1", url: `${BASE_L2}caravan_1.png` },
+    { name: "Caravan", value: "2", url: `${BASE_L2}caravan_2.png` },
+    { name: "Caravan", value: "5", url: `${BASE_L2}caravan_5.png` },
+    { name: "Caravan", value: "6", url: `${BASE_L2}caravan_6.png` },
+
+    // Garden × 4 (P = permanent; 4 identical copies)
+    { name: "Garden", value: "P", url: `${BASE_L2}garden_p.png` },
+    { name: "Garden", value: "P", url: `${BASE_L2}garden_p.png` },
+    { name: "Garden", value: "P", url: `${BASE_L2}garden_p.png` },
+    { name: "Garden", value: "P", url: `${BASE_L2}garden_p.png` },
+
+    // Temple × 4
+    { name: "Temple", value: "1", url: `${BASE_L2}temple_1_34.png` },
+    { name: "Temple", value: "2", url: `${BASE_L2}temple_2_45.png` },
+    { name: "Temple", value: "3", url: `${BASE_L2}temple_3_56.png` },
+    { name: "Temple", value: "4", url: `${BASE_L2}temple_4_61.png` },
+
+    // Mansion × 4 (P = permanent; 4 identical copies)
+    { name: "Mansion", value: "P", description: "Roll one more die during your action phase", url: `${BASE_L2}mansion_p.png` },
+    { name: "Mansion", value: "P", description: "Roll one more die during your action phase", url: `${BASE_L2}mansion_p.png` },
+    { name: "Mansion", value: "P", description: "Roll one more die during your action phase", url: `${BASE_L2}mansion_p.png` },
+    { name: "Mansion", value: "P", description: "Roll one more die during your action phase", url: `${BASE_L2}mansion_p.png` },
+
+    // Bank × 4 (P = permanent; 4 identical copies)
+    { name: "Bank", value: "P", url: `${BASE_L2}bank_p.png` },
+    { name: "Bank", value: "P", url: `${BASE_L2}bank_p.png` },
+    { name: "Bank", value: "P", url: `${BASE_L2}bank_p.png` },
+    { name: "Bank", value: "P", url: `${BASE_L2}bank_p.png` },
+
+    // Mine × 4 (P = permanent; 4 identical copies)
+    { name: "Mine", value: "P", url: `${BASE_L2}mine_p.png` },
+    { name: "Mine", value: "P", url: `${BASE_L2}mine_p.png` },
+    { name: "Mine", value: "P", url: `${BASE_L2}mine_p.png` },
+    { name: "Mine", value: "P", url: `${BASE_L2}mine_p.png` },
+
+    // Fortress × 1
+    { name: "Fortress", value: "P", description: "Gain life tokens and place them anywhere", url: `${BASE_L2}fortress_p_any.png` },
+];
+
+module.exports = { shaoiliaLevel1, shaoiliaWSLevel2, shaoiliaTWLevel2, shaoiliaWarElephantVariants, shaoiliaAncestralValleyVariants };
