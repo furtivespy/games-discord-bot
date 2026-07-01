@@ -426,4 +426,10 @@ const shaoiliaTCWLevel2 = [
     { name: "Ancestral Valley", value: "P", description: "Can't be destroyed. Gain 7 Culture on 4 or 5.", url: `${BASE_L2}ancestral_p_45.png` },
 ];
 
-module.exports = { shaoiliaLevel1, shaoiliaWSLevel2, shaoiliaTWLevel2, shaoiliaHFLevel2, shaoiliaTCWLevel2, shaoiliaWarElephantVariants, shaoiliaAncestralValleyVariants };
+// Shaolia - Tyrant Level 2 Cards (76 cards)
+// Card Setting: every Lv2 building type ×4, excluding War Elephant, Fortress, and Ancestral Valley
+const shaoiliaTyrantLevel2 = shaoiliaTCWLevel2.filter(
+    card => !["War Elephant", "Fortress", "Ancestral Valley"].includes(card.name)
+);
+
+module.exports = { shaoiliaLevel1, shaoiliaWSLevel2, shaoiliaTWLevel2, shaoiliaHFLevel2, shaoiliaTCWLevel2, shaoiliaTyrantLevel2, shaoiliaWarElephantVariants, shaoiliaAncestralValleyVariants };
