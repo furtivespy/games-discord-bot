@@ -31,3 +31,19 @@ An image-rendering error was observed in a Honeycomb trace (trace ID: `125fb5b20
 **Note:** The exact trace/command was not identified as part of this write-up (no Honeycomb access available) — this entry just records the trace ID and the desired resilience behavior for later investigation.
 
 Status: Open
+
+## 4. Deprecated `ephemeral` option used instead of `flags`
+
+Discord.js is emitting this deprecation warning somewhere in the codebase:
+
+> Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
+
+This means some interaction response calls (`reply`/`editReply`/`deferReply`/`followUp`/component `update`) are still passing `{ ephemeral: true }` instead of `{ flags: MessageFlags.Ephemeral }`.
+
+**Why it matters beyond the deprecation warning:** ephemeral flag usage has been through human sign-off/review as `flags: MessageFlags.Ephemeral`. Any lingering `ephemeral: true` usage is inconsistent with that reviewed convention, so this is an audit/compliance concern as much as a deprecation cleanup — the codebase should have one consistent, reviewed pattern for ephemeral responses, not two.
+
+**Quick grep for context (not exhaustive, not a fix):** a repo-wide search for `ephemeral:\s*true` across `subcommands/` and `slashcommands/` turns up at least 8 files with ~40+ occurrences, including `subcommands/cards/burn.js`, `subcommands/cards/flipmulti.js`, `subcommands/cards/gameboarddiscard.js`, `subcommands/cards/gameboardmove.js`, `subcommands/cards/pileflip.js`, `subcommands/cards/pileflipmultiple.js`, `subcommands/cards/pilemove.js`, and `subcommands/cards/playareamove.js`. A full search should be re-run at fix time since this list may not be exhaustive.
+
+**Fix direction:** search & replace `ephemeral: true` → `flags: MessageFlags.Ephemeral` project-wide, checking each call site for a correct `MessageFlags` import (`require("discord.js")` or equivalent), and watching for cases where `flags` is combined with other flags (e.g. component `update()` calls) so the replacement doesn't clobber an existing `flags` value.
+
+Status: Open
