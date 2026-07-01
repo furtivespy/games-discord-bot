@@ -51,7 +51,7 @@ const candylandCards = require('./decks/candyland');
 const botswanaCards = require('./decks/botswana');
 const {mollyVice, mollyLoyalty, mollyMinor, mollyMajor, mollyItem} = require('./decks/mollyhouse');
 const { arcsActionBase, arcsActionFull } = require('./decks/arcs');
-const { shaoiliaLevel1, shaoiliaWSLevel2, shaoiliaTWLevel2, shaoiliaHFLevel2, shaoiliaWarElephantVariants, shaoiliaAncestralValleyVariants } = require('./decks/shaolia');
+const { shaoiliaLevel1, shaoiliaWSLevel2, shaoiliaTWLevel2, shaoiliaHFLevel2, shaoiliaTCWLevel2, shaoiliaWarElephantVariants, shaoiliaAncestralValleyVariants } = require('./decks/shaolia');
 
 class GameDatabase {
     
@@ -160,6 +160,7 @@ class GameDatabase {
         [ "Shaolia - Warring States Level 2", "shaolia-ws2" ],
         [ "Shaolia - Trade War Level 2", "shaolia-tw2" ],
         [ "Shaolia - Hidden Figures Level 2", "shaolia-hf2" ],
+        [ "Shaolia - Three-Cornered War Level 2", "shaolia-tcw2" ],
     ]
 
     defaultGameData = {
@@ -469,6 +470,8 @@ class GameDatabase {
                 const ancestralValley = shaoiliaAncestralValleyVariants[Math.floor(Math.random() * shaoiliaAncestralValleyVariants.length)];
                 return this.createCardFromObjList(deckName, "C", [...shaoiliaHFLevel2, warElephant, ancestralValley]);
             }
+            case "shaolia-tcw2":
+                return this.createCardFromObjList(deckName, "C", shaoiliaTCWLevel2);
             default:
                 return []
         }
