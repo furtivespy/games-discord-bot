@@ -13,9 +13,10 @@ class PileTake {
             return
         }
 
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-        
-        const gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            GameHelper.getGameData(client, interaction)
+        ]);
         const pileId = interaction.options.getString('pile')
         
         const player = find(gameData.players, {userId: interaction.user.id})

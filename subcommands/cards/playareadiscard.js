@@ -11,9 +11,10 @@ module.exports = {
     // For now, assuming it's routed directly and doesn't need its own data builder here.
 
     async execute(interaction, client) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral }); // Start with ephemeral, can make non-ephemeral later if needed
-
-        const gameData = await GameHelper.getGameData(client, interaction);
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }), // Start with ephemeral, can make non-ephemeral later if needed
+            GameHelper.getGameData(client, interaction)
+        ]);
         if (gameData.isdeleted) {
             return interaction.editReply({ content: "No active game found in this channel."});
         }
@@ -129,35 +130,40 @@ module.exports = {
             // Ephemeral confirmation of action
             const successfullyDiscardedCards = discardedCards.filter(dc => !player.playArea.find(pc => pc.id === dc.id));
 
-            if (successfullyDiscardedCards.length > 0) {
-                await selectionInteraction.update({
-                    content: `You discarded ${successfullyDiscardedCards.length} card(s) from your play area: ${successfullyDiscardedCards.map(c => Formatter.cardShortName(c)).join(', ')}.`,
-                    components: []
-                });
-
-                // Public follow-up message
-                await interaction.followUp({
-                    content: `${interaction.member.displayName} discarded ${successfullyDiscardedCards.length} card(s) from their play area.`});
-            } else {
-                 await selectionInteraction.update({
-                    content: `No cards were ultimately discarded due to errors finding their discard piles.`,
-                    components: []
-                });
-            }
-
-
             // Display updated play area to the player (ephemeral)
             // This can be part of the selectionInteraction.update or a new followUp
             const playAreaEmbed = new EmbedBuilder()
                 .setColor(player.color || 13502711)
                 .setTitle("Your Updated Play Area");
 
-            const playAreaAttachment = await Formatter.genericCardZoneDisplay(
-                player.playArea, // Send the updated playArea
-                playAreaEmbed,
-                "Current Cards",
-                `PlayAreaUpdate-${player.userId}`
-            );
+            let mainConfirmPromise;
+            if (successfullyDiscardedCards.length > 0) {
+                mainConfirmPromise = selectionInteraction.update({
+                    content: `You discarded ${successfullyDiscardedCards.length} card(s) from your play area: ${successfullyDiscardedCards.map(c => Formatter.cardShortName(c)).join(', ')}.`,
+                    components: []
+                });
+            } else {
+                mainConfirmPromise = selectionInteraction.update({
+                    content: `No cards were ultimately discarded due to errors finding their discard piles.`,
+                    components: []
+                });
+            }
+
+            const [, playAreaAttachment] = await Promise.all([
+                mainConfirmPromise,
+                Formatter.genericCardZoneDisplay(
+                    player.playArea, // Send the updated playArea
+                    playAreaEmbed,
+                    "Current Cards",
+                    `PlayAreaUpdate-${player.userId}`
+                )
+            ]);
+
+            if (successfullyDiscardedCards.length > 0) {
+                // Public follow-up message
+                await interaction.followUp({
+                    content: `${interaction.member.displayName} discarded ${successfullyDiscardedCards.length} card(s) from their play area.`});
+            }
 
             const finalEphemeralReply = {
                 embeds: [playAreaEmbed],

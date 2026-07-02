@@ -7,9 +7,10 @@ const { EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder, MessageFlags} =
 module.exports = {
     // data for subcommand group is in main cards.js
     async execute(interaction, client) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-        const gameData = await GameHelper.getGameData(client, interaction);
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            GameHelper.getGameData(client, interaction)
+        ]);
         if (gameData.isdeleted) {
             return interaction.editReply({ content: "No active game found in this channel."});
         }
@@ -113,18 +114,19 @@ module.exports = {
 
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
-            // Ephemeral confirmation of action
-            await selectionInteraction.update({
-                content: `You picked up ${pickedCards.length} card(s) from your play area: ${pickedCards.map(c => Formatter.cardShortName(c)).join(', ')}. They have been added to your hand.`,
-                components: []
-            });
-
-            // Public follow-up message
-            await interaction.followUp({
-                content: `${interaction.member.displayName} picked up ${pickedCards.length} card(s) from their play area.`});
+            // Ephemeral confirmation of action, public follow-up, and the hand/play-area render
+            // are all independent of each other, so they can run concurrently.
+            const [, , handShowReply] = await Promise.all([
+                selectionInteraction.update({
+                    content: `You picked up ${pickedCards.length} card(s) from your play area: ${pickedCards.map(c => Formatter.cardShortName(c)).join(', ')}. They have been added to your hand.`,
+                    components: []
+                }),
+                interaction.followUp({
+                    content: `${interaction.member.displayName} picked up ${pickedCards.length} card(s) from their play area.`}),
+                Formatter.playerSecretHandAndImages(gameData, player)
+            ]);
 
             // Display updated hand and play area to the player (ephemeral)
-            const handShowReply = await Formatter.playerSecretHandAndImages(gameData, player);
             await interaction.followUp({
                 content: "Your updated hand and play area:",
                 embeds: handShowReply.embeds,
