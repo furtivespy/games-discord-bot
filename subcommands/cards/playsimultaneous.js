@@ -10,9 +10,10 @@ const {
 
 class PlaySimultaneous {
   async execute(interaction, client) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-    let gameData = await GameHelper.getGameData(client, interaction);
+    const [, gameData] = await Promise.all([
+      interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+      GameHelper.getGameData(client, interaction)
+    ]);
 
     if (gameData.isdeleted) {
       return interaction.editReply({
@@ -131,18 +132,18 @@ class PlaySimultaneous {
       p.hands.simultaneous && p.hands.simultaneous.length > 0
     );
 
-    // Send a public followup message to notify other players
-    await interaction.followUp({
-      content: allPlayersSelected 
-        ? `${interaction.user} has selected their cards for simultaneous play! All players have now made their selections - time to reveal!`
-        : `${interaction.user} has selected their cards for simultaneous play!`});
-
-    await interaction.editReply({
-      content: `You have selected your cards for simultaneous play. Waiting for the reveal.`,
-      components: []});
-
-    // Show the player their current hand
-    var handInfo = await Formatter.playerSecretHandAndImages(gameData, player);
+    // Send a public followup message to notify other players, acknowledge the selection,
+    // and render the player's current hand all concurrently - they're independent of each other.
+    const [, , handInfo] = await Promise.all([
+      interaction.followUp({
+        content: allPlayersSelected 
+          ? `${interaction.user} has selected their cards for simultaneous play! All players have now made their selections - time to reveal!`
+          : `${interaction.user} has selected their cards for simultaneous play!`}),
+      interaction.editReply({
+        content: `You have selected your cards for simultaneous play. Waiting for the reveal.`,
+        components: []}),
+      Formatter.playerSecretHandAndImages(gameData, player)
+    ]);
     if (handInfo.attachments.length > 0) {
       await interaction.followUp({ 
         embeds: [...handInfo.embeds],

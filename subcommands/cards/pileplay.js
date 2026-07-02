@@ -24,9 +24,10 @@ class PilePlay {
             return
         }
 
-        await interaction.deferReply()
-        
-        const gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply(),
+            GameHelper.getGameData(client, interaction)
+        ]);
 
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})
@@ -92,13 +93,13 @@ class PilePlay {
 
         const embeds = pile.isSecret ? [] : [Formatter.oneCard(playedCard)]
 
-        await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
-            content: publicMessage,
-            additionalEmbeds: embeds
-        })
-
-        // Private follow-up with hand
-        const handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
+        const [, handInfo] = await Promise.all([
+            GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
+                content: publicMessage,
+                additionalEmbeds: embeds
+            }),
+            Formatter.playerSecretHandAndImages(gameData, player)
+        ]);
         const privateFollowup = { embeds: [...handInfo.embeds], flags: MessageFlags.Ephemeral }
         if (handInfo.attachments.length > 0) {
             privateFollowup.files = [...handInfo.attachments]

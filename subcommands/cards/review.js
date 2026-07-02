@@ -11,9 +11,10 @@ class Review {
             return
         }
 
-        await interaction.deferReply()
-        
-        let gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply(),
+            GameHelper.getGameData(client, interaction)
+        ]);
 
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})
@@ -27,10 +28,11 @@ class Review {
             return
         } 
         
-        let followup = await Formatter.multiCard(deck.allCards, `All cards in ${deck.name}`)
-
-        await interaction.editReply({ 
-            content: `${interaction.member.displayName} is reviewing the total makeup of ${deck.name}`})
+        const [, followup] = await Promise.all([
+            interaction.editReply({ 
+                content: `${interaction.member.displayName} is reviewing the total makeup of ${deck.name}`}),
+            Formatter.multiCard(deck.allCards, `All cards in ${deck.name}`)
+        ]);
         
         await interaction.followUp({ embeds: [...followup[0]], files: [...followup[1]], flags: MessageFlags.Ephemeral })
     }

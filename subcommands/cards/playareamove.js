@@ -36,9 +36,10 @@ module.exports = {
             return;
         }
 
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-        const gameData = await GameHelper.getGameData(client, interaction);
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            GameHelper.getGameData(client, interaction)
+        ]);
         if (gameData.isdeleted) {
             return interaction.editReply({ content: "No active game found in this channel."});
         }
@@ -238,32 +239,40 @@ module.exports = {
                 const sourcePlayAreaEmbed = new EmbedBuilder()
                     .setTitle(`${sourceUser.username}'s Updated Play Area`)
                     .setColor(sourcePlayer.color || 13502711);
-                const sourceAttachment = await Formatter.genericCardZoneDisplay(
-                    sourcePlayer.playArea,
-                    sourcePlayAreaEmbed,
-                    "Their Cards",
-                    `PlayAreaUpdate-${sourcePlayer.userId}`
-                );
+
+                let destinationPlayer, destDisplayName, destPlayAreaEmbed;
+                if (destination === 'playarea') {
+                    destinationPlayer = find(gameData.players, { userId: destinationPlayerId });
+                    const destMember = interaction.guild.members.cache.get(destinationPlayerId);
+                    destDisplayName = destMember?.displayName || destinationPlayer.name || `Player ${destinationPlayer.order}`;
+                    destPlayAreaEmbed = new EmbedBuilder()
+                        .setTitle(`${destDisplayName}'s Updated Play Area`)
+                        .setColor(destinationPlayer.color || 13502711);
+                }
+
+                // Source and destination renders are independent of each other, so run them concurrently.
+                const [sourceAttachment, destAttachment] = await Promise.all([
+                    Formatter.genericCardZoneDisplay(
+                        sourcePlayer.playArea,
+                        sourcePlayAreaEmbed,
+                        "Their Cards",
+                        `PlayAreaUpdate-${sourcePlayer.userId}`
+                    ),
+                    destination === 'playarea'
+                        ? Formatter.genericCardZoneDisplay(
+                            destinationPlayer.playArea,
+                            destPlayAreaEmbed,
+                            "Their Cards",
+                            `PlayAreaUpdate-${destinationPlayer.userId}`
+                        )
+                        : Promise.resolve(null)
+                ]);
 
                 const statusFiles = [];
                 if (sourceAttachment) statusFiles.push(sourceAttachment);
                 const embeds = [sourcePlayAreaEmbed].filter(e => e.data.fields && e.data.fields.length > 0 || e.data.image);
 
                 if (destination === 'playarea') {
-                    const destinationPlayer = find(gameData.players, { userId: destinationPlayerId });
-                    const destMember = interaction.guild.members.cache.get(destinationPlayerId);
-                    const destDisplayName = destMember?.displayName || destinationPlayer.name || `Player ${destinationPlayer.order}`;
-                    
-                    const destPlayAreaEmbed = new EmbedBuilder()
-                        .setTitle(`${destDisplayName}'s Updated Play Area`)
-                        .setColor(destinationPlayer.color || 13502711);
-                    const destAttachment = await Formatter.genericCardZoneDisplay(
-                        destinationPlayer.playArea,
-                        destPlayAreaEmbed,
-                        "Their Cards",
-                        `PlayAreaUpdate-${destinationPlayer.userId}`
-                    );
-
                     if (destAttachment) statusFiles.push(destAttachment);
                     embeds.push(destPlayAreaEmbed);
                 }

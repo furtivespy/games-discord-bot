@@ -13,9 +13,10 @@ class PileDrawMultiple {
             return
         }
 
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-        
-        const gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            GameHelper.getGameData(client, interaction)
+        ]);
         const pileId = interaction.options.getString('pile')
         const count = interaction.options.getInteger('count')
         
@@ -77,10 +78,11 @@ class PileDrawMultiple {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-        let followup = await Formatter.multiCard(drawnCards, `Cards Drawn from ${pile.name}`)
-        
-        await interaction.editReply({ 
-            content: `You drew ${count} cards from ${pile.name}`})
+        const [followup] = await Promise.all([
+            Formatter.multiCard(drawnCards, `Cards Drawn from ${pile.name}`),
+            interaction.editReply({ 
+                content: `You drew ${count} cards from ${pile.name}`})
+        ]);
 
         await interaction.followUp({ 
             embeds: [...followup[0]], 

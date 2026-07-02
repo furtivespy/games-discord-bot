@@ -10,9 +10,10 @@ module.exports = {
             await GameHelper.getDeckAutocomplete(gameData, interaction)
         } else {
             try {
-                await interaction.deferReply()
-
-                let gameData = await GameHelper.getGameData(client, interaction);
+                const [, gameData] = await Promise.all([
+                    interaction.deferReply(),
+                    GameHelper.getGameData(client, interaction)
+                ]);
                 const deckName = interaction.options.getString('deck');
                 let depth = interaction.options.getInteger('depth') ?? 1;
                 // Fetch the deck from the DB

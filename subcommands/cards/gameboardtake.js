@@ -29,9 +29,10 @@ class GameBoardTake {
             return
         }
 
-        await interaction.deferReply({})
-        
-        const gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({}),
+            GameHelper.getGameData(client, interaction)
+        ]);
         
         const cardId = interaction.options.getString('card')
         const destination = interaction.options.getString('destination') || 'hand'
@@ -118,17 +119,20 @@ class GameBoardTake {
             publicMessage += ` to ${destinationName}`
         }
 
-        await interaction.editReply({ 
-            content: publicMessage})
-
-        // Show updated hand privately if destination was hand
+        // Show updated hand privately if destination was hand - the reply and the hand
+        // render are independent, so run them concurrently when a render is needed.
         if (destination === 'hand') {
-            const handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
+            const [, handInfo] = await Promise.all([
+                interaction.editReply({ content: publicMessage}),
+                Formatter.playerSecretHandAndImages(gameData, player)
+            ]);
             const privateFollowup = { embeds: [...handInfo.embeds], flags: MessageFlags.Ephemeral }
             if (handInfo.attachments.length > 0) {
                 privateFollowup.files = [...handInfo.attachments]
             }
             await interaction.followUp(privateFollowup)
+        } else {
+            await interaction.editReply({ content: publicMessage})
         }
     }
 }
