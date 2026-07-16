@@ -10,9 +10,10 @@ class PileView {
             return
         }
 
-        await interaction.deferReply()
-        
-        const gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply(),
+            GameHelper.getGameData(client, interaction)
+        ]);
 
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})
@@ -38,11 +39,12 @@ class PileView {
             return
         }
 
-        let followup = await Formatter.multiCard(pile.cards, `All Cards in ${pile.name}`)
-
-        await interaction.editReply({ 
-            content: `${interaction.member.displayName} is viewing ${pile.name} (${pile.cards.length} cards)`
-        })
+        const [, followup] = await Promise.all([
+            interaction.editReply({ 
+                content: `${interaction.member.displayName} is viewing ${pile.name} (${pile.cards.length} cards)`
+            }),
+            Formatter.multiCard(pile.cards, `All Cards in ${pile.name}`)
+        ]);
 
         await interaction.followUp({ 
             embeds: [...followup[0]], 

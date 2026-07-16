@@ -22,9 +22,10 @@ class Take {
             return
         }
 
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-        
-        let gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            GameHelper.getGameData(client, interaction)
+        ]);
 
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})
@@ -70,9 +71,11 @@ class Take {
         
         //client.setGameData(`game-${interaction.channel.id}`, gameData)
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
-        await interaction.editReply({ content: `${interaction.member.displayName} has un-drafted a card!`})
-                        
-        var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
+
+        const [, handInfo] = await Promise.all([
+            interaction.editReply({ content: `${interaction.member.displayName} has un-drafted a card!`}),
+            Formatter.playerSecretHandAndImages(gameData, player)
+        ]);
         if (handInfo.attachments.length >0){
             await interaction.followUp({ 
                 content: `You un-drafted:`, 

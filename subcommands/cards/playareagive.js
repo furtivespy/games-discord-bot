@@ -9,9 +9,10 @@ module.exports = {
     // Needs: .addUserOption(option => option.setName('target').setDescription('The player to give cards to').setRequired(true))
 
     async execute(interaction, client) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-        const gameData = await GameHelper.getGameData(client, interaction);
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            GameHelper.getGameData(client, interaction)
+        ]);
         if (gameData.isdeleted) {
             return interaction.editReply({ content: "No active game found in this channel."});
         }
@@ -117,10 +118,6 @@ module.exports = {
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
             const givenCardsList = givenCards.map(c => Formatter.cardShortName(c)).join(', ');
-            await selectionInteraction.update({
-                content: `You gave ${givenCards.length} card(s) to ${targetUser.username}: ${givenCardsList}.`,
-                components: []
-            });
 
             let publicFollowUpContent = `${interaction.member.displayName} gave ${givenCards.length} card(s) to ${targetUser.username}'s play area`;
             if (givenCards.length > 0) {
@@ -129,15 +126,21 @@ module.exports = {
             if (publicFollowUpContent.length > 2000) { // Discord message limit
                 publicFollowUpContent = `${interaction.member.displayName} gave ${givenCards.length} card(s) to ${targetUser.username}'s play area. (Card list too long to display).`;
             }
-            await interaction.followUp({
-                content: publicFollowUpContent});
 
             // Display updated play areas
             const initiatorPlayAreaEmbed = new EmbedBuilder().setTitle("Your Updated Play Area").setColor(initiator.color || 13502711);
-            const initiatorAttachment = await Formatter.genericCardZoneDisplay(initiator.playArea, initiatorPlayAreaEmbed, "Your Cards", `PlayAreaUpdate-${initiator.userId}`);
-
             const targetPlayAreaEmbed = new EmbedBuilder().setTitle(`${targetUser.username}'s Updated Play Area`).setColor(targetPlayer.color || 13502711);
-            const targetAttachment = await Formatter.genericCardZoneDisplay(targetPlayer.playArea, targetPlayAreaEmbed, "Their Cards", `PlayAreaUpdate-${targetPlayer.userId}`);
+
+            const [, , initiatorAttachment, targetAttachment] = await Promise.all([
+                selectionInteraction.update({
+                    content: `You gave ${givenCards.length} card(s) to ${targetUser.username}: ${givenCardsList}.`,
+                    components: []
+                }),
+                interaction.followUp({
+                    content: publicFollowUpContent}),
+                Formatter.genericCardZoneDisplay(initiator.playArea, initiatorPlayAreaEmbed, "Your Cards", `PlayAreaUpdate-${initiator.userId}`),
+                Formatter.genericCardZoneDisplay(targetPlayer.playArea, targetPlayAreaEmbed, "Their Cards", `PlayAreaUpdate-${targetPlayer.userId}`)
+            ]);
 
             const statusFiles = [];
             if (initiatorAttachment) statusFiles.push(initiatorAttachment);

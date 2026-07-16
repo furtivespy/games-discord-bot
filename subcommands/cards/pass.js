@@ -7,9 +7,10 @@ const { StringSelectMenuBuilder, ActionRowBuilder, MessageFlags} = require('disc
 
 class Pass {
     async execute(interaction, client) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-        
-        let gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            GameHelper.getGameData(client, interaction)
+        ]);
 
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})
@@ -90,11 +91,14 @@ class Pass {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-        await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
-            content: `${interaction.member.displayName} passed ${passedCardsObjects.length} card(s) to ${selectedPlayer}.`
-        });
+        const [, senderHandInfo, receiverHandInfo] = await Promise.all([
+            GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
+                content: `${interaction.member.displayName} passed ${passedCardsObjects.length} card(s) to ${selectedPlayer}.`
+            }),
+            Formatter.playerSecretHandAndImages(gameData, player),
+            Formatter.playerSecretHandAndImages(gameData, targetPlayer)
+        ]);
 
-        var senderHandInfo = await Formatter.playerSecretHandAndImages(gameData, player)
         await interaction.followUp({
             content: `You passed ${passedCardsObjects.length} card(s) to ${selectedPlayer.username}. Your hand is now:`,
             embeds: [...senderHandInfo.embeds],
@@ -102,7 +106,6 @@ class Pass {
             flags: MessageFlags.Ephemeral
         });
 
-        var receiverHandInfo = await Formatter.playerSecretHandAndImages(gameData, targetPlayer)
         await interaction.guild.members.fetch(selectedPlayer.id).then(member => {
             member.send({
                 content: `You received ${passedCardsObjects.length} card(s) from ${interaction.member.displayName}. Your hand is now:`,

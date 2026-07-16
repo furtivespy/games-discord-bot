@@ -26,9 +26,10 @@ class Rturn {
             return
         }
 
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-        
-        let gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            GameHelper.getGameData(client, interaction)
+        ]);
         let player = find(gameData.players, {userId: interaction.user.id})
 
         if (gameData.isdeleted) {
@@ -89,13 +90,13 @@ class Rturn {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
-        await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
-            content: `${interaction.member.displayName} returned a card${destination !== 'deck' ? ' to ' + destinationName : ''}`
-        });
-
-        await interaction.editReply({ content: `You returned ${Formatter.cardShortName(card)} to ${destinationName}.` });
-
-        var handInfo = await Formatter.playerSecretHandAndImages(gameData, player);
+        const [, , handInfo] = await Promise.all([
+            GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
+                content: `${interaction.member.displayName} returned a card${destination !== 'deck' ? ' to ' + destinationName : ''}`
+            }),
+            interaction.editReply({ content: `You returned ${Formatter.cardShortName(card)} to ${destinationName}.` }),
+            Formatter.playerSecretHandAndImages(gameData, player)
+        ]);
         const privateFollowup = { embeds: [...handInfo.embeds], flags: MessageFlags.Ephemeral };
         if (handInfo.attachments.length > 0) {
             privateFollowup.files = [...handInfo.attachments];

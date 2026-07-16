@@ -4,9 +4,10 @@ const Formatter = require('../../modules/GameFormatter')
 
 class GameBoardView {
     async execute(interaction, client) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-        
-        const gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            GameHelper.getGameData(client, interaction)
+        ]);
 
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})
@@ -18,10 +19,11 @@ class GameBoardView {
             return
         }
 
-        let followup = await Formatter.multiCard(gameData.gameBoard, `All Cards on Game Board`)
-
-        await interaction.editReply({ 
-            content: `Game Board (${gameData.gameBoard.length} cards)`})
+        const [, followup] = await Promise.all([
+            interaction.editReply({ 
+                content: `Game Board (${gameData.gameBoard.length} cards)`}),
+            Formatter.multiCard(gameData.gameBoard, `All Cards on Game Board`)
+        ]);
 
         await interaction.followUp({ 
             embeds: [...followup[0]], 

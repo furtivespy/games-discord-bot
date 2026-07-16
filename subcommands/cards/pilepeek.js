@@ -11,9 +11,10 @@ class PilePeek {
             return
         }
 
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-        
-        const gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            GameHelper.getGameData(client, interaction)
+        ]);
 
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})
@@ -33,10 +34,11 @@ class PilePeek {
             return
         }
 
-        let followup = await Formatter.multiCard(pile.cards, `All Cards in ${pile.name}`)
-
-        await interaction.editReply({ 
-            content: `Peeking at ${pile.name} (${pile.cards.length} cards)${pile.isSecret ? ' 🔒' : ''}`})
+        const [, followup] = await Promise.all([
+            interaction.editReply({ 
+                content: `Peeking at ${pile.name} (${pile.cards.length} cards)${pile.isSecret ? ' 🔒' : ''}`}),
+            Formatter.multiCard(pile.cards, `All Cards in ${pile.name}`)
+        ]);
 
         await interaction.followUp({ 
             embeds: [...followup[0]], 

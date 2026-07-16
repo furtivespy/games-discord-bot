@@ -13,8 +13,10 @@ class Draw {
             return
         }
 
-        await interaction.deferReply()
-        let gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply(),
+            GameHelper.getGameData(client, interaction)
+        ]);
         
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})
@@ -73,11 +75,12 @@ class Draw {
         
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
                         
-        await GameStatusHelper.sendGameStatus(interaction, client, gameData,
-          { content: `${interaction.member.displayName} drew a card from ${deck.name}` }
-        );
-
-        var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
+        const [, handInfo] = await Promise.all([
+            GameStatusHelper.sendGameStatus(interaction, client, gameData,
+              { content: `${interaction.member.displayName} drew a card from ${deck.name}` }
+            ),
+            Formatter.playerSecretHandAndImages(gameData, player)
+        ]);
         if (handInfo.attachments.length >0){
             await interaction.followUp({ 
                 content: `You drew:`, 

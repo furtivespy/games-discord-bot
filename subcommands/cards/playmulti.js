@@ -6,9 +6,10 @@ const GameDB = require('../../db/anygame')
 
 class PlayMulti {
     async execute(interaction, client) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-        
-        let gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            GameHelper.getGameData(client, interaction)
+        ]);
 
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})
@@ -153,9 +154,10 @@ class PlayMulti {
         const followupOptions = { content: mainContent, components: [] };
         if (replyEmbeds.length > 0) followupOptions.embeds = replyEmbeds;
         if (replyFiles.length > 0) followupOptions.files = replyFiles;
-        await interaction.followUp(followupOptions);
-        
-        var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
+        const [, handInfo] = await Promise.all([
+            interaction.followUp(followupOptions),
+            Formatter.playerSecretHandAndImages(gameData, player)
+        ]);
         if (handInfo.attachments.length >0){
             await interaction.followUp({ 
                 embeds: [...handInfo.embeds],

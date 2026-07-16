@@ -12,9 +12,10 @@ class Pick {
         return
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-    
-    let gameData = await GameHelper.getGameData(client, interaction)
+    const [, gameData] = await Promise.all([
+      interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+      GameHelper.getGameData(client, interaction)
+    ]);
     const inputDeck = interaction.options.getString('deck')
     const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
     let player = find(gameData.players, {userId: interaction.user.id})

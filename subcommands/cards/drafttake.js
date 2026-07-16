@@ -26,9 +26,10 @@ class Take {
             return
         }
 
-        await interaction.deferReply()
-        
-        let gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply(),
+            GameHelper.getGameData(client, interaction)
+        ]);
 
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})
@@ -60,7 +61,12 @@ class Take {
             console.warn('Failed to record draft take in history:', error)
         }
         
-        await interaction.editReply({ content: `${interaction.member.displayName} has drafted a card!`})
+        // The reply and the hand render are independent (the render only needs the
+        // already-mutated in-memory gameData/player), so run them concurrently.
+        const [, handInfo] = await Promise.all([
+            interaction.editReply({ content: `${interaction.member.displayName} has drafted a card!`}),
+            Formatter.playerSecretHandAndImages(gameData, player)
+        ]);
 
         let cardsLeft = player.hands.draft.length
         let shouldPass = true
@@ -79,7 +85,6 @@ class Take {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-        var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
         if (handInfo.attachments.length > 0){
             await interaction.followUp({ 
                 content: `You drafted:`, 

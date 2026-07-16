@@ -28,9 +28,10 @@ class Play {
             return
         }
 
-        await interaction.deferReply()
-        
-        let gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply(),
+            GameHelper.getGameData(client, interaction)
+        ]);
 
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})
@@ -162,10 +163,10 @@ class Play {
         if (replyFiles.length > 0) {
             replyOptions.files = replyFiles;
         }
-        await interaction.editReply(replyOptions);
-
-        // The ephemeral follow-up for hand status remains the same
-        var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
+        const [, handInfo] = await Promise.all([
+            interaction.editReply(replyOptions),
+            Formatter.playerSecretHandAndImages(gameData, player)
+        ]);
         if (handInfo.attachments.length >0){
             await interaction.followUp({ 
                 embeds: [...handInfo.embeds],

@@ -23,9 +23,10 @@ class Reveal {
             return
         }
 
-        await interaction.deferReply()
-        
-        let gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply(),
+            GameHelper.getGameData(client, interaction)
+        ]);
 
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})
@@ -66,12 +67,13 @@ class Reveal {
         // Save game data to persist history entry
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         
-        await interaction.editReply({ content: "Revealing a card:",
-        embeds: [
-            Formatter.oneCard(card),
-        ]})
-
-        var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
+        const [, handInfo] = await Promise.all([
+            interaction.editReply({ content: "Revealing a card:",
+            embeds: [
+                Formatter.oneCard(card),
+            ]}),
+            Formatter.playerSecretHandAndImages(gameData, player)
+        ]);
         if (handInfo.attachments.length >0){
             await interaction.followUp({ 
                 embeds: [...handInfo.embeds],
