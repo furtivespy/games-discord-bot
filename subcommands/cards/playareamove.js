@@ -172,7 +172,7 @@ module.exports = {
                 if (!pile) {
                     // Return cards to source play area if pile not found
                     sourcePlayer.playArea.push(...movedCards);
-                    await selectionInteraction.update({ content: 'Pile not found! Cards returned to source play area.', components: [], ephemeral: true });
+                    await selectionInteraction.update({ content: 'Pile not found! Cards returned to source play area.', components: [], flags: MessageFlags.Ephemeral });
                     return;
                 }
                 pile.cards.push(...movedCards);

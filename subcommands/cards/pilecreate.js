@@ -52,7 +52,8 @@ class PileCreate {
 
         const secretText = isSecret ? ' (cards will be hidden)' : ''
         await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
-            content: `${interaction.member.displayName} created a new pile: **${pileName}**${secretText}`
+            content: `${interaction.member.displayName} created a new pile: **${pileName}**${secretText}`,
+            resolveDeferredReply: true
         })
     }
 }

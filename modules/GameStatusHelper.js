@@ -27,7 +27,7 @@ class GameStatusHelper {
     await this.cleanUpPreviousMessage(interaction.channel, gameData);
 
     // Now, always send a new, full status message.
-    const fullReply = await Formatter.createGameStatusReply(gameData, interaction.guild, client.user.id, options);
+    const fullReply = await this.buildStatusReplyOptions(gameData, interaction.guild, client.user.id, options);
 
     const replyOptions = {
         ...fullReply,
@@ -57,8 +57,20 @@ class GameStatusHelper {
     await this.cleanUpPreviousMessage(channel, gameData);
 
     // Now, always send a new, full status message.
-    const fullReply = await Formatter.createGameStatusReply(gameData, channel.guild, client.user.id, options);
-    const sentMessage = await channel.send({ ...fullReply, fetchReply: true });
+    const fullReply = await this.buildStatusReplyOptions(gameData, channel.guild, client.user.id, options);
+
+    // Callers can opt in via options.resolveDeferredReply when the original
+    // interaction (deferred publicly) hasn't been resolved by any other means -
+    // otherwise it would be left stuck on "thinking..." while this status update
+    // is posted as a separate channel message. Callers that already resolve the
+    // interaction themselves (e.g. an ephemeral defer + separate editReply/followUp)
+    // are unaffected, since this defaults to off and keeps sending a new channel message.
+    let sentMessage;
+    if (options.resolveDeferredReply && (interaction.deferred || interaction.replied)) {
+        sentMessage = await interaction.editReply({ ...fullReply, fetchReply: true });
+    } else {
+        sentMessage = await channel.send({ ...fullReply, fetchReply: true });
+    }
 
     // Persist the status update result to the database
     const statusUpdateResult = {
@@ -66,6 +78,23 @@ class GameStatusHelper {
         lastStatusMessageTimestamp: Date.now()
     };
     await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult);
+  }
+
+  // Single choke point for building the full game status reply (table image,
+  // embeds, etc). Rendering can fail (e.g. a bad card image URL, canvas error),
+  // so this degrades to a text-only reply rather than letting the failure
+  // propagate and leave the interaction with no response at all.
+  static async buildStatusReplyOptions(gameData, guild, clientUserId, options = {}) {
+    try {
+        return await Formatter.createGameStatusReply(gameData, guild, clientUserId, options);
+    } catch (error) {
+        console.error('Failed to render game status; falling back to a text-only status update.', error);
+        const fallback = { embeds: [], files: [] };
+        fallback.content = options.content
+            ? `${options.content}\n\n⚠️ Could not render the full game status due to an error.`
+            : '⚠️ Could not render the full game status due to an error.';
+        return fallback;
+    }
   }
 
   static async persistStatusUpdate(client, interaction, gameData, publicUpdateResult) {

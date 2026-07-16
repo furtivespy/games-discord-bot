@@ -1,3 +1,4 @@
+const { MessageFlags } = require('discord.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const Formatter = require('../../modules/GameFormatter')
@@ -22,7 +23,7 @@ class FlipMulti {
         ]);
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`, flags: MessageFlags.Ephemeral })
             return
         }
 
@@ -33,14 +34,14 @@ class FlipMulti {
         const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
 
         if (!deck || deck.piles.draw.cards.length < 1) {
-            await interaction.editReply({ content: "No cards in draw pile", ephemeral: true })
+            await interaction.editReply({ content: "No cards in draw pile", flags: MessageFlags.Ephemeral })
             return
         }
 
         if (deck.piles.draw.cards.length < count) {
             await interaction.editReply({
                 content: `Not enough cards in draw pile! (has ${deck.piles.draw.cards.length}, requested ${count})`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })
             return
         }
@@ -61,7 +62,7 @@ class FlipMulti {
             const pile = GameHelper.getGlobalPile(gameData, destination)
             if (!pile) {
                 deck.piles.draw.cards.unshift(...flippedCards)
-                await interaction.editReply({ content: 'Pile not found!', ephemeral: true })
+                await interaction.editReply({ content: 'Pile not found!', flags: MessageFlags.Ephemeral })
                 return
             }
             pile.cards.push(...flippedCards)

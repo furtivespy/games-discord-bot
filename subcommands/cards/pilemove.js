@@ -2,7 +2,7 @@ const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
-const { EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js')
+const { EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder, MessageFlags } = require('discord.js')
 
 class PileMove {
     async execute(interaction, client) {
@@ -42,13 +42,13 @@ class PileMove {
         const gameData = await GameHelper.getGameData(client, interaction)
         
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`, flags: MessageFlags.Ephemeral })
             return
         }
 
         const player = find(gameData.players, {userId: interaction.user.id})
         if (!player) {
-            await interaction.editReply({ content: "You must be a player in this game!", ephemeral: true })
+            await interaction.editReply({ content: "You must be a player in this game!", flags: MessageFlags.Ephemeral })
             return
         }
 
@@ -56,18 +56,18 @@ class PileMove {
         const sourcePile = GameHelper.getGlobalPile(gameData, sourcePileId)
         
         if (!sourcePile) {
-            await interaction.editReply({ content: `Source pile not found!`, ephemeral: true })
+            await interaction.editReply({ content: `Source pile not found!`, flags: MessageFlags.Ephemeral })
             return
         }
 
         if (sourcePile.cards.length < 1) {
-            await interaction.editReply({ content: `No cards in ${sourcePile.name}!`, ephemeral: true })
+            await interaction.editReply({ content: `No cards in ${sourcePile.name}!`, flags: MessageFlags.Ephemeral })
             return
         }
 
         const destination = interaction.options.getString('destination')
         if (!destination) {
-            await interaction.editReply({ content: "You must specify a destination.", ephemeral: true })
+            await interaction.editReply({ content: "You must specify a destination.", flags: MessageFlags.Ephemeral })
             return
         }
 
@@ -75,20 +75,20 @@ class PileMove {
 
         // Validate destination-specific requirements
         if (destination === 'playarea' && !destinationPlayerId) {
-            await interaction.editReply({ content: "You must specify a destination player when destination is 'Play Area'.", ephemeral: true })
+            await interaction.editReply({ content: "You must specify a destination player when destination is 'Play Area'.", flags: MessageFlags.Ephemeral })
             return
         }
 
         if (destination === 'playarea') {
             const destinationPlayer = find(gameData.players, { userId: destinationPlayerId })
             if (!destinationPlayer) {
-                await interaction.editReply({ content: "Destination player not found in the game.", ephemeral: true })
+                await interaction.editReply({ content: "Destination player not found in the game.", flags: MessageFlags.Ephemeral })
                 return
             }
         }
 
         if (sourcePileId === destination) {
-            await interaction.editReply({ content: "Cannot move cards to the same pile they came from.", ephemeral: true })
+            await interaction.editReply({ content: "Cannot move cards to the same pile they came from.", flags: MessageFlags.Ephemeral })
             return
         }
 
@@ -148,7 +148,7 @@ class PileMove {
             sourcePile.cards = newSourceCards
 
             if (movedCards.length === 0) {
-                await selectionInteraction.update({ content: "No valid cards were selected or an error occurred.", components: [], ephemeral: true })
+                await selectionInteraction.update({ content: "No valid cards were selected or an error occurred.", components: [], flags: MessageFlags.Ephemeral })
                 return
             }
 
@@ -160,7 +160,7 @@ class PileMove {
                 const destinationPlayer = find(gameData.players, { userId: destinationPlayerId })
                 if (!destinationPlayer) {
                     sourcePile.cards.push(...movedCards)
-                    await selectionInteraction.update({ content: 'Destination player not found! Cards returned to source pile.', components: [], ephemeral: true })
+                    await selectionInteraction.update({ content: 'Destination player not found! Cards returned to source pile.', components: [], flags: MessageFlags.Ephemeral })
                     return
                 }
                 if (!destinationPlayer.playArea) {
@@ -199,7 +199,7 @@ class PileMove {
                 if (!destinationPile) {
                     // Return cards to source pile if destination pile not found
                     sourcePile.cards.push(...movedCards)
-                    await selectionInteraction.update({ content: 'Destination pile not found! Cards returned to source pile.', components: [], ephemeral: true })
+                    await selectionInteraction.update({ content: 'Destination pile not found! Cards returned to source pile.', components: [], flags: MessageFlags.Ephemeral })
                     return
                 }
                 destinationPile.cards.push(...movedCards)
@@ -259,7 +259,7 @@ class PileMove {
                 // Show updated hand privately if destination was hand
                 if (destination === 'hand') {
                     const handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
-                    const privateFollowup = { embeds: [...handInfo.embeds], ephemeral: true }
+                    const privateFollowup = { embeds: [...handInfo.embeds], flags: MessageFlags.Ephemeral }
                     if (handInfo.attachments.length > 0) {
                         privateFollowup.files = [...handInfo.attachments]
                     }
@@ -274,10 +274,10 @@ class PileMove {
 
         } catch (e) {
             if (e.code === 'InteractionCollectorError') {
-                await interaction.editReply({ content: 'Card selection timed out.', components: [], ephemeral: true })
+                await interaction.editReply({ content: 'Card selection timed out.', components: [], flags: MessageFlags.Ephemeral })
             } else {
                 client.logger.log(e, 'error')
-                await interaction.editReply({ content: 'An error occurred during card selection for moving.', components: [], ephemeral: true })
+                await interaction.editReply({ content: 'An error occurred during card selection for moving.', components: [], flags: MessageFlags.Ephemeral })
             }
         }
     }

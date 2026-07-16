@@ -1,3 +1,4 @@
+const { MessageFlags } = require('discord.js');
 const GameHelper = require('../../modules/GlobalGameHelper');
 const GameDB = require('../../db/anygame.js');
 // No Formatter needed as we are not displaying card details
@@ -61,7 +62,7 @@ class Burn {
         } else {
              targetPile = GameHelper.getGlobalPile(gameData, destination);
              if (!targetPile) {
-                 await interaction.editReply({ content: 'Pile not found!', ephemeral: true });
+                 await interaction.editReply({ content: 'Pile not found!', flags: MessageFlags.Ephemeral });
                  return;
              }
              destinationName = targetPile.name;
