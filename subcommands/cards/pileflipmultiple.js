@@ -1,3 +1,4 @@
+const { MessageFlags } = require('discord.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const Formatter = require('../../modules/GameFormatter')
@@ -21,7 +22,7 @@ class PileFlipMultiple {
         ]);
 
         if (gameData.isdeleted) {
-            await interaction.editReply({ content: `There is no game in this channel.`, ephemeral: true })
+            await interaction.editReply({ content: `There is no game in this channel.`, flags: MessageFlags.Ephemeral })
             return
         }
 
@@ -31,14 +32,14 @@ class PileFlipMultiple {
         const pile = GameHelper.getGlobalPile(gameData, pileId)
 
         if (!pile) {
-            await interaction.editReply({ content: `Pile not found!`, ephemeral: true })
+            await interaction.editReply({ content: `Pile not found!`, flags: MessageFlags.Ephemeral })
             return
         }
 
         if (pile.cards.length < count) {
             await interaction.editReply({
                 content: `Not enough cards in ${pile.name}! (has ${pile.cards.length}, requested ${count})`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })
             return
         }
@@ -66,7 +67,7 @@ class PileFlipMultiple {
 
             if (!deck) {
                 pile.cards.unshift(...flippedCards)
-                await interaction.editReply({ content: 'No deck found to discard to. Use Game Board or a Custom Pile as destination.', ephemeral: true })
+                await interaction.editReply({ content: 'No deck found to discard to. Use Game Board or a Custom Pile as destination.', flags: MessageFlags.Ephemeral })
                 return
             }
             deck.piles.discard.cards.push(...flippedCards)
@@ -76,7 +77,7 @@ class PileFlipMultiple {
             const destPile = GameHelper.getGlobalPile(gameData, destination)
             if (!destPile) {
                 pile.cards.unshift(...flippedCards)
-                await interaction.editReply({ content: 'Destination pile not found!', ephemeral: true })
+                await interaction.editReply({ content: 'Destination pile not found!', flags: MessageFlags.Ephemeral })
                 return
             }
             destPile.cards.push(...flippedCards)

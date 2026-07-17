@@ -12,7 +12,7 @@ class PilePeek {
         }
 
         const [, gameData] = await Promise.all([
-            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            interaction.deferReply(),
             GameHelper.getGameData(client, interaction)
         ]);
 

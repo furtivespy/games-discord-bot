@@ -3,7 +3,7 @@ const GameDB = require('../../db/anygame.js')
 const { find, findIndex, sortBy, filter } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
-const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js')
+const { StringSelectMenuBuilder, ActionRowBuilder, MessageFlags } = require('discord.js')
 
 class GameBoardDiscard {
     async execute(interaction, client) {
@@ -75,7 +75,7 @@ class GameBoardDiscard {
             if (!pile) {
                 // Return card to board if pile not found
                 gameData.gameBoard.splice(cardIndex, 0, discardedCard)
-                await interaction.editReply({ content: 'Pile not found!', ephemeral: true })
+                await interaction.editReply({ content: 'Pile not found!', flags: MessageFlags.Ephemeral })
                 return
             }
             pile.cards.push(discardedCard)

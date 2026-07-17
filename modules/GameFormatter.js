@@ -607,9 +607,16 @@ class GameFormatter {
         const cardsInFirstRow = Math.min(imgList.length, 6);
         const canvasWidth = cardsInFirstRow * 200;
         const cardWidth = 200;
+        const fallbackCardHeight = 280;
 
-        // Fetch all images in parallel
-        const cardImages = await Promise.all(imgList.map(url => loadImage(url)));
+        // Load images individually so a single failed/unreachable URL degrades to a
+        // placeholder instead of aborting the whole render (and the command with it).
+        const cardImages = await Promise.all(imgList.map(url =>
+          loadImage(url).catch(err => {
+            console.error(`Failed to load card image: ${url}`, err);
+            return null;
+          })
+        ));
 
         // Layout pass: calculate row boundaries to determine final canvas height
         let rowstart = 0;
@@ -617,7 +624,7 @@ class GameFormatter {
         const layout = [];
         for (let i = 0; i < cardImages.length; i++) {
           const cardImage = cardImages[i];
-          const cardHeight = (cardWidth / cardImage.width) * cardImage.height;
+          const cardHeight = cardImage ? (cardWidth / cardImage.width) * cardImage.height : fallbackCardHeight;
           const spot = i % 6;
           if (spot === 0) {
             rowstart = rowend;
@@ -634,7 +641,17 @@ class GameFormatter {
         // Draw pass (sequential canvas ops using pre-loaded images)
         for (let i = 0; i < cardImages.length; i++) {
           const { rowstart, cardHeight } = layout[i];
-          ctx.drawImage(cardImages[i], (i % 6) * cardWidth, rowstart, cardWidth, cardHeight);
+          const x = (i % 6) * cardWidth;
+          if (cardImages[i]) {
+            ctx.drawImage(cardImages[i], x, rowstart, cardWidth, cardHeight);
+          } else {
+            ctx.fillStyle = "#cccccc";
+            ctx.fillRect(x, rowstart, cardWidth, cardHeight);
+            ctx.fillStyle = "#000000";
+            ctx.font = "16px Open Sans";
+            ctx.textAlign = "center";
+            ctx.fillText("No Image", x + cardWidth / 2, rowstart + cardHeight / 2);
+          }
         }
 
         return canvas.toBuffer();

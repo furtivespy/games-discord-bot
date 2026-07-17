@@ -1,3 +1,4 @@
+const { MessageFlags } = require('discord.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const Formatter = require('../../modules/GameFormatter')
@@ -62,7 +63,7 @@ class PileFlip {
 
             if (!deck) {
                 pile.cards.unshift(flippedCard)
-                await interaction.editReply({ content: 'No deck found to discard to. Use Game Board or a Custom Pile as destination.', ephemeral: true })
+                await interaction.editReply({ content: 'No deck found to discard to. Use Game Board or a Custom Pile as destination.', flags: MessageFlags.Ephemeral })
                 return
             }
             deck.piles.discard.cards.push(flippedCard)
@@ -72,7 +73,7 @@ class PileFlip {
             const destPile = GameHelper.getGlobalPile(gameData, destination)
             if (!destPile) {
                 pile.cards.unshift(flippedCard)
-                await interaction.editReply({ content: 'Destination pile not found!', ephemeral: true })
+                await interaction.editReply({ content: 'Destination pile not found!', flags: MessageFlags.Ephemeral })
                 return
             }
             destPile.cards.push(flippedCard)
