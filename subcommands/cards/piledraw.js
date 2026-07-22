@@ -13,9 +13,10 @@ class PileDraw {
             return
         }
 
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-        
-        const gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            GameHelper.getGameData(client, interaction)
+        ])
         const pileId = interaction.options.getString('pile')
         
         const player = find(gameData.players, {userId: interaction.user.id})
@@ -69,11 +70,12 @@ class PileDraw {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-        await interaction.editReply({ 
-            content: `You drew ${Formatter.cardShortName(drawnCard)} from ${pile.name}`})
-
-        // Show updated hand
-        const handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
+        // Main reply and the secondary hand render are independent of each other
+        const [, handInfo] = await Promise.all([
+            interaction.editReply({ 
+                content: `You drew ${Formatter.cardShortName(drawnCard)} from ${pile.name}`}),
+            Formatter.playerSecretHandAndImages(gameData, player)
+        ])
         const privateFollowup = { embeds: [...handInfo.embeds], flags: MessageFlags.Ephemeral }
         if (handInfo.attachments.length > 0) {
             privateFollowup.files = [...handInfo.attachments]

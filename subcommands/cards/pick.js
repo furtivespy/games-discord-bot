@@ -58,8 +58,6 @@ class Pick {
     if (pickedCards.length < 1){
       await interaction.editReply({ content: 'No cards selected', components: [] })
       return
-    } else {
-      await interaction.editReply({ content: 'Cards Picked Back Up!', components: [] })
     }
 
       let pickedCardsObjects = []
@@ -97,7 +95,10 @@ class Pick {
 
       await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-    let followup = await Formatter.multiCard(pickedCardsObjects, `Cards Picked Back Up by ${interaction.member.displayName}`)
+    const [, followup] = await Promise.all([
+      interaction.editReply({ content: 'Cards Picked Back Up!', components: [] }),
+      Formatter.multiCard(pickedCardsObjects, `Cards Picked Back Up by ${interaction.member.displayName}`)
+    ])
     await interaction.followUp({ embeds: [...followup[0]], files: [...followup[1]] })    
   }
 }

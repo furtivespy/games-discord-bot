@@ -27,8 +27,11 @@ class NewGame {
       return;
     }
 
-    await interaction.deferReply();
-    let gameData = await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId);
+    const [, rawGameData] = await Promise.all([
+      interaction.deferReply(),
+      client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
+    ]);
+    let gameData = rawGameData;
 
     if (gameData && !gameData.isdeleted) {
       gameData.bggGameId = search;
@@ -96,15 +99,17 @@ class NewGame {
       // Save game data before sending status messages
       await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
-      await interaction.editReply({
-        content: `New Game Created!`,
-        embeds: bgg.embeds,
-        files: bgg.attachments});
-
-      // Game Status Logic using the helper
-      await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
-        content: content
-      });
+      // Main reply and the public status update are independent sends
+      // (editReply vs. channel.send), so they can run concurrently.
+      await Promise.all([
+        interaction.editReply({
+          content: `New Game Created!`,
+          embeds: bgg.embeds,
+          files: bgg.attachments}),
+        GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
+          content: content
+        })
+      ]);
 
       if (bgg.otherAttachments.length > 0) {
         await interaction.followUp({

@@ -16,8 +16,10 @@ module.exports = {
                 )),
     async execute(interaction) {
         try {
-            await interaction.deferReply();
-            const gameData = await GlobalGameHelper.getGameData(interaction.client, interaction);
+            const [, gameData] = await Promise.all([
+                interaction.deferReply(),
+                GlobalGameHelper.getGameData(interaction.client, interaction)
+            ]);
 
             if (gameData.isdeleted) {
                 return interaction.editReply({ content: "No active game found in this channel. Start a new game first."});

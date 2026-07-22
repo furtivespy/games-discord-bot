@@ -52,7 +52,8 @@ class PileTake {
 
         const CardsSelected = await interaction.editReply({ 
             content: `Choose cards to take from ${pile.name}:`, 
-            components: [row],  
+            components: [row], 
+ 
             fetchReply: true 
         })
         
@@ -69,8 +70,6 @@ class PileTake {
         if (takenCards.length < 1) {
             await interaction.editReply({ content: 'No cards selected', components: [] })
             return
-        } else {
-            await interaction.editReply({ content: 'Cards Taken!', components: [] })
         }
 
         let takenCardObjects = []
@@ -114,7 +113,10 @@ class PileTake {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-        let followup = await Formatter.multiCard(takenCardObjects, `Cards Taken by ${interaction.member.displayName}`)
+        const [, followup] = await Promise.all([
+            interaction.editReply({ content: 'Cards Taken!', components: [] }),
+            Formatter.multiCard(takenCardObjects, `Cards Taken by ${interaction.member.displayName}`)
+        ])
         await interaction.followUp({ embeds: [...followup[0]], files: [...followup[1]] })
     }
 }

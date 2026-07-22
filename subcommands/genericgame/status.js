@@ -6,18 +6,22 @@ const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class Status {
     static async execute(interaction, client) {
-        await interaction.deferReply()
-        const gameData = await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply(),
+            client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
+        ])
 
         if (!gameData || gameData.isdeleted) {
             return await interaction.editReply({ content: "No game in progress!"})
         }
 
-        // Get secret tokens for the command caller
+        // Get secret tokens for the command caller - the main status send and
+        // the secondary token render are independent of each other
         const player = find(gameData.players, { userId: interaction.user.id })
-        const secretTokensEmbed = player ? await Formatter.playerSecretTokens(gameData, player) : null
-
-        await GameStatusHelper.sendGameStatus(interaction, client, gameData, { content: "📊" });
+        const [, secretTokensEmbed] = await Promise.all([
+            GameStatusHelper.sendGameStatus(interaction, client, gameData, { content: "📊" }),
+            player ? Formatter.playerSecretTokens(gameData, player) : Promise.resolve(null)
+        ]);
 
         // If the player has secret tokens, send them in an ephemeral followup
         if (secretTokensEmbed) {
