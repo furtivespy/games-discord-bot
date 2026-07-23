@@ -3,9 +3,10 @@ const {EmbedBuilder, MessageFlags} = require('discord.js')
 
 class PileList {
     async execute(interaction, client) {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-        
-        const gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            GameHelper.getGameData(client, interaction)
+        ])
 
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})

@@ -11,9 +11,10 @@ class PileConfigure {
             return
         }
 
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-        
-        const gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            GameHelper.getGameData(client, interaction)
+        ])
 
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})

@@ -37,9 +37,10 @@ class PileMove {
             return
         }
 
-        await interaction.deferReply({ ephemeral: false })
-        
-        const gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ ephemeral: false }),
+            GameHelper.getGameData(client, interaction)
+        ])
         
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`, flags: MessageFlags.Ephemeral })
@@ -251,19 +252,26 @@ class PileMove {
                     publicMessage = `${interaction.member.displayName} moved ${successfullyMovedCards.length} card(s) from ${sourcePile.name} to ${destinationName}. (Card list too long to display).`
                 }
                 
-                await selectionInteraction.update({
-                    content: publicMessage,
-                    components: []
-                })
-
-                // Show updated hand privately if destination was hand
+                // Show updated hand privately if destination was hand - the update and the
+                // secondary hand render are independent of each other, so run concurrently
                 if (destination === 'hand') {
-                    const handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
+                    const [, handInfo] = await Promise.all([
+                        selectionInteraction.update({
+                            content: publicMessage,
+                            components: []
+                        }),
+                        Formatter.playerSecretHandAndImages(gameData, player)
+                    ])
                     const privateFollowup = { embeds: [...handInfo.embeds], flags: MessageFlags.Ephemeral }
                     if (handInfo.attachments.length > 0) {
                         privateFollowup.files = [...handInfo.attachments]
                     }
                     await interaction.followUp(privateFollowup)
+                } else {
+                    await selectionInteraction.update({
+                        content: publicMessage,
+                        components: []
+                    })
                 }
             } else {
                 await selectionInteraction.update({

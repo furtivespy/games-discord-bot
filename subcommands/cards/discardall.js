@@ -12,10 +12,13 @@ class DiscardAll {
   }
 
   async execute(interaction, client) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const deferPromise = interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
-      let gameData = await GameHelper.getGameData(client, interaction);
+      const [, gameData] = await Promise.all([
+        deferPromise,
+        GameHelper.getGameData(client, interaction)
+      ]);
 
       if (gameData.isdeleted) {
         await interaction.editReply({ content: `There is no game in this channel.`});
@@ -66,14 +69,15 @@ class DiscardAll {
       // Save the game data after the primary action (discarding).
       await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
-      // First, send the private confirmation to the user.
-      await interaction.editReply({
-          content: `You have discarded all ${discardedCount} cards from your hand. Your hand is now empty.`});
-
-      // Now, handle the public status update using the helper.
-      await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
-        content: `${interaction.member.displayName} has discarded all ${discardedCount} cards from their hand.`
-      });
+      // Private confirmation and public status update target independent sends
+      // (editReply vs. channel.send), so they can run concurrently.
+      await Promise.all([
+        interaction.editReply({
+          content: `You have discarded all ${discardedCount} cards from your hand. Your hand is now empty.`}),
+        GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
+          content: `${interaction.member.displayName} has discarded all ${discardedCount} cards from their hand.`
+        })
+      ]);
 
     } catch (e) {
       console.error(e);

@@ -12,9 +12,10 @@ class PileShuffle {
             return
         }
 
-        await interaction.deferReply()
-        
-        const gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply(),
+            GameHelper.getGameData(client, interaction)
+        ])
 
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})

@@ -152,9 +152,10 @@ class DeckPrune {
             return
         }
 
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-        
-        let gameData = await GameHelper.getGameData(client, interaction)
+        const [, gameData] = await Promise.all([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            GameHelper.getGameData(client, interaction)
+        ])
 
         if (gameData.isdeleted) {
             await interaction.editReply({ content: `There is no game in this channel.`})
@@ -249,13 +250,16 @@ class DeckPrune {
         }
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
-        
-        await GameStatusHelper.sendGameStatus(interaction, client, gameData, {
-            content: `${interaction.member.displayName} removed ${prunedCardObjects.length} card(s) from the "${deck.name}" deck. All cards recalled and deck reshuffled. New deck size: ${deck.allCards.length} cards.`
-        })
+
+        // Main status send and the secondary render are independent of each other
+        const [, followup] = await Promise.all([
+            GameStatusHelper.sendGameStatus(interaction, client, gameData, {
+                content: `${interaction.member.displayName} removed ${prunedCardObjects.length} card(s) from the "${deck.name}" deck. All cards recalled and deck reshuffled. New deck size: ${deck.allCards.length} cards.`
+            }),
+            Formatter.multiCard(prunedCardObjects, `Cards Removed from ${deck.name}`)
+        ])
 
         // Send ephemeral follow-up showing which cards were removed
-        let followup = await Formatter.multiCard(prunedCardObjects, `Cards Removed from ${deck.name}`)
         await interaction.followUp({ 
             embeds: [...followup[0]], 
             files: [...followup[1]],

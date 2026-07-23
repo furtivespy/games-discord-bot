@@ -63,16 +63,18 @@ class Remove {
       }
       
       await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
-      await interaction.reply(
-        { 
-          content: `${interaction.member.displayName} has Removed:`,
-          embeds: [
-            Formatter.oneCard(handCard),
-            ...Formatter.deckStatus2(gameData)
-          ]
-        }
-      )
-      var handInfo = await Formatter.playerSecretHandAndImages(gameData, currentPlayer)
+      const [, handInfo] = await Promise.all([
+        interaction.reply(
+          { 
+            content: `${interaction.member.displayName} has Removed:`,
+            embeds: [
+              Formatter.oneCard(handCard),
+              ...Formatter.deckStatus2(gameData)
+            ]
+          }
+        ),
+        Formatter.playerSecretHandAndImages(gameData, currentPlayer)
+      ])
       if (handInfo.attachments.length >0){
           await interaction.followUp({ 
               embeds: [...handInfo.embeds],
