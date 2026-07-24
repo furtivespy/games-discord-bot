@@ -250,13 +250,16 @@ class Suggest extends SlashCommand {
         return;
       }
 
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const subcommand = interaction.options.getSubcommand();
-      
+
+      const [, rawSuggestionData] = await Promise.all([
+        interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+        this.client.getGameDataV2(interaction.guildId, 'suggest', "x")
+      ]);
       let suggestionData = Object.assign(
         {},
         cloneDeep(defaultSuggestionsObject),
-        await this.client.getGameDataV2(interaction.guildId, 'suggest', "x")
+        rawSuggestionData
       );
 
       // Migrate any existing suggestions that don't have all fields

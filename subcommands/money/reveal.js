@@ -4,18 +4,14 @@ const Formatter = require("../../modules/GameFormatter");
 
 class Reveal {
   async execute(interaction, client) {
-    await interaction.deferReply();
-    
-    if (interaction.options.getString("confirm") == "reveal") {
-      let gameData = Object.assign(
-        {},
-        cloneDeep(GameDB.defaultGameData),
-        await client.getGameDataV2(
-          interaction.guildId,
-          "game",
-          interaction.channelId
-        )
-      );
+    const confirm = interaction.options.getString("confirm");
+
+    if (confirm == "reveal") {
+      const [, rawGameData] = await Promise.all([
+        interaction.deferReply(),
+        client.getGameDataV2(interaction.guildId, "game", interaction.channelId)
+      ]);
+      let gameData = Object.assign({}, cloneDeep(GameDB.defaultGameData), rawGameData);
 
       if (gameData.isdeleted) {
         await interaction.editReply({
@@ -28,6 +24,7 @@ class Reveal {
       await interaction.editReply({content: `Here's the money:\n${moneies}`})
 
     } else {
+      await interaction.deferReply();
       await interaction.editReply({ content: `Nothing revealed...`})
     }
   }
