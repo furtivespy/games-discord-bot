@@ -12,15 +12,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/furtivespy/node-discord-bot.git"
+    "url": "git+https://github.com/furtivespy/games-discord-bot.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/furtivespy/node-discord-bot/issues"
+    "url": "https://github.com/furtivespy/games-discord-bot/issues"
   },
-  "homepage": "https://github.com/furtivespy/node-discord-bot#readme",
+  "homepage": "https://github.com/furtivespy/games-discord-bot#readme",
   "dependencies": {
     "@bugsnag/js": "^7.18.0",
     "@google/genai": "^1.12.0",
