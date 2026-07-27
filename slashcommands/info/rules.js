@@ -27,14 +27,22 @@ class Rules extends SlashCommand {
   async execute(interaction) {
     try {
       const question = interaction.options.getString("question");
-      
-      // Defer reply since AI processing takes time
-      await interaction.deferReply();
+
+      // Defer reply (network round-trip) concurrently with fetching game context.
+      // getGameData failures are swallowed here (not surfaced via Promise.all) so a
+      // missing/broken game context still degrades gracefully instead of failing
+      // the whole command, matching the original try/catch behavior.
+      const [, gameData] = await Promise.all([
+        interaction.deferReply(),
+        GameHelper.getGameData(this.client, interaction).catch((e) => {
+          this.client.logger.warn("Could not get game context for rules command", { error: e.message });
+          return null;
+        })
+      ]);
 
       // Try to get current game context for better AI responses
       let bggData = null;
       try {
-        const gameData = await GameHelper.getGameData(this.client, interaction);
         if (gameData && gameData.bggGameId && !gameData.isdeleted) {
           bggData = await BoardGameGeek.CreateAndLoad(gameData.bggGameId, this.client, interaction)
         }

@@ -11,8 +11,10 @@ module.exports = {
         const client = interaction.client;
 
         if (interaction.customId === 'colorall-modal') {
-            await interaction.deferReply();
-            let gameData = await GameHelper.getGameData(client, interaction);
+            const [, gameData] = await Promise.all([
+                interaction.deferReply(),
+                GameHelper.getGameData(client, interaction)
+            ]);
 
             if (gameData.isdeleted) {
                 await interaction.editReply({
@@ -54,8 +56,10 @@ module.exports = {
                 content: `Player colors updated successfully.`
             });
         } else if (interaction.customId === 'scoreall-modal') {
-            await interaction.deferReply();
-            let gameData = await GameHelper.getGameData(client, interaction);
+            const [, gameData] = await Promise.all([
+                interaction.deferReply(),
+                GameHelper.getGameData(client, interaction)
+            ]);
 
             if (gameData.isdeleted) {
                 await interaction.editReply({
@@ -97,8 +101,10 @@ module.exports = {
                 content: `Player scores updated successfully.`
             });
         } else if (interaction.customId === 'team-roster-modal') {
-            await interaction.deferReply();
-            let gameData = await GameHelper.getGameData(client, interaction);
+            const [, gameData] = await Promise.all([
+                interaction.deferReply(),
+                GameHelper.getGameData(client, interaction)
+            ]);
 
             if (gameData.isdeleted) {
                 await interaction.editReply({

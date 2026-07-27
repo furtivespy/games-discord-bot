@@ -36,17 +36,14 @@ class ReleaseNotes extends SlashCommand {
     }
 
     try {
-      await interaction.deferReply();
       const version = interaction.options.getString("version");
-      let release;
-
-      if (version) {
-        const response = await fetch(`https://api.github.com/repos/furtivespy/games-discord-bot/releases/tags/${version}`);
-        release = await response.json();
-      } else {
-        const response = await fetch(`https://api.github.com/repos/furtivespy/games-discord-bot/releases/latest`);
-        release = await response.json();
-      }
+      const [, response] = await Promise.all([
+        interaction.deferReply(),
+        fetch(version
+          ? `https://api.github.com/repos/furtivespy/games-discord-bot/releases/tags/${version}`
+          : `https://api.github.com/repos/furtivespy/games-discord-bot/releases/latest`)
+      ]);
+      const release = await response.json();
 
       if (release.message === "Not Found") {
         await interaction.editReply({ content: `Release notes for version ${version} not found.`});

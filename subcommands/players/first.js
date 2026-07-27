@@ -5,15 +5,18 @@ const { find } = require("lodash");
 
 class First {
   async execute(interaction, client) {
-    await interaction.deferReply();
     try {
       const newFirstPlayer = interaction.options.getUser("player");
       if (!newFirstPlayer) {
+        await interaction.deferReply();
         return interaction.editReply({
           content: "Please mention a player to set as first player."});
       }
 
-      let gameData = await GameHelper.getGameData(client, interaction);
+      const [, gameData] = await Promise.all([
+        interaction.deferReply(),
+        GameHelper.getGameData(client, interaction)
+      ]);
 
       if (gameData.isdeleted) {
         return interaction.editReply({
