@@ -6,11 +6,12 @@ class Mode {
     async execute(interaction, client) {
         const mode = interaction.options.getString('mode')
 
-        let secretData = Object.assign(
-            {},
-            cloneDeep(GameDB.defaultSecretData), 
-            await client.getGameDataV2(interaction.guildId, 'secret', interaction.channelId)
-        )
+        const [, rawSecretData, mainGameData] = await Promise.all([
+            interaction.deferReply(),
+            client.getGameDataV2(interaction.guildId, 'secret', interaction.channelId),
+            GameHelper.getGameData(client, interaction).catch(() => null)
+        ])
+        let secretData = Object.assign({}, cloneDeep(GameDB.defaultSecretData), rawSecretData)
 
         const oldMode = secretData.mode || 'normal'
         secretData.mode = mode
@@ -18,8 +19,7 @@ class Mode {
 
         // Record history in main game
         try {
-            const mainGameData = await GameHelper.getGameData(client, interaction)
-            if (!mainGameData.isdeleted) {
+            if (mainGameData && !mainGameData.isdeleted) {
                 const actorDisplayName = interaction.member?.displayName || interaction.user.username
                 const modeDisplay = mode === 'super-secret' ? 'Super Secret' : 'Normal'
                 
@@ -45,7 +45,7 @@ class Mode {
         }
 
         const modeDisplay = mode === 'super-secret' ? '🤐 Super Secret' : '😊 Normal'
-        await interaction.reply({ 
+        await interaction.editReply({ 
             content: `Secret mode changed to: **${modeDisplay}**\n\n${
                 mode === 'super-secret' 
                     ? '🔒 Super Secret Mode:\n• Secret entries are ephemeral (only you see them)\n• Shows count of secrets entered, not who entered them\n• Revealed secrets are wrapped in spoiler tags' 

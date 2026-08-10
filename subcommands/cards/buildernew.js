@@ -1,4 +1,3 @@
-const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { find, cloneDeep, shuffle } = require('lodash')
@@ -7,8 +6,6 @@ const haiku = require('haikunator')
 
 class builderNew {
   async execute(interaction, client) {
-
-    let gameData = await GameHelper.getGameData(client, interaction)
 
     if (interaction.isAutocomplete()) {
       const searchField = interaction.options.getFocused(true).name
@@ -19,11 +16,15 @@ class builderNew {
       );
 
     } else {
+      const [, gameData] = await Promise.all([
+        interaction.deferReply(),
+        GameHelper.getGameData(client, interaction)
+      ])
+
       if (gameData.isdeleted) {
-        await interaction.reply({ content: `There is no game in this channel.`, flags: MessageFlags.Ephemeral })
+        await interaction.editReply({ content: `There is no game in this channel.`})
         return
       }
-      await interaction.deferReply();
       const inputSet = interaction.options.getString("basecardset");
       const allCardSet = interaction.options.getString("supplyset");
 

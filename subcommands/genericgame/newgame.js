@@ -1,4 +1,3 @@
-const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, shuffle } = require('lodash')
@@ -7,10 +6,14 @@ const GameStatusHelper = require('../../modules/GameStatusHelper')
 class NewGame {
     async execute(interaction, client) {
 
-        let gameData = await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId);
+        const [, rawGameData] = await Promise.all([
+            interaction.deferReply(),
+            client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
+        ]);
+        let gameData = rawGameData;
 
         if (gameData && !gameData.isdeleted) {
-            await interaction.reply({ content: `There is an existing game in this channel. Delete it if you want to start a new one.`, flags: MessageFlags.Ephemeral })
+            await interaction.editReply({ content: `There is an existing game in this channel. Delete it if you want to start a new one.`})
         } else {
             gameData = Object.assign(
                 {},
@@ -75,9 +78,9 @@ class NewGame {
                 console.warn('Failed to record new game creation in history:', error)
             }
 
-            // The initial message for a new game should not be editable.
-            // Therefore, we save the game data first, then send the status.
-            // The helper will see no last message and post a new one.
+            // We save the game data first, then send the status.
+            // The freshly-created gameData has no lastStatusMessageId, so the helper
+            // will post a new message rather than editing a stale one.
             // Crucially, we don't save the game data *again* after the helper runs.
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
             

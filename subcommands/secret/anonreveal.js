@@ -8,27 +8,20 @@ class AnonReveal {
     async execute(interaction, client) {
 
         if (interaction.options.getString('confirm') == 'reveal') {
-            let secretData = Object.assign(
-                {},
-                cloneDeep(GameDB.defaultSecretData),
-                await client.getGameDataV2(interaction.guildId, 'secret', interaction.channelId)
-            )
-
-            // Get game data for team grouping
-            let gameData = null
-            try {
-                gameData = await GameHelper.getGameData(client, interaction)
-            } catch (error) {
-                // Game data might not exist, that's okay
-            }
+            const [, rawSecretData, gameData] = await Promise.all([
+                interaction.deferReply(),
+                client.getGameDataV2(interaction.guildId, 'secret', interaction.channelId),
+                GameHelper.getGameData(client, interaction).catch(() => null)
+            ])
+            let secretData = Object.assign({}, cloneDeep(GameDB.defaultSecretData), rawSecretData)
 
             if (secretData.players.length > 0){
-                await interaction.reply({
+                await interaction.editReply({
                     content: `Your Secrets! Anonymously!`,
                     embeds: [await Formatter.SecretStatusAnon(secretData, interaction.guild, gameData)]
                 })
             } else {
-                await interaction.reply({ content: `Nothing to reveal...`, flags: MessageFlags.Ephemeral })
+                await interaction.editReply({ content: `Nothing to reveal...`})
             }
 
         } else {
