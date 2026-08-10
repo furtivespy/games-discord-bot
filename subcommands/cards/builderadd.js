@@ -1,4 +1,3 @@
-const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const Formatter = require('../../modules/GameFormatter')
@@ -8,10 +7,9 @@ const { find } = require('lodash')
 class Add {
   async execute(interaction, client) {
 
-    let gameData = await GameHelper.getGameData(client, interaction)
-    let supplyDeck = gameData.decks.find(d => d.name.startsWith("Supply-"))
-
     if (interaction.isAutocomplete()) {
+      let gameData = await GameHelper.getGameData(client, interaction)
+      let supplyDeck = gameData.decks.find(d => d.name.startsWith("Supply-"))
       if (gameData.isdeleted || !supplyDeck){
         await interaction.respond([])
         return
@@ -21,8 +19,14 @@ class Add {
       );
     } else {
 
+      const [, gameData] = await Promise.all([
+        interaction.deferReply(),
+        GameHelper.getGameData(client, interaction)
+      ])
+      let supplyDeck = gameData.decks.find(d => d.name.startsWith("Supply-"))
+
       if (gameData.isdeleted || !supplyDeck) {
-          await interaction.reply({ content: `There is no game or deckbuilder in this channel.`, flags: MessageFlags.Ephemeral })
+          await interaction.editReply({ content: `There is no game or deckbuilder in this channel.`})
           return
       }
 
@@ -31,11 +35,10 @@ class Add {
       const card = find(supplyDeck.allCards, {id: cardid})
 
       if (!card || !playerDeck){
-          await interaction.reply({ content: "Something is broken!?", flags: MessageFlags.Ephemeral })
+          await interaction.editReply({ content: "Something is broken!?"})
           return
       }
 
-      await interaction.deferReply();
       const newCard = GameDB.createCardFromObj(playerDeck.name, card.format, card)
 
       playerDeck.allCards.push(newCard)

@@ -7,12 +7,12 @@ class Delete {
     async execute(interaction, client) {
 
         if (interaction.options.getString('confirm') == 'delete') {
-            let gameData = Object.assign(
-                {},
-                cloneDeep(GameDB.defaultGameData), 
-                await client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
-            )
-            
+            const [, rawGameData] = await Promise.all([
+                interaction.deferReply(),
+                client.getGameDataV2(interaction.guildId, 'game', interaction.channelId)
+            ])
+            let gameData = Object.assign({}, cloneDeep(GameDB.defaultGameData), rawGameData)
+
             if (!gameData.isdeleted){
                 // Record history for game deletion before marking as deleted
                 try {
@@ -42,9 +42,9 @@ class Delete {
                 gameData.isdeleted = true
                 //client.setGameData(`game-${interaction.channel.id}`, gameData)
                 await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
-                await interaction.reply({ content: `Game Deleted!?` })
+                await interaction.editReply({ content: `Game Deleted!?` })
             } else {
-                await interaction.reply({ content: `No Active Game to Delete...`, flags: MessageFlags.Ephemeral })
+                await interaction.editReply({ content: `No Active Game to Delete...`})
             }
 
         } else {

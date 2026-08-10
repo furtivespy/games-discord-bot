@@ -5,19 +5,12 @@ const Formatter = require('../../modules/GameFormatter')
 
 class Status {
     async execute(interaction, client) {
-        let secretData = Object.assign(
-            {},
-            cloneDeep(GameDB.defaultSecretData), 
-            await client.getGameDataV2(interaction.guildId, 'secret', interaction.channelId)
-        )
-
-        // Get game data for player count
-        let gameData = null
-        try {
-            gameData = await GameHelper.getGameData(client, interaction)
-        } catch (error) {
-            // Game data might not exist, that's okay
-        }
+        const [, rawSecretData, gameData] = await Promise.all([
+            interaction.deferReply(),
+            client.getGameDataV2(interaction.guildId, 'secret', interaction.channelId),
+            GameHelper.getGameData(client, interaction).catch(() => null)
+        ])
+        let secretData = Object.assign({}, cloneDeep(GameDB.defaultSecretData), rawSecretData)
 
         const isSuperSecret = secretData.mode === 'super-secret'
 
@@ -29,11 +22,11 @@ class Status {
                 ? secretData.players.length 
                 : (gameData && gameData.players ? gameData.players.length : 0)
             
-            await interaction.reply({ 
+            await interaction.editReply({ 
                 content: `🤐 **Super Secret Status:**\n${secretCount} of ${totalPlayers} players have entered secrets`})
         } else {
             // In normal mode, show full status
-            await interaction.reply({ 
+            await interaction.editReply({ 
                 content: `Secret Status:`,
                 embeds: [await Formatter.SecretStatus(secretData, interaction.guild, gameData)]
             })

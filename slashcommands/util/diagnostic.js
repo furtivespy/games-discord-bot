@@ -23,7 +23,20 @@ class Diagnostic extends SlashCommand {
       });
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const guildId = interaction.guildId;
+    const channelId = interaction.channelId;
+
+    const gameDataPromise = guildId
+      ? this.client.getGameDataV2(guildId, "game", channelId).then(
+          (data) => ({ data, error: null }),
+          (error) => ({ data: null, error })
+        )
+      : Promise.resolve(null);
+
+    const [, gameDataResult] = await Promise.all([
+      interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+      gameDataPromise
+    ]);
 
     const lines = [];
 
@@ -62,28 +75,24 @@ class Diagnostic extends SlashCommand {
 
     // Active game in current channel
     lines.push("── Active game in this channel ────────────────");
-    const guildId = interaction.guildId;
-    const channelId = interaction.channelId;
 
     if (!guildId) {
       lines.push("  (no guild — DM context)");
+    } else if (gameDataResult.error) {
+      lines.push(`  ERROR: ${gameDataResult.error.message}`);
     } else {
-      try {
-        const gameData = await this.client.getGameDataV2(guildId, "game", channelId);
-        if (!gameData || Object.keys(gameData).length === 0) {
-          lines.push("  No active game found in this channel.");
-        } else {
-          const raw = this.client.db.getGameRawRow(guildId, "game", channelId);
-          const playerCount =
-            gameData.players != null
-              ? Object.keys(gameData.players).length
-              : "n/a";
-          lines.push(`  isdeleted    : ${gameData.isdeleted ?? false}`);
-          lines.push(`  player count : ${playerCount}`);
-          lines.push(`  updated_at   : ${raw?.updated_at ?? "n/a (legacy cache)"}`);
-        }
-      } catch (e) {
-        lines.push(`  ERROR: ${e.message}`);
+      const gameData = gameDataResult.data;
+      if (!gameData || Object.keys(gameData).length === 0) {
+        lines.push("  No active game found in this channel.");
+      } else {
+        const raw = this.client.db.getGameRawRow(guildId, "game", channelId);
+        const playerCount =
+          gameData.players != null
+            ? Object.keys(gameData.players).length
+            : "n/a";
+        lines.push(`  isdeleted    : ${gameData.isdeleted ?? false}`);
+        lines.push(`  player count : ${playerCount}`);
+        lines.push(`  updated_at   : ${raw?.updated_at ?? "n/a (legacy cache)"}`);
       }
     }
 
