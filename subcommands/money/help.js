@@ -13,6 +13,7 @@ Here's a list of commands to help you navigate the world of moolah. Let's get th
 
         const commands_and_conclusion_content = `\n**Money Commands:**
 
+*   **/money deal** 💵 - Give the same amount of money to every player. Perfect for starting funds!
 *   **/money take** 💰 - Need some cash? This command lets you take some money. Cha-ching! Hope you're feeling lucky! 🍀
 *   **/money spend** 💸 - Got that paper burning a hole in your pocket? Use this to spend your hard-earned cash. Treat yo' self! 🛍️
 *   **/money pay** 🤝 - Feeling generous (or maybe you lost a bet 😉)? Pay another player. Sharing is caring... sometimes!

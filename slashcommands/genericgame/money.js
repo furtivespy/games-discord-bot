@@ -3,6 +3,7 @@ const SlashCommand = require('../../base/SlashCommand.js')
 const { SlashCommandBuilder } = require('@discordjs/builders');
 
 const Check = require(`../../subcommands/money/check`)
+const Deal = require(`../../subcommands/money/deal`)
 const Pay = require(`../../subcommands/money/pay`)
 const Reveal = require(`../../subcommands/money/reveal`)
 const Spend = require(`../../subcommands/money/spend`)
@@ -30,6 +31,18 @@ class Money extends SlashCommand {
                 subcommand
                     .setName("check")
                     .setDescription("Check your current money")
+                )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("deal")
+                    .setDescription("Deal money to all players")
+                    .addIntegerOption(option =>
+                        option
+                            .setName("amount")
+                            .setDescription("Amount to give each player")
+                            .setMinValue(1)
+                            .setRequired(true)
+                    )
                 )
             .addSubcommand(subcommand =>
                 subcommand
@@ -63,6 +76,9 @@ class Money extends SlashCommand {
             switch (interaction.options.getSubcommand()) {
                 case "check":
                     await Check.execute(interaction, this.client)
+                    break
+                case "deal":
+                    await Deal.execute(interaction, this.client)
                     break
                 case "pay":
                     await Pay.execute(interaction, this.client)
