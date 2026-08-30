@@ -1,7 +1,8 @@
 const SlashCommand = require("../../base/SlashCommand.js");
-const {SlashCommandBuilder, MessageFlags} = require("discord.js");
+const {SlashCommandBuilder, MessageFlags, InteractionContextType, ApplicationIntegrationType} = require("discord.js");
 const { cloneDeep } = require("lodash");
 const { nanoid } = require("nanoid");
+const SuggestionStore = require("../../modules/SuggestionStore");
 
 // Status constants with emojis
 const SUGGESTION_STATUS = {
@@ -43,28 +44,23 @@ const SUGGESTIONS_PER_PAGE = 10;
 const ADMIN_USER_ID = '84025085047869440'; // TODO: Replace with actual admin ID
 
 const defaultSuggestionObject = {
-  id: '',
-  user: '',
-  userId: '',
-  suggestion: '',
+  ...SuggestionStore.defaultSuggestion,
   status: SUGGESTION_STATUS.SUGGESTED,
-  votes: {
-    count: 0,
-    voters: []
-  },
-  createdAt: null,
-  updatedAt: null
 };
 
 const defaultSuggestionsObject = {
   suggestions: [],
 };
 
+function displayNameFor(interaction) {
+  return interaction.member?.displayName || interaction.user.globalName || interaction.user.username;
+}
+
 class Suggest extends SlashCommand {
   constructor(client) {
     super(client, {
       name: "suggest",
-      description: "Manage suggestions",
+      description: "Manage global feature suggestions",
       usage: "suggest <add|list|vote|status>",
       enabled: true,
       permLevel: "User",
@@ -72,6 +68,9 @@ class Suggest extends SlashCommand {
     this.data = new SlashCommandBuilder()
       .setName(this.help.name)
       .setDescription(this.help.description)
+      .setDMPermission(true)
+      .setContexts(InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel)
+      .setIntegrationTypes(ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall)
       .addSubcommand(subcommand =>
         subcommand
           .setName('add')
@@ -156,23 +155,7 @@ class Suggest extends SlashCommand {
   }
 
   migrateSuggestion(oldSuggestion) {
-    // If the suggestion already has an id, it's probably already migrated
-    if (oldSuggestion.id) {
-      return oldSuggestion;
-    }
-
-    // Create a new suggestion with all required fields
-    const now = new Date();
-    return Object.assign({}, cloneDeep(defaultSuggestionObject), {
-      id: nanoid(),
-      user: oldSuggestion.user || 'Unknown User',
-      userId: oldSuggestion.userId || '',
-      suggestion: oldSuggestion.suggestion || '',
-      status: oldSuggestion.status || SUGGESTION_STATUS.SUGGESTED,
-      votes: oldSuggestion.votes || { count: 0, voters: [] },
-      createdAt: oldSuggestion.createdAt || now,
-      updatedAt: oldSuggestion.updatedAt || now
-    });
+    return SuggestionStore.ensureSuggestionShape(oldSuggestion);
   }
 
   sortSuggestions(suggestions, sortBy = 'VOTES') {
@@ -223,7 +206,7 @@ class Suggest extends SlashCommand {
         const suggestionData = Object.assign(
           {},
           cloneDeep(defaultSuggestionsObject),
-          await this.client.getGameDataV2(interaction.guildId, 'suggest', "x")
+          await SuggestionStore.loadGlobalSuggestions(this.client)
         );
 
         // Filter suggestions based on search term and status
@@ -254,7 +237,7 @@ class Suggest extends SlashCommand {
 
       const [, rawSuggestionData] = await Promise.all([
         interaction.deferReply({ flags: MessageFlags.Ephemeral }),
-        this.client.getGameDataV2(interaction.guildId, 'suggest', "x")
+        SuggestionStore.loadGlobalSuggestions(this.client)
       ]);
       let suggestionData = Object.assign(
         {},
@@ -267,34 +250,62 @@ class Suggest extends SlashCommand {
         const migratedSuggestions = suggestionData.suggestions.map(s => this.migrateSuggestion(s));
         if (JSON.stringify(migratedSuggestions) !== JSON.stringify(suggestionData.suggestions)) {
           suggestionData.suggestions = migratedSuggestions;
-          await this.client.setGameDataV2(interaction.guildId, 'suggest', "x", suggestionData);
+          await SuggestionStore.saveGlobalSuggestions(this.client, suggestionData);
           this.client.logger.log('Migrated suggestions data to new format', 'debug');
         }
       }
 
+      let confirmMessage = '';
+
       if (subcommand === 'add') {
-        const suggestion = interaction.options.getString('suggestion');
-        // Create new suggestion using the default object as base
-        const now = new Date();
-        const newSuggestion = Object.assign({}, cloneDeep(defaultSuggestionObject), {
-          id: nanoid(),
-          user: interaction.member.displayName,
-          userId: interaction.user.id,
-          suggestion: suggestion,
-          createdAt: now,
-          updatedAt: now
-        });
+        const suggestion = interaction.options.getString('suggestion')?.trim();
+        if (!suggestion) {
+          await interaction.editReply({ content: 'Suggestion text cannot be empty.'});
+          return;
+        }
 
-        suggestionData.suggestions.push(newSuggestion);
-        await this.client.setGameDataV2(interaction.guildId, 'suggest', "x", suggestionData);
+        const existing = SuggestionStore.findMatchingSuggestion(suggestionData.suggestions, suggestion);
+        if (existing) {
+          const userId = interaction.user.id;
+          if (interaction.guildId) {
+            existing.sourceGuildIds = existing.sourceGuildIds || [];
+            if (!existing.sourceGuildIds.includes(interaction.guildId)) {
+              existing.sourceGuildIds.push(interaction.guildId);
+            }
+          }
+          if (!existing.votes.voters.includes(userId)) {
+            existing.votes.voters.push(userId);
+            existing.votes.count = existing.votes.voters.length;
+            existing.updatedAt = new Date();
+            confirmMessage = `That request already exists on the global list. Your vote was added. (${STATUS_EMOJIS[existing.status]} ${existing.status})`;
+          } else {
+            confirmMessage = `That request already exists on the global list and you have already voted for it. (${STATUS_EMOJIS[existing.status]} ${existing.status})`;
+          }
+          await SuggestionStore.saveGlobalSuggestions(this.client, suggestionData);
+        } else {
+          const now = new Date();
+          const newSuggestion = Object.assign({}, cloneDeep(defaultSuggestionObject), {
+            id: nanoid(),
+            user: displayNameFor(interaction),
+            userId: interaction.user.id,
+            suggestion: suggestion,
+            createdAt: now,
+            updatedAt: now,
+            sourceGuildIds: interaction.guildId ? [interaction.guildId] : []
+          });
 
-        // Notify admin of new suggestion
-        if (ADMIN_USER_ID !== 'your-discord-id') {
-          try {
-            const admin = await interaction.client.users.fetch(ADMIN_USER_ID);
-            await admin.send(`New suggestion from ${interaction.member.displayName}: ${suggestion}`);
-          } catch (e) {
-            this.client.logger.log('Failed to send admin notification: ' + e, 'error');
+          suggestionData.suggestions.push(newSuggestion);
+          await SuggestionStore.saveGlobalSuggestions(this.client, suggestionData);
+          confirmMessage = 'Added your request to the global feature list.';
+
+          // Notify admin of new suggestion
+          if (ADMIN_USER_ID !== 'your-discord-id') {
+            try {
+              const admin = await interaction.client.users.fetch(ADMIN_USER_ID);
+              await admin.send(`New suggestion from ${displayNameFor(interaction)}: ${suggestion}`);
+            } catch (e) {
+              this.client.logger.log('Failed to send admin notification: ' + e, 'error');
+            }
           }
         }
       } else if (subcommand === 'vote') {
@@ -327,10 +338,10 @@ class Suggest extends SlashCommand {
 
         // Update the suggestion in the data
         suggestionData.suggestions[suggestionIndex] = suggestion;
-        await this.client.setGameDataV2(interaction.guildId, 'suggest', "x", suggestionData);
+        await SuggestionStore.saveGlobalSuggestions(this.client, suggestionData);
       } else if (subcommand === 'status') {
-        // Check if user is admin
-        if (interaction.user.id !== ADMIN_USER_ID || interaction.member.permissions.level < 3) {
+        // Bot admin only — do not require guild member permissions so this works in DMs
+        if (interaction.user.id !== ADMIN_USER_ID) {
           await interaction.editReply({ content: 'You do not have permission to change suggestion status.'});
           return;
         }
@@ -352,7 +363,7 @@ class Suggest extends SlashCommand {
         suggestion.status = newStatus;
         suggestion.updatedAt = new Date();
         suggestionData.suggestions[suggestionIndex] = suggestion;
-        await this.client.setGameDataV2(interaction.guildId, 'suggest', "x", suggestionData);
+        await SuggestionStore.saveGlobalSuggestions(this.client, suggestionData);
 
         // Try to notify the original suggester
         try {
@@ -389,7 +400,7 @@ class Suggest extends SlashCommand {
       const paginatedSuggestions = filteredSuggestions.slice(startIndex, startIndex + SUGGESTIONS_PER_PAGE);
 
       // Build suggestions list
-      let suggestions = `Current Suggestions (Page ${page}/${totalPages || 1}):\n`;
+      let suggestions = `${confirmMessage ? `${confirmMessage}\n\n` : ''}Global Feature Requests (Page ${page}/${totalPages || 1}):\n`;
       suggestions += paginatedSuggestions.map(suggestion => {
         const voteCount = suggestion.votes?.count || 0;
         const status = suggestion.status || SUGGESTION_STATUS.SUGGESTED;
@@ -401,7 +412,7 @@ class Suggest extends SlashCommand {
       }
 
       let embedItem = {
-        title: `Game Bot Suggestions`,
+        title: `Game Bot Feature Requests`,
         description: suggestions,
         color: statusFilter === FILTER_OPTIONS.ALL ? 
           STATUS_COLORS.DEFAULT : 
@@ -416,7 +427,7 @@ class Suggest extends SlashCommand {
           }
         ],
         footer: {
-          text: `Showing ${statusFilter === FILTER_OPTIONS.ALL ? 'all suggestions' : 
+          text: `Global across all servers • ${statusFilter === FILTER_OPTIONS.ALL ? 'all suggestions' : 
             statusFilter === FILTER_OPTIONS.ACTIVE ? '💡🔨 active suggestions' :
             `${STATUS_EMOJIS[statusFilter]} ${statusFilter} suggestions`} • Sorted by ${sortBy.toLowerCase()} • Page ${page}/${totalPages || 1}`
         }

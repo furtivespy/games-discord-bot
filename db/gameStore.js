@@ -170,6 +170,40 @@ class GameStore {
       .get(String(guildId), collection, String(channelId));
   }
 
+  listDocumentsByCollection(collection) {
+    const rows = this.db
+      .query(
+        `SELECT guild_id, collection, channel_id, data
+         FROM game_documents
+         WHERE collection = ?`
+      )
+      .all(collection);
+
+    return rows.map((row) => {
+      let data = {};
+      try {
+        data = JSON.parse(row.data);
+      } catch {
+        data = {};
+      }
+      return {
+        guildId: row.guild_id,
+        collection: row.collection,
+        channelId: row.channel_id,
+        data,
+      };
+    });
+  }
+
+  deleteGameData(guildId, collection, channelId) {
+    this.db
+      .query(
+        `DELETE FROM game_documents
+         WHERE guild_id = ? AND collection = ? AND channel_id = ?`
+      )
+      .run(String(guildId), collection, String(channelId));
+  }
+
   runDiagnostic() {
     const result = {};
 

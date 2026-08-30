@@ -3,6 +3,10 @@ const path = require("path");
 const { Database } = require("bun:sqlite");
 const GameStore = require("./gameStore.js");
 const { resolveDataDir, ensureDataDir } = require("./dataDir.js");
+const {
+  GLOBAL_SUGGEST_SCOPE,
+  SUGGEST_COLLECTION,
+} = require("../modules/SuggestionStore.js");
 
 const LEGACY_GAMEDATA_PREFIXES = new Set([
   "game",
@@ -61,10 +65,12 @@ function migrateGamedataRows(store, rows, { guildHint = null, sourceLabel }) {
 
     const data = parseStoredValue(row.value);
     let guildId = inferGuildId(data);
-    if (
+    if (parsed.collection === SUGGEST_COLLECTION) {
+      guildId = GLOBAL_SUGGEST_SCOPE;
+    } else if (
       !guildId &&
       guildHint &&
-      (parsed.collection === "bgg" || parsed.collection === "suggest")
+      parsed.collection === "bgg"
     ) {
       guildId = String(guildHint);
     }
