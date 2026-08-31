@@ -380,6 +380,20 @@ class DiscordBot extends Client {
     if (gameData.lastStatusMessageTimestamp === undefined) {
       gameData.lastStatusMessageTimestamp = null;
     }
+
+    // Ensure pinned live status fields exist (feature defaults to off)
+    if (gameData.pinnedStatusEnabled === undefined) {
+      gameData.pinnedStatusEnabled = false;
+    }
+    if (gameData.pinnedStatusMessageId === undefined) {
+      gameData.pinnedStatusMessageId = null;
+    }
+    if (gameData.pinnedStatusChannelId === undefined) {
+      gameData.pinnedStatusChannelId = null;
+    }
+    if (gameData.pinnedStatusPinned === undefined) {
+      gameData.pinnedStatusPinned = false;
+    }
     
     return gameData;
   }

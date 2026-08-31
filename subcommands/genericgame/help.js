@@ -32,6 +32,7 @@ Here's a list of commands to get you started. Don't worry, they're super easy to
 *   **/game addlink** 🔗 - Sharing is caring! Adds a link to the game. Let's see those cool links!
 *   **/game removelink** 🚫🔗 - Oops, wrong link? Removes a link from the game. No problemo!
 *   **/game playarea [mode:on/off]** 🏞️ - Toggles or sets if cards are played to a personal Play Area or the common discard. Default is toggle; specify 'on' or 'off' to set.
+*   **/game pinnedstatus [mode:on/off]** 📌 - Toggles or sets a pinned live status message that is edited in place. Default is off; specify 'on' or 'off' to set.
 *   **/game test** 🧪 - Just checking things out! For testing purposes. Nothing to see here, folks! 😉
 *   **/game history** 📜 - Want to see what happened? View the complete game history with filtering and pagination! 🕰️
 *   **/game historyadd** ✏️ - Add your own custom notes to the game history. Document those epic moments! 📝`;
