@@ -160,6 +160,39 @@ class GameStore {
     });
   }
 
+  getDocumentsByCollection(collection) {
+    return tracer.startActiveSpan("db.list game_documents", (span) => {
+      span.setAttributes({
+        "db.system": "sqlite",
+        "db.operation": "SELECT",
+        "db.sql.table": "game_documents",
+        "db.collection": collection,
+      });
+      try {
+        const rows = this.db
+          .query(
+            `SELECT guild_id, channel_id, data
+             FROM game_documents
+             WHERE collection = ?
+             ORDER BY CASE WHEN guild_id = 'global' THEN 0 ELSE 1 END, guild_id, channel_id`
+          )
+          .all(collection);
+        span.setAttribute("db.result_count", rows.length);
+        return rows.map((row) => ({
+          guildId: row.guild_id,
+          channelId: row.channel_id,
+          data: this._parseRow(row),
+        }));
+      } catch (err) {
+        span.recordError(err);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
+  }
+
   getGameRawRow(guildId, collection, channelId) {
     return this.db
       .query(

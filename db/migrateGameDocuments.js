@@ -10,6 +10,8 @@ const LEGACY_GAMEDATA_PREFIXES = new Set([
   "bgg",
   "suggest",
 ]);
+const GLOBAL_SUGGESTIONS_GUILD_ID = "global";
+const SUGGESTIONS_CHANNEL_ID = "x";
 
 function backupFileIfExists(filePath) {
   if (!fs.existsSync(filePath)) return null;
@@ -432,6 +434,62 @@ async function migrateFromMongo(store, mongoUri, { guildIds = [] } = {}) {
   return { migrated, skipped, databaseCount, warnings };
 }
 
+function consolidateGlobalSuggestions(store) {
+  const documents = store.getDocumentsByCollection("suggest");
+  const suggestions = [];
+  const suggestionIds = new Set();
+  let duplicateCount = 0;
+  let sourceDocumentCount = 0;
+
+  for (const document of documents) {
+    if (document.guildId !== GLOBAL_SUGGESTIONS_GUILD_ID) {
+      sourceDocumentCount++;
+    }
+
+    const documentSuggestions = Array.isArray(document.data?.suggestions)
+      ? document.data.suggestions
+      : [];
+    for (const suggestion of documentSuggestions) {
+      if (suggestion?.id && suggestionIds.has(suggestion.id)) {
+        duplicateCount++;
+        continue;
+      }
+
+      if (suggestion?.id) {
+        suggestionIds.add(suggestion.id);
+      }
+      suggestions.push(suggestion);
+    }
+  }
+
+  store.upsertGameData(
+    GLOBAL_SUGGESTIONS_GUILD_ID,
+    "suggest",
+    SUGGESTIONS_CHANNEL_ID,
+    { suggestions }
+  );
+
+  return {
+    sourceDocumentCount,
+    globalDocumentFound: documents.some(
+      (document) => document.guildId === GLOBAL_SUGGESTIONS_GUILD_ID
+    ),
+    suggestionsKept: suggestions.length,
+    duplicateCount,
+  };
+}
+
+function restoreSuggestionDocuments(store, documents) {
+  for (const document of documents) {
+    store.upsertGameData(
+      document.guildId,
+      "suggest",
+      document.channelId,
+      document.data
+    );
+  }
+}
+
 function formatMigrationSummary(result) {
   const lines = [`Migration complete (mode: ${result.mode}).`, `data dir: ${result.dataDir}`];
 
@@ -484,6 +542,12 @@ function formatMigrationSummary(result) {
     lines.push(`MongoDB: ${result.mongoSkippedReason}`);
   }
 
+  if (result.suggestions) {
+    lines.push(
+      `suggestions: ${result.suggestions.sourceDocumentCount} server document(s) scanned, ${result.suggestions.suggestionsKept} kept, ${result.suggestions.duplicateCount} duplicate(s) skipped`
+    );
+  }
+
   const warnings = [
     ...(result.gamedata.warnings ?? []),
     ...(result.guilddata.warnings ?? []),
@@ -512,9 +576,12 @@ async function runGameDocumentsMigration({
 
   const gameStore = store ?? new GameStore();
   let backupPath = null;
+  const existingSuggestionDocuments =
+    mode === "replace" ? gameStore.getDocumentsByCollection("suggest") : [];
 
   if (mode === "replace") {
     backupPath = gameStore.reset();
+    restoreSuggestionDocuments(gameStore, existingSuggestionDocuments);
   }
 
   const gamedataFromDisk = migrateEnmapGamedata(gameStore, { guildHint });
@@ -551,6 +618,8 @@ async function runGameDocumentsMigration({
     mongoSkippedReason = "skipped (mongoConnectionString not configured)";
   }
 
+  const suggestions = consolidateGlobalSuggestions(gameStore);
+
   const result = {
     mode,
     dataDir,
@@ -561,6 +630,7 @@ async function runGameDocumentsMigration({
     cache,
     mongo,
     mongoSkippedReason,
+    suggestions,
   };
 
   return {
@@ -572,4 +642,6 @@ async function runGameDocumentsMigration({
 module.exports = {
   runGameDocumentsMigration,
   formatMigrationSummary,
+  consolidateGlobalSuggestions,
+  restoreSuggestionDocuments,
 };

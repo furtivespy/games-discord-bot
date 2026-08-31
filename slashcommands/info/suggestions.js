@@ -60,6 +60,9 @@ const defaultSuggestionsObject = {
   suggestions: [],
 };
 
+const GLOBAL_SUGGESTIONS_GUILD_ID = "global";
+const SUGGESTIONS_CHANNEL_ID = "x";
+
 class Suggest extends SlashCommand {
   constructor(client) {
     super(client, {
@@ -223,7 +226,11 @@ class Suggest extends SlashCommand {
         const suggestionData = Object.assign(
           {},
           cloneDeep(defaultSuggestionsObject),
-          await this.client.getGameDataV2(interaction.guildId, 'suggest', "x")
+          await this.client.getGameDataV2(
+            GLOBAL_SUGGESTIONS_GUILD_ID,
+            "suggest",
+            SUGGESTIONS_CHANNEL_ID
+          )
         );
 
         // Filter suggestions based on search term and status
@@ -254,7 +261,11 @@ class Suggest extends SlashCommand {
 
       const [, rawSuggestionData] = await Promise.all([
         interaction.deferReply({ flags: MessageFlags.Ephemeral }),
-        this.client.getGameDataV2(interaction.guildId, 'suggest', "x")
+        this.client.getGameDataV2(
+          GLOBAL_SUGGESTIONS_GUILD_ID,
+          "suggest",
+          SUGGESTIONS_CHANNEL_ID
+        )
       ]);
       let suggestionData = Object.assign(
         {},
@@ -267,7 +278,12 @@ class Suggest extends SlashCommand {
         const migratedSuggestions = suggestionData.suggestions.map(s => this.migrateSuggestion(s));
         if (JSON.stringify(migratedSuggestions) !== JSON.stringify(suggestionData.suggestions)) {
           suggestionData.suggestions = migratedSuggestions;
-          await this.client.setGameDataV2(interaction.guildId, 'suggest', "x", suggestionData);
+          await this.client.setGameDataV2(
+            GLOBAL_SUGGESTIONS_GUILD_ID,
+            "suggest",
+            SUGGESTIONS_CHANNEL_ID,
+            suggestionData
+          );
           this.client.logger.log('Migrated suggestions data to new format', 'debug');
         }
       }
@@ -286,7 +302,12 @@ class Suggest extends SlashCommand {
         });
 
         suggestionData.suggestions.push(newSuggestion);
-        await this.client.setGameDataV2(interaction.guildId, 'suggest', "x", suggestionData);
+        await this.client.setGameDataV2(
+          GLOBAL_SUGGESTIONS_GUILD_ID,
+          "suggest",
+          SUGGESTIONS_CHANNEL_ID,
+          suggestionData
+        );
 
         // Notify admin of new suggestion
         if (ADMIN_USER_ID !== 'your-discord-id') {
@@ -327,7 +348,12 @@ class Suggest extends SlashCommand {
 
         // Update the suggestion in the data
         suggestionData.suggestions[suggestionIndex] = suggestion;
-        await this.client.setGameDataV2(interaction.guildId, 'suggest', "x", suggestionData);
+        await this.client.setGameDataV2(
+          GLOBAL_SUGGESTIONS_GUILD_ID,
+          "suggest",
+          SUGGESTIONS_CHANNEL_ID,
+          suggestionData
+        );
       } else if (subcommand === 'status') {
         // Check if user is admin
         if (interaction.user.id !== ADMIN_USER_ID || interaction.member.permissions.level < 3) {
@@ -352,7 +378,12 @@ class Suggest extends SlashCommand {
         suggestion.status = newStatus;
         suggestion.updatedAt = new Date();
         suggestionData.suggestions[suggestionIndex] = suggestion;
-        await this.client.setGameDataV2(interaction.guildId, 'suggest', "x", suggestionData);
+        await this.client.setGameDataV2(
+          GLOBAL_SUGGESTIONS_GUILD_ID,
+          "suggest",
+          SUGGESTIONS_CHANNEL_ID,
+          suggestionData
+        );
 
         // Try to notify the original suggester
         try {
@@ -389,7 +420,7 @@ class Suggest extends SlashCommand {
       const paginatedSuggestions = filteredSuggestions.slice(startIndex, startIndex + SUGGESTIONS_PER_PAGE);
 
       // Build suggestions list
-      let suggestions = `Current Suggestions (Page ${page}/${totalPages || 1}):\n`;
+      let suggestions = `Global Feature Requests (Page ${page}/${totalPages || 1}):\n`;
       suggestions += paginatedSuggestions.map(suggestion => {
         const voteCount = suggestion.votes?.count || 0;
         const status = suggestion.status || SUGGESTION_STATUS.SUGGESTED;
@@ -401,7 +432,7 @@ class Suggest extends SlashCommand {
       }
 
       let embedItem = {
-        title: `Game Bot Suggestions`,
+        title: `Game Bot Feature Requests`,
         description: suggestions,
         color: statusFilter === FILTER_OPTIONS.ALL ? 
           STATUS_COLORS.DEFAULT : 
@@ -416,7 +447,7 @@ class Suggest extends SlashCommand {
           }
         ],
         footer: {
-          text: `Showing ${statusFilter === FILTER_OPTIONS.ALL ? 'all suggestions' : 
+          text: `Global across all servers • ${statusFilter === FILTER_OPTIONS.ALL ? 'all suggestions' : 
             statusFilter === FILTER_OPTIONS.ACTIVE ? '💡🔨 active suggestions' :
             `${STATUS_EMOJIS[statusFilter]} ${statusFilter} suggestions`} • Sorted by ${sortBy.toLowerCase()} • Page ${page}/${totalPages || 1}`
         }
