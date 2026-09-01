@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { Database } = require("bun:sqlite");
-const { resolveDataDir, ensureDataDir } = require("./dataDir.js");
+const { ensureDataDir } = require("./dataDir.js");
 const { trace, SpanStatusCode } = require("@opentelemetry/api");
 
 const tracer = trace.getTracer("discord-bot:db");
@@ -10,25 +10,8 @@ class GameStore {
   constructor(options = {}) {
     this.logger = options.logger;
     const dataDir = ensureDataDir();
-
-    this.db = new Database(path.join(dataDir, "game_documents.sqlite"), {
-      create: true,
-    });
-    this.db.exec(`PRAGMA journal_mode = WAL`);
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS game_documents (
-        guild_id TEXT NOT NULL,
-        collection TEXT NOT NULL,
-        channel_id TEXT NOT NULL,
-        bgg_game_id TEXT,
-        data TEXT NOT NULL,
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-        PRIMARY KEY (guild_id, collection, channel_id)
-      );
-      CREATE INDEX IF NOT EXISTS idx_game_bgg
-        ON game_documents (guild_id, collection, bgg_game_id)
-        WHERE bgg_game_id IS NOT NULL;
-    `);
+    this.dbPath = path.join(dataDir, "game_documents.sqlite");
+    this.db = openGameDocumentsDatabase(this.dbPath);
   }
 
   _extractBggGameId(data) {
@@ -231,32 +214,57 @@ class GameStore {
   }
 
   reset() {
-    const dataDir = resolveDataDir();
-    const dbPath = path.join(dataDir, "game_documents.sqlite");
-    const backupPath = backupFileIfExists(dbPath);
+    const backupPath = this.createBackup();
 
     this.db.close();
-    if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+    if (fs.existsSync(this.dbPath)) fs.unlinkSync(this.dbPath);
 
-    this.db = new Database(dbPath, { create: true });
-    this.db.exec(`PRAGMA journal_mode = WAL`);
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS game_documents (
-        guild_id TEXT NOT NULL,
-        collection TEXT NOT NULL,
-        channel_id TEXT NOT NULL,
-        bgg_game_id TEXT,
-        data TEXT NOT NULL,
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-        PRIMARY KEY (guild_id, collection, channel_id)
-      );
-      CREATE INDEX IF NOT EXISTS idx_game_bgg
-        ON game_documents (guild_id, collection, bgg_game_id)
-        WHERE bgg_game_id IS NOT NULL;
-    `);
+    this.db = openGameDocumentsDatabase(this.dbPath);
 
     return backupPath;
   }
+
+  createBackup() {
+    const checkpoint = this.db.query("PRAGMA wal_checkpoint(TRUNCATE)").get();
+    if (Number(checkpoint?.busy) !== 0) {
+      throw new Error("Could not safely checkpoint the SQLite WAL for backup");
+    }
+    return backupFileIfExists(this.dbPath);
+  }
+
+  restoreFromBackup(backupPath) {
+    if (!fs.existsSync(backupPath)) {
+      throw new Error(`Database backup does not exist: ${backupPath}`);
+    }
+
+    this.db.close();
+    for (const suffix of ["-wal", "-shm"]) {
+      const sidecarPath = `${this.dbPath}${suffix}`;
+      if (fs.existsSync(sidecarPath)) fs.unlinkSync(sidecarPath);
+    }
+    fs.copyFileSync(backupPath, this.dbPath);
+    this.db = openGameDocumentsDatabase(this.dbPath);
+  }
+}
+
+function openGameDocumentsDatabase(dbPath) {
+  const db = new Database(dbPath, { create: true });
+  db.exec(`PRAGMA journal_mode = WAL`);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS game_documents (
+      guild_id TEXT NOT NULL,
+      collection TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      bgg_game_id TEXT,
+      data TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (guild_id, collection, channel_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_game_bgg
+      ON game_documents (guild_id, collection, bgg_game_id)
+      WHERE bgg_game_id IS NOT NULL;
+  `);
+  return db;
 }
 
 function backupFileIfExists(filePath) {
