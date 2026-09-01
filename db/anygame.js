@@ -331,7 +331,7 @@ class GameDatabase {
             case "standard":
                 return this.createCardFromObjList(deckName, "A", playingCards)
             case "pear":
-                return this.createCardFromStrList(deckName, "A", pairCards)
+                return this.createCardFromStrList(deckName, pairCards)
             case "imperium":
                 return this.createCardFromObjList(deckName, "B", duneImperium)
             case "dune-ix":

@@ -3,18 +3,29 @@ const { SlashCommandBuilder, MessageFlags } = require("discord.js");
 const {
   runSuggestionRecoveryMigration,
 } = require("../../db/migrateGameDocuments.js");
+const { seedDeckCatalog } = require("../../db/seedDeckCatalog.js");
 
 class Migrate extends SlashCommand {
   constructor(client) {
     super(client, {
       name: "migrate",
-      description: "Recover the game database and make suggestions global",
+      description: "Run a Bot Owner migration job",
       permLevel: "Bot Owner",
     });
     this.data = new SlashCommandBuilder()
       .setName(this.help.name)
       .setDescription(this.help.description)
-      .setDMPermission(false);
+      .setDMPermission(false)
+      .addStringOption((option) =>
+        option
+          .setName("job")
+          .setDescription("Which job to run (default: suggestions)")
+          .setRequired(false)
+          .addChoices(
+            { name: "suggestions", value: "suggestions" },
+            { name: "deck-catalog", value: "deck-catalog" }
+          )
+      );
   }
 
   async execute(interaction) {
@@ -25,7 +36,10 @@ class Migrate extends SlashCommand {
       });
     }
 
-    if (this.client._gameDocumentsMigrationRunning) {
+    if (
+      this.client._gameDocumentsMigrationRunning ||
+      this.client._deckCatalogMigrationRunning
+    ) {
       return interaction.reply({
         content: "A migration is already running.",
         flags: MessageFlags.Ephemeral,
@@ -34,8 +48,31 @@ class Migrate extends SlashCommand {
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     this.client._gameDocumentsMigrationRunning = true;
+    this.client._deckCatalogMigrationRunning = true;
 
     try {
+      const job = interaction.options.getString("job") ?? "suggestions";
+
+      if (job === "deck-catalog") {
+        const result = seedDeckCatalog();
+        await interaction.editReply({
+          content: [
+            "Deck catalog seed complete.",
+            `Templates inserted: ${result.inserted}`,
+            `Templates skipped (already present): ${result.skipped}`,
+            `Total rows: ${result.total}`,
+          ].join("\n"),
+        });
+        return;
+      }
+
+      if (job !== "suggestions") {
+        await interaction.editReply({
+          content: `Unknown migration job: ${job}`,
+        });
+        return;
+      }
+
       const result = runSuggestionRecoveryMigration({
         store: this.client.db,
       });
@@ -54,6 +91,7 @@ class Migrate extends SlashCommand {
       });
     } finally {
       this.client._gameDocumentsMigrationRunning = false;
+      this.client._deckCatalogMigrationRunning = false;
     }
   }
 }
