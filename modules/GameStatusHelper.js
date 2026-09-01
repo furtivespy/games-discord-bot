@@ -1,8 +1,10 @@
-const { PermissionsBitField } = require('discord.js');
+const { AttachmentBuilder, PermissionsBitField } = require('discord.js');
 const Formatter = require('./GameFormatter');
 
 const UNKNOWN_MESSAGE_CODE = 10008;
+const MISSING_PERMISSIONS_CODE = 50013;
 const PINNED_STATUS_HEADER = '📌 Live game status';
+const MANUAL_PIN_COMMAND_NOTICE = "\n\n⚠️ I can't pin messages in this channel. Please pin the live status message manually.";
 const loggedMissingPinPermission = new Set();
 
 class GameStatusHelper {
@@ -16,9 +18,50 @@ class GameStatusHelper {
     return `${PINNED_STATUS_HEADER}\n*Last updated: <t:${nowUnix}:R>*`;
   }
 
+  static buildManualPinCommandNotice(channel, client, gameData) {
+    if (!this.isPinnedStatusEnabled(gameData) || gameData.pinnedStatusPinned === true) {
+      return '';
+    }
+    if (!this.canManageMessages(channel, client) || gameData.pinnedStatusPinned === false) {
+      return MANUAL_PIN_COMMAND_NOTICE;
+    }
+    return '';
+  }
+
+  static cloneReplyFiles(files) {
+    if (!files?.length) {
+      return [];
+    }
+
+    return files.map((file) => {
+      if (file instanceof AttachmentBuilder) {
+        const data = file.attachment;
+        const clonedData = Buffer.isBuffer(data) ? Buffer.from(data) : data;
+        return new AttachmentBuilder(clonedData, { name: file.name, description: file.description });
+      }
+      return file;
+    });
+  }
+
+  static buildPinSnapshot(snapshotReply) {
+    if (!snapshotReply) {
+      return null;
+    }
+
+    return {
+      embeds: snapshotReply.embeds || [],
+      files: this.cloneReplyFiles(snapshotReply.files || []),
+    };
+  }
+
   static isUnknownMessageError(error) {
     const code = error?.code ?? error?.rawError?.code;
     return Number(code) === UNKNOWN_MESSAGE_CODE;
+  }
+
+  static isMissingPinPermissionError(error) {
+    const code = error?.code ?? error?.rawError?.code;
+    return Number(code) === MISSING_PERMISSIONS_CODE;
   }
 
   static async fetchPinnedMessage(channel, messageId) {
@@ -77,7 +120,13 @@ class GameStatusHelper {
     } : null;
     
     await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult);
-    await this.safeUpsertPinnedStatus(interaction.channel, client, interaction, gameData, fullReply);
+    await this.safeUpsertPinnedStatus(
+      interaction.channel,
+      client,
+      interaction,
+      gameData,
+      this.buildPinSnapshot(fullReply)
+    );
   }
 
   static async sendPublicStatusUpdate(interaction, client, gameData, options = {}) {
@@ -108,7 +157,13 @@ class GameStatusHelper {
         lastStatusMessageTimestamp: Date.now()
     };
     await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult);
-    await this.safeUpsertPinnedStatus(channel, client, interaction, gameData, fullReply);
+    await this.safeUpsertPinnedStatus(
+      channel,
+      client,
+      interaction,
+      gameData,
+      this.buildPinSnapshot(fullReply)
+    );
   }
 
   // Single choke point for building the full game status reply (table image,
@@ -234,7 +289,11 @@ class GameStatusHelper {
       await message.pin();
       gameData.pinnedStatusPinned = true;
     } catch (error) {
-      console.error("Failed to pin live game status message.", error);
+      if (this.isMissingPinPermissionError(error)) {
+        this.logMissingPinPermission(channel);
+      } else {
+        console.error("Failed to pin live game status message.", error);
+      }
       gameData.pinnedStatusPinned = false;
     }
   }
@@ -287,5 +346,6 @@ class GameStatusHelper {
 }
 
 GameStatusHelper.PINNED_STATUS_HEADER = PINNED_STATUS_HEADER;
+GameStatusHelper.MANUAL_PIN_COMMAND_NOTICE = MANUAL_PIN_COMMAND_NOTICE;
 
 module.exports = GameStatusHelper;

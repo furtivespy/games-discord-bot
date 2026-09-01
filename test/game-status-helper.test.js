@@ -44,6 +44,7 @@ function createHarness({
   const pinMessage = {
     id: "pin-1",
     pinned: false,
+    content: "",
     pin: async () => {
       pinCalls.push("pin");
       if (pinThrows) {
@@ -57,6 +58,9 @@ function createHarness({
     },
     edit: async (payload) => {
       editCalls.push(payload);
+      if (typeof payload.content === "string") {
+        pinMessage.content = payload.content;
+      }
       return pinMessage;
     },
   };
@@ -394,6 +398,37 @@ describe("GameStatusHelper pinned live status", () => {
     expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
     expect(harness.gameData.pinnedStatusPinned).toBe(false);
     expect(harness.gameData.lastStatusMessageId).toBe("chat-1");
+  });
+
+  test("pin() permission failure still persists chat status without editing the live message notice", async () => {
+    const pinError = Object.assign(new Error("Missing Permissions"), { code: 50013 });
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusEnabled: true }),
+      pinThrows: pinError,
+    });
+
+    await GameStatusHelper.sendGameStatus(harness.interaction, harness.client, harness.gameData, {
+      content: "📊",
+    });
+
+    expect(harness.pinCalls).toHaveLength(1);
+    expect(harness.gameData.pinnedStatusPinned).toBe(false);
+    expect(harness.pinMessage.content).not.toContain(GameStatusHelper.MANUAL_PIN_COMMAND_NOTICE);
+  });
+
+  test("buildManualPinCommandNotice prompts manual pin when the bot cannot pin", () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusEnabled: true, pinnedStatusPinned: false }),
+      manageMessages: false,
+    });
+
+    const notice = GameStatusHelper.buildManualPinCommandNotice(
+      harness.channel,
+      harness.client,
+      harness.gameData
+    );
+
+    expect(notice).toBe(GameStatusHelper.MANUAL_PIN_COMMAND_NOTICE);
   });
 
   test("unpinned live message is re-pinned on a later update", async () => {

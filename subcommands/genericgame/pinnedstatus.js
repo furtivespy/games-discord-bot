@@ -84,7 +84,10 @@ module.exports = {
             const status = finalMode
                 ? "ON. A pinned live status message will be kept up to date in this channel."
                 : "OFF. Chat status posts are unchanged.";
-            await interaction.editReply(`Pinned live status is now ${status}`);
+            const manualPinNotice = finalMode
+                ? GameStatusHelper.buildManualPinCommandNotice(interaction.channel, interaction.client, gameData)
+                : '';
+            await interaction.editReply(`Pinned live status is now ${status}${manualPinNotice}`);
 
         } catch (e) {
             interaction.client.logger.log(e, 'error');
