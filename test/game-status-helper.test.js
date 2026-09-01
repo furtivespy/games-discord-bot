@@ -68,7 +68,10 @@ function createHarness({
       has: (flag) => manageMessages && flag === PermissionsBitField.Flags.ManageMessages,
     }),
     messages: {
-      fetch: async (id) => {
+      fetch: async (idOrOptions) => {
+        const id = typeof idOrOptions === "object" && idOrOptions
+          ? (idOrOptions.message || idOrOptions.id)
+          : idOrOptions;
         fetchCalls.push(id);
         if (fetchImpl) {
           return fetchImpl(id, pinMessage);
@@ -236,6 +239,8 @@ describe("GameStatusHelper pinned live status", () => {
     )).toBe(true);
     expect(harness.gameData.lastStatusMessageId).toBe("chat-1");
     expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+    // In-place pin edits should not rewrite the whole game document.
+    expect(harness.persistCalls).toHaveLength(1);
   });
 
   test("cleanUpPreviousMessage never fetches or edits the pinned id", async () => {
@@ -333,6 +338,28 @@ describe("GameStatusHelper pinned live status", () => {
     expect(harness.gameData.pinnedStatusPinned).toBe(false);
   });
 
+  test("clearPinnedStatus marks the pin off when the feature is toggled off", async () => {
+    const harness = createHarness({
+      gameData: createGameData({
+        pinnedStatusEnabled: true,
+        pinnedStatusMessageId: "pin-1",
+        pinnedStatusChannelId: "channel-1",
+        pinnedStatusPinned: true,
+      }),
+    });
+    harness.pinMessage.pinned = true;
+
+    await GameStatusHelper.clearPinnedStatus(harness.channel, harness.client, harness.gameData, { ended: false });
+
+    expect(harness.editCalls.some((payload) =>
+      payload.content === `${GameStatusHelper.PINNED_STATUS_HEADER} is off for this game.`
+    )).toBe(true);
+    expect(harness.unpinCalls).toHaveLength(1);
+    expect(harness.gameData.pinnedStatusMessageId).toBeNull();
+    expect(harness.gameData.pinnedStatusChannelId).toBeNull();
+    expect(harness.gameData.pinnedStatusPinned).toBe(false);
+  });
+
   test("clearPinnedStatus still clears fields when Discord fetch fails", async () => {
     const harness = createHarness({
       gameData: createGameData({
@@ -364,6 +391,73 @@ describe("GameStatusHelper pinned live status", () => {
 
     expect(harness.sendCalls).toHaveLength(1);
     expect(harness.pinCalls).toHaveLength(0);
+    expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+    expect(harness.gameData.pinnedStatusPinned).toBe(false);
+    expect(harness.gameData.lastStatusMessageId).toBe("chat-1");
+  });
+
+  test("unpinned live message is re-pinned on a later update", async () => {
+    const harness = createHarness({
+      gameData: createGameData({
+        pinnedStatusEnabled: true,
+        pinnedStatusMessageId: "pin-1",
+        pinnedStatusChannelId: "channel-1",
+        pinnedStatusPinned: true,
+      }),
+    });
+    harness.pinMessage.pinned = false;
+
+    await GameStatusHelper.sendPublicStatusUpdate(harness.interaction, harness.client, harness.gameData, {
+      content: "Alice drew 3 cards",
+    });
+
+    expect(harness.pinCalls).toHaveLength(1);
+    expect(harness.gameData.pinnedStatusPinned).toBe(true);
+    expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+  });
+
+  test("pin send failure does not fail the chat status", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusEnabled: true }),
+    });
+    harness.channel.send = async (payload) => {
+      harness.sendCalls.push(payload);
+      if (typeof payload.content === "string" && payload.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)) {
+        throw new Error("cannot send pin");
+      }
+      return { id: "chat-1" };
+    };
+
+    await GameStatusHelper.sendGameStatus(harness.interaction, harness.client, harness.gameData, {
+      content: "📊",
+    });
+
+    expect(harness.chatReplyCalls).toHaveLength(1);
+    expect(harness.gameData.lastStatusMessageId).toBe("chat-1");
+    expect(harness.gameData.pinnedStatusMessageId).toBeNull();
+  });
+
+  test("missing Manage Messages still edits the live message in place", async () => {
+    const harness = createHarness({
+      gameData: createGameData({
+        pinnedStatusEnabled: true,
+        pinnedStatusMessageId: "pin-1",
+        pinnedStatusChannelId: "channel-1",
+        pinnedStatusPinned: false,
+      }),
+      manageMessages: false,
+    });
+
+    await GameStatusHelper.sendGameStatus(harness.interaction, harness.client, harness.gameData, {
+      content: "📊",
+    });
+
+    expect(harness.chatReplyCalls).toHaveLength(1);
+    expect(harness.sendCalls).toHaveLength(0);
+    expect(harness.pinCalls).toHaveLength(0);
+    expect(harness.editCalls.some((payload) =>
+      typeof payload.content === "string" && payload.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)
+    )).toBe(true);
     expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
     expect(harness.gameData.pinnedStatusPinned).toBe(false);
     expect(harness.gameData.lastStatusMessageId).toBe("chat-1");

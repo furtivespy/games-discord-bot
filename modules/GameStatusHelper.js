@@ -17,7 +17,13 @@ class GameStatusHelper {
   }
 
   static isUnknownMessageError(error) {
-    return error?.code === UNKNOWN_MESSAGE_CODE;
+    const code = error?.code ?? error?.rawError?.code;
+    return Number(code) === UNKNOWN_MESSAGE_CODE;
+  }
+
+  static async fetchPinnedMessage(channel, messageId) {
+    // Force the API so a human unpin is visible; cached Message.pinned can stay true.
+    return channel.messages.fetch({ message: messageId, force: true });
   }
 
   static async cleanUpPreviousMessage(channel, gameData) {
@@ -165,14 +171,19 @@ class GameStatusHelper {
 
     if (gameData.pinnedStatusMessageId && !channelMismatch) {
       try {
-        const existing = await channel.messages.fetch(gameData.pinnedStatusMessageId);
+        const existing = await this.fetchPinnedMessage(channel, gameData.pinnedStatusMessageId);
         if (existing) {
+          const pinnedBefore = gameData.pinnedStatusPinned;
           await existing.edit({
             ...pinPayload,
             attachments: [],
           });
           await this.ensurePinned(existing, channel, client, gameData, { isNew: false });
-          await this.persistPinFields(client, interaction, gameData);
+          // Pin ids are already stored. Rewriting the whole game doc here can
+          // clobber a newer chat status persist from a concurrent command.
+          if (gameData.pinnedStatusPinned !== pinnedBefore) {
+            await this.persistPinFields(client, interaction, gameData);
+          }
           return;
         }
       } catch (error) {
@@ -241,7 +252,7 @@ class GameStatusHelper {
     const messageId = gameData.pinnedStatusMessageId;
     if (messageId && channel) {
       try {
-        const message = await channel.messages.fetch(messageId);
+        const message = await this.fetchPinnedMessage(channel, messageId);
         const endedContent = ended
           ? `${PINNED_STATUS_HEADER} — this game has ended.`
           : `${PINNED_STATUS_HEADER} is off for this game.`;
