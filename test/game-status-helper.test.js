@@ -157,6 +157,7 @@ describe("GameStatusHelper pinned live status", () => {
   });
 
   test("new games default pinned live status to off", () => {
+    expect(GameDB.defaultGameData.pinnedStatusMode).toBe("off");
     expect(GameDB.defaultGameData.pinnedStatusEnabled).toBe(false);
     expect(GameDB.defaultGameData.pinnedStatusMessageId).toBeNull();
     expect(GameDB.defaultGameData.pinnedStatusChannelId).toBeNull();
@@ -524,5 +525,244 @@ describe("GameStatusHelper pinned live status", () => {
     expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
     expect(harness.gameData.pinnedStatusPinned).toBe(false);
     expect(harness.gameData.lastStatusMessageId).toBe("chat-1");
+  });
+});
+
+describe("GameStatusHelper pinnedStatusMode", () => {
+  beforeEach(() => {
+    Formatter.createGameStatusReply = async (_gameData, _guild, _clientUserId, options = {}) =>
+      snapshotReply(options.content);
+  });
+
+  afterAll(() => {
+    Formatter.createGameStatusReply = originalCreateGameStatusReply;
+  });
+
+  test("legacy boolean true/false/undefined map to on/off, and an existing mode wins", () => {
+    expect(GameStatusHelper.resolvePinnedStatusMode({ pinnedStatusEnabled: true })).toBe("on");
+    expect(GameStatusHelper.resolvePinnedStatusMode({ pinnedStatusEnabled: false })).toBe("off");
+    expect(GameStatusHelper.resolvePinnedStatusMode({ pinnedStatusEnabled: undefined })).toBe("off");
+    expect(GameStatusHelper.resolvePinnedStatusMode({})).toBe("off");
+    expect(GameStatusHelper.resolvePinnedStatusMode({
+      pinnedStatusMode: "full",
+      pinnedStatusEnabled: false,
+    })).toBe("full");
+    expect(GameStatusHelper.resolvePinnedStatusMode({
+      pinnedStatusMode: "on",
+      pinnedStatusEnabled: false,
+    })).toBe("on");
+    expect(GameStatusHelper.resolvePinnedStatusMode({
+      pinnedStatusMode: "off",
+      pinnedStatusEnabled: true,
+    })).toBe("off");
+  });
+
+  test("applyPinnedStatusModeDefaults is idempotent and does not overwrite a migrated mode", () => {
+    const fromTrue = { pinnedStatusEnabled: true };
+    GameStatusHelper.applyPinnedStatusModeDefaults(fromTrue);
+    GameStatusHelper.applyPinnedStatusModeDefaults(fromTrue);
+    expect(fromTrue.pinnedStatusMode).toBe("on");
+    expect(fromTrue.pinnedStatusEnabled).toBe(true);
+
+    const fromFalse = { pinnedStatusEnabled: false };
+    GameStatusHelper.applyPinnedStatusModeDefaults(fromFalse);
+    GameStatusHelper.applyPinnedStatusModeDefaults(fromFalse);
+    expect(fromFalse.pinnedStatusMode).toBe("off");
+    expect(fromFalse.pinnedStatusEnabled).toBe(false);
+
+    const fromUndefined = {};
+    GameStatusHelper.applyPinnedStatusModeDefaults(fromUndefined);
+    GameStatusHelper.applyPinnedStatusModeDefaults(fromUndefined);
+    expect(fromUndefined.pinnedStatusMode).toBe("off");
+    expect(fromUndefined.pinnedStatusEnabled).toBe(false);
+
+    const alreadyFull = { pinnedStatusMode: "full", pinnedStatusEnabled: false };
+    GameStatusHelper.applyPinnedStatusModeDefaults(alreadyFull);
+    GameStatusHelper.applyPinnedStatusModeDefaults(alreadyFull);
+    expect(alreadyFull.pinnedStatusMode).toBe("full");
+    expect(alreadyFull.pinnedStatusEnabled).toBe(false);
+  });
+
+  test("setPinnedStatusMode dual-writes the legacy boolean without deleting it", () => {
+    const gameData = createGameData({ pinnedStatusEnabled: false });
+    GameStatusHelper.setPinnedStatusMode(gameData, "full");
+    expect(gameData.pinnedStatusMode).toBe("full");
+    expect(gameData.pinnedStatusEnabled).toBe(true);
+
+    GameStatusHelper.setPinnedStatusMode(gameData, "off");
+    expect(gameData.pinnedStatusMode).toBe("off");
+    expect(gameData.pinnedStatusEnabled).toBe(false);
+  });
+
+  test("mode on with a conflicting false boolean still pins (mode wins)", async () => {
+    const harness = createHarness({
+      gameData: createGameData({
+        pinnedStatusMode: "on",
+        pinnedStatusEnabled: false,
+      }),
+    });
+
+    await GameStatusHelper.sendGameStatus(harness.interaction, harness.client, harness.gameData, {
+      content: "📊",
+    });
+
+    expect(harness.chatReplyCalls).toHaveLength(1);
+    expect(harness.chatReplyCalls[0].embeds).toEqual([{ title: "Game Status" }]);
+    expect(harness.sendCalls).toHaveLength(1);
+    expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+  });
+
+  test("mode off with a conflicting true boolean does not pin", async () => {
+    const harness = createHarness({
+      gameData: createGameData({
+        pinnedStatusMode: "off",
+        pinnedStatusEnabled: true,
+      }),
+    });
+
+    await GameStatusHelper.sendGameStatus(harness.interaction, harness.client, harness.gameData, {
+      content: "📊",
+    });
+
+    expect(harness.chatReplyCalls).toHaveLength(1);
+    expect(harness.sendCalls).toHaveLength(0);
+    expect(harness.pinCalls).toHaveLength(0);
+    expect(harness.gameData.pinnedStatusMessageId).toBeNull();
+  });
+
+  test("full mode sendGameStatus skips the chat table but still updates the pin", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusMode: "full" }),
+    });
+
+    await GameStatusHelper.sendGameStatus(harness.interaction, harness.client, harness.gameData, {
+      content: "Alice drew a card",
+    });
+
+    expect(harness.chatReplyCalls).toHaveLength(1);
+    expect(harness.chatReplyCalls[0].content).toBe("Alice drew a card");
+    expect(harness.chatReplyCalls[0].embeds).toBeUndefined();
+    expect(harness.chatReplyCalls[0].files).toBeUndefined();
+    expect(harness.sendCalls).toHaveLength(1);
+    expect(harness.sendCalls[0].content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)).toBe(true);
+    expect(harness.sendCalls[0].embeds).toEqual([{ title: "Game Status" }]);
+    expect(harness.pinCalls).toHaveLength(1);
+    expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+    expect(harness.gameData.lastStatusMessageId).toBeNull();
+  });
+
+  test("full mode sendPublicStatusUpdate skips the chat table but still updates the pin", async () => {
+    const harness = createHarness({
+      gameData: createGameData({
+        pinnedStatusMode: "full",
+        pinnedStatusMessageId: "pin-1",
+        pinnedStatusChannelId: "channel-1",
+        pinnedStatusPinned: true,
+      }),
+    });
+    harness.pinMessage.pinned = true;
+
+    await GameStatusHelper.sendPublicStatusUpdate(harness.interaction, harness.client, harness.gameData, {
+      content: "Alice drew 3 cards",
+    });
+
+    const pinSends = harness.sendCalls.filter((payload) =>
+      typeof payload.content === "string" && payload.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)
+    );
+    const chatSends = harness.sendCalls.filter((payload) => payload.content === "Alice drew 3 cards");
+    expect(chatSends).toHaveLength(0);
+    expect(pinSends).toHaveLength(0);
+    expect(harness.chatReplyCalls).toHaveLength(0);
+    expect(harness.editCalls.some((payload) =>
+      typeof payload.content === "string" && payload.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)
+    )).toBe(true);
+    expect(harness.gameData.lastStatusMessageId).toBeNull();
+    expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+  });
+
+  test("full mode plus explicitStatus still posts the chat table and updates the pin", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusMode: "full" }),
+    });
+
+    await GameStatusHelper.sendGameStatus(harness.interaction, harness.client, harness.gameData, {
+      content: "📊",
+      explicitStatus: true,
+    });
+
+    expect(harness.chatReplyCalls).toHaveLength(1);
+    expect(harness.chatReplyCalls[0].content).toBe("📊");
+    expect(harness.chatReplyCalls[0].embeds).toEqual([{ title: "Game Status" }]);
+    expect(harness.sendCalls).toHaveLength(1);
+    expect(harness.sendCalls[0].content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)).toBe(true);
+    expect(harness.gameData.lastStatusMessageId).toBe("chat-1");
+    expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+  });
+
+  test("on mode with pinnedStatusMode still posts chat status and updates the pin", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusMode: "on" }),
+    });
+
+    await GameStatusHelper.sendGameStatus(harness.interaction, harness.client, harness.gameData, {
+      content: "📊",
+    });
+
+    expect(harness.chatReplyCalls).toHaveLength(1);
+    expect(harness.chatReplyCalls[0].embeds).toEqual([{ title: "Game Status" }]);
+    expect(harness.sendCalls).toHaveLength(1);
+    expect(harness.gameData.lastStatusMessageId).toBe("chat-1");
+    expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+  });
+
+  test("off mode with pinnedStatusMode still posts chat status and does not pin", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusMode: "off" }),
+    });
+
+    await GameStatusHelper.sendPublicStatusUpdate(harness.interaction, harness.client, harness.gameData, {
+      content: "drew a card",
+    });
+
+    expect(harness.sendCalls).toHaveLength(1);
+    expect(harness.sendCalls[0].content).toBe("drew a card");
+    expect(harness.pinCalls).toHaveLength(0);
+    expect(harness.gameData.pinnedStatusMessageId).toBeNull();
+  });
+
+  test("full mode resolveDeferredReply resolves the interaction without the table", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusMode: "full" }),
+    });
+
+    await GameStatusHelper.sendPublicStatusUpdate(harness.interaction, harness.client, harness.gameData, {
+      content: "created a new pile",
+      resolveDeferredReply: true,
+    });
+
+    expect(harness.chatReplyCalls).toHaveLength(1);
+    expect(harness.chatReplyCalls[0].content).toBe("created a new pile");
+    expect(harness.chatReplyCalls[0].embeds).toBeUndefined();
+    const chatSends = harness.sendCalls.filter((payload) => payload.content === "created a new pile");
+    expect(chatSends).toHaveLength(0);
+    expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+    expect(harness.gameData.lastStatusMessageId).toBeNull();
+  });
+
+  test("full mode does not overwrite an interaction that already has a bespoke reply", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusMode: "full" }),
+    });
+    harness.interaction.replied = true;
+    harness.interaction.deferred = true;
+
+    await GameStatusHelper.sendGameStatus(harness.interaction, harness.client, harness.gameData, {
+      content: "should not replace bespoke reply",
+    });
+
+    expect(harness.chatReplyCalls).toHaveLength(0);
+    expect(harness.sendCalls).toHaveLength(1);
+    expect(harness.sendCalls[0].content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)).toBe(true);
+    expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
   });
 });

@@ -17,6 +17,7 @@ const GoogleSearch = require("./modules/GoogleSearch.js");
 const _ = require("lodash");
 const modalSubmission = require('./events/modalSubmission.js');
 const ReminderSystem = require("./modules/ReminderSystem.js");
+const GameStatusHelper = require("./modules/GameStatusHelper");
 
 class DiscordBot extends Client {
   constructor(options) {
@@ -381,10 +382,10 @@ class DiscordBot extends Client {
       gameData.lastStatusMessageTimestamp = null;
     }
 
-    // Ensure pinned live status fields exist (feature defaults to off)
-    if (gameData.pinnedStatusEnabled === undefined) {
-      gameData.pinnedStatusEnabled = false;
-    }
+    // Ensure pinned live status fields exist (feature defaults to off).
+    // Prefer pinnedStatusMode; derive from the legacy boolean when missing.
+    // Do not overwrite an already-migrated mode, and do not delete the old flag.
+    GameStatusHelper.applyPinnedStatusModeDefaults(gameData);
     if (gameData.pinnedStatusMessageId === undefined) {
       gameData.pinnedStatusMessageId = null;
     }
