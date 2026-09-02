@@ -118,15 +118,20 @@ function createHarness({
     },
   };
 
+  const storedGame = structuredClone(gameData);
+
   const client = {
     user: { id: "bot-1" },
+    getGameDataV2: async () => structuredClone(storedGame),
     setGameDataV2: async (...args) => {
+      Object.assign(storedGame, args[3]);
       persistCalls.push(args);
     },
   };
 
   return {
     gameData,
+    storedGame,
     channel,
     interaction,
     client,
@@ -188,6 +193,29 @@ describe("GameStatusHelper pinned live status", () => {
     expect(harness.sendCalls[0].content).toBe("drew a card");
     expect(harness.pinCalls).toHaveLength(0);
     expect(harness.gameData.pinnedStatusMessageId).toBeNull();
+  });
+
+  test("persistPinFields merges pin ids into the latest saved game state", async () => {
+    const harness = createHarness({
+      gameData: createGameData({
+        pinnedStatusEnabled: true,
+        players: [{ userId: "p1", score: 0 }],
+      }),
+    });
+
+    harness.storedGame.players = [{ userId: "p1", score: 99 }];
+    harness.gameData.pinnedStatusMessageId = "pin-1";
+    harness.gameData.pinnedStatusChannelId = "channel-1";
+    harness.gameData.pinnedStatusPinned = true;
+
+    await GameStatusHelper.persistPinFields(harness.client, harness.interaction, harness.gameData);
+
+    expect(harness.persistCalls).toHaveLength(1);
+    const saved = harness.persistCalls[0][3];
+    expect(saved.players[0].score).toBe(99);
+    expect(saved.pinnedStatusMessageId).toBe("pin-1");
+    expect(saved.pinnedStatusChannelId).toBe("channel-1");
+    expect(saved.pinnedStatusPinned).toBe(true);
   });
 
   test("first status with pin enabled creates, pins, and persists a separate pin id", async () => {

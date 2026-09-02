@@ -192,7 +192,17 @@ class GameStatusHelper {
   }
 
   static async persistPinFields(client, interaction, gameData) {
-    await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
+    const guildId = interaction.guildId;
+    const channelId = interaction.channelId;
+    const fresh = await client.getGameDataV2(guildId, "game", channelId);
+    if (!fresh || fresh.isdeleted) {
+      return;
+    }
+
+    fresh.pinnedStatusMessageId = gameData.pinnedStatusMessageId;
+    fresh.pinnedStatusChannelId = gameData.pinnedStatusChannelId;
+    fresh.pinnedStatusPinned = gameData.pinnedStatusPinned;
+    await client.setGameDataV2(guildId, "game", channelId, fresh);
   }
 
   static async safeUpsertPinnedStatus(channel, client, interaction, gameData, snapshotReply) {
