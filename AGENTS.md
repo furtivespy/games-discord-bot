@@ -1,5 +1,15 @@
 # Agent Guidance
 
+## Linear
+
+This repo's Linear project is **Game Bot** (team **Furtivespy**, key `FUR`).
+
+- **Project name:** Game Bot
+- **Project ID:** `25f57271-2db4-4e27-aa45-f40219aa5bb6`
+- **URL:** https://linear.app/furtivespy/project/game-bot-3db2f0748b50
+
+When the user mentions Linear, issues, or project tracking for this codebase, scope work to the Game Bot project unless they say otherwise.
+
 ## Data migrations
 
 - Do not change data scope (for example, guild- or channel-scoped data to bot-wide data) without an explicit migration path.
