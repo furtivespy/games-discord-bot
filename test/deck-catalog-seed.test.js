@@ -178,7 +178,7 @@ describe("seedDeckCatalog", () => {
   });
 });
 
-describe("/migrate job=deck-catalog", () => {
+describe("/migrate", () => {
   test("reports inserted, skipped, and total rows", async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "deck-catalog-migrate-"));
     const previousDataDir = process.env.GAMEBOT_DATA_DIR;
@@ -193,9 +193,7 @@ describe("/migrate job=deck-catalog", () => {
       user: { id: "owner" },
       deferReply: async () => {},
       editReply: async (response) => replies.push(response),
-      options: {
-        getString: (name) => (name === "job" ? "deck-catalog" : null),
-      },
+      options: {},
     };
 
     try {
@@ -232,12 +230,12 @@ describe("/migrate job=deck-catalog", () => {
     const command = new Migrate({
       config: { botOwnerId: "owner" },
       logger: { log: () => {} },
-      _gameDocumentsMigrationRunning: true,
+      _deckCatalogMigrationRunning: true,
     });
     const interaction = {
       user: { id: "owner" },
       reply: async (response) => replies.push(response),
-      options: { getString: () => "deck-catalog" },
+      options: {},
     };
 
     await command.execute(interaction);
