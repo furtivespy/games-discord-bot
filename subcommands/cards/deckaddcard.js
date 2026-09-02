@@ -36,9 +36,15 @@ class DeckAddCard {
 
         const copies = interaction.options.getInteger('copies') ?? 1
         const format = interaction.options.getString('format') || 'A'
+        const url = (interaction.options.getString('url') || '').trim() || null
+        if (url && !DeckRecipeHelper.isEmbedImageUrl(url)) {
+            await interaction.editReply({ content: `Card image URL must be a valid http or https URL.` })
+            return
+        }
+
         const added = DeckRecipeHelper.addRichCards(deck, {
             name,
-            url: interaction.options.getString('url'),
+            url,
             type: interaction.options.getString('type'),
             suit: interaction.options.getString('suit'),
             value: interaction.options.getString('value'),

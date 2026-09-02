@@ -85,3 +85,12 @@ test("recipe add does not shuffle — draw pile stays untouched", () => {
   expect(deck.piles.draw.cards).toBe(drawRef);
   expect(deck.piles.draw.cards).toEqual(drawBefore);
 });
+
+test("isEmbedImageUrl accepts http and https URLs and rejects malformed values", () => {
+  expect(DeckRecipeHelper.isEmbedImageUrl("https://example.com/promo.png")).toBe(true);
+  expect(DeckRecipeHelper.isEmbedImageUrl("http://example.com/card.jpg")).toBe(true);
+  expect(DeckRecipeHelper.isEmbedImageUrl("not-a-url")).toBe(false);
+  expect(DeckRecipeHelper.isEmbedImageUrl("ftp://example.com/image.png")).toBe(false);
+  expect(DeckRecipeHelper.isEmbedImageUrl("")).toBe(false);
+  expect(DeckRecipeHelper.isEmbedImageUrl("   ")).toBe(false);
+});

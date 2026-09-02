@@ -63,8 +63,16 @@ class DeckAddList {
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
         const actorDisplayName = interaction.member?.displayName || interaction.user.username
+        const nameList = names.join(', ')
+        let content = `${actorDisplayName} added ${added.length} card(s) to ${deck.name}`
+        if (nameList.length > 0 && nameList.length < 500) {
+            content += `: ${nameList}`
+        }
+        if (content.length > 2000) {
+            content = `${actorDisplayName} added ${added.length} card(s) to ${deck.name}. (Card list too long to display).`
+        }
         await interaction.editReply({
-            content: `${actorDisplayName} added ${added.length} card(s) to ${deck.name}: ${names.join(', ')}`,
+            content,
             embeds: Formatter.deckStatus2(gameData)
         })
     }

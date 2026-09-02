@@ -62,6 +62,22 @@ function parseNameList(customlist) {
     return customlist.split(',').map(name => name.trim()).filter(name => name.length > 0)
 }
 
+function isEmbedImageUrl(url) {
+    if (!url || typeof url !== 'string') {
+        return false
+    }
+    const trimmed = url.trim()
+    if (!trimmed || trimmed.length > 2048) {
+        return false
+    }
+    try {
+        const parsed = new URL(trimmed)
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+    } catch {
+        return false
+    }
+}
+
 function addCardsFromNameList(deck, customlist) {
     const names = parseNameList(customlist)
     const cards = GameDB.createCardFromStrList(deck.name, names)
@@ -74,4 +90,5 @@ module.exports = {
     addRichCards,
     addCardsFromNameList,
     parseNameList,
+    isEmbedImageUrl,
 }
