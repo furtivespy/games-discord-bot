@@ -114,7 +114,7 @@ class BoardGameGeek {
         this.gameName = he.decode(gameName);
         span.setAttribute("bgg.game_name", this.gameName);
       } catch (err) {
-        span.recordError(err);
+        span.recordException(err);
         span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
         throw err;
       } finally {
@@ -202,7 +202,7 @@ class BoardGameGeek {
         canvas.height = 1;
         ctx.clearRect(0, 0, 1, 1);
       } catch (err) {
-        span.recordError(err);
+        span.recordException(err);
         span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
         throw err;
       } finally {

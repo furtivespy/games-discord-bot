@@ -1,6 +1,7 @@
 const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
+const GameStatusHelper = require('../../modules/GameStatusHelper')
 const { cloneDeep } = require('lodash')
 
 class Delete {
@@ -39,6 +40,12 @@ class Delete {
                     console.warn('Failed to record game deletion in history:', error)
                 }
                 
+                try {
+                    await GameStatusHelper.clearPinnedStatus(interaction.channel, client, gameData, { ended: true })
+                } catch (error) {
+                    console.error("Failed to clear pinned live status while deleting the game.", error)
+                }
+
                 gameData.isdeleted = true
                 //client.setGameData(`game-${interaction.channel.id}`, gameData)
                 await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
