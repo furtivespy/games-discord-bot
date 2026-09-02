@@ -38,6 +38,7 @@ class Help {
 • **/cards hand show** - Shows your current hand and play area, including card images.
 
 • **/game status** - Current game status, including play area details, card counts, and images.
+• **/game pinnedstatus** - off / on / full. **full** keeps a pinned live status without posting the full table in chat after each action; **/game status** still shows the table.
 
 Thank you, and please let me know if I can make any of these clearer`;
 

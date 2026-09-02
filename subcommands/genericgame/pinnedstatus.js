@@ -3,17 +3,30 @@ const GameStatusHelper = require('../../modules/GameStatusHelper');
 const GameDB = require('../../db/anygame.js');
 const { SlashCommandSubcommandBuilder } = require('discord.js');
 
+const MODE_STATUS_TEXT = {
+    off: 'OFF. Chat status posts are unchanged.',
+    on: 'ON. A pinned live status message will be kept up to date in this channel.',
+    full: 'FULL. A pinned live status message will be kept up to date. State-changing commands will not post the full status table in chat; use /game status when you want the table in chat.',
+};
+
+const MODE_HISTORY_TEXT = {
+    off: 'OFF',
+    on: 'ON (pinned live status)',
+    full: 'FULL (pinned live status, no chat table)',
+};
+
 module.exports = {
     data: new SlashCommandSubcommandBuilder()
         .setName('pinnedstatus')
-        .setDescription('Toggles or sets the pinned live status message for this game (default: off).')
+        .setDescription('Sets the pinned live status message for this game (default: off).')
         .addStringOption(option =>
             option.setName('mode')
-                .setDescription('Set to "on" to keep a pinned live status, "off" to disable it.')
+                .setDescription('off: no pin. on: pin + chat table. full: pin only (chat keeps command replies).')
                 .setRequired(false)
                 .addChoices(
                     { name: 'On', value: 'on' },
-                    { name: 'Off', value: 'off' }
+                    { name: 'Off', value: 'off' },
+                    { name: 'Full', value: 'full' }
                 )),
     async execute(interaction) {
         try {
@@ -27,22 +40,21 @@ module.exports = {
             }
 
             const desiredMode = interaction.options.getString('mode');
+            const currentMode = GameStatusHelper.resolvePinnedStatusMode(gameData);
             let finalMode;
 
-            if (desiredMode === 'on') {
-                gameData.pinnedStatusEnabled = true;
-                finalMode = true;
-            } else if (desiredMode === 'off') {
-                gameData.pinnedStatusEnabled = false;
-                finalMode = false;
+            if (GameStatusHelper.isValidPinnedStatusMode(desiredMode)) {
+                finalMode = desiredMode;
             } else {
-                gameData.pinnedStatusEnabled = !gameData.pinnedStatusEnabled;
-                finalMode = gameData.pinnedStatusEnabled;
+                // Toggle stays on ↔ off (full counts as on for toggle purposes).
+                finalMode = currentMode === 'off' ? 'on' : 'off';
             }
+
+            GameStatusHelper.setPinnedStatusMode(gameData, finalMode);
 
             try {
                 const actorDisplayName = interaction.member?.displayName || interaction.user.username;
-                const modeText = finalMode ? 'ON (pinned live status)' : 'OFF';
+                const modeText = MODE_HISTORY_TEXT[finalMode];
 
                 GlobalGameHelper.recordMove(
                     gameData,
@@ -63,7 +75,7 @@ module.exports = {
                 console.warn('Failed to record pinned status mode change in history:', error);
             }
 
-            if (!finalMode) {
+            if (finalMode === 'off') {
                 try {
                     await GameStatusHelper.clearPinnedStatus(interaction.channel, interaction.client, gameData, { ended: false });
                 } catch (error) {
@@ -73,7 +85,7 @@ module.exports = {
 
             await interaction.client.setGameDataV2(interaction.guildId, 'game', interaction.channelId, gameData);
 
-            if (finalMode) {
+            if (finalMode !== 'off') {
                 try {
                     await GameStatusHelper.upsertPinnedStatus(interaction.channel, interaction.client, interaction, gameData);
                 } catch (error) {
@@ -81,10 +93,9 @@ module.exports = {
                 }
             }
 
-            const status = finalMode
-                ? "ON. A pinned live status message will be kept up to date in this channel."
-                : "OFF. Chat status posts are unchanged.";
-            const manualPinNotice = finalMode
+            const pinEnabled = finalMode !== 'off';
+            const status = MODE_STATUS_TEXT[finalMode];
+            const manualPinNotice = pinEnabled
                 ? GameStatusHelper.buildManualPinCommandNotice(interaction.channel, interaction.client, gameData)
                 : '';
             await interaction.editReply(`Pinned live status is now ${status}${manualPinNotice}`);

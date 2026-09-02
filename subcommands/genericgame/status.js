@@ -19,7 +19,7 @@ class Status {
         // the secondary token render are independent of each other
         const player = find(gameData.players, { userId: interaction.user.id })
         const [, secretTokensEmbed] = await Promise.all([
-            GameStatusHelper.sendGameStatus(interaction, client, gameData, { content: "📊" }),
+            GameStatusHelper.sendGameStatus(interaction, client, gameData, { content: "📊", explicitStatus: true }),
             player ? Formatter.playerSecretTokens(gameData, player) : Promise.resolve(null)
         ]);
 
