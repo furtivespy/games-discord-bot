@@ -16,6 +16,7 @@ const Help = require('../../subcommands/genericgame/help.js')
 const History = require('../../subcommands/genericgame/history.js')
 const HistoryAdd = require('../../subcommands/genericgame/historyadd.js')
 const PlayArea = require('../../subcommands/genericgame/playarea.js') // Restoring playarea toggle
+const PinnedStatus = require('../../subcommands/genericgame/pinnedstatus.js')
 
 class Game extends SlashCommand {
     constructor(client){
@@ -195,6 +196,7 @@ class Game extends SlashCommand {
                 )
                 
             .addSubcommand(PlayArea.data) // Restoring playarea toggle
+            .addSubcommand(PinnedStatus.data)
                 
     }
 
@@ -248,6 +250,9 @@ class Game extends SlashCommand {
                     break
                 case "playarea": // Restoring playarea toggle
                     await PlayArea.execute(interaction)
+                    break
+                case "pinnedstatus":
+                    await PinnedStatus.execute(interaction)
                     break
                 default:
                     await interaction.reply({ content: "Something Went Wrong!?!?!?", flags: MessageFlags.Ephemeral })

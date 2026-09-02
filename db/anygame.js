@@ -179,6 +179,10 @@ class GameDatabase {
         history: [], // Added for history tracking feature
         lastStatusMessageId: null,
         lastStatusMessageTimestamp: null,
+        pinnedStatusEnabled: false, // Per-game toggle for the live pinned status message (default off)
+        pinnedStatusMessageId: null,
+        pinnedStatusChannelId: null,
+        pinnedStatusPinned: false,
         gameBoard: [], // Added for game board feature - shared play area for all players
         globalPiles: [], // Added for global piles feature - configurable card piles
     }
@@ -331,7 +335,7 @@ class GameDatabase {
             case "standard":
                 return this.createCardFromObjList(deckName, "A", playingCards)
             case "pear":
-                return this.createCardFromStrList(deckName, "A", pairCards)
+                return this.createCardFromStrList(deckName, pairCards)
             case "imperium":
                 return this.createCardFromObjList(deckName, "B", duneImperium)
             case "dune-ix":
