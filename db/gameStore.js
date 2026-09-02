@@ -60,7 +60,7 @@ class GameStore {
             JSON.stringify(data)
           );
       } catch (err) {
-        span.recordError(err);
+        span.recordException(err);
         span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
         throw err;
       } finally {
@@ -89,7 +89,7 @@ class GameStore {
         span.setAttribute("db.found", row !== null);
         return row ? this._parseRow(row) : null;
       } catch (err) {
-        span.recordError(err);
+        span.recordException(err);
         span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
         throw err;
       } finally {
@@ -134,7 +134,7 @@ class GameStore {
         span.setAttribute("db.result_count", results.length);
         return results;
       } catch (err) {
-        span.recordError(err);
+        span.recordException(err);
         span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
         throw err;
       } finally {
@@ -167,7 +167,7 @@ class GameStore {
           data: this._parseRow(row),
         }));
       } catch (err) {
-        span.recordError(err);
+        span.recordException(err);
         span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
         throw err;
       } finally {

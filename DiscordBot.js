@@ -243,7 +243,7 @@ class DiscordBot extends Client {
       try {
         this.db.upsertGameData(serverId, gameName, channelId, updatedData);
       } catch (err) {
-        span.recordError(err);
+        span.recordException(err);
         span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
         this.logger.log(`setGameDataV2 failed [guild=${serverId} collection=${gameName} channel=${channelId}]: ${err}`, "error");
         throw err;
@@ -274,7 +274,7 @@ class DiscordBot extends Client {
         });
         return result;
       } catch (err) {
-        span.recordError(err);
+        span.recordException(err);
         span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
         throw err;
       } finally {
@@ -379,6 +379,20 @@ class DiscordBot extends Client {
     }
     if (gameData.lastStatusMessageTimestamp === undefined) {
       gameData.lastStatusMessageTimestamp = null;
+    }
+
+    // Ensure pinned live status fields exist (feature defaults to off)
+    if (gameData.pinnedStatusEnabled === undefined) {
+      gameData.pinnedStatusEnabled = false;
+    }
+    if (gameData.pinnedStatusMessageId === undefined) {
+      gameData.pinnedStatusMessageId = null;
+    }
+    if (gameData.pinnedStatusChannelId === undefined) {
+      gameData.pinnedStatusChannelId = null;
+    }
+    if (gameData.pinnedStatusPinned === undefined) {
+      gameData.pinnedStatusPinned = false;
     }
     
     return gameData;
@@ -768,7 +782,7 @@ client.on("interactionCreate", async (interaction) => {
       try {
         await command.execute(interaction);
       } catch (error) {
-        span.recordError(error);
+        span.recordException(error);
         span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
         console.error(error);
         return interaction.reply({
