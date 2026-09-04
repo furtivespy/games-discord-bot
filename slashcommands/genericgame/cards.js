@@ -41,6 +41,8 @@ const Burn = require('../../subcommands/cards/burn')
 const DeckPeek = require('../../subcommands/cards/deckpeek')
 const DeckRemove = require('../../subcommands/cards/deckremove')
 const DeckPrune = require('../../subcommands/cards/deckprune')
+const DeckAddCard = require('../../subcommands/cards/deckaddcard')
+const DeckAddList = require('../../subcommands/cards/deckaddlist')
 // Global Piles
 const PileCreate = require('../../subcommands/cards/pilecreate')
 const PileDelete = require('../../subcommands/cards/piledelete')
@@ -200,6 +202,31 @@ class Cards extends SlashCommand {
                     .setName("prune")
                     .setDescription("Remove specific cards from a deck's complete card list and reshuffle.")
                     .addStringOption(option => option.setName('deck').setDescription('Deck to prune').setAutocomplete(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("addcard")
+                    .setDescription("Add a card to an in-game deck recipe (goes to discard, not draw)")
+                    .addStringOption(option => option.setName('name').setDescription('Name of the card').setRequired(true))
+                    .addStringOption(option => option.setName('deck').setDescription('Deck to add to').setAutocomplete(true))
+                    .addStringOption(option => option.setName('url').setDescription('Image URL for the card'))
+                    .addStringOption(option => option.setName('type').setDescription('Card type'))
+                    .addStringOption(option => option.setName('suit').setDescription('Card suit'))
+                    .addStringOption(option => option.setName('value').setDescription('Card value'))
+                    .addStringOption(option => option.setName('description').setDescription('Card description'))
+                    .addIntegerOption(option => option.setName('copies').setDescription('Number of copies to add').setMinValue(1).setMaxValue(50))
+                    .addStringOption(option => option.setName('format').setDescription('Card display format').addChoices(
+                        {name: "A", value: "A"},
+                        {name: "B", value: "B"},
+                        {name: "C", value: "C"}
+                    ))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("addlist")
+                    .setDescription("Bulk-add name-only cards to an in-game deck recipe (goes to discard, not draw)")
+                    .addStringOption(option => option.setName('customlist').setDescription('Comma-separated card names').setRequired(true).setMaxLength(2000))
+                    .addStringOption(option => option.setName('deck').setDescription('Deck to add to').setAutocomplete(true))
             );
         });
         this.data.addSubcommandGroup(group =>
@@ -550,6 +577,12 @@ class Cards extends SlashCommand {
                             break
                         case "prune":
                             await DeckPrune.execute(interaction, this.client)
+                            break
+                        case "addcard":
+                            await DeckAddCard.execute(interaction, this.client)
+                            break
+                        case "addlist":
+                            await DeckAddList.execute(interaction, this.client)
                             break
                         default:
                             await interaction.reply({ content: "Command not fully written yet :(", flags: MessageFlags.Ephemeral })
