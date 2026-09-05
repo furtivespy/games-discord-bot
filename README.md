@@ -48,7 +48,6 @@ A versatile Discord bot designed to enhance tabletop and card game experiences i
 - Built with discord.js for Discord integration
 - MongoDB for persistent game state storage
 - Node.js backend
-- Hosted on Fly.io
 
 ### Architecture
 - Modular design with separate components for:

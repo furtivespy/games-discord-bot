@@ -3,8 +3,6 @@
 ARG BUN_VERSION=1.3.14
 FROM oven/bun:${BUN_VERSION} AS base
 
-LABEL fly_launch_runtime="Bun"
-
 WORKDIR /app
 
 ENV NODE_ENV="production"
