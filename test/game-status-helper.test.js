@@ -731,6 +731,35 @@ describe("GameStatusHelper pinnedStatusMode", () => {
     expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
   });
 
+  test("full mode sendPublicStatusUpdate posts attached card media without the status table", async () => {
+    const cardEmbed = { title: "Combat: Staged Incident", image: { url: "attachment://played-card-staged-1.png" } };
+    const cardFile = { name: "played-card-staged-1.png" };
+    const harness = createHarness({
+      gameData: createGameData({
+        pinnedStatusMode: "full",
+        pinnedStatusMessageId: "pin-1",
+        pinnedStatusChannelId: "channel-1",
+        pinnedStatusPinned: true,
+      }),
+    });
+    harness.pinMessage.pinned = true;
+
+    await GameStatusHelper.sendPublicStatusUpdate(harness.interaction, harness.client, harness.gameData, {
+      content: "Alice has Played to discard pile:",
+      additionalEmbeds: [cardEmbed],
+      additionalFiles: [cardFile],
+    });
+
+    const chatSends = harness.sendCalls.filter((payload) =>
+      payload.content === "Alice has Played to discard pile:"
+    );
+    expect(chatSends).toHaveLength(1);
+    expect(chatSends[0].embeds).toEqual([cardEmbed]);
+    expect(chatSends[0].files).toEqual([cardFile]);
+    expect(harness.chatReplyCalls).toHaveLength(0);
+    expect(harness.gameData.lastStatusMessageId).toBeNull();
+  });
+
   test("full mode preserves command-owned files without the status table image", async () => {
     const cardFile = { name: "played-card.png" };
     const harness = createHarness({

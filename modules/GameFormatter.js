@@ -920,6 +920,27 @@ class GameFormatter {
     return newEmbed;
   }
 
+  // Public card replies should attach the image as a Discord file. External
+  // setImage(url) embeds often fail to render in a channel that already has a
+  // pinned live-status message with large attachments.
+  static async oneCardReplyParts(cardObj) {
+    const embed = this.oneCard(cardObj);
+    const files = [];
+    if (!cardObj?.url) {
+      return { embed, files };
+    }
+    try {
+      const safeId = String(cardObj.id || 'image').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24);
+      const fileName = `played-card-${safeId || 'image'}.png`;
+      const buffer = await this.ImagefromUrlList([cardObj.url]);
+      files.push(new AttachmentBuilder(buffer, { name: fileName }));
+      embed.setImage(`attachment://${fileName}`);
+    } catch (error) {
+      console.error('Failed to attach card image; keeping URL embed.', error);
+    }
+    return { embed, files };
+  }
+
   static async multiCard(cardArry, title) {
     const embeds = [];
     const attachments = [];
@@ -1127,8 +1148,12 @@ class GameFormatter {
     }
 
     const replyOptions = {
-        files: [attachment, ...consolidatedPlayAreaData.attachments], // Add main status table + consolidated play area images + gameboard
-        embeds: finalEmbeds // Use the constructed finalEmbeds array
+        files: [
+            attachment,
+            ...consolidatedPlayAreaData.attachments,
+            ...(options.additionalFiles || []),
+        ],
+        embeds: finalEmbeds
     };
 
     if (options.content) {
