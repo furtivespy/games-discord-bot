@@ -1,6 +1,7 @@
 const { describe, expect, test } = require("bun:test");
 const Cards = require("../slashcommands/genericgame/cards");
 const {
+  collectedReplyText,
   createActiveGame,
   createCard,
   createDeck,
@@ -44,14 +45,7 @@ describe("/cards command handlers", () => {
       { options: { subcommand: "help" } },
       async (harness) => {
         await runCards(harness);
-        const bodies = [
-          harness.calls.reply[0]?.content,
-          ...harness.calls.followUp.map((payload) => payload.content),
-          ...harness.calls.editReply.map((payload) => payload?.content),
-        ]
-          .filter(Boolean)
-          .join("\n");
-        expect(bodies.toLowerCase()).toContain("card");
+        expect(collectedReplyText(harness).toLowerCase()).toContain("card");
       }
     );
   });
@@ -275,6 +269,50 @@ describe("/cards command handlers", () => {
           cards: [],
         });
         expect(harness.lastContent()).toContain("created a new pile: **Market**");
+      }
+    );
+  });
+
+  test("hand play autocomplete uses getFocused for the card option", async () => {
+    const ace = createCard({ id: "ace-1", name: "Ace", origin: "Main" });
+    const king = createCard({ id: "king-1", name: "King", origin: "Main" });
+    await withHarness(
+      {
+        isAutocomplete: true,
+        gameData: gameWithDeck({ draw: [], hand: [ace, king] }),
+        options: {
+          subcommandGroup: "hand",
+          subcommand: "play",
+          focused: "ace",
+          focusedName: "card",
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.calls.respond[0]).toEqual([
+          { name: "Ace", value: "ace-1" },
+        ]);
+      }
+    );
+  });
+
+  test("deck draw persists through GameStore SQLite in the temp data dir", async () => {
+    const top = createCard({ id: "top", name: "Queen", origin: "Main" });
+    await withHarness(
+      {
+        useGameStore: true,
+        gameData: gameWithDeck({ draw: [top] }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "draw",
+          strings: { deck: "Main" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        expect(saved.players[0].hands.main.map((card) => card.id)).toEqual(["top"]);
+        expect(saved.decks[0].piles.draw.cards).toHaveLength(0);
       }
     );
   });

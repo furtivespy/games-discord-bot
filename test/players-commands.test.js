@@ -1,6 +1,7 @@
 const { describe, expect, test } = require("bun:test");
 const Players = require("../slashcommands/players/players");
 const {
+  collectedReplyText,
   createActiveGame,
   createPlayer,
   createUser,
@@ -162,13 +163,7 @@ describe("/players command handlers", () => {
       { options: { subcommand: "help" } },
       async (harness) => {
         await runPlayers(harness);
-        const bodies = [
-          harness.calls.reply[0]?.content,
-          ...harness.calls.followUp.map((payload) => payload.content),
-        ]
-          .filter(Boolean)
-          .join("\n");
-        expect(bodies.toLowerCase()).toContain("player");
+        expect(collectedReplyText(harness).toLowerCase()).toContain("player");
       }
     );
   });

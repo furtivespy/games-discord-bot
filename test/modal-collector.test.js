@@ -100,6 +100,22 @@ describe("modals and collectors", () => {
         expect(
           harness.calls.editReply.some((payload) => payload.content === "Cards Picked Back Up!")
         ).toBe(true);
+        expect(harness.calls.editReply[0].fetchReply).toBe(true);
+      }
+    );
+  });
+
+  test("modal field lookup throws when a custom id is missing", async () => {
+    await withHarness(
+      {
+        isModalSubmit: true,
+        modalCustomId: "colorall-modal",
+        modalFields: { "color-user-1": "red" },
+      },
+      async (harness) => {
+        expect(() => harness.interaction.fields.getTextInputValue("color-user-2")).toThrow(
+          /not found/
+        );
       }
     );
   });

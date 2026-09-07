@@ -152,6 +152,43 @@ describe("mock interaction harness", () => {
         filter: (i) => i.user.id === "user-1" && i.customId === "card",
       });
       expect(collected.values).toEqual(["card-1"]);
+      await collected.update({ content: "acked" });
+      expect(collected.deferUpdate).toBeTypeOf("function");
+    });
+  });
+
+  test("collector times out when time is 0 even if a component is queued", async () => {
+    await withHarness(
+      { componentInteraction: { user: { id: "user-1" }, customId: "card", values: ["x"] } },
+      async ({ interaction }) => {
+        const message = await interaction.editReply({
+          content: "Choose",
+          fetchReply: true,
+        });
+        await expect(
+          message.awaitMessageComponent({ time: 0 })
+        ).rejects.toMatchObject({ code: "InteractionCollectorError" });
+      }
+    );
+  });
+
+  test("reply without fetchReply does not expose a collector", async () => {
+    await withHarness(
+      { componentInteraction: { user: { id: "user-1" }, customId: "card", values: ["x"] } },
+      async ({ interaction }) => {
+        const message = await interaction.reply({ content: "no fetch" });
+        expect(message.awaitMessageComponent).toBeUndefined();
+      }
+    );
+  });
+
+  test("required option getters and modal fields throw like discord.js", async () => {
+    await withHarness({}, async ({ interaction }) => {
+      expect(() => interaction.options.getSubcommand()).toThrow(/Subcommand is required/);
+      expect(() => interaction.options.getSubcommandGroup()).toThrow(/Subcommand group is required/);
+      expect(interaction.options.getSubcommandGroup(false)).toBeNull();
+      expect(() => interaction.options.getFocused()).toThrow(/Focused option is required/);
+      expect(() => interaction.fields.getTextInputValue("missing")).toThrow(/not found/);
     });
   });
 });

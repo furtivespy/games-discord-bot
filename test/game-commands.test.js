@@ -1,9 +1,10 @@
 const { describe, expect, test } = require("bun:test");
 const Game = require("../slashcommands/genericgame/game");
-const BoardGameGeek = require("../modules/BoardGameGeek");
 const {
+  collectedReplyText,
   createActiveGame,
   createUser,
+  withBggStub,
   withHarness,
 } = require("./helpers/harness");
 
@@ -18,13 +19,10 @@ describe("/game command handlers", () => {
       { options: { subcommand: "help" } },
       async (harness) => {
         await runGame(harness);
-        expect(harness.calls.reply[0].content).toContain("Generic Game Zone");
+        const bodies = collectedReplyText(harness);
+        expect(bodies).toContain("Generic Game Zone");
+        expect(bodies).toContain("/game newgame");
         expect(harness.calls.followUp.length).toBeGreaterThanOrEqual(2);
-        expect(
-          harness.calls.followUp.some((payload) =>
-            String(payload.content).includes("/game newgame")
-          )
-        ).toBe(true);
       }
     );
   });
@@ -136,8 +134,12 @@ describe("/game command handlers", () => {
       },
       async (harness) => {
         await runGame(harness);
-        expect(harness.lastContent()).toBe("📊");
-        expect((await harness.getSavedGame()).lastStatusMessageId).toBeTruthy();
+        const saved = await harness.getSavedGame();
+        expect(harness.calls.deferReply).toHaveLength(1);
+        expect(saved.lastStatusMessageId).toBe("chat-1");
+        expect(saved.players).toHaveLength(2);
+        expect(saved.isdeleted).toBe(false);
+        expect(harness.persistCalls.length).toBeGreaterThanOrEqual(1);
       }
     );
   });
@@ -246,70 +248,86 @@ describe("/game command handlers", () => {
   });
 
   test("newgame creates players and stubs BGG at the module boundary", async () => {
-    const originalCreate = BoardGameGeek.CreateAndLoad;
-    BoardGameGeek.CreateAndLoad = async () => ({
-      embeds: [{ title: "Stubbed Catan" }],
-      attachments: [],
-      otherAttachments: [],
-      LoadEmbeds: async () => {},
-    });
-
-    try {
-      await withHarness(
-        {
-          options: {
-            subcommand: "newgame",
-            strings: { game: "13" },
-            users: {
-              player1: createUser({ id: "user-1", username: "Alice" }),
-              player2: createUser({ id: "user-2", username: "Bob" }),
+    await withBggStub(
+      {
+        CreateAndLoad: async () => ({
+          embeds: [{ title: "Stubbed Catan" }],
+          attachments: [],
+          otherAttachments: [],
+          LoadEmbeds: async () => {},
+        }),
+      },
+      async () => {
+        await withHarness(
+          {
+            options: {
+              subcommand: "newgame",
+              strings: { game: "13" },
+              users: {
+                player1: createUser({ id: "user-1", username: "Alice" }),
+                player2: createUser({ id: "user-2", username: "Bob" }),
+              },
             },
           },
-        },
-        async (harness) => {
-          await runGame(harness);
-          const saved = await harness.getSavedGame();
-          expect(saved.isdeleted).toBe(false);
-          expect(saved.bggGameId).toBe("13");
-          expect(saved.players).toHaveLength(2);
-          expect(saved.players.map((player) => player.userId).sort()).toEqual([
-            "user-1",
-            "user-2",
-          ]);
-          expect(harness.calls.editReply[0].content).toBe("New Game Created!");
-          expect(harness.calls.editReply[0].embeds[0].title).toBe("Stubbed Catan");
-        }
-      );
-    } finally {
-      BoardGameGeek.CreateAndLoad = originalCreate;
-    }
+          async (harness) => {
+            await runGame(harness);
+            const saved = await harness.getSavedGame();
+            expect(saved.isdeleted).toBe(false);
+            expect(saved.bggGameId).toBe("13");
+            expect(saved.players).toHaveLength(2);
+            expect(saved.players.map((player) => player.userId).sort()).toEqual([
+              "user-1",
+              "user-2",
+            ]);
+            expect(harness.calls.editReply[0].content).toBe("New Game Created!");
+            expect(harness.calls.editReply[0].embeds[0].title).toBe("Stubbed Catan");
+          }
+        );
+      }
+    );
   });
 
   test("newgame autocomplete uses a stubbed BGG search", async () => {
-    const originalSearch = BoardGameGeek.Search;
-    BoardGameGeek.Search = async (query) => {
-      expect(query).toBe("catan");
-      return [{ name: "Catan (1995)", value: "13" }];
-    };
-
-    try {
-      await withHarness(
-        {
-          isAutocomplete: true,
-          options: {
-            subcommand: "newgame",
-            strings: { game: "catan" },
-          },
+    await withBggStub(
+      {
+        Search: async (query) => {
+          expect(query).toBe("catan");
+          return [{ name: "Catan (1995)", value: "13" }];
         },
-        async (harness) => {
-          await runGame(harness);
-          expect(harness.calls.respond[0]).toEqual([
-            { name: "Catan (1995)", value: "13" },
-          ]);
-        }
-      );
-    } finally {
-      BoardGameGeek.Search = originalSearch;
-    }
+      },
+      async () => {
+        await withHarness(
+          {
+            isAutocomplete: true,
+            options: {
+              subcommand: "newgame",
+              strings: { game: "catan" },
+            },
+          },
+          async (harness) => {
+            await runGame(harness);
+            expect(harness.calls.respond[0]).toEqual([
+              { name: "Catan (1995)", value: "13" },
+            ]);
+          }
+        );
+      }
+    );
+  });
+
+  test("reverse persists through GameStore SQLite in the temp data dir", async () => {
+    await withHarness(
+      {
+        useGameStore: true,
+        gameData: createActiveGame({ reverseOrder: false }),
+        options: { subcommand: "reverse" },
+      },
+      async (harness) => {
+        await runGame(harness);
+        const saved = await harness.getSavedGame();
+        expect(saved.reverseOrder).toBe(true);
+        expect(saved.history.at(-1).action.type).toBe("reverse");
+      }
+    );
   });
 });

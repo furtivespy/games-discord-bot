@@ -5,6 +5,7 @@ const { PermissionsBitField } = require("discord.js");
 const GameDB = require("../../db/anygame.js");
 const GameStore = require("../../db/gameStore.js");
 const Formatter = require("../../modules/GameFormatter");
+const BoardGameGeek = require("../../modules/BoardGameGeek");
 
 const DEFAULT_GUILD_ID = "guild-1";
 const DEFAULT_CHANNEL_ID = "channel-1";
@@ -41,25 +42,17 @@ function createMember({
 }
 
 function createPlayer(overrides = {}) {
-  return Object.assign({}, structuredClone(GameDB.defaultPlayer), {
-    guildId: overrides.guildId || DEFAULT_GUILD_ID,
-    userId: overrides.userId || "user-1",
-    order: overrides.order ?? 0,
-    name: overrides.name || "Alice",
-    score: overrides.score ?? "",
-    hands: overrides.hands || {
-      main: [],
-      played: [],
-      passed: [],
-      received: [],
-      simultaneous: [],
+  return Object.assign(
+    {},
+    structuredClone(GameDB.defaultPlayer),
+    {
+      guildId: DEFAULT_GUILD_ID,
+      userId: "user-1",
+      order: 0,
+      name: "Alice",
     },
-    playArea: overrides.playArea || [],
-    color: overrides.color ?? null,
-    tokens: overrides.tokens || {},
-    teamId: overrides.teamId ?? null,
-    ...overrides,
-  });
+    overrides
+  );
 }
 
 function createCard(overrides = {}) {
@@ -110,6 +103,16 @@ function replyContent(payload) {
   return payload.content;
 }
 
+function collectedReplyText(harness) {
+  return [
+    ...harness.calls.reply.map(replyContent),
+    ...harness.calls.editReply.map(replyContent),
+    ...harness.calls.followUp.map(replyContent),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function stubGameFormatter() {
   Formatter.createGameStatusReply = async (_gameData, _guild, _clientUserId, options = {}) => ({
     content: options.content ?? "📊",
@@ -127,6 +130,19 @@ function restoreGameFormatter() {
   Object.assign(Formatter, formatterOriginals);
 }
 
+async function withBggStub({ CreateAndLoad, Search } = {}, run) {
+  const originalCreate = BoardGameGeek.CreateAndLoad;
+  const originalSearch = BoardGameGeek.Search;
+  if (CreateAndLoad) BoardGameGeek.CreateAndLoad = CreateAndLoad;
+  if (Search) BoardGameGeek.Search = Search;
+  try {
+    return await run();
+  } finally {
+    BoardGameGeek.CreateAndLoad = originalCreate;
+    BoardGameGeek.Search = originalSearch;
+  }
+}
+
 function createMessage({
   id = "chat-1",
   content = "",
@@ -136,8 +152,8 @@ function createMessage({
     id,
     content,
     pinned: false,
-    awaitMessageComponent: async ({ filter } = {}) => {
-      if (!componentInteraction) {
+    awaitMessageComponent: async ({ filter, time } = {}) => {
+      if (time === 0 || !componentInteraction) {
         const error = new Error("Collector timed out");
         error.code = "InteractionCollectorError";
         throw error;
@@ -150,8 +166,14 @@ function createMessage({
   };
 }
 
+function missingOptionError(kind) {
+  const error = new Error(`${kind} is required`);
+  error.code = "CommandInteractionOptionNotFound";
+  return error;
+}
+
 /**
- * Shared Option 2 harness: duck-typed Discord interaction + client.
+ * Duck-typed Discord interaction + client for command.execute() tests.
  * Does not require DiscordBot.js (that file logs in).
  */
 function createHarness({
@@ -174,6 +196,8 @@ function createHarness({
   isModalSubmit = false,
   modalCustomId = "",
   stubFormatter = true,
+  pinThrows = null,
+  fetchImpl = null,
 } = {}) {
   if (stubFormatter) {
     stubGameFormatter();
@@ -219,7 +243,23 @@ function createHarness({
   const fetchCalls = [];
   const editCalls = [];
   const persistCalls = [];
-  let chatMessageSeq = 1;
+  const getCalls = [];
+  const chatReplyCalls = [];
+  const componentUpdateCalls = [];
+
+  const queuedComponent = componentInteraction
+    ? Object.assign(
+        {
+          update: async (payload) => {
+            componentUpdateCalls.push(payload);
+          },
+          deferUpdate: async () => {
+            componentUpdateCalls.push({ deferred: true });
+          },
+        },
+        componentInteraction
+      )
+    : null;
 
   const pinMessage = {
     id: "pin-1",
@@ -227,6 +267,9 @@ function createHarness({
     content: "",
     pin: async () => {
       pinCalls.push("pin");
+      if (pinThrows) {
+        throw pinThrows;
+      }
       pinMessage.pinned = true;
     },
     unpin: async () => {
@@ -246,7 +289,15 @@ function createHarness({
     id: guildId,
     members: {
       cache: membersCache,
-      fetch: async (id) => memberById.get(id) || null,
+      fetch: async (id) => {
+        const found = memberById.get(id);
+        if (!found) {
+          const error = new Error("Unknown Member");
+          error.code = 10007;
+          throw error;
+        }
+        return found;
+      },
     },
   };
 
@@ -264,6 +315,9 @@ function createHarness({
             ? idOrOptions.message || idOrOptions.id
             : idOrOptions;
         fetchCalls.push(id);
+        if (fetchImpl) {
+          return fetchImpl(id, pinMessage);
+        }
         if (id === pinMessage.id) {
           return pinMessage;
         }
@@ -284,7 +338,7 @@ function createHarness({
       ) {
         return pinMessage;
       }
-      return { id: `chat-${++chatMessageSeq}` };
+      return { id: "chat-1" };
     },
   };
 
@@ -295,15 +349,35 @@ function createHarness({
     followUp: [],
     showModal: [],
     respond: [],
+    componentUpdate: componentUpdateCalls,
   };
 
   const memory = new Map();
-  const memoryKey = (serverId, collection, channel) =>
-    `${serverId}:${collection}:${channel}`;
+  const memoryKey = (serverId, collection, channelKey) =>
+    `${serverId}:${collection}:${channelKey}`;
 
   let store = null;
   if (useGameStore) {
     store = new GameStore();
+  }
+
+  let gameSeeded = Boolean(gameData);
+  const storedGame = gameData ? structuredClone(gameData) : {};
+
+  function isDefaultGame(serverId, collection, channelKey) {
+    return (
+      collection === "game" &&
+      String(serverId) === String(guildId) &&
+      String(channelKey) === String(channelId)
+    );
+  }
+
+  function replaceStoredGame(data) {
+    for (const key of Object.keys(storedGame)) {
+      delete storedGame[key];
+    }
+    Object.assign(storedGame, structuredClone(data));
+    gameSeeded = true;
   }
 
   const client = {
@@ -319,28 +393,40 @@ function createHarness({
         send: async () => {},
       }),
     },
-    async getGameDataV2(serverId, collection, channel) {
+    async getGameDataV2(serverId, collection, channelKey) {
+      getCalls.push([serverId, collection, channelKey]);
       if (store) {
-        return store.getSpecificGameData(serverId, collection, channel);
+        return store.getSpecificGameData(serverId, collection, channelKey);
       }
-      return memory.get(memoryKey(serverId, collection, channel)) ?? null;
+      if (isDefaultGame(serverId, collection, channelKey)) {
+        return gameSeeded ? structuredClone(storedGame) : null;
+      }
+      return memory.get(memoryKey(serverId, collection, channelKey)) ?? null;
     },
-    async setGameDataV2(serverId, collection, channel, data) {
-      persistCalls.push([serverId, collection, channel, structuredClone(data)]);
+    async setGameDataV2(serverId, collection, channelKey, data) {
+      persistCalls.push([serverId, collection, channelKey, data]);
       if (store) {
-        store.upsertGameData(serverId, collection, channel, data);
+        store.upsertGameData(serverId, collection, channelKey, data);
         return;
       }
-      memory.set(memoryKey(serverId, collection, channel), structuredClone(data));
+      if (isDefaultGame(serverId, collection, channelKey)) {
+        replaceStoredGame(data);
+        return;
+      }
+      memory.set(memoryKey(serverId, collection, channelKey), structuredClone(data));
     },
   };
 
-  function seedCollection(collection, data, { serverId = guildId, channel = channelId } = {}) {
+  function seedCollection(collection, data, { serverId = guildId, channel: seedChannel = channelId } = {}) {
     if (store) {
-      store.upsertGameData(serverId, collection, channel, data);
+      store.upsertGameData(serverId, collection, seedChannel, data);
       return;
     }
-    memory.set(memoryKey(serverId, collection, channel), structuredClone(data));
+    if (isDefaultGame(serverId, collection, seedChannel)) {
+      replaceStoredGame(data);
+      return;
+    }
+    memory.set(memoryKey(serverId, collection, seedChannel), structuredClone(data));
   }
 
   if (gameData) {
@@ -357,16 +443,21 @@ function createHarness({
     integers: optionValues.integers || {},
     booleans: optionValues.booleans || {},
     users: optionValues.users || {},
-    focused: optionValues.focused ?? null,
-    focusedName: optionValues.focusedName ?? null,
+    focused: Object.prototype.hasOwnProperty.call(optionValues, "focused")
+      ? optionValues.focused
+      : undefined,
+    focusedName: optionValues.focusedName,
   };
 
   function makeReplyMessage(payload) {
-    const content = replyContent(payload) || "";
+    const fetchReply = Boolean(payload && typeof payload === "object" && payload.fetchReply);
+    if (!fetchReply) {
+      return { id: "chat-1" };
+    }
     return createMessage({
-      id: `chat-${++chatMessageSeq}`,
-      content,
-      componentInteraction,
+      id: "chat-1",
+      content: replyContent(payload) || "",
+      componentInteraction: queuedComponent,
     });
   }
 
@@ -384,10 +475,15 @@ function createHarness({
     isAutocomplete: () => isAutocomplete,
     isModalSubmit: () => isModalSubmit,
     options: {
-      getSubcommand: () => optionBag.subcommand,
+      getSubcommand: (required = true) => {
+        if (optionBag.subcommand == null && required) {
+          throw missingOptionError("Subcommand");
+        }
+        return optionBag.subcommand;
+      },
       getSubcommandGroup: (required = true) => {
         if (optionBag.subcommandGroup == null && required) {
-          return null;
+          throw missingOptionError("Subcommand group");
         }
         return optionBag.subcommandGroup;
       },
@@ -405,6 +501,9 @@ function createHarness({
           : null,
       getUser: (name) => optionBag.users[name] || null,
       getFocused: (whole = false) => {
+        if (optionBag.focused === undefined && optionBag.focusedName === undefined) {
+          throw missingOptionError("Focused option");
+        }
         if (whole) {
           return {
             name: optionBag.focusedName || "query",
@@ -415,7 +514,14 @@ function createHarness({
       },
     },
     fields: {
-      getTextInputValue: (name) => modalFields[name] ?? "",
+      getTextInputValue: (name) => {
+        if (!Object.prototype.hasOwnProperty.call(modalFields, name)) {
+          const error = new Error(`Custom id ${name} not found.`);
+          error.code = "ModalSubmitInteractionFieldNotFound";
+          throw error;
+        }
+        return modalFields[name];
+      },
     },
     deferReply: async (payload) => {
       calls.deferReply.push(payload ?? {});
@@ -423,11 +529,13 @@ function createHarness({
     },
     reply: async (payload) => {
       calls.reply.push(payload);
+      chatReplyCalls.push(payload);
       interaction.replied = true;
       return makeReplyMessage(payload);
     },
     editReply: async (payload) => {
       calls.editReply.push(payload);
+      chatReplyCalls.push(payload);
       interaction.replied = true;
       return makeReplyMessage(payload);
     },
@@ -439,6 +547,9 @@ function createHarness({
       calls.showModal.push(modal);
     },
     respond: async (choices) => {
+      if (Array.isArray(choices) && choices.length > 25) {
+        throw new Error("Autocomplete cannot respond with more than 25 choices");
+      }
       calls.respond.push(choices);
     },
   };
@@ -449,11 +560,7 @@ function createHarness({
 
   function cleanup() {
     if (store) {
-      try {
-        store.db.close();
-      } catch (_) {
-        // already closed
-      }
+      store.db.close();
     }
     if (previousDataDir === undefined) {
       delete process.env.GAMEBOT_DATA_DIR;
@@ -473,20 +580,24 @@ function createHarness({
     guild,
     user,
     member: resolvedMember,
+    gameData,
+    storedGame,
     dataDir,
     calls,
+    getCalls,
     persistCalls,
+    chatReplyCalls,
     pinCalls,
     unpinCalls,
     sendCalls,
     fetchCalls,
     editCalls,
     pinMessage,
-    optionBag,
     seedCollection,
     getSavedGame: () => client.getGameDataV2(guildId, "game", channelId),
     lastPayload,
     lastContent: () => replyContent(lastPayload()),
+    lastFollowUp: () => replyContent(calls.followUp.at(-1)),
     cleanup,
   };
 }
@@ -511,7 +622,9 @@ module.exports = {
   createActiveGame,
   createHarness,
   withHarness,
+  withBggStub,
   stubGameFormatter,
   restoreGameFormatter,
   replyContent,
+  collectedReplyText,
 };
