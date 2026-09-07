@@ -1,8 +1,12 @@
 const fs = require("fs");
 const path = require("path");
 
+function isInContainer() {
+  return process.env.IS_IN_CONTAINER === "true";
+}
+
 function resolveDataDir() {
-  if (process.env.IS_ON_FLY === "true") {
+  if (isInContainer()) {
     return "/data";
   }
   if (process.env.GAMEBOT_DATA_DIR) {
@@ -18,6 +22,7 @@ function ensureDataDir() {
 }
 
 module.exports = {
+  isInContainer,
   resolveDataDir,
   ensureDataDir,
 };

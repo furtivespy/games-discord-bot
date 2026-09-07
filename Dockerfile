@@ -47,4 +47,5 @@ VOLUME /data
 
 EXPOSE 3000
 ENV DATABASE_URL="file:///data/sqlite.db"
+ENV IS_IN_CONTAINER="true"
 CMD [ "bun", "run", "start" ]
