@@ -69,18 +69,56 @@ class GameStatusHelper {
     return options.explicitStatus === true;
   }
 
+  // Command-owned chat payload only: never include the status table/image
+  // that createGameStatusReply attaches. Card embeds/files live on
+  // additionalEmbeds / additionalFiles and must survive `full` mode.
+  static buildCommandNaturalReply(options = {}, { fallbackContent = null } = {}) {
+    const payload = {};
+    if (typeof options.content === 'string' && options.content.length > 0) {
+      payload.content = options.content;
+    } else if (typeof fallbackContent === 'string') {
+      payload.content = fallbackContent;
+    }
+    if (options.additionalEmbeds?.length) {
+      payload.embeds = options.additionalEmbeds;
+    }
+    if (options.additionalFiles?.length) {
+      payload.files = options.additionalFiles;
+    }
+    return payload;
+  }
+
+  static commandNaturalReplyHasBody(payload) {
+    return Boolean(
+      (typeof payload.content === 'string' && payload.content.length > 0)
+      || payload.embeds?.length
+      || payload.files?.length
+    );
+  }
+
   static async resolveInteractionWithoutFullStatus(interaction, options = {}) {
     if (!interaction || interaction.replied) {
       return;
     }
-    const content = typeof options.content === 'string' && options.content.length > 0
-      ? options.content
-      : '\u200b';
+    // Keep command media (card embeds/files). Content-only editReply would
+    // wipe a prior bespoke reply and drop additionalEmbeds from this payload.
+    const payload = this.buildCommandNaturalReply(options, { fallbackContent: '\u200b' });
     if (interaction.deferred) {
-      await interaction.editReply({ content });
+      await interaction.editReply(payload);
       return;
     }
-    await interaction.reply({ content });
+    await interaction.reply(payload);
+  }
+
+  static async postCommandNaturalReplyToChannel(channel, options = {}) {
+    if (!channel) {
+      return;
+    }
+    const payload = this.buildCommandNaturalReply(options);
+    if (!this.commandNaturalReplyHasBody(payload)) {
+      return;
+    }
+    await channel.send(payload);
   }
 
   static buildPinnedStatusContent() {
@@ -193,7 +231,9 @@ class GameStatusHelper {
       
       await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult);
     } else {
-      // Keep the command's natural reply (options.content) and skip the table/image.
+      // Keep the command's natural reply (content + additionalEmbeds/files)
+      // and skip the table/image. Do not record this as lastStatusMessageId
+      // or a later cleanup would strip the command's card media.
       await this.resolveInteractionWithoutFullStatus(interaction, options);
     }
 
@@ -234,6 +274,9 @@ class GameStatusHelper {
       await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult);
     } else if (options.resolveDeferredReply) {
       await this.resolveInteractionWithoutFullStatus(interaction, options);
+    } else {
+      // Same channel.send path as the full-status update, minus the table/image.
+      await this.postCommandNaturalReplyToChannel(channel, options);
     }
 
     await this.safeUpsertPinnedStatus(

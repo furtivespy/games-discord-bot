@@ -670,7 +670,9 @@ describe("GameStatusHelper pinnedStatusMode", () => {
       typeof payload.content === "string" && payload.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)
     );
     const chatSends = harness.sendCalls.filter((payload) => payload.content === "Alice drew 3 cards");
-    expect(chatSends).toHaveLength(0);
+    expect(chatSends).toHaveLength(1);
+    expect(chatSends[0].embeds).toBeUndefined();
+    expect(chatSends[0].files).toBeUndefined();
     expect(pinSends).toHaveLength(0);
     expect(harness.chatReplyCalls).toHaveLength(0);
     expect(harness.editCalls.some((payload) =>
@@ -678,6 +680,74 @@ describe("GameStatusHelper pinnedStatusMode", () => {
     )).toBe(true);
     expect(harness.gameData.lastStatusMessageId).toBeNull();
     expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+  });
+
+  test("full mode sendGameStatus keeps command card embeds and skips the status table", async () => {
+    const cardEmbed = { title: "Ace of Spades", image: { url: "https://cards.example/ace.png" } };
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusMode: "full" }),
+    });
+
+    await GameStatusHelper.sendGameStatus(harness.interaction, harness.client, harness.gameData, {
+      content: "Alice played Ace of Spades to discard",
+      additionalEmbeds: [cardEmbed],
+    });
+
+    expect(harness.chatReplyCalls).toHaveLength(1);
+    expect(harness.chatReplyCalls[0].content).toBe("Alice played Ace of Spades to discard");
+    expect(harness.chatReplyCalls[0].embeds).toEqual([cardEmbed]);
+    expect(harness.chatReplyCalls[0].files).toBeUndefined();
+    expect(harness.sendCalls).toHaveLength(1);
+    expect(harness.sendCalls[0].content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)).toBe(true);
+    expect(harness.sendCalls[0].embeds).toEqual([{ title: "Game Status" }]);
+    expect(harness.sendCalls[0].files).toEqual([{ name: "table.png" }]);
+    expect(harness.gameData.lastStatusMessageId).toBeNull();
+    expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+  });
+
+  test("full mode sendPublicStatusUpdate keeps command card embeds and skips the status table", async () => {
+    const cardEmbed = { title: "Queen of Hearts", image: { url: "https://cards.example/queen.png" } };
+    const harness = createHarness({
+      gameData: createGameData({
+        pinnedStatusMode: "full",
+        pinnedStatusMessageId: "pin-1",
+        pinnedStatusChannelId: "channel-1",
+        pinnedStatusPinned: true,
+      }),
+    });
+    harness.pinMessage.pinned = true;
+
+    await GameStatusHelper.sendPublicStatusUpdate(harness.interaction, harness.client, harness.gameData, {
+      content: "Alice played a card to **River**",
+      additionalEmbeds: [cardEmbed],
+    });
+
+    const chatSends = harness.sendCalls.filter((payload) => payload.content === "Alice played a card to **River**");
+    expect(chatSends).toHaveLength(1);
+    expect(chatSends[0].embeds).toEqual([cardEmbed]);
+    expect(chatSends[0].files).toBeUndefined();
+    expect(harness.chatReplyCalls).toHaveLength(0);
+    expect(harness.gameData.lastStatusMessageId).toBeNull();
+    expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+  });
+
+  test("full mode preserves command-owned files without the status table image", async () => {
+    const cardFile = { name: "played-card.png" };
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusMode: "full" }),
+    });
+
+    await GameStatusHelper.sendGameStatus(harness.interaction, harness.client, harness.gameData, {
+      content: "Alice played a card to their play area",
+      additionalFiles: [cardFile],
+    });
+
+    expect(harness.chatReplyCalls).toHaveLength(1);
+    expect(harness.chatReplyCalls[0].content).toBe("Alice played a card to their play area");
+    expect(harness.chatReplyCalls[0].files).toEqual([cardFile]);
+    expect(harness.chatReplyCalls[0].embeds).toBeUndefined();
+    expect(harness.sendCalls[0].files).toEqual([{ name: "table.png" }]);
+    expect(harness.gameData.lastStatusMessageId).toBeNull();
   });
 
   test("full mode plus explicitStatus still posts the chat table and updates the pin", async () => {
@@ -763,6 +833,45 @@ describe("GameStatusHelper pinnedStatusMode", () => {
     expect(harness.chatReplyCalls).toHaveLength(0);
     expect(harness.sendCalls).toHaveLength(1);
     expect(harness.sendCalls[0].content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)).toBe(true);
+    expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+  });
+
+  test("full mode does not strip embeds from an interaction that already replied with card media", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusMode: "full" }),
+    });
+    harness.interaction.replied = true;
+    harness.interaction.deferred = true;
+
+    await GameStatusHelper.sendGameStatus(harness.interaction, harness.client, harness.gameData, {
+      content: "should not replace card image",
+      additionalEmbeds: [{ title: "should not be posted as a second reply" }],
+    });
+
+    expect(harness.chatReplyCalls).toHaveLength(0);
+    expect(harness.sendCalls).toHaveLength(1);
+    expect(harness.sendCalls[0].content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)).toBe(true);
+    expect(harness.gameData.lastStatusMessageId).toBeNull();
+  });
+
+  test("full mode resolveDeferredReply keeps command card embeds without the table", async () => {
+    const cardEmbed = { title: "Two of Clubs" };
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusMode: "full" }),
+    });
+
+    await GameStatusHelper.sendPublicStatusUpdate(harness.interaction, harness.client, harness.gameData, {
+      content: "Alice played Two of Clubs",
+      additionalEmbeds: [cardEmbed],
+      resolveDeferredReply: true,
+    });
+
+    expect(harness.chatReplyCalls).toHaveLength(1);
+    expect(harness.chatReplyCalls[0].content).toBe("Alice played Two of Clubs");
+    expect(harness.chatReplyCalls[0].embeds).toEqual([cardEmbed]);
+    const chatSends = harness.sendCalls.filter((payload) => payload.content === "Alice played Two of Clubs");
+    expect(chatSends).toHaveLength(0);
+    expect(harness.gameData.lastStatusMessageId).toBeNull();
     expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
   });
 });
