@@ -920,9 +920,22 @@ class GameFormatter {
     return newEmbed;
   }
 
-  // Public card replies should attach the image as a Discord file. External
-  // setImage(url) embeds often fail to render in a channel that already has a
-  // pinned live-status message with large attachments.
+  static async fetchCardImageBuffer(url) {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch card image: ${res.status}`);
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (!buffer.length) {
+      throw new Error('Empty card image');
+    }
+    return buffer;
+  }
+
+  // Public card replies should attach the original image as a Discord file.
+  // External setImage(url) embeds often fail to render in a channel that
+  // already has a pinned live-status message with large attachments.
+  // If the download fails, keep the URL embed instead of a placeholder PNG.
   static async oneCardReplyParts(cardObj) {
     const embed = this.oneCard(cardObj);
     const files = [];
@@ -931,8 +944,11 @@ class GameFormatter {
     }
     try {
       const safeId = String(cardObj.id || 'image').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24);
-      const fileName = `played-card-${safeId || 'image'}.png`;
-      const buffer = await this.ImagefromUrlList([cardObj.url]);
+      const extMatch = String(cardObj.url).match(/\.(png|jpe?g|gif|webp)(\?|$)/i);
+      let ext = extMatch ? extMatch[1].toLowerCase() : 'png';
+      if (ext === 'jpeg') ext = 'jpg';
+      const fileName = `played-card-${safeId || 'image'}.${ext}`;
+      const buffer = await this.fetchCardImageBuffer(cardObj.url);
       files.push(new AttachmentBuilder(buffer, { name: fileName }));
       embed.setImage(`attachment://${fileName}`);
     } catch (error) {
