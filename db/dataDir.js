@@ -1,28 +1,40 @@
 const fs = require("fs");
 const path = require("path");
 
-function isInContainer() {
-  return process.env.IS_IN_CONTAINER === "true";
+const CONTAINER_DATA_DIR = "/data";
+const LOCAL_CONFIG_PATH = "./config.json";
+
+function isInContainer(env = process.env) {
+  return env.IS_IN_CONTAINER === "true";
 }
 
-function resolveDataDir() {
-  if (isInContainer()) {
-    return "/data";
+function resolveDataDir(env = process.env) {
+  if (isInContainer(env)) {
+    return CONTAINER_DATA_DIR;
   }
-  if (process.env.GAMEBOT_DATA_DIR) {
-    return path.resolve(process.env.GAMEBOT_DATA_DIR);
+  if (env.GAMEBOT_DATA_DIR) {
+    return path.resolve(env.GAMEBOT_DATA_DIR);
   }
   return path.resolve("./data");
 }
 
-function ensureDataDir() {
-  const dataDir = resolveDataDir();
+function resolveConfigPath(env = process.env) {
+  if (isInContainer(env)) {
+    return path.join(CONTAINER_DATA_DIR, "config.json");
+  }
+  return LOCAL_CONFIG_PATH;
+}
+
+function ensureDataDir(env = process.env) {
+  const dataDir = resolveDataDir(env);
   fs.mkdirSync(dataDir, { recursive: true });
   return dataDir;
 }
 
 module.exports = {
+  CONTAINER_DATA_DIR,
   isInContainer,
   resolveDataDir,
+  resolveConfigPath,
   ensureDataDir,
 };

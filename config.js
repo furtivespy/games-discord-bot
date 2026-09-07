@@ -1,7 +1,7 @@
 const onChange = require('on-change')
 const jsonfile = require('jsonfile')
-const { isInContainer } = require('./db/dataDir.js')
-const configFileName = isInContainer() ? "/data/config.json" : "./config.json";
+const { resolveConfigPath } = require('./db/dataDir.js')
+const configFileName = resolveConfigPath();
 
 const configFile = jsonfile.readFileSync(configFileName);
 
