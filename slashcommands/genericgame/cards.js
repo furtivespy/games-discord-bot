@@ -214,7 +214,7 @@ class Cards extends SlashCommand {
                     .addStringOption(option => option.setName('suit').setDescription('Card suit'))
                     .addStringOption(option => option.setName('value').setDescription('Card value'))
                     .addStringOption(option => option.setName('description').setDescription('Card description'))
-                    .addIntegerOption(option => option.setName('copies').setDescription('Number of copies to add').setMinValue(1).setMaxValue(50))
+                    .addIntegerOption(option => option.setName('copies').setDescription('Number of copies to add (default 1)').setMinValue(1).setMaxValue(50))
                     .addStringOption(option => option.setName('format').setDescription('Card display format').addChoices(
                         {name: "A", value: "A"},
                         {name: "B", value: "B"},
@@ -225,7 +225,7 @@ class Cards extends SlashCommand {
                 subcommand
                     .setName("addlist")
                     .setDescription("Bulk-add name-only cards to an in-game deck recipe (goes to discard, not draw)")
-                    .addStringOption(option => option.setName('customlist').setDescription('Comma-separated card names').setRequired(true).setMaxLength(2000))
+                    .addStringOption(option => option.setName('customlist').setDescription('Comma-separated card names').setRequired(true))
                     .addStringOption(option => option.setName('deck').setDescription('Deck to add to').setAutocomplete(true))
             );
         });

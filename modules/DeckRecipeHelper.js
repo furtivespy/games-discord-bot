@@ -1,7 +1,10 @@
 const GameDB = require('../db/anygame.js')
+const Formatter = require('./GameFormatter')
 const { cloneDeep } = require('lodash')
 
 const MAX_COPIES = 50
+const DISCORD_CONTENT_MAX = 2000
+const INVALID_IMAGE_URL_MESSAGE = 'Card image URL must be a valid http or https URL.'
 
 function ensureRecipePiles(deck) {
     if (!Array.isArray(deck.allCards)) {
@@ -84,11 +87,83 @@ function addCardsFromNameList(deck, customlist) {
     return addCardsToRecipe(deck, cards)
 }
 
+function clipContent(content) {
+    const text = String(content || '')
+    if (text.length <= DISCORD_CONTENT_MAX) {
+        return text
+    }
+    return text.slice(0, DISCORD_CONTENT_MAX)
+}
+
+function formatAddCardContent(actorDisplayName, deckName, added) {
+    const count = added?.length || 0
+    const name = added?.[0]?.name
+    if (name) {
+        const withName = `${actorDisplayName} added ${count} card(s) "${name}" to ${deckName}`
+        if (withName.length <= DISCORD_CONTENT_MAX) {
+            return withName
+        }
+    }
+    return clipContent(`${actorDisplayName} added ${count} card(s) to ${deckName}`)
+}
+
+function formatAddListContent(actorDisplayName, deckName, names) {
+    const count = names?.length || 0
+    const prefix = `${actorDisplayName} added ${count} card(s) to ${deckName}`
+    if (!names || names.length < 1) {
+        return clipContent(prefix)
+    }
+    const withNames = `${prefix}: ${names.join(', ')}`
+    if (withNames.length <= DISCORD_CONTENT_MAX) {
+        return withNames
+    }
+    return clipContent(`${prefix}. (Card list too long to display.)`)
+}
+
+function buildAddCardEmbeds(gameData, card) {
+    const embeds = []
+    if (card) {
+        try {
+            embeds.push(Formatter.oneCard(card))
+        } catch (error) {
+            console.warn('Failed to build addcard image embed:', error)
+        }
+    }
+    try {
+        embeds.push(...Formatter.deckStatus2(gameData))
+    } catch (error) {
+        console.warn('Failed to build deck status embeds:', error)
+    }
+    return embeds
+}
+
+async function editReplyAfterSave(interaction, payload) {
+    try {
+        await interaction.editReply(payload)
+        return
+    } catch (error) {
+        console.warn('Failed to send recipe add reply after save:', error)
+    }
+    try {
+        await interaction.editReply({
+            content: clipContent(payload?.content || 'Cards added to the deck recipe.'),
+        })
+    } catch (error) {
+        console.warn('Failed to send recipe add fallback reply after save:', error)
+    }
+}
+
 module.exports = {
     MAX_COPIES,
+    DISCORD_CONTENT_MAX,
+    INVALID_IMAGE_URL_MESSAGE,
     addCardsToRecipe,
     addRichCards,
     addCardsFromNameList,
     parseNameList,
     isEmbedImageUrl,
+    formatAddCardContent,
+    formatAddListContent,
+    buildAddCardEmbeds,
+    editReplyAfterSave,
 }

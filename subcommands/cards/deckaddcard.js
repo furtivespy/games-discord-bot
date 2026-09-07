@@ -38,7 +38,7 @@ class DeckAddCard {
         const format = interaction.options.getString('format') || 'A'
         const url = (interaction.options.getString('url') || '').trim() || null
         if (url && !DeckRecipeHelper.isEmbedImageUrl(url)) {
-            await interaction.editReply({ content: `Card image URL must be a valid http or https URL.` })
+            await interaction.editReply({ content: DeckRecipeHelper.INVALID_IMAGE_URL_MESSAGE })
             return
         }
 
@@ -80,12 +80,9 @@ class DeckAddCard {
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
         const actorDisplayName = interaction.member?.displayName || interaction.user.username
-        await interaction.editReply({
-            content: `${actorDisplayName} added ${added.length} card(s) "${name}" to ${deck.name}`,
-            embeds: [
-                Formatter.oneCard(added[0]),
-                ...Formatter.deckStatus2(gameData)
-            ]
+        await DeckRecipeHelper.editReplyAfterSave(interaction, {
+            content: DeckRecipeHelper.formatAddCardContent(actorDisplayName, deck.name, added),
+            embeds: DeckRecipeHelper.buildAddCardEmbeds(gameData, added[0]),
         })
     }
 }

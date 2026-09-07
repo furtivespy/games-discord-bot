@@ -1,6 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
-const Formatter = require('../../modules/GameFormatter')
 const DeckRecipeHelper = require('../../modules/DeckRecipeHelper')
 
 class DeckAddList {
@@ -39,18 +38,17 @@ class DeckAddList {
 
         try {
             const actorDisplayName = interaction.member?.displayName || interaction.user.username
-            const cardNames = added.map(card => card.name).join(', ')
+            const historyNames = DeckRecipeHelper.formatAddListContent(actorDisplayName, deck.name, names)
 
             GameHelper.recordMove(
                 gameData,
                 interaction.user,
                 GameDB.ACTION_CATEGORIES.CARD,
                 GameDB.ACTION_TYPES.ADD,
-                `${actorDisplayName} added ${added.length} cards to ${deck.name}: ${cardNames}`,
+                historyNames,
                 {
                     deckName: deck.name,
                     cardIds: added.map(card => card.id),
-                    cardNames,
                     cardCount: added.length,
                     newDeckSize: deck.allCards.length,
                     action: "add list to in-game deck recipe"
@@ -63,17 +61,9 @@ class DeckAddList {
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
         const actorDisplayName = interaction.member?.displayName || interaction.user.username
-        const nameList = names.join(', ')
-        let content = `${actorDisplayName} added ${added.length} card(s) to ${deck.name}`
-        if (nameList.length > 0 && nameList.length < 500) {
-            content += `: ${nameList}`
-        }
-        if (content.length > 2000) {
-            content = `${actorDisplayName} added ${added.length} card(s) to ${deck.name}. (Card list too long to display).`
-        }
-        await interaction.editReply({
-            content,
-            embeds: Formatter.deckStatus2(gameData)
+        await DeckRecipeHelper.editReplyAfterSave(interaction, {
+            content: DeckRecipeHelper.formatAddListContent(actorDisplayName, deck.name, names),
+            embeds: DeckRecipeHelper.buildAddCardEmbeds(gameData),
         })
     }
 }
