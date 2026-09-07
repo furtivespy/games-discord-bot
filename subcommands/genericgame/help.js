@@ -42,7 +42,10 @@ Here's a list of commands to get you started. Don't worry, they're super easy to
             flags: MessageFlags.Ephemeral
         });
 
-        const conclusion_content = `\nRemember, the most important rule is to have FUN! If you have any questions, don't hesitate to ask (though I'm just a bot, I'll try my best 🤖). 
+        const conclusion_content = `\n**Before play starts:**
+*   **/gather** 🙋 - Look up a game on BGG and post a “Who’s interested?” panel. People tap Very / Somewhat / Only a little / Give my spot away. The host can close interest when the table is set.
+
+Remember, the most important rule is to have FUN! If you have any questions, don't hesitate to ask (though I'm just a bot, I'll try my best 🤖). 
 
 Now go forth and conquer the game! 💪`;
 
