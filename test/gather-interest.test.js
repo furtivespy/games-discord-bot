@@ -149,7 +149,7 @@ describe("GatherInterest panel components", () => {
     expect(rows[0].components.map((c) => c.label)).toEqual([
       "Very interested",
       "Somewhat interested",
-      "Only a little",
+      "Only a little interested",
       "Give my spot away",
     ]);
     expect(rows[0].components.every((c) => c.disabled === false)).toBe(true);
@@ -409,6 +409,117 @@ describe("GatherInterest button handler", () => {
     expect(handled).toBe(false);
     expect(interaction.deferred).toBe(false);
     expect(replies).toHaveLength(0);
+  });
+});
+
+describe("GatherInterest two-phase save race", () => {
+  test("post-save does not clobber a click that already registered", async () => {
+    const gather = sampleGather();
+    const client = memoryClient();
+    await GatherInterest.saveGather(client, gather);
+
+    const posted = JSON.parse(JSON.stringify(gather));
+    posted.gameMessageId = "game-msg";
+    posted.interestMessageId = "panel-msg";
+
+    const edits = [];
+    const replies = [];
+    await GatherInterest.handleButton(
+      buttonInteraction({
+        customId: GatherInterest.interestCustomId(gather.id, "very"),
+        edits,
+        replies,
+      }),
+      client
+    );
+    expect(replies[0].content).toBe("Registered: Very interested");
+
+    const afterClick = await client.getGameDataV2(
+      gather.guildId,
+      GatherInterest.COLLECTION,
+      gather.id
+    );
+    expect(afterClick.interests["user-1"].level).toBe("very");
+    expect(afterClick.interestMessageId).toBeNull();
+
+    // Command save #2 still holds the empty in-memory roster plus new ids.
+    await GatherInterest.saveGatherAfterPost(client, posted);
+
+    const stored = await client.getGameDataV2(
+      gather.guildId,
+      GatherInterest.COLLECTION,
+      gather.id
+    );
+    expect(stored.interests["user-1"].level).toBe("very");
+    expect(stored.gameMessageId).toBe("game-msg");
+    expect(stored.interestMessageId).toBe("panel-msg");
+    expect(Object.keys(stored.interests)).toEqual(["user-1"]);
+  });
+
+  test("concurrent click and post-save keep both interests and message ids", async () => {
+    const gather = sampleGather();
+    const client = memoryClient();
+    await GatherInterest.saveGather(client, gather);
+
+    const posted = JSON.parse(JSON.stringify(gather));
+    posted.gameMessageId = "game-msg";
+    posted.interestMessageId = "panel-msg";
+
+    const originalSet = client.setGameDataV2;
+    client.setGameDataV2 = async (...args) => {
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      return originalSet(...args);
+    };
+
+    const edits = [];
+    const replies = [];
+    await Promise.all([
+      GatherInterest.handleButton(
+        buttonInteraction({
+          customId: GatherInterest.interestCustomId(gather.id, "somewhat"),
+          edits,
+          replies,
+        }),
+        client
+      ),
+      GatherInterest.saveGatherAfterPost(client, posted),
+    ]);
+
+    const stored = await client.getGameDataV2(
+      gather.guildId,
+      GatherInterest.COLLECTION,
+      gather.id
+    );
+    expect(stored.interests["user-1"].level).toBe("somewhat");
+    expect(stored.gameMessageId).toBe("game-msg");
+    expect(stored.interestMessageId).toBe("panel-msg");
+    expect(replies[0].content).toBe("Registered: Somewhat interested");
+  });
+
+  test("withGatherLock serializes the same gather and releases the map entry", async () => {
+    const order = [];
+    await Promise.all([
+      GatherInterest.withGatherLock("lock-a", async () => {
+        order.push("a-start");
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        order.push("a-end");
+      }),
+      GatherInterest.withGatherLock("lock-a", async () => {
+        order.push("b-start");
+        order.push("b-end");
+      }),
+    ]);
+    expect(order).toEqual(["a-start", "a-end", "b-start", "b-end"]);
+
+    // After both waiters finish the last one must delete the entry so a
+    // later lock is not chained onto a resolved leftover promise forever.
+    expect(GatherInterest.hasActiveLock("lock-a")).toBe(false);
+    const after = [];
+    await GatherInterest.withGatherLock("lock-a", async () => {
+      after.push("c");
+    });
+    expect(after).toEqual(["c"]);
+    expect(GatherInterest.hasActiveLock("lock-a")).toBe(false);
   });
 });
 

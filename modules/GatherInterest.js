@@ -34,7 +34,7 @@ const LEVELS = {
     label: "Only a little interested",
     confirm: "Only a little interested",
     header: "Little",
-    button: "Only a little",
+    button: "Only a little interested",
     emoji: "🤏",
     style: ButtonStyle.Secondary,
   },
@@ -331,22 +331,48 @@ class GatherInterest {
     await client.setGameDataV2(gather.guildId, COLLECTION, gather.id, gather);
   }
 
+  /**
+   * Persist message ids after the panel is live without clobbering
+   * interests (or status) written by a concurrent button click.
+   */
+  static async saveGatherAfterPost(client, posted) {
+    return this.withGatherLock(posted.id, async () => {
+      const latest = (await this.loadGather(client, posted.guildId, posted.id)) || posted;
+      if (posted.gameMessageId != null) {
+        latest.gameMessageId = posted.gameMessageId;
+      }
+      if (posted.interestMessageId != null) {
+        latest.interestMessageId = posted.interestMessageId;
+      }
+      await this.saveGather(client, latest);
+      return latest;
+    });
+  }
+
   static async withGatherLock(gatherId, fn) {
     const previous = locks.get(gatherId) || Promise.resolve();
     let release;
     const current = new Promise((resolve) => {
       release = resolve;
     });
-    locks.set(gatherId, previous.then(() => current));
+    // Store the same promise we compare on release so the last waiter
+    // can delete the map entry. previous.then(() => current) must be
+    // the stored value — not `current` itself.
+    const queued = previous.then(() => current);
+    locks.set(gatherId, queued);
     await previous;
     try {
       return await fn();
     } finally {
       release();
-      if (locks.get(gatherId) === current) {
+      if (locks.get(gatherId) === queued) {
         locks.delete(gatherId);
       }
     }
+  }
+
+  static hasActiveLock(gatherId) {
+    return locks.has(gatherId);
   }
 
   static async replyEphemeral(interaction, content) {

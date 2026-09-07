@@ -81,7 +81,9 @@ class Gather extends SlashCommand {
       });
       gather.interestMessageId = panelMessage?.id || null;
 
-      await GatherInterest.saveGather(this.client, gather);
+      // Reload-and-merge under the gather lock so a click that already
+      // confirmed is not overwritten by this in-memory object (empty interests).
+      await GatherInterest.saveGatherAfterPost(this.client, gather);
 
       if (bgg.otherAttachments.length > 0) {
         await interaction.followUp({
