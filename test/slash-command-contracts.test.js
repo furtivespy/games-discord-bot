@@ -32,6 +32,8 @@ describe("slash command definition contracts", () => {
   const files = listSlashCommandFiles();
   const stubClient = { logger: { log: () => {} }, config: {} };
 
+  // Cold require of every slash command pulls canvas/Gemini/chrono via
+  // subcommand graphs; bun's default 5s budget flakes on first load.
   test("every slashcommands file exports a constructable command with toJSON()", () => {
     expect(files.length).toBeGreaterThan(10);
 
@@ -47,7 +49,7 @@ describe("slash command definition contracts", () => {
     }
 
     expect(new Set(names).size).toBe(names.length);
-  });
+  }, 15_000);
 
   test("/game registers the core table-management subcommands", () => {
     const Game = require("../slashcommands/genericgame/game");
