@@ -1,10 +1,11 @@
-const { describe, expect, test, beforeEach, afterAll } = require("bun:test");
-const { PermissionsBitField } = require("discord.js");
+const { describe, expect, test, beforeEach, afterEach, afterAll } = require("bun:test");
 const GameStatusHelper = require("../modules/GameStatusHelper");
 const Formatter = require("../modules/GameFormatter");
 const GameDB = require("../db/anygame");
+const { createHarness: createSharedHarness } = require("./helpers/harness");
 
 const originalCreateGameStatusReply = Formatter.createGameStatusReply;
+const openHarnesses = [];
 
 function snapshotReply(content = "📊") {
   return {
@@ -33,123 +34,28 @@ function createHarness({
   fetchImpl = null,
   deferred = true,
 } = {}) {
-  const pinCalls = [];
-  const sendCalls = [];
-  const fetchCalls = [];
-  const editCalls = [];
-  const chatReplyCalls = [];
-  const persistCalls = [];
-  const unpinCalls = [];
-
-  const pinMessage = {
-    id: "pin-1",
-    pinned: false,
-    content: "",
-    pin: async () => {
-      pinCalls.push("pin");
-      if (pinThrows) {
-        throw pinThrows;
-      }
-      pinMessage.pinned = true;
-    },
-    unpin: async () => {
-      unpinCalls.push("unpin");
-      pinMessage.pinned = false;
-    },
-    edit: async (payload) => {
-      editCalls.push(payload);
-      if (typeof payload.content === "string") {
-        pinMessage.content = payload.content;
-      }
-      return pinMessage;
-    },
-  };
-
-  const channel = {
-    id: "channel-1",
-    guild: { id: "guild-1" },
-    permissionsFor: () => ({
-      has: (flag) => manageMessages && flag === PermissionsBitField.Flags.ManageMessages,
-    }),
-    messages: {
-      fetch: async (idOrOptions) => {
-        const id = typeof idOrOptions === "object" && idOrOptions
-          ? (idOrOptions.message || idOrOptions.id)
-          : idOrOptions;
-        fetchCalls.push(id);
-        if (fetchImpl) {
-          return fetchImpl(id, pinMessage);
-        }
-        if (id === pinMessage.id) {
-          return pinMessage;
-        }
-        return {
-          id,
-          content: "old chat status",
-          edit: async (payload) => {
-            editCalls.push({ id, ...payload });
-          },
-        };
-      },
-    },
-    send: async (payload) => {
-      sendCalls.push(payload);
-      if (typeof payload.content === "string" && payload.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)) {
-        return pinMessage;
-      }
-      return { id: "chat-1" };
-    },
-  };
-
-  const interaction = {
-    guildId: "guild-1",
-    channelId: "channel-1",
-    guild: channel.guild,
-    channel,
-    deferred,
-    replied: false,
-    editReply: async (payload) => {
-      chatReplyCalls.push(payload);
-      return { id: "chat-1" };
-    },
-    reply: async (payload) => {
-      chatReplyCalls.push(payload);
-      return { id: "chat-1" };
-    },
-  };
-
-  const storedGame = structuredClone(gameData);
-
-  const client = {
-    user: { id: "bot-1" },
-    getGameDataV2: async () => structuredClone(storedGame),
-    setGameDataV2: async (...args) => {
-      Object.assign(storedGame, args[3]);
-      persistCalls.push(args);
-    },
-  };
-
-  return {
+  const harness = createSharedHarness({
     gameData,
-    storedGame,
-    channel,
-    interaction,
-    client,
-    pinMessage,
-    pinCalls,
-    sendCalls,
-    fetchCalls,
-    editCalls,
-    chatReplyCalls,
-    persistCalls,
-    unpinCalls,
-  };
+    manageMessages,
+    pinThrows,
+    fetchImpl,
+    deferred,
+    stubFormatter: false,
+  });
+  openHarnesses.push(harness);
+  return harness;
 }
 
 describe("GameStatusHelper pinned live status", () => {
   beforeEach(() => {
     Formatter.createGameStatusReply = async (_gameData, _guild, _clientUserId, options = {}) =>
       snapshotReply(options.content);
+  });
+
+  afterEach(() => {
+    while (openHarnesses.length) {
+      openHarnesses.pop().cleanup();
+    }
   });
 
   afterAll(() => {
