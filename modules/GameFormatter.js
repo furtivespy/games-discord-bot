@@ -920,6 +920,43 @@ class GameFormatter {
     return newEmbed;
   }
 
+  static async fetchCardImageBuffer(url) {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch card image: ${res.status}`);
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (!buffer.length) {
+      throw new Error('Empty card image');
+    }
+    return buffer;
+  }
+
+  // Public card replies should attach the original image as a Discord file.
+  // External setImage(url) embeds often fail to render in a channel that
+  // already has a pinned live-status message with large attachments.
+  // If the download fails, keep the URL embed instead of a placeholder PNG.
+  static async oneCardReplyParts(cardObj) {
+    const embed = this.oneCard(cardObj);
+    const files = [];
+    if (!cardObj?.url) {
+      return { embed, files };
+    }
+    try {
+      const safeId = String(cardObj.id || 'image').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24);
+      const extMatch = String(cardObj.url).match(/\.(png|jpe?g|gif|webp)(\?|$)/i);
+      let ext = extMatch ? extMatch[1].toLowerCase() : 'png';
+      if (ext === 'jpeg') ext = 'jpg';
+      const fileName = `played-card-${safeId || 'image'}.${ext}`;
+      const buffer = await this.fetchCardImageBuffer(cardObj.url);
+      files.push(new AttachmentBuilder(buffer, { name: fileName }));
+      embed.setImage(`attachment://${fileName}`);
+    } catch (error) {
+      console.error('Failed to attach card image; keeping URL embed.', error);
+    }
+    return { embed, files };
+  }
+
   static async multiCard(cardArry, title) {
     const embeds = [];
     const attachments = [];
@@ -1127,8 +1164,12 @@ class GameFormatter {
     }
 
     const replyOptions = {
-        files: [attachment, ...consolidatedPlayAreaData.attachments], // Add main status table + consolidated play area images + gameboard
-        embeds: finalEmbeds // Use the constructed finalEmbeds array
+        files: [
+            attachment,
+            ...consolidatedPlayAreaData.attachments,
+            ...(options.additionalFiles || []),
+        ],
+        embeds: finalEmbeds
     };
 
     if (options.content) {

@@ -128,11 +128,12 @@ class Play {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
+        const cardMedia = await Formatter.oneCardReplyParts(cardToPlay);
         const replyEmbeds = [
-            Formatter.oneCard(cardToPlay),
+            cardMedia.embed,
             ...Formatter.deckStatus2(gameData)
         ];
-        const replyFiles = [];
+        const replyFiles = [...cardMedia.files];
 
         // If played to playarea, show updated playarea
         if ((actualDestination === 'playarea' || destinationTypeForHistory === 'playarea') && player.playArea && player.playArea.length > 0) {
