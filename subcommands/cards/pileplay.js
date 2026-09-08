@@ -91,12 +91,15 @@ class PilePlay {
             ? `${interaction.member.displayName} played a card to **${pile.name}**`
             : `${interaction.member.displayName} played a card to **${pile.name}**`
 
-        const embeds = pile.isSecret ? [] : [Formatter.oneCard(playedCard)]
+        const cardMedia = pile.isSecret
+            ? { embed: null, files: [] }
+            : await Formatter.oneCardReplyParts(playedCard)
 
         const [, handInfo] = await Promise.all([
             GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
                 content: publicMessage,
-                additionalEmbeds: embeds
+                additionalEmbeds: cardMedia.embed ? [cardMedia.embed] : [],
+                additionalFiles: cardMedia.files
             }),
             Formatter.playerSecretHandAndImages(gameData, player)
         ]);

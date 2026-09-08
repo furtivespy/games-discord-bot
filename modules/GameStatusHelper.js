@@ -5,12 +5,120 @@ const UNKNOWN_MESSAGE_CODE = 10008;
 const MISSING_PERMISSIONS_CODE = 50013;
 const PINNED_STATUS_HEADER = '📌 Live game status';
 const MANUAL_PIN_COMMAND_NOTICE = "\n\n⚠️ I can't pin messages in this channel. Please pin the live status message manually.";
+const PINNED_STATUS_MODES = Object.freeze({
+  OFF: 'off',
+  ON: 'on',
+  FULL: 'full',
+});
 const loggedMissingPinPermission = new Set();
 
 class GameStatusHelper {
 
+  static isValidPinnedStatusMode(mode) {
+    return mode === PINNED_STATUS_MODES.OFF
+      || mode === PINNED_STATUS_MODES.ON
+      || mode === PINNED_STATUS_MODES.FULL;
+  }
+
+  // Prefer pinnedStatusMode. Fall back to the legacy boolean without deleting it.
+  // Already-migrated mode values win even if they disagree with the old flag.
+  static resolvePinnedStatusMode(gameData) {
+    if (this.isValidPinnedStatusMode(gameData?.pinnedStatusMode)) {
+      return gameData.pinnedStatusMode;
+    }
+    return gameData?.pinnedStatusEnabled === true ? PINNED_STATUS_MODES.ON : PINNED_STATUS_MODES.OFF;
+  }
+
+  // Read-time defaults only: fill missing fields, never overwrite an existing mode.
+  static applyPinnedStatusModeDefaults(gameData) {
+    if (!gameData || typeof gameData !== 'object') {
+      return gameData;
+    }
+    if (gameData.pinnedStatusMode === undefined) {
+      gameData.pinnedStatusMode = gameData.pinnedStatusEnabled === true
+        ? PINNED_STATUS_MODES.ON
+        : PINNED_STATUS_MODES.OFF;
+    }
+    if (gameData.pinnedStatusEnabled === undefined) {
+      gameData.pinnedStatusEnabled = gameData.pinnedStatusMode === PINNED_STATUS_MODES.ON
+        || gameData.pinnedStatusMode === PINNED_STATUS_MODES.FULL;
+    }
+    return gameData;
+  }
+
+  static setPinnedStatusMode(gameData, mode) {
+    const nextMode = this.isValidPinnedStatusMode(mode) ? mode : PINNED_STATUS_MODES.OFF;
+    gameData.pinnedStatusMode = nextMode;
+    // Mirror the legacy boolean (pin active for on/full). Do not delete the old field.
+    gameData.pinnedStatusEnabled = nextMode === PINNED_STATUS_MODES.ON
+      || nextMode === PINNED_STATUS_MODES.FULL;
+    return nextMode;
+  }
+
   static isPinnedStatusEnabled(gameData) {
-    return gameData?.pinnedStatusEnabled === true;
+    const mode = this.resolvePinnedStatusMode(gameData);
+    return mode === PINNED_STATUS_MODES.ON || mode === PINNED_STATUS_MODES.FULL;
+  }
+
+  // In `full` mode, skip the chat table/image unless the caller is an explicit
+  // status command (/game status, /game newgame, and similar setup dumps).
+  static shouldPostChatFullStatus(gameData, options = {}) {
+    if (this.resolvePinnedStatusMode(gameData) !== PINNED_STATUS_MODES.FULL) {
+      return true;
+    }
+    return options.explicitStatus === true;
+  }
+
+  // Command-owned chat payload only: never include the status table/image
+  // that createGameStatusReply attaches. Card embeds/files live on
+  // additionalEmbeds / additionalFiles and must survive `full` mode.
+  static buildCommandNaturalReply(options = {}, { fallbackContent = null } = {}) {
+    const payload = {};
+    if (typeof options.content === 'string' && options.content.length > 0) {
+      payload.content = options.content;
+    } else if (typeof fallbackContent === 'string') {
+      payload.content = fallbackContent;
+    }
+    if (options.additionalEmbeds?.length) {
+      payload.embeds = options.additionalEmbeds;
+    }
+    if (options.additionalFiles?.length) {
+      payload.files = options.additionalFiles;
+    }
+    return payload;
+  }
+
+  static commandNaturalReplyHasBody(payload) {
+    return Boolean(
+      (typeof payload.content === 'string' && payload.content.length > 0)
+      || payload.embeds?.length
+      || payload.files?.length
+    );
+  }
+
+  static async resolveInteractionWithoutFullStatus(interaction, options = {}) {
+    if (!interaction || interaction.replied) {
+      return;
+    }
+    // Keep command media (card embeds/files). Content-only editReply would
+    // wipe a prior bespoke reply and drop additionalEmbeds from this payload.
+    const payload = this.buildCommandNaturalReply(options, { fallbackContent: '\u200b' });
+    if (interaction.deferred) {
+      await interaction.editReply(payload);
+      return;
+    }
+    await interaction.reply(payload);
+  }
+
+  static async postCommandNaturalReplyToChannel(channel, options = {}) {
+    if (!channel) {
+      return;
+    }
+    const payload = this.buildCommandNaturalReply(options);
+    if (!this.commandNaturalReplyHasBody(payload)) {
+      return;
+    }
+    await channel.send(payload);
   }
 
   static buildPinnedStatusContent() {
@@ -95,31 +203,40 @@ class GameStatusHelper {
   }
 
   static async sendGameStatus(interaction, client, gameData, options = {}) {
-    // First, clean up the previous status message if it was recent.
-    await this.cleanUpPreviousMessage(interaction.channel, gameData);
+    const postChat = this.shouldPostChatFullStatus(gameData, options);
 
-    // Now, always send a new, full status message.
-    const fullReply = await this.buildStatusReplyOptions(gameData, interaction.guild, client.user.id, options);
-
-    const replyOptions = {
-        ...fullReply,
-        fetchReply: true,
-    };
-
-    let sentMessage;
-    if (interaction.deferred || interaction.replied) {
-        sentMessage = await interaction.editReply(replyOptions);
-    } else {
-        sentMessage = await interaction.reply(replyOptions);
+    if (postChat) {
+      await this.cleanUpPreviousMessage(interaction.channel, gameData);
     }
 
-    // Update gameData with the new message's ID and timestamp.
-    const statusUpdateResult = sentMessage ? {
-        lastStatusMessageId: sentMessage.id,
-        lastStatusMessageTimestamp: Date.now()
-    } : null;
-    
-    await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult);
+    const fullReply = await this.buildStatusReplyOptions(gameData, interaction.guild, client.user.id, options);
+
+    if (postChat) {
+      const replyOptions = {
+          ...fullReply,
+          fetchReply: true,
+      };
+
+      let sentMessage;
+      if (interaction.deferred || interaction.replied) {
+          sentMessage = await interaction.editReply(replyOptions);
+      } else {
+          sentMessage = await interaction.reply(replyOptions);
+      }
+
+      const statusUpdateResult = sentMessage ? {
+          lastStatusMessageId: sentMessage.id,
+          lastStatusMessageTimestamp: Date.now()
+      } : null;
+      
+      await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult);
+    } else {
+      // Keep the command's natural reply (content + additionalEmbeds/files)
+      // and skip the table/image. Do not record this as lastStatusMessageId
+      // or a later cleanup would strip the command's card media.
+      await this.resolveInteractionWithoutFullStatus(interaction, options);
+    }
+
     await this.safeUpsertPinnedStatus(
       interaction.channel,
       client,
@@ -131,32 +248,37 @@ class GameStatusHelper {
 
   static async sendPublicStatusUpdate(interaction, client, gameData, options = {}) {
     const channel = interaction.channel;
-    
-    // First, clean up the previous status message if it was recent.
-    await this.cleanUpPreviousMessage(channel, gameData);
-
-    // Now, always send a new, full status message.
+    const postChat = this.shouldPostChatFullStatus(gameData, options);
     const fullReply = await this.buildStatusReplyOptions(gameData, channel.guild, client.user.id, options);
 
-    // Callers can opt in via options.resolveDeferredReply when the original
-    // interaction (deferred publicly) hasn't been resolved by any other means -
-    // otherwise it would be left stuck on "thinking..." while this status update
-    // is posted as a separate channel message. Callers that already resolve the
-    // interaction themselves (e.g. an ephemeral defer + separate editReply/followUp)
-    // are unaffected, since this defaults to off and keeps sending a new channel message.
-    let sentMessage;
-    if (options.resolveDeferredReply && (interaction.deferred || interaction.replied)) {
-        sentMessage = await interaction.editReply({ ...fullReply, fetchReply: true });
+    if (postChat) {
+      await this.cleanUpPreviousMessage(channel, gameData);
+
+      // Callers can opt in via options.resolveDeferredReply when the original
+      // interaction (deferred publicly) hasn't been resolved by any other means -
+      // otherwise it would be left stuck on "thinking..." while this status update
+      // is posted as a separate channel message. Callers that already resolve the
+      // interaction themselves (e.g. an ephemeral defer + separate editReply/followUp)
+      // are unaffected, since this defaults to off and keeps sending a new channel message.
+      let sentMessage;
+      if (options.resolveDeferredReply && (interaction.deferred || interaction.replied)) {
+          sentMessage = await interaction.editReply({ ...fullReply, fetchReply: true });
+      } else {
+          sentMessage = await channel.send({ ...fullReply, fetchReply: true });
+      }
+
+      const statusUpdateResult = {
+          lastStatusMessageId: sentMessage.id,
+          lastStatusMessageTimestamp: Date.now()
+      };
+      await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult);
+    } else if (options.resolveDeferredReply) {
+      await this.resolveInteractionWithoutFullStatus(interaction, options);
     } else {
-        sentMessage = await channel.send({ ...fullReply, fetchReply: true });
+      // Same channel.send path as the full-status update, minus the table/image.
+      await this.postCommandNaturalReplyToChannel(channel, options);
     }
 
-    // Persist the status update result to the database
-    const statusUpdateResult = {
-        lastStatusMessageId: sentMessage.id,
-        lastStatusMessageTimestamp: Date.now()
-    };
-    await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult);
     await this.safeUpsertPinnedStatus(
       channel,
       client,
@@ -357,5 +479,6 @@ class GameStatusHelper {
 
 GameStatusHelper.PINNED_STATUS_HEADER = PINNED_STATUS_HEADER;
 GameStatusHelper.MANUAL_PIN_COMMAND_NOTICE = MANUAL_PIN_COMMAND_NOTICE;
+GameStatusHelper.PINNED_STATUS_MODES = PINNED_STATUS_MODES;
 
 module.exports = GameStatusHelper;

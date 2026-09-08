@@ -3,8 +3,6 @@
 ARG BUN_VERSION=1.3.14
 FROM oven/bun:${BUN_VERSION} AS base
 
-LABEL fly_launch_runtime="Bun"
-
 WORKDIR /app
 
 ENV NODE_ENV="production"
@@ -49,4 +47,5 @@ VOLUME /data
 
 EXPOSE 3000
 ENV DATABASE_URL="file:///data/sqlite.db"
+ENV IS_IN_CONTAINER="true"
 CMD [ "bun", "run", "start" ]

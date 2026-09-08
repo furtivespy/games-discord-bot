@@ -107,7 +107,8 @@ class NewGame {
           embeds: bgg.embeds,
           files: bgg.attachments}),
         GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
-          content: content
+          content: content,
+          explicitStatus: true,
         })
       ]);
 
