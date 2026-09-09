@@ -123,6 +123,22 @@ describe("GameStatusHelper pinned live status", () => {
     expect(saved.pinnedStatusMessageId).toBe("pin-1");
     expect(saved.pinnedStatusChannelId).toBe("channel-1");
     expect(saved.pinnedStatusPinned).toBe(true);
+    expect(harness.sendCalls).toHaveLength(0);
+  });
+
+  test("persistPinFields does not create a pin as a side effect of saving pin metadata", async () => {
+    const harness = createHarness({
+      gameData: createGameData({
+        pinnedStatusEnabled: true,
+        players: [{ userId: "p1", score: 0 }],
+      }),
+    });
+
+    await GameStatusHelper.persistPinFields(harness.client, harness.interaction, harness.gameData);
+
+    expect(harness.sendCalls).toHaveLength(0);
+    expect(harness.pinCalls).toHaveLength(0);
+    expect(harness.persistCalls).toHaveLength(1);
   });
 
   test("first status with pin enabled creates, pins, and persists a separate pin id", async () => {
@@ -808,5 +824,115 @@ describe("GameStatusHelper pinnedStatusMode", () => {
     expect(chatSends).toHaveLength(0);
     expect(harness.gameData.lastStatusMessageId).toBeNull();
     expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+  });
+});
+
+describe("GameStatusHelper.refreshPinnedStatusAfterGameSave", () => {
+  beforeEach(() => {
+    Formatter.createGameStatusReply = async (_gameData, _guild, _clientUserId, options = {}) =>
+      snapshotReply(options.content);
+  });
+
+  afterEach(() => {
+    while (openHarnesses.length) {
+      openHarnesses.pop().cleanup();
+    }
+  });
+
+  test("no-ops when pinned live status is off", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusEnabled: false }),
+    });
+
+    await GameStatusHelper.refreshPinnedStatusAfterGameSave(
+      harness.client,
+      { channel: harness.channel, guildId: harness.interaction.guildId, channelId: harness.interaction.channelId },
+      harness.gameData
+    );
+
+    expect(harness.sendCalls).toHaveLength(0);
+    expect(harness.pinCalls).toHaveLength(0);
+    expect(harness.editCalls).toHaveLength(0);
+  });
+
+  test("no-ops for deleted games even when pin mode is on", async () => {
+    const harness = createHarness({
+      gameData: createGameData({
+        pinnedStatusEnabled: true,
+        isdeleted: true,
+        pinnedStatusMessageId: "pin-1",
+        pinnedStatusChannelId: "channel-1",
+        pinnedStatusPinned: true,
+      }),
+    });
+
+    await GameStatusHelper.refreshPinnedStatusAfterGameSave(
+      harness.client,
+      { channel: harness.channel, guildId: harness.interaction.guildId, channelId: harness.interaction.channelId },
+      harness.gameData
+    );
+
+    expect(harness.sendCalls).toHaveLength(0);
+    expect(harness.editCalls).toHaveLength(0);
+  });
+
+  test("skipPinnedRefresh avoids creating or editing the pin", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusEnabled: true }),
+    });
+
+    await GameStatusHelper.refreshPinnedStatusAfterGameSave(
+      harness.client,
+      { channel: harness.channel, guildId: harness.interaction.guildId, channelId: harness.interaction.channelId },
+      harness.gameData,
+      { skipPinnedRefresh: true }
+    );
+
+    expect(harness.sendCalls).toHaveLength(0);
+    expect(harness.pinCalls).toHaveLength(0);
+  });
+
+  test("creates and pins a live status message after a game save", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusEnabled: true }),
+    });
+
+    await GameStatusHelper.refreshPinnedStatusAfterGameSave(
+      harness.client,
+      {
+        channel: harness.channel,
+        guildId: harness.interaction.guildId,
+        channelId: harness.interaction.channelId,
+        interaction: harness.interaction,
+      },
+      harness.gameData
+    );
+
+    expect(harness.sendCalls).toHaveLength(1);
+    expect(harness.sendCalls[0].content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)).toBe(true);
+    expect(harness.pinCalls).toHaveLength(1);
+    expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+  });
+
+  test("edits an existing pin in place instead of posting a new chat status", async () => {
+    const harness = createHarness({
+      gameData: createGameData({
+        pinnedStatusEnabled: true,
+        pinnedStatusMessageId: "pin-1",
+        pinnedStatusChannelId: "channel-1",
+        pinnedStatusPinned: true,
+      }),
+    });
+
+    await GameStatusHelper.refreshPinnedStatusAfterGameSave(
+      harness.client,
+      { channel: harness.channel, guildId: harness.interaction.guildId, channelId: harness.interaction.channelId },
+      harness.gameData
+    );
+
+    expect(harness.sendCalls).toHaveLength(0);
+    expect(harness.editCalls.length).toBeGreaterThanOrEqual(1);
+    expect(harness.editCalls[0].content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)).toBe(true);
+    expect(harness.chatReplyCalls).toHaveLength(0);
   });
 });
