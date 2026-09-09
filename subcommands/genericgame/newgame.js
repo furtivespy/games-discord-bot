@@ -85,7 +85,8 @@ class NewGame {
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
             
             await GameStatusHelper.sendGameStatus(interaction, client, gameData, {
-                content: content
+                content: content,
+                explicitStatus: true,
             })
         }
     }

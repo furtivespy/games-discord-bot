@@ -179,7 +179,8 @@ class GameDatabase {
         history: [], // Added for history tracking feature
         lastStatusMessageId: null,
         lastStatusMessageTimestamp: null,
-        pinnedStatusEnabled: false, // Per-game toggle for the live pinned status message (default off)
+        pinnedStatusMode: 'off', // 'off' | 'on' | 'full' — live pinned status (default off)
+        pinnedStatusEnabled: false, // Legacy boolean; kept as a fallback. New writes persist pinnedStatusMode.
         pinnedStatusMessageId: null,
         pinnedStatusChannelId: null,
         pinnedStatusPinned: false,

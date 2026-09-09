@@ -109,9 +109,11 @@ class GameBoardDiscard {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         
+        const cardMedia = await Formatter.oneCardReplyParts(discardedCard)
         await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
             content: `${interaction.member.displayName} discarded ${Formatter.cardShortName(discardedCard)} from Game Board to ${destinationName}`,
-            additionalEmbeds: [Formatter.oneCard(discardedCard)]
+            additionalEmbeds: [cardMedia.embed],
+            additionalFiles: cardMedia.files
         })
     }
 }
