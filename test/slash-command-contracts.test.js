@@ -98,6 +98,44 @@ describe("slash command definition contracts", () => {
     );
   });
 
+  test("/catalog is a top-level Bot Owner command with save-as publish", () => {
+    const Catalog = require("../slashcommands/genericgame/catalog");
+    const command = new Catalog(stubClient);
+    expect(command.conf.permLevel).toBe("Bot Owner");
+    const json = command.data.toJSON();
+    expect(json.name).toBe("catalog");
+    expect(json.dm_permission).toBe(false);
+    const subcommands = Object.fromEntries(
+      json.options.map((option) => [option.name, option])
+    );
+    expect(Object.keys(subcommands)).toEqual([
+      "list",
+      "show",
+      "disable",
+      "enable",
+      "publish",
+    ]);
+    expect(subcommands.show.options.find((option) => option.name === "id")).toMatchObject({
+      required: true,
+      autocomplete: true,
+    });
+    expect(
+      subcommands.disable.options.find((option) => option.name === "id")
+    ).toMatchObject({ required: true, autocomplete: true });
+    expect(
+      subcommands.enable.options.find((option) => option.name === "id")
+    ).toMatchObject({ required: true, autocomplete: true });
+    expect(
+      subcommands.publish.options.find((option) => option.name === "deck")
+    ).toMatchObject({ required: true, autocomplete: true });
+    expect(
+      subcommands.publish.options.find((option) => option.name === "id").required
+    ).toBe(true);
+    expect(
+      subcommands.publish.options.find((option) => option.name === "name").required
+    ).toBe(true);
+  });
+
   test("/players registers add, remove, score, and first", () => {
     const Players = require("../slashcommands/players/players");
     const json = new Players(stubClient).data.toJSON();
