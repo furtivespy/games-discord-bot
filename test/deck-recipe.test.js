@@ -185,6 +185,43 @@ test("editReplyAfterSave does not throw after persist if the full reply is rejec
   expect(calls[1]).toEqual({ content: "Alice added 1 card(s) \"Promo\" to Main" });
 });
 
+test("format A/B/C match the slash choice templates; suit is sort-only; value is shown only in C", () => {
+  const sample = {
+    name: "Ace",
+    type: "Spades",
+    suit: "Hearts",
+    value: "14",
+    description: "",
+  };
+
+  expect(Formatter.cardShortName({ ...sample, format: "A" })).toBe("Ace of Spades");
+  expect(Formatter.cardShortName({ ...sample, format: "B" })).toBe("Spades: Ace");
+  expect(Formatter.cardShortName({ ...sample, format: "C" })).toBe("14: Ace");
+
+  for (const format of ["A", "B", "C"]) {
+    expect(Formatter.cardShortName({ ...sample, format })).not.toContain("Hearts");
+  }
+
+  expect(Formatter.CARD_FORMAT_CHOICES.map((choice) => choice.name)).toEqual([
+    "A - {name} of {type}",
+    "B - {type}: {name}",
+    "C - {value}: {name}",
+  ]);
+  expect(Formatter.HAND_SORT_KEYS).toEqual(["suit", "value", "name"]);
+  expect(Formatter.CARD_FORMAT_OPTION_DESCRIPTION).toContain("suit");
+  expect(Formatter.CARD_FORMAT_OPTION_DESCRIPTION).toContain("value");
+});
+
+test("cardSort orders by suit, then value, then name", () => {
+  const sorted = Formatter.cardSort([
+    { name: "Beta", suit: "B", value: "1" },
+    { name: "Alpha", suit: "A", value: "2" },
+    { name: "Gamma", suit: "A", value: "1" },
+    { name: "Delta", suit: "A", value: "1" },
+  ]);
+  expect(sorted.map((card) => card.name)).toEqual(["Delta", "Gamma", "Alpha", "Beta"]);
+});
+
 test("recipe editor flow: add to discard, shuffle into draw, recall includes allCards, prune can remove", () => {
   const deck = Object.assign({}, cloneDeep(GameDB.defaultDeck), { name: "Main" });
   deck.allCards = GameDB.createCardFromStrList("Main", "Ace, King".split(",").map(card => card.trim()));

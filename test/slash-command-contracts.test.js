@@ -106,6 +106,30 @@ describe("slash command definition contracts", () => {
     );
   });
 
+  test("/cards deck addcard format choices use the real display strings and note hand sorting", () => {
+    const Cards = require("../slashcommands/genericgame/cards");
+    const GameFormatter = require("../modules/GameFormatter");
+    const json = new Cards(stubClient).data.toJSON();
+    const addcard = json.options
+      .find((option) => option.name === "deck")
+      .options.find((option) => option.name === "addcard");
+    const format = addcard.options.find((option) => option.name === "format");
+    const suit = addcard.options.find((option) => option.name === "suit");
+    const value = addcard.options.find((option) => option.name === "value");
+
+    expect(format.description).toBe(GameFormatter.CARD_FORMAT_OPTION_DESCRIPTION);
+    expect(format.description).toContain("suit");
+    expect(format.description).toContain("value");
+    expect(format.choices).toEqual(GameFormatter.CARD_FORMAT_CHOICES);
+    expect(format.choices.map((choice) => choice.name)).toEqual([
+      "A - {name} of {type}",
+      "B - {type}: {name}",
+      "C - {value}: {name}",
+    ]);
+    expect(suit.description.toLowerCase()).toContain("not shown");
+    expect(value.description.toLowerCase()).toContain("format c");
+  });
+
   test("required and autocomplete flags stay set on high-traffic options", () => {
     const Cards = require("../slashcommands/genericgame/cards");
     const json = new Cards(stubClient).data.toJSON();

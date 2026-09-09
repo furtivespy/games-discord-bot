@@ -1,7 +1,7 @@
 const GameDB = require("./anygame.js");
 const DeckCatalog = require("./deckCatalog.js");
 
-const INSTANCE_ONLY_IDS = new Set(["custom-csv", "customempty"]);
+const INSTANCE_ONLY_IDS = new Set(["custom-csv", "customempty", "empty"]);
 
 function catalogCardFromGenerated(card) {
   return {

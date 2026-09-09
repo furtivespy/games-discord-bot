@@ -1,6 +1,7 @@
 const SlashCommand = require('../../base/SlashCommand.js')
 const {SlashCommandBuilder, MessageFlags} = require('discord.js');
 const GameDB = require('../../db/anygame.js')
+const GameFormatter = require('../../modules/GameFormatter')
 const BuildNew = require('../../subcommands/cards/buildernew')
 const BuildAdd = require('../../subcommands/cards/builderadd')
 const BuildRemove = require('../../subcommands/cards/builderremove')
@@ -210,15 +211,13 @@ class Cards extends SlashCommand {
                     .addStringOption(option => option.setName('name').setDescription('Name of the card').setRequired(true))
                     .addStringOption(option => option.setName('deck').setDescription('Deck to add to').setAutocomplete(true))
                     .addStringOption(option => option.setName('url').setDescription('Image URL for the card'))
-                    .addStringOption(option => option.setName('type').setDescription('Card type'))
-                    .addStringOption(option => option.setName('suit').setDescription('Card suit'))
-                    .addStringOption(option => option.setName('value').setDescription('Card value'))
+                    .addStringOption(option => option.setName('type').setDescription('Card type (shown in formats A and B)'))
+                    .addStringOption(option => option.setName('suit').setDescription('Suit — used to sort hands; not shown on the card'))
+                    .addStringOption(option => option.setName('value').setDescription('Value — used to sort hands; shown only with format C'))
                     .addStringOption(option => option.setName('description').setDescription('Card description'))
                     .addIntegerOption(option => option.setName('copies').setDescription('Number of copies to add (default 1)').setMinValue(1).setMaxValue(50))
-                    .addStringOption(option => option.setName('format').setDescription('Card display format').addChoices(
-                        {name: "A", value: "A"},
-                        {name: "B", value: "B"},
-                        {name: "C", value: "C"}
+                    .addStringOption(option => option.setName('format').setDescription(GameFormatter.CARD_FORMAT_OPTION_DESCRIPTION).addChoices(
+                        ...GameFormatter.CARD_FORMAT_CHOICES
                     ))
             )
             .addSubcommand(subcommand =>

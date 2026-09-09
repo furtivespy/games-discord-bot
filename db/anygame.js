@@ -99,6 +99,7 @@ class GameDatabase {
     
     CurrentCardList = [
         [ "Custom - From CSV", "custom-csv" ],
+        [ "Empty", "empty" ],
         [ "Standard 52 Card Poker Deck", "standard" ],
         [ "Pear/Triangle (one 1, two 2s ... ten 10s)", "pear" ],
         [ "Dune Imperium Intrigue (Base)", "imperium"],
@@ -272,6 +273,10 @@ class GameDatabase {
         showTopCard: false,
         created: "",
         createdBy: "",
+    }
+
+    isEmptyCardSet(cardset) {
+        return cardset === "empty" || cardset === "customempty"
     }
 
     createCard(deck, name, description = "", type = "", suit = "", value = "", format = "A", image){

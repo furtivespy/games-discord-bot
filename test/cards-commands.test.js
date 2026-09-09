@@ -114,6 +114,67 @@ describe("/cards command handlers", () => {
     );
   });
 
+  test("deck new creates an empty deck from cardset empty", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "new",
+          strings: { name: "Scratch", cardset: "empty" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        expect(saved.decks).toHaveLength(1);
+        expect(saved.decks[0].name).toBe("Scratch");
+        expect(saved.decks[0].allCards).toEqual([]);
+        expect(saved.decks[0].piles.draw.cards).toEqual([]);
+        expect(saved.decks[0].piles.discard.cards).toEqual([]);
+        expect(harness.lastContent()).toContain("Added and shuffled the new deck: Scratch");
+      }
+    );
+  });
+
+  test("deck new still accepts customempty as an empty starting deck", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "new",
+          strings: { name: "Blank", cardset: "customempty" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        expect(saved.decks[0].allCards).toEqual([]);
+        expect(saved.decks[0].piles.draw.cards).toEqual([]);
+      }
+    );
+  });
+
+  test("deck new autocomplete includes Empty as a cardset", async () => {
+    await withHarness(
+      {
+        isAutocomplete: true,
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "new",
+          strings: { cardset: "empty" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.calls.respond[0]).toEqual(
+          expect.arrayContaining([{ name: "Empty", value: "empty" }])
+        );
+      }
+    );
+  });
+
   test("deck new autocomplete filters CurrentCardList", async () => {
     await withHarness(
       {

@@ -872,8 +872,22 @@ class GameFormatter {
     return [newEmbed];
   }
 
+  // Hands (and other pick lists) sort by suit, then value, then name.
+  // suit is sort-only and never shown. value is always used to sort, and is
+  // shown to users only in format C. type is shown in formats A and B.
+  static HAND_SORT_KEYS = ["suit", "value", "name"];
+
+  static CARD_FORMAT_CHOICES = [
+    { name: "A - {name} of {type}", value: "A" },
+    { name: "B - {type}: {name}", value: "B" },
+    { name: "C - {value}: {name}", value: "C" },
+  ];
+
+  static CARD_FORMAT_OPTION_DESCRIPTION =
+    "How the card is shown. Hands sort by suit, then value, then name.";
+
   static cardSort(cardArry) {
-    return sortBy(cardArry, ["suit", "value", "name"]);
+    return sortBy(cardArry, this.HAND_SORT_KEYS);
   }
 
   static cardShortName(cardObj) {
