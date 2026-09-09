@@ -21,13 +21,27 @@ class GameHelper {
     }
   }
 
+  // Instance-only starters stay visible in the default Discord picker (25 max).
+  // Empty sorts after El Grande / Empire's End and would otherwise fall off the list.
+  static PINNED_CARDSET_IDS = ["custom-csv", "empty"]
+
   static getCardLists(searchTerm) {
-    return chain(GameDB.CurrentCardList)
-      .filter(cl => cl[0].toLowerCase().includes(searchTerm.toLowerCase()))
-      .sortBy(cl => cl[0])
-      .map(cl => ({ name: cl[0], value: cl[1] }))
-      .slice(0, 25)
+    const term = String(searchTerm ?? "").toLowerCase()
+    const matches = GameDB.CurrentCardList.filter((cl) =>
+      cl[0].toLowerCase().includes(term)
+    )
+    const pinned = GameHelper.PINNED_CARDSET_IDS
+      .map((id) => matches.find((cl) => cl[1] === id))
+      .filter(Boolean)
+    const pinnedIds = new Set(pinned.map((cl) => cl[1]))
+    const catalog = chain(matches)
+      .filter((cl) => !pinnedIds.has(cl[1]))
+      .sortBy((cl) => cl[0])
       .value()
+
+    return [...pinned, ...catalog]
+      .slice(0, 25)
+      .map((cl) => ({ name: cl[0], value: cl[1] }))
   }
 
   static getCardsAutocomplete(searchTerm, cardList) {

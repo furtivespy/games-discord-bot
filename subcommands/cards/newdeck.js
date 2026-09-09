@@ -1,5 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
-const { find, chain, cloneDeep, shuffle } = require('lodash')
+const { find, cloneDeep, shuffle } = require('lodash')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
 const GameDB = require("../../db/anygame.js")
 
@@ -7,12 +7,7 @@ class NewDeck {
     async execute(interaction, client) {
         if (interaction.isAutocomplete()) {
             await interaction.respond(
-                chain(GameDB.CurrentCardList)
-                .filter(cl => cl[0].toLowerCase().includes(interaction.options.getString("cardset").toLowerCase()))
-                .sortBy(cl => cl[0])
-                .map(cl => ({name: cl[0], value: cl[1]}))
-                .slice(0, 25)
-                .value()
+                GameHelper.getCardLists(interaction.options.getString("cardset"))
             );
             return
         }

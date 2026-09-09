@@ -156,19 +156,21 @@ describe("/cards command handlers", () => {
     );
   });
 
-  test("deck new autocomplete includes Empty as a cardset", async () => {
+  test("deck new unfiltered autocomplete includes Empty as a cardset", async () => {
     await withHarness(
       {
         isAutocomplete: true,
         options: {
           subcommandGroup: "deck",
           subcommand: "new",
-          strings: { cardset: "empty" },
+          strings: { cardset: "" },
         },
       },
       async (harness) => {
         await runCards(harness);
-        expect(harness.calls.respond[0]).toEqual(
+        const choices = harness.calls.respond[0];
+        expect(choices.length).toBeLessThanOrEqual(25);
+        expect(choices).toEqual(
           expect.arrayContaining([{ name: "Empty", value: "empty" }])
         );
       }
