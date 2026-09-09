@@ -3,12 +3,12 @@ const { SlashCommandBuilder, MessageFlags } = require("discord.js");
 const BoardGameGeek = require("../../modules/BoardGameGeek");
 const GatherInterest = require("../../modules/GatherInterest");
 
-class Gather extends SlashCommand {
+class Lfg extends SlashCommand {
   constructor(client) {
     super(client, {
-      name: "gather",
-      description: "Propose a game night: BGG lookup plus a Who's interested? panel",
-      usage: "Use /gather with a game name to post BGG info and an interest panel",
+      name: "lfg",
+      description: "Look up a game on BGG and open a Who's interested? panel.",
+      usage: "Use /lfg with a game name to post BGG info and an interest panel",
       enabled: true,
       permLevel: "User",
     });
@@ -40,7 +40,7 @@ class Gather extends SlashCommand {
 
       if (!interaction.guildId) {
         await interaction.reply({
-          content: "Use /gather in a server channel.",
+          content: "Use /lfg in a server channel.",
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -104,4 +104,4 @@ class Gather extends SlashCommand {
   }
 }
 
-module.exports = Gather;
+module.exports = Lfg;

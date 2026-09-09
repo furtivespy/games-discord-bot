@@ -5,7 +5,7 @@ const path = require("path");
 const { MessageFlags } = require("discord.js");
 const GatherInterest = require("../modules/GatherInterest");
 const GameStore = require("../db/gameStore.js");
-const Gather = require("../slashcommands/info/gather.js");
+const Lfg = require("../slashcommands/info/lfg.js");
 
 function sampleGame(overrides = {}) {
   return {
@@ -88,30 +88,31 @@ function buttonInteraction({
 }
 
 describe("GatherInterest levels and roster", () => {
-  test("counts header includes Give my spot away as Flexible", () => {
+  test("counts header includes three levels with Flexible last", () => {
     const gather = sampleGather();
     GatherInterest.upsertInterest(gather, "a", "very", "A", new Date("2026-09-07T12:01:00Z"));
     GatherInterest.upsertInterest(gather, "b", "somewhat", "B", new Date("2026-09-07T12:02:00Z"));
     GatherInterest.upsertInterest(gather, "c", "somewhat", "C", new Date("2026-09-07T12:03:00Z"));
-    GatherInterest.upsertInterest(gather, "d", "little", "D", new Date("2026-09-07T12:04:00Z"));
+    GatherInterest.upsertInterest(gather, "d", "somewhat", "D", new Date("2026-09-07T12:04:00Z"));
     GatherInterest.upsertInterest(gather, "e", "flexible", "E", new Date("2026-09-07T12:05:00Z"));
 
     expect(GatherInterest.headerCounts(gather)).toBe(
-      "Very: 1 · Somewhat: 2 · Little: 1 · Flexible: 1"
+      "Very: 1 · Somewhat: 3 · Flexible: 1"
     );
   });
 
   test("roster groups strongest-first and keeps one entry per user", () => {
     const gather = sampleGather();
-    GatherInterest.upsertInterest(gather, "a", "little", "Ann", new Date("2026-09-07T12:01:00Z"));
+    GatherInterest.upsertInterest(gather, "a", "somewhat", "Ann", new Date("2026-09-07T12:01:00Z"));
     GatherInterest.upsertInterest(gather, "a", "very", "Ann", new Date("2026-09-07T12:02:00Z"));
     GatherInterest.upsertInterest(gather, "b", "flexible", "Bob", new Date("2026-09-07T12:03:00Z"));
 
     const text = GatherInterest.buildRosterText(gather);
-    expect(text.indexOf("Very interested")).toBeLessThan(text.indexOf("Give my spot away"));
+    expect(text.indexOf("Very interested")).toBeLessThan(text.indexOf("Flexibly interested"));
     expect(text).toContain("Ann · <@a>");
     expect(text).toContain("Bob · <@b>");
     expect(text).not.toContain("Only a little interested");
+    expect(text).not.toContain("Give my spot away");
     expect(Object.keys(gather.interests)).toEqual(["a", "b"]);
     expect(gather.interests.a.level).toBe("very");
   });
@@ -136,25 +137,26 @@ describe("GatherInterest levels and roster", () => {
     expect(description).toContain("Hosty · <@host-1>");
     expect(description).toContain("[Wingspan](https://boardgamegeek.com/boardgame/266192)");
     expect(description).toContain("1–5 players");
-    expect(description).toContain("Give my spot away");
+    expect(description).toContain("**Flexibly interested**");
     expect(description).toContain("Casey · <@flex>");
     expect(description).toContain("Flexible: 1");
+    expect(description).toContain(GatherInterest.FLEXIBLE_MEANING);
+    expect(description).not.toContain("Give my spot away");
   });
 });
 
 describe("GatherInterest panel components", () => {
-  test("open panel has four interest buttons plus host Close", () => {
+  test("open panel has three interest buttons plus host Close", () => {
     const gather = sampleGather();
     const rows = GatherInterest.buildPanelComponents(gather).map((row) => row.toJSON());
     expect(rows[0].components.map((c) => c.label)).toEqual([
       "Very interested",
       "Somewhat interested",
-      "Only a little interested",
-      "Give my spot away",
+      "Flexibly interested",
     ]);
     expect(rows[0].components.every((c) => c.disabled === false)).toBe(true);
     expect(rows[1].components[0].label).toBe("Close interest");
-    expect(rows[0].components[3].custom_id).toBe(
+    expect(rows[0].components[2].custom_id).toBe(
       GatherInterest.interestCustomId(gather.id, "flexible")
     );
   });
@@ -185,8 +187,94 @@ describe("GatherInterest custom ids", () => {
       action: "reopen",
       gatherId: "abc",
     });
+    expect(GatherInterest.parseCustomId("gather:little:abc")).toEqual({
+      action: "interest",
+      level: "somewhat",
+      gatherId: "abc",
+    });
     expect(GatherInterest.parseCustomId("public")).toBeNull();
     expect(GatherInterest.parseCustomId("gather:nope:abc")).toBeNull();
+  });
+});
+
+describe("GatherInterest legacy four-level migration", () => {
+  test("upserting little stores somewhat so old clicks keep people on the roster", () => {
+    const gather = sampleGather();
+    GatherInterest.upsertInterest(gather, "d", "little", "Dee");
+    expect(gather.interests.d.level).toBe("somewhat");
+    expect(GatherInterest.headerCounts(gather)).toBe(
+      "Very: 0 · Somewhat: 1 · Flexible: 0"
+    );
+    expect(GatherInterest.buildRosterText(gather)).toContain("**Somewhat interested**");
+    expect(GatherInterest.buildRosterText(gather)).toContain("Dee · <@d>");
+    expect(GatherInterest.buildRosterText(gather)).not.toContain("Only a little interested");
+  });
+
+  test("normalizeGather maps stored little to somewhat and is idempotent", () => {
+    const gather = sampleGather();
+    gather.interests = {
+      a: { level: "little", displayName: "Ann", updatedAt: "2026-09-07T12:04:00.000Z" },
+      b: { level: "very", displayName: "Bob", updatedAt: "2026-09-07T12:01:00.000Z" },
+      c: { level: "flexible", displayName: "Casey", updatedAt: "2026-09-07T12:05:00.000Z" },
+    };
+    GatherInterest.normalizeGather(gather);
+    expect(gather.interests.a.level).toBe("somewhat");
+    expect(gather.interests.b.level).toBe("very");
+    expect(gather.interests.c.level).toBe("flexible");
+    GatherInterest.normalizeGather(gather);
+    expect(gather.interests.a.level).toBe("somewhat");
+    expect(GatherInterest.headerCounts(gather)).toBe(
+      "Very: 1 · Somewhat: 1 · Flexible: 1"
+    );
+  });
+
+  test("loadGather rewrites little onto somewhat without dropping the person", async () => {
+    const gather = sampleGather();
+    gather.interests = {
+      d: { level: "little", displayName: "Dee", updatedAt: "2026-09-07T12:04:00.000Z" },
+    };
+    const client = memoryClient({
+      [`${gather.guildId}:${GatherInterest.COLLECTION}:${gather.id}`]: gather,
+    });
+    const loaded = await GatherInterest.loadGather(client, gather.guildId, gather.id);
+    expect(loaded.interests.d.level).toBe("somewhat");
+    expect(GatherInterest.buildRosterText(loaded)).toContain("Dee · <@d>");
+    expect(GatherInterest.buildRosterText(loaded)).toContain("**Somewhat interested**");
+  });
+
+  test("clicking an old little button registers as somewhat and rebuilds three buttons", async () => {
+    const gather = sampleGather();
+    gather.interests = {
+      other: { level: "little", displayName: "Other", updatedAt: "2026-09-07T12:04:00.000Z" },
+    };
+    const client = memoryClient({
+      [`${gather.guildId}:${GatherInterest.COLLECTION}:${gather.id}`]: gather,
+    });
+    const edits = [];
+    const replies = [];
+    await GatherInterest.handleButton(
+      buttonInteraction({
+        customId: `gather:little:${gather.id}`,
+        userId: "user-1",
+        displayName: "Alex",
+        edits,
+        replies,
+      }),
+      client
+    );
+    expect(replies[0].content).toBe("Registered: Somewhat interested");
+    const stored = await client.getGameDataV2(
+      gather.guildId,
+      GatherInterest.COLLECTION,
+      gather.id
+    );
+    expect(stored.interests["user-1"].level).toBe("somewhat");
+    expect(stored.interests.other.level).toBe("somewhat");
+    expect(edits[0].components[0].components.map((c) => c.data.label)).toEqual([
+      "Very interested",
+      "Somewhat interested",
+      "Flexibly interested",
+    ]);
   });
 });
 
@@ -226,7 +314,7 @@ describe("GatherInterest persistence shape", () => {
     const restored = JSON.parse(JSON.stringify(gather));
     expect(restored.interests.a.level).toBe("flexible");
     expect(GatherInterest.headerCounts(restored)).toBe(
-      "Very: 0 · Somewhat: 0 · Little: 0 · Flexible: 1"
+      "Very: 0 · Somewhat: 0 · Flexible: 1"
     );
   });
 
@@ -322,8 +410,10 @@ describe("GatherInterest button handler", () => {
     );
     expect(Object.keys(stored.interests)).toEqual(["user-1"]);
     expect(stored.interests["user-1"].level).toBe("flexible");
-    expect(replies[0].content).toBe("Registered: Give my spot away");
-    expect(edits[0].embeds[0].data.description).toContain("Give my spot away");
+    expect(replies[0].content).toBe(
+      `Registered: ${GatherInterest.LEVELS.flexible.confirm}`
+    );
+    expect(edits[0].embeds[0].data.description).toContain("**Flexibly interested**");
     expect(edits[0].embeds[0].data.description).not.toContain("**Very interested**");
   });
 
@@ -523,16 +613,19 @@ describe("GatherInterest two-phase save race", () => {
   });
 });
 
-describe("/gather command", () => {
-  test("slash description fits Discord's 100-character limit", () => {
-    const command = new Gather({ config: {}, logger: { log: () => {} } });
-    expect(command.data.toJSON().description.length).toBeLessThanOrEqual(100);
-    expect(command.data.toJSON().options[0].description.length).toBeLessThanOrEqual(100);
+describe("/lfg command", () => {
+  test("slash description fits Discord's 100-character limit and teaches the feature", () => {
+    const command = new Lfg({ config: {}, logger: { log: () => {} } });
+    const json = command.data.toJSON();
+    expect(json.name).toBe("lfg");
+    expect(json.description).toBe("Look up a game on BGG and open a Who's interested? panel.");
+    expect(json.description.length).toBeLessThanOrEqual(100);
+    expect(json.options[0].description.length).toBeLessThanOrEqual(100);
   });
 
   test("rejects a raw name that is not a BGG id, matching /bgg", async () => {
     const replies = [];
-    const command = new Gather({ config: { BGGToken: "token" }, logger: { log: () => {} } });
+    const command = new Lfg({ config: { BGGToken: "token" }, logger: { log: () => {} } });
     await command.execute({
       guildId: "guild-1",
       isAutocomplete: () => false,
@@ -552,7 +645,7 @@ describe("/gather command", () => {
       return [{ name: "Wingspan (2019)", value: "266192" }];
     };
     try {
-      const command = new Gather({ config: { BGGToken: "bgg-token" }, logger: { log: () => {} } });
+      const command = new Lfg({ config: { BGGToken: "bgg-token" }, logger: { log: () => {} } });
       const responded = [];
       await command.execute({
         isAutocomplete: () => true,

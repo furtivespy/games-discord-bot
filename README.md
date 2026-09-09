@@ -107,7 +107,7 @@ The bot uses Discord's slash command system. Here are some common commands:
 
 ### Information
 - `/bgg` - Look up games on Board Game Geek
-- `/gather` - Propose a game night: BGG lookup plus a persistent “Who’s interested?” panel (very / somewhat / a little / give my spot away)
+- `/lfg` - Gather Interest: look up a game on BGG and post a persistent “Who’s interested?” panel (very / somewhat / flexibly interested)
 
 ## Contributing
 

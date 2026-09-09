@@ -29,27 +29,26 @@ const LEVELS = {
     emoji: "👍",
     style: ButtonStyle.Primary,
   },
-  little: {
-    key: "little",
-    label: "Only a little interested",
-    confirm: "Only a little interested",
-    header: "Little",
-    button: "Only a little interested",
-    emoji: "🤏",
-    style: ButtonStyle.Secondary,
-  },
   flexible: {
     key: "flexible",
-    label: "Give my spot away",
-    confirm: "Give my spot away",
+    label: "Flexibly interested",
+    confirm:
+      "Flexibly interested — you're in, but you'll give your seat to a new player, someone not in a game, or someone who'd rather play",
     header: "Flexible",
-    button: "Give my spot away",
+    button: "Flexibly interested",
     emoji: "🪑",
     style: ButtonStyle.Secondary,
   },
 };
 
-const LEVEL_ORDER = ["very", "somewhat", "little", "flexible"];
+const LEVEL_ORDER = ["very", "somewhat", "flexible"];
+// v1 stored "little" (Only a little interested). Keep those people on the
+// roster by folding them into somewhat; old gather:little: buttons still parse.
+const LEGACY_LEVEL_MAP = {
+  little: "somewhat",
+};
+const FLEXIBLE_MEANING =
+  "Flexibly interested: you're in, but you'll give your seat to a new player, someone not in a game, or someone who'd rather play.";
 const MAX_DESCRIPTION = 4096;
 
 const locks = new Map();
@@ -58,6 +57,25 @@ class GatherInterest {
   static COLLECTION = COLLECTION;
   static LEVELS = LEVELS;
   static LEVEL_ORDER = LEVEL_ORDER;
+  static LEGACY_LEVEL_MAP = LEGACY_LEVEL_MAP;
+  static FLEXIBLE_MEANING = FLEXIBLE_MEANING;
+
+  static canonicalizeLevel(level) {
+    if (level == null) return null;
+    const mapped = LEGACY_LEVEL_MAP[level] || level;
+    return LEVELS[mapped] ? mapped : null;
+  }
+
+  static normalizeGather(gather) {
+    if (!gather?.interests) return gather;
+    for (const entry of Object.values(gather.interests)) {
+      const next = this.canonicalizeLevel(entry.level);
+      if (next) {
+        entry.level = next;
+      }
+    }
+    return gather;
+  }
 
   static isGatherButton(customId) {
     return typeof customId === "string" && customId.startsWith(`${CUSTOM_ID_PREFIX}:`);
@@ -72,8 +90,9 @@ class GatherInterest {
     if (action === "close" || action === "reopen") {
       return { action, gatherId };
     }
-    if (LEVELS[action]) {
-      return { action: "interest", level: action, gatherId };
+    const level = this.canonicalizeLevel(action);
+    if (level) {
+      return { action: "interest", level, gatherId };
     }
     return null;
   }
@@ -135,12 +154,13 @@ class GatherInterest {
   }
 
   static upsertInterest(gather, userId, level, displayName, now = new Date()) {
-    if (!LEVELS[level]) {
+    const canonical = this.canonicalizeLevel(level);
+    if (!canonical) {
       throw new Error(`Unknown interest level: ${level}`);
     }
     const updatedAt = now instanceof Date ? now.toISOString() : String(now);
     gather.interests[String(userId)] = {
-      level,
+      level: canonical,
       displayName: displayName || `User ${userId}`,
       updatedAt,
     };
@@ -165,11 +185,11 @@ class GatherInterest {
   }
 
   static countByLevel(gather) {
-    const counts = { very: 0, somewhat: 0, little: 0, flexible: 0 };
+    const counts = {};
+    for (const key of LEVEL_ORDER) counts[key] = 0;
     for (const entry of Object.values(gather?.interests || {})) {
-      if (counts[entry.level] !== undefined) {
-        counts[entry.level] += 1;
-      }
+      const level = this.canonicalizeLevel(entry.level);
+      if (level) counts[level] += 1;
     }
     return counts;
   }
@@ -187,15 +207,12 @@ class GatherInterest {
   }
 
   static rosterGroups(gather) {
-    const groups = {
-      very: [],
-      somewhat: [],
-      little: [],
-      flexible: [],
-    };
+    const groups = {};
+    for (const key of LEVEL_ORDER) groups[key] = [];
     for (const [userId, entry] of Object.entries(gather?.interests || {})) {
-      if (!groups[entry.level]) continue;
-      groups[entry.level].push({
+      const level = this.canonicalizeLevel(entry.level);
+      if (!groups[level]) continue;
+      groups[level].push({
         userId,
         displayName: entry.displayName,
         updatedAt: entry.updatedAt,
@@ -247,7 +264,7 @@ class GatherInterest {
     const header = this.headerCounts(gather);
     const roster = this.buildRosterText(gather);
 
-    let description = `${title}${summary ? `\n${summary}` : ""}\n${hostLine}\n\n**${header}**\n${statusLine}\n\n${roster}`;
+    let description = `${title}${summary ? `\n${summary}` : ""}\n${hostLine}\n\n**${header}**\n${statusLine}\n${FLEXIBLE_MEANING}\n\n${roster}`;
     if (description.length > MAX_DESCRIPTION) {
       description = `${description.substring(0, MAX_DESCRIPTION - 3)}...`;
     }
@@ -324,10 +341,11 @@ class GatherInterest {
     if (!data || data.kind !== "gather" || !data.id) {
       return null;
     }
-    return data;
+    return this.normalizeGather(data);
   }
 
   static async saveGather(client, gather) {
+    this.normalizeGather(gather);
     await client.setGameDataV2(gather.guildId, COLLECTION, gather.id, gather);
   }
 
