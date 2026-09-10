@@ -1,5 +1,7 @@
 const { describe, expect, test } = require("bun:test");
 const Cards = require("../slashcommands/genericgame/cards");
+const DeckCatalog = require("../db/deckCatalog.js");
+const { seedDeckCatalog } = require("../db/seedDeckCatalog.js");
 const {
   collectedReplyText,
   createActiveGame,
@@ -114,21 +116,145 @@ describe("/cards command handlers", () => {
     );
   });
 
-  test("deck new autocomplete filters CurrentCardList", async () => {
+  test("deck new autocomplete lists enabled catalog templates plus custom-csv", async () => {
     await withHarness(
       {
         isAutocomplete: true,
         options: {
           subcommandGroup: "deck",
           subcommand: "new",
-          strings: { cardset: "standard" },
+          strings: { cardset: "alpha" },
         },
       },
       async (harness) => {
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        catalog.insertTemplate({
+          id: "alpha-set",
+          name: "Alpha Set",
+          cards: [{ name: "Ace", description: "", type: "", suit: "", value: "", url: null, format: "A" }],
+        });
+        catalog.insertTemplate({
+          id: "zeta-disabled",
+          name: "Zeta Disabled",
+          cards: [{ name: "Hidden", description: "", type: "", suit: "", value: "", url: null, format: "A" }],
+          enabled: 0,
+        });
+        catalog.close();
+
         await runCards(harness);
-        const names = harness.calls.respond[0].map((choice) => choice.name.toLowerCase());
-        expect(names.some((name) => name.includes("standard"))).toBe(true);
-        expect(harness.calls.respond[0][0]).toHaveProperty("value");
+        const choices = harness.calls.respond[0];
+        expect(choices).toEqual([{ name: "Alpha Set", value: "alpha-set" }]);
+        expect(choices.some((choice) => choice.value === "zeta-disabled")).toBe(
+          false
+        );
+      }
+    );
+  });
+
+  test("deck new materializes an enabled catalog template with new ids", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "new",
+          strings: { name: "Table", cardset: "alpha-set" },
+        },
+      },
+      async (harness) => {
+        const stored = [
+          {
+            id: "stored-ace",
+            origin: "alpha-set",
+            name: "Ace",
+            description: "",
+            type: "",
+            suit: "",
+            value: "",
+            url: null,
+            format: "A",
+          },
+          {
+            name: "King",
+            description: "",
+            type: "",
+            suit: "",
+            value: "",
+            url: null,
+            format: "B",
+          },
+        ];
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        catalog.insertTemplate({
+          id: "alpha-set",
+          name: "Alpha Set",
+          cards: stored,
+        });
+        catalog.close();
+
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        expect(saved.decks).toHaveLength(1);
+        expect(saved.decks[0].allCards.map((card) => card.name)).toEqual([
+          "Ace",
+          "King",
+        ]);
+        expect(saved.decks[0].allCards[0].id).not.toBe("stored-ace");
+        expect(saved.decks[0].allCards.every((card) => card.origin === "Table")).toBe(
+          true
+        );
+        expect(harness.lastContent()).toContain("Added and shuffled the new deck: Table");
+      }
+    );
+  });
+
+  test("deck new materializes standard from a seeded catalog as 52 cards", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "new",
+          strings: { name: "Poker", cardset: "standard" },
+        },
+      },
+      async (harness) => {
+        seedDeckCatalog();
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        expect(saved.decks[0].allCards).toHaveLength(52);
+        expect(
+          saved.decks[0].allCards.every((card) => card.origin === "Poker")
+        ).toBe(true);
+        const ids = saved.decks[0].allCards.map((card) => card.id);
+        expect(new Set(ids).size).toBe(52);
+      }
+    );
+  });
+
+  test("deck new rejects a disabled or unknown catalog set", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "new",
+          strings: { name: "Nope", cardset: "zeta-disabled" },
+        },
+      },
+      async (harness) => {
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        catalog.insertTemplate({
+          id: "zeta-disabled",
+          name: "Zeta Disabled",
+          cards: [{ name: "Hidden", description: "", type: "", suit: "", value: "", url: null, format: "A" }],
+          enabled: 0,
+        });
+        catalog.close();
+
+        await runCards(harness);
+        expect(harness.lastContent()).toBe("unknown or disabled card set");
+        expect((await harness.getSavedGame()).decks).toHaveLength(0);
       }
     );
   });

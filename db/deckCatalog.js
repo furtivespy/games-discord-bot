@@ -56,6 +56,14 @@ class DeckCatalog {
     return rows.map(parseTemplateRow);
   }
 
+  listEnabledTemplateNames() {
+    return this.db
+      .query(
+        `SELECT id, name FROM deck_templates WHERE enabled = 1 ORDER BY name`
+      )
+      .all();
+  }
+
   getTemplate(id) {
     const row = this.db
       .query(

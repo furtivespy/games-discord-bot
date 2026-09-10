@@ -55,7 +55,7 @@ class CatalogDisable {
         interaction,
         [
           `Disabled \`${template.id}\` (${template.name}). Live games are unchanged.`,
-          "Until catalog cutover (FUR-38), this does not affect `/cards` autocomplete (still JS).",
+          "This set will no longer appear in `/cards deck new`.",
         ].join("\n")
       );
     } finally {

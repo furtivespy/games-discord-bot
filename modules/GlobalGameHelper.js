@@ -1,5 +1,6 @@
 const GameDB = require('../db/anygame.js')
 const GameFormatter = require('./GameFormatter')
+const { listCardSets } = require('../db/catalogDecks.js')
 const { cloneDeep, chain, find } = require("lodash");
 const { nanoid } = require('nanoid');
 
@@ -21,8 +22,8 @@ class GameHelper {
     }
   }
 
-  static getCardLists(searchTerm) {
-    return chain(GameDB.CurrentCardList)
+  static getCardLists(searchTerm, options) {
+    return chain(listCardSets(options))
       .filter(cl => cl[0].toLowerCase().includes(searchTerm.toLowerCase()))
       .sortBy(cl => cl[0])
       .map(cl => ({ name: cl[0], value: cl[1] }))
