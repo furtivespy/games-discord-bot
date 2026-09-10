@@ -4,14 +4,15 @@ const DeckCatalog = require("./deckCatalog.js");
 const INSTANCE_ONLY_IDS = new Set(["custom-csv", "customempty"]);
 
 function catalogCardFromGenerated(card) {
+  const src = card != null && typeof card === "object" ? card : {};
   return {
-    name: card.name ?? "",
-    description: card.description ?? "",
-    type: card.type ?? "",
-    suit: card.suit ?? "",
-    value: card.value ?? "",
-    url: card.url ?? null,
-    format: card.format ?? "A",
+    name: src.name ?? "",
+    description: src.description ?? "",
+    type: src.type ?? "",
+    suit: src.suit ?? "",
+    value: src.value ?? "",
+    url: src.url ?? null,
+    format: src.format ?? "A",
   };
 }
 
