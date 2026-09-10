@@ -16,6 +16,7 @@ const GameStore = require("./db/gameStore.js");
 const GoogleSearch = require("./modules/GoogleSearch.js");
 const _ = require("lodash");
 const modalSubmission = require('./events/modalSubmission.js');
+const GatherInterest = require("./modules/GatherInterest.js");
 const ReminderSystem = require("./modules/ReminderSystem.js");
 const GameStatusHelper = require("./modules/GameStatusHelper");
 
@@ -234,9 +235,9 @@ class DiscordBot extends Client {
     //this.db.testConnection();
     this.gamedata.set(gameName, updatedData);
   }
-  async setGameDataV2(serverId, gameName, channelId, updatedData) {
+  async setGameDataV2(serverId, gameName, channelId, updatedData, options = {}) {
     const tracer = trace.getTracer("discord-bot");
-    return tracer.startActiveSpan("game.save", (span) => {
+    tracer.startActiveSpan("game.save", (span) => {
       span.setAttributes({
         "game.collection": gameName,
         "game.player_count": updatedData?.players?.length ?? 0,
@@ -252,6 +253,22 @@ class DiscordBot extends Client {
         span.end();
       }
     });
+
+    if (gameName === "game") {
+      try {
+        await GameStatusHelper.refreshPinnedStatusAfterGameSave(
+          this,
+          { guildId: serverId, channelId },
+          updatedData,
+          options
+        );
+      } catch (err) {
+        this.logger.log(
+          `Pinned status refresh after save failed [guild=${serverId} channel=${channelId}]: ${err}`,
+          "error"
+        );
+      }
+    }
   }
   async getGameDataV2(serverId, gameName, channelId) {
     const tracer = trace.getTracer("discord-bot");
@@ -800,6 +817,21 @@ client.on("interactionCreate", async (interaction) => {
         );
       }
     });
+  } else if (interaction.isButton()) {
+    try {
+      await GatherInterest.handleButton(interaction, interaction.client);
+    } catch (error) {
+      console.error(error);
+      if (interaction.deferred || interaction.replied) {
+        return interaction.editReply({
+          content: "There was an error while processing this button!",
+        });
+      }
+      return interaction.reply({
+        content: "There was an error while processing this button!",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
   } else if (interaction.isModalSubmit()) {
     try {
       await modalSubmission.execute(interaction);

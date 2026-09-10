@@ -5,6 +5,7 @@ const { PermissionsBitField } = require("discord.js");
 const GameDB = require("../../db/anygame.js");
 const GameStore = require("../../db/gameStore.js");
 const Formatter = require("../../modules/GameFormatter");
+const GameStatusHelper = require("../../modules/GameStatusHelper");
 const BoardGameGeek = require("../../modules/BoardGameGeek");
 
 const DEFAULT_GUILD_ID = "guild-1";
@@ -97,9 +98,29 @@ function createActiveGame(overrides = {}) {
   });
 }
 
+function embedPlainText(embed) {
+  if (!embed) return "";
+  const data =
+    typeof embed.toJSON === "function" ? embed.toJSON() : embed.data || embed;
+  const parts = [];
+  if (data.title) parts.push(data.title);
+  if (data.description) parts.push(data.description);
+  for (const field of data.fields || []) {
+    if (field.name) parts.push(field.name);
+    if (field.value) parts.push(field.value);
+  }
+  if (data.footer?.text) parts.push(data.footer.text);
+  return parts.filter(Boolean).join("\n");
+}
+
 function replyContent(payload) {
   if (payload == null) return undefined;
   if (typeof payload === "string") return payload;
+  if (payload.content) return payload.content;
+  if (Array.isArray(payload.embeds) && payload.embeds.length) {
+    const text = payload.embeds.map(embedPlainText).filter(Boolean).join("\n");
+    return text || undefined;
+  }
   return payload.content;
 }
 
@@ -403,17 +424,29 @@ function createHarness({
       }
       return memory.get(memoryKey(serverId, collection, channelKey)) ?? null;
     },
-    async setGameDataV2(serverId, collection, channelKey, data) {
+    async setGameDataV2(serverId, collection, channelKey, data, options = {}) {
       persistCalls.push([serverId, collection, channelKey, data]);
       if (store) {
         store.upsertGameData(serverId, collection, channelKey, data);
-        return;
-      }
-      if (isDefaultGame(serverId, collection, channelKey)) {
+      } else if (isDefaultGame(serverId, collection, channelKey)) {
         replaceStoredGame(data);
-        return;
+      } else {
+        memory.set(memoryKey(serverId, collection, channelKey), structuredClone(data));
       }
-      memory.set(memoryKey(serverId, collection, channelKey), structuredClone(data));
+
+      if (collection === "game") {
+        await GameStatusHelper.refreshPinnedStatusAfterGameSave(
+          client,
+          {
+            guildId: serverId,
+            channelId: channelKey,
+            channel,
+            interaction: { guildId: serverId, channelId: channelKey },
+          },
+          data,
+          options
+        );
+      }
     },
   };
 
