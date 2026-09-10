@@ -1,17 +1,52 @@
 const { describe, expect, test } = require("bun:test");
-const { EmbedBuilder } = require("discord.js");
+const { EmbedBuilder, MessageFlags } = require("discord.js");
 const Formatter = require("../modules/GameFormatter");
 const {
   batchEmbeds,
   buildCardListEmbeds,
   catalogEmbed,
+  embedCharCount,
   EMBED_DESCRIPTION_LIMIT,
+  EMBED_FOOTER_LIMIT,
+  EMBED_TITLE_LIMIT,
   EMBED_TOTAL_CHAR_LIMIT,
   formatHandCardLine,
   formatLayoutLabel,
   formatTemplateListLine,
+  replyEphemeralEmbeds,
   splitLinesToDescriptions,
 } = require("../subcommands/catalog/shared.js");
+
+function mockReplyInteraction(overrides = {}) {
+  const calls = { reply: [], editReply: [], followUp: [], deferReply: [] };
+  const interaction = {
+    deferred: false,
+    replied: false,
+    deferReply: async (payload) => {
+      calls.deferReply.push(payload ?? {});
+      interaction.deferred = true;
+    },
+    reply: async (payload) => {
+      calls.reply.push(payload);
+      interaction.replied = true;
+      return payload;
+    },
+    editReply: async (payload) => {
+      calls.editReply.push(payload);
+      interaction.replied = true;
+      return payload;
+    },
+    followUp: async (payload) => {
+      calls.followUp.push(payload);
+      return payload;
+    },
+    ...overrides,
+  };
+  if (overrides.followUp) {
+    interaction.followUp = overrides.followUp;
+  }
+  return { interaction, calls };
+}
 
 describe("catalog format helpers", () => {
   test("list line puts name first, then id, count, layout, and creator", () => {
@@ -109,15 +144,121 @@ describe("catalog format helpers", () => {
     expect(batches.length).toBeGreaterThan(1);
     for (const batch of batches) {
       expect(batch.length).toBeLessThanOrEqual(10);
-      const chars = batch.reduce(
-        (sum, embed) =>
-          sum +
-          (embed.data.title || "").length +
-          (embed.data.description || "").length,
+      const chars = batch.reduce((sum, embed) => sum + embedCharCount(embed), 0);
+      expect(chars).toBeLessThanOrEqual(EMBED_TOTAL_CHAR_LIMIT);
+    }
+  });
+
+  test("batchEmbeds counts footer text toward the 6000 combined budget", () => {
+    const first = catalogEmbed({
+      title: "Enabled (1)",
+      description: "d".repeat(4096),
+      footer: "f".repeat(2000),
+    });
+    const second = catalogEmbed({
+      title: "Disabled (0)",
+      description: "None",
+    });
+    expect(embedCharCount(first)).toBeLessThanOrEqual(EMBED_TOTAL_CHAR_LIMIT);
+    expect(embedCharCount(first) + embedCharCount(second)).toBeGreaterThan(
+      EMBED_TOTAL_CHAR_LIMIT
+    );
+    const batches = batchEmbeds([first, second]);
+    expect(batches.length).toBe(2);
+    expect(batches[0]).toEqual([first]);
+    expect(batches[1]).toEqual([second]);
+    for (const batch of batches) {
+      const chars = batch.reduce((sum, embed) => sum + embedCharCount(embed), 0);
+      expect(chars).toBeLessThanOrEqual(EMBED_TOTAL_CHAR_LIMIT);
+    }
+  });
+
+  test("a lone embed with max title, description, and footer fits 6000 chars", () => {
+    const embed = catalogEmbed({
+      title: "T".repeat(EMBED_TITLE_LIMIT),
+      description: "D".repeat(EMBED_DESCRIPTION_LIMIT),
+      footer: "F".repeat(EMBED_FOOTER_LIMIT),
+    });
+    expect(embedCharCount(embed)).toBeLessThanOrEqual(EMBED_TOTAL_CHAR_LIMIT);
+    expect((embed.data.description || "").length).toBeLessThan(
+      EMBED_DESCRIPTION_LIMIT
+    );
+
+    const oversized = new EmbedBuilder()
+      .setTitle("T".repeat(EMBED_TITLE_LIMIT))
+      .setDescription("D".repeat(EMBED_DESCRIPTION_LIMIT))
+      .setFooter({ text: "F".repeat(EMBED_FOOTER_LIMIT) });
+    expect(embedCharCount(oversized)).toBeGreaterThan(EMBED_TOTAL_CHAR_LIMIT);
+    const batches = batchEmbeds([oversized]);
+    expect(batches).toHaveLength(1);
+    expect(batches[0]).toHaveLength(1);
+    expect(embedCharCount(batches[0][0])).toBeLessThanOrEqual(
+      EMBED_TOTAL_CHAR_LIMIT
+    );
+  });
+
+  test("does not mid-clamp markdown image URLs in card lines", () => {
+    const url = `https://example.test/${"x".repeat(5000)}.png`;
+    const line = formatHandCardLine({ name: "Stafford", url });
+    expect(line.length).toBeGreaterThan(EMBED_DESCRIPTION_LIMIT);
+    expect(line).toContain(`[image](${url})`);
+
+    const [desc] = splitLinesToDescriptions([line]);
+    expect(desc.length).toBeLessThanOrEqual(EMBED_DESCRIPTION_LIMIT);
+    expect(desc).toContain("Stafford");
+    expect(desc).not.toMatch(/\[image\]\(/);
+    expect(desc).not.toContain("https://example.test/");
+    expect(desc.endsWith("…") && desc.includes("[image]")).toBe(false);
+  });
+
+  test("replyEphemeralEmbeds sends overflow batches as follow-ups", async () => {
+    const { interaction, calls } = mockReplyInteraction();
+    const embeds = Array.from({ length: 12 }, (_, i) =>
+      catalogEmbed({
+        title: `Part ${i}`,
+        description: "n".repeat(800),
+      })
+    );
+    await replyEphemeralEmbeds(interaction, embeds);
+    expect(calls.reply).toHaveLength(1);
+    expect(calls.followUp.length).toBeGreaterThanOrEqual(1);
+    expect(calls.editReply).toHaveLength(0);
+    const sent = [...calls.reply, ...calls.followUp];
+    expect(sent.reduce((n, payload) => n + payload.embeds.length, 0)).toBe(12);
+    for (const payload of sent) {
+      expect(payload.flags).toBe(MessageFlags.Ephemeral);
+      expect(payload.embeds.length).toBeLessThanOrEqual(10);
+      const chars = payload.embeds.reduce(
+        (sum, embed) => sum + embedCharCount(embed),
         0
       );
       expect(chars).toBeLessThanOrEqual(EMBED_TOTAL_CHAR_LIMIT);
     }
+  });
+
+  test("follow-up failure leaves the first embed batch in place", async () => {
+    const { interaction, calls } = mockReplyInteraction({
+      followUp: async () => {
+        throw new Error("discord follow-up failed");
+      },
+    });
+    const embeds = Array.from({ length: 12 }, (_, i) =>
+      catalogEmbed({
+        title: `Part ${i}`,
+        description: "n".repeat(800),
+      })
+    );
+    let caught;
+    try {
+      await replyEphemeralEmbeds(interaction, embeds);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeTruthy();
+    expect(caught.catalogPrimarySent).toBe(true);
+    expect(calls.reply).toHaveLength(1);
+    expect(calls.reply[0].embeds[0].data.title).toBe("Part 0");
+    expect(calls.editReply).toHaveLength(0);
   });
 
   test("splitLinesToDescriptions does not exceed the description cap", () => {

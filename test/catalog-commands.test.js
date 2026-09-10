@@ -15,12 +15,44 @@ const {
   createUser,
   withHarness,
 } = require("./helpers/harness");
+const { MessageFlags } = require("discord.js");
 
 const OWNER = createUser({ id: "owner-1", username: "Owner" });
+const SNOWFLAKE_CREATOR = "123456789012345678";
 
 async function runCatalog(harness) {
   const command = new Catalog(harness.client);
   await command.execute(harness.interaction);
+}
+
+function primaryPayload(harness) {
+  return harness.calls.editReply[0] || harness.calls.reply[0];
+}
+
+function insertPackedTemplates(dataDir, count, { enabled = 1 } = {}) {
+  const catalog = new DeckCatalog({ dataDir });
+  try {
+    for (let i = 0; i < count; i++) {
+      catalog.insertTemplate({
+        id: `pack-${i}`,
+        name: `Packed Deck ${String(i).padStart(3, "0")} ${"W".repeat(70)}`,
+        cards: [
+          {
+            name: "A",
+            description: "",
+            type: "",
+            suit: "",
+            value: "",
+            url: null,
+            format: "A",
+          },
+        ],
+        enabled,
+      });
+    }
+  } finally {
+    catalog.close();
+  }
 }
 
 function gameWithDeck(cards) {
@@ -69,9 +101,12 @@ describe("/catalog command handlers", () => {
         expect(text).toMatch(/Enabled \(6\d\)/);
         expect(text).toContain("Disabled (0)");
         expect(text).not.toMatch(/— enabled —/);
-        expect(harness.calls.reply[0].embeds.length).toBeGreaterThanOrEqual(2);
-        expect(harness.calls.reply[0].embeds[0].data.title).toMatch(/^Enabled \(/);
-        expect(harness.calls.reply[0].embeds.at(-1).data.title).toMatch(/^Disabled \(/);
+        expect(harness.calls.deferReply).toHaveLength(1);
+        expect(harness.calls.deferReply[0].flags).toBe(MessageFlags.Ephemeral);
+        const primary = primaryPayload(harness);
+        expect(primary.embeds.length).toBeGreaterThanOrEqual(2);
+        expect(primary.embeds[0].data.title).toMatch(/^Enabled \(/);
+        expect(primary.embeds.at(-1).data.title).toMatch(/^Disabled \(/);
       }
     );
   });
@@ -91,13 +126,14 @@ describe("/catalog command handlers", () => {
         expect(text).toContain(
           "Standard 52 Card Poker Deck (standard): 52 cards, Layout A"
         );
-        const disabledEmbed = harness.calls.reply[0].embeds.find((embed) =>
+        const primary = primaryPayload(harness);
+        const disabledEmbed = primary.embeds.find((embed) =>
           String(embed.data.title).startsWith("Disabled")
         );
         expect(disabledEmbed.data.description).toContain(
           "Standard 52 Card Poker Deck (standard)"
         );
-        const enabledEmbed = harness.calls.reply[0].embeds.find((embed) =>
+        const enabledEmbed = primary.embeds.find((embed) =>
           String(embed.data.title).startsWith("Enabled")
         );
         expect(enabledEmbed.data.description).not.toContain("(standard):");
@@ -122,7 +158,8 @@ describe("/catalog command handlers", () => {
         expect(text).toContain("Layout A");
         expect(text).toContain("• A of ♣");
         expect(text).toContain("• K of ♠");
-        expect(harness.calls.reply[0].embeds.length).toBeGreaterThanOrEqual(1);
+        expect(harness.calls.deferReply).toHaveLength(1);
+        expect(primaryPayload(harness).embeds.length).toBeGreaterThanOrEqual(1);
       }
     );
   });
@@ -399,6 +436,130 @@ describe("/catalog command handlers", () => {
         expect(GameDB.CurrentCardList.some(([, id]) => id === "standard")).toBe(
           true
         );
+      }
+    );
+  });
+
+  test("list shows None when enabled is empty and disabled is not", async () => {
+    await withHarness(
+      { user: OWNER, options: { subcommand: "list" } },
+      async (harness) => {
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        catalog.insertTemplate({
+          id: "only-off",
+          name: "Only Disabled",
+          cards: [
+            {
+              name: "X",
+              description: "",
+              type: "",
+              suit: "",
+              value: "",
+              url: null,
+              format: "A",
+            },
+          ],
+          enabled: 0,
+        });
+        catalog.close();
+
+        await runCatalog(harness);
+        const text = collectedReplyText(harness);
+        expect(text).toContain("Enabled (0)");
+        expect(text).toMatch(/Enabled \(0\)\nNone/);
+        expect(text).toContain("Disabled (1)");
+        expect(text).toContain("Only Disabled (only-off): 1 cards, Layout A");
+        const primary = primaryPayload(harness);
+        const enabledEmbed = primary.embeds.find((embed) =>
+          String(embed.data.title).startsWith("Enabled")
+        );
+        expect(enabledEmbed.data.description).toBe("None");
+      }
+    );
+  });
+
+  test("list defers before fetching creator names", async () => {
+    await withHarness(
+      { user: OWNER, options: { subcommand: "list" } },
+      async (harness) => {
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        catalog.insertTemplate({
+          id: "custom-one",
+          name: "Custom One",
+          cards: [
+            {
+              name: "X",
+              description: "",
+              type: "",
+              suit: "",
+              value: "",
+              url: null,
+              format: "A",
+            },
+          ],
+          createdBy: SNOWFLAKE_CREATOR,
+        });
+        catalog.close();
+
+        const order = [];
+        const origDefer = harness.interaction.deferReply.bind(
+          harness.interaction
+        );
+        harness.interaction.deferReply = async (payload) => {
+          order.push("defer");
+          return origDefer(payload);
+        };
+        harness.client.users.fetch = async (id) => {
+          order.push("fetch");
+          return { id, username: "Will", displayName: "Will" };
+        };
+
+        await runCatalog(harness);
+        expect(order[0]).toBe("defer");
+        expect(order).toContain("fetch");
+        expect(order.indexOf("defer")).toBeLessThan(order.indexOf("fetch"));
+        expect(collectedReplyText(harness)).toContain("by Will");
+      }
+    );
+  });
+
+  test("list sends overflow pages as follow-ups", async () => {
+    await withHarness(
+      { user: OWNER, options: { subcommand: "list" } },
+      async (harness) => {
+        insertPackedTemplates(harness.dataDir, 60);
+        await runCatalog(harness);
+        expect(harness.calls.followUp.length).toBeGreaterThanOrEqual(1);
+        const text = collectedReplyText(harness);
+        expect(text).toContain("Enabled (60)");
+        expect(text).toContain("Packed Deck 000");
+        expect(text).toContain("Disabled (0)");
+      }
+    );
+  });
+
+  test("follow-up failure does not editReply the first catalog page away", async () => {
+    await withHarness(
+      { user: OWNER, options: { subcommand: "list" } },
+      async (harness) => {
+        insertPackedTemplates(harness.dataDir, 60);
+        harness.interaction.followUp = async () => {
+          throw new Error("discord follow-up failed");
+        };
+
+        await runCatalog(harness);
+        const primary = primaryPayload(harness);
+        expect(primary.embeds[0].data.title).toMatch(/^Enabled \(/);
+        expect(collectedReplyText(harness)).toContain("Packed Deck 000");
+        expect(collectedReplyText(harness)).not.toContain(
+          "Something went wrong"
+        );
+        const errorEdits = harness.calls.editReply.filter((payload) =>
+          String(payload?.embeds?.[0]?.data?.description || "").includes(
+            "Something went wrong"
+          )
+        );
+        expect(errorEdits).toHaveLength(0);
       }
     );
   });
