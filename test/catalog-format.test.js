@@ -45,6 +45,18 @@ describe("catalog format helpers", () => {
     expect(formatLayoutLabel([{ format: "c" }])).toBe("Layout C");
   });
 
+  test("list line surfaces unreadable cards instead of a count", () => {
+    expect(
+      formatTemplateListLine({
+        id: "broken",
+        name: "Broken",
+        cards: [],
+        cardsError: "invalid_json",
+        created_by: "seed",
+      })
+    ).toBe("Broken (broken): unreadable cards");
+  });
+
   test("card lines match the in-hand formatter (long name, bullet, image link)", () => {
     const card = {
       name: "Stafford",

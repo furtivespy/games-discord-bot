@@ -1,13 +1,14 @@
 const {
   autocompleteTemplates,
-  migrateHintReply,
+  catalogUnavailableReply,
+  isTemplateEnabled,
   openReadyCatalog,
   replyEphemeral,
 } = require("./shared.js");
 
 class CatalogDisable {
   async execute(interaction) {
-    const { ready, catalog } = openReadyCatalog();
+    const { ready, catalog, info } = openReadyCatalog();
     if (interaction.isAutocomplete()) {
       try {
         if (!ready) {
@@ -19,7 +20,7 @@ class CatalogDisable {
           autocompleteTemplates(
             catalog.listTemplates(),
             focused,
-            (template) => Number(template.enabled) === 1
+            isTemplateEnabled
           )
         );
       } finally {
@@ -29,7 +30,7 @@ class CatalogDisable {
     }
 
     if (!ready) {
-      return interaction.reply(migrateHintReply());
+      return interaction.reply(catalogUnavailableReply(info));
     }
 
     try {
@@ -42,7 +43,7 @@ class CatalogDisable {
         );
         return;
       }
-      if (Number(template.enabled) === 0) {
+      if (!isTemplateEnabled(template)) {
         await replyEphemeral(
           interaction,
           `\`${template.id}\` (${template.name}) is already disabled.`

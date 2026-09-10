@@ -5,7 +5,7 @@ const {
   formatHandCardLine,
   formatLayoutLabel,
   formatCreatorName,
-  migrateHintReply,
+  catalogUnavailableReply,
   openReadyCatalog,
   replyEphemeral,
   replyEphemeralEmbeds,
@@ -14,7 +14,7 @@ const {
 
 class CatalogShow {
   async execute(interaction, client) {
-    const { ready, catalog } = openReadyCatalog();
+    const { ready, catalog, info } = openReadyCatalog();
     if (interaction.isAutocomplete()) {
       try {
         if (!ready) {
@@ -32,7 +32,7 @@ class CatalogShow {
     }
 
     if (!ready) {
-      return interaction.reply(migrateHintReply());
+      return interaction.reply(catalogUnavailableReply(info));
     }
 
     try {
@@ -46,7 +46,16 @@ class CatalogShow {
         return;
       }
 
-      const count = Array.isArray(template.cards) ? template.cards.length : 0;
+      if (template.cardsError) {
+        await replyEphemeral(
+          interaction,
+          `Catalog template \`${template.id}\` (${template.name}) has unreadable cards data and cannot be displayed.`
+        );
+        return;
+      }
+
+      const cards = Array.isArray(template.cards) ? template.cards : [];
+      const count = cards.length;
       const creatorNames = await resolveCreatorNames(
         client || interaction.client,
         [template.created_by]
@@ -56,7 +65,7 @@ class CatalogShow {
         `\`${template.id}\``,
         enabledHeading(template.enabled),
         `${count} cards`,
-        formatLayoutLabel(template.cards),
+        formatLayoutLabel(cards),
         creator ? `by ${creator}` : null,
       ]
         .filter(Boolean)
@@ -67,7 +76,7 @@ class CatalogShow {
         buildCardListEmbeds({
           title: template.name,
           header,
-          cardLines: (template.cards || []).map(formatHandCardLine),
+          cardLines: cards.map(formatHandCardLine),
         })
       );
     } finally {
