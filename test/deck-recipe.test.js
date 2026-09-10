@@ -203,13 +203,21 @@ test("format A/B/C match the slash choice templates; suit is sort-only; value is
   }
 
   expect(Formatter.CARD_FORMAT_CHOICES.map((choice) => choice.name)).toEqual([
-    "A - {name} of {type}",
-    "B - {type}: {name}",
-    "C - {value}: {name}",
+    "A - {name} of {type} (sort: suit hidden, value hidden)",
+    "B - {type}: {name} (sort: suit hidden, value hidden)",
+    "C - {value}: {name} (sort: suit hidden, value shown)",
   ]);
   expect(Formatter.HAND_SORT_KEYS).toEqual(["suit", "value", "name"]);
   expect(Formatter.CARD_FORMAT_OPTION_DESCRIPTION).toContain("suit");
   expect(Formatter.CARD_FORMAT_OPTION_DESCRIPTION).toContain("value");
+  expect(Formatter.CARD_FORMAT_OPTION_DESCRIPTION.toLowerCase()).toContain("shown in c");
+  expect(Formatter.CARD_FORMAT_OPTION_DESCRIPTION.length).toBeLessThanOrEqual(
+    Formatter.DISCORD_OPTION_DESCRIPTION_MAX
+  );
+  for (const choice of Formatter.CARD_FORMAT_CHOICES) {
+    expect(choice.name.length).toBeLessThanOrEqual(Formatter.DISCORD_CHOICE_NAME_MAX);
+    expect(choice.name).toContain("sort:");
+  }
 });
 
 test("cardSort orders by suit, then value, then name", () => {

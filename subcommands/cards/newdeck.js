@@ -6,8 +6,12 @@ const GameDB = require("../../db/anygame.js")
 class NewDeck {
     async execute(interaction, client) {
         if (interaction.isAutocomplete()) {
+            let searchTerm = interaction.options.getString("cardset")
+            try {
+                searchTerm = interaction.options.getFocused()
+            } catch (_) {}
             await interaction.respond(
-                GameHelper.getCardLists(interaction.options.getString("cardset"))
+                GameHelper.getCardLists(searchTerm)
             );
             return
         }

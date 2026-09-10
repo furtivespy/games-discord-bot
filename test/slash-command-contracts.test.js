@@ -160,12 +160,26 @@ describe("slash command definition contracts", () => {
     expect(format.description).toContain("value");
     expect(format.choices).toEqual(GameFormatter.CARD_FORMAT_CHOICES);
     expect(format.choices.map((choice) => choice.name)).toEqual([
-      "A - {name} of {type}",
-      "B - {type}: {name}",
-      "C - {value}: {name}",
+      "A - {name} of {type} (sort: suit hidden, value hidden)",
+      "B - {type}: {name} (sort: suit hidden, value hidden)",
+      "C - {value}: {name} (sort: suit hidden, value shown)",
     ]);
+    for (const choice of format.choices) {
+      expect(choice.name.length).toBeLessThanOrEqual(GameFormatter.DISCORD_CHOICE_NAME_MAX);
+    }
+    expect(format.description.length).toBeLessThanOrEqual(GameFormatter.DISCORD_OPTION_DESCRIPTION_MAX);
+    expect(format.description.toLowerCase()).toContain("suit");
+    expect(format.description.toLowerCase()).toContain("value");
+    expect(format.description.toLowerCase()).toContain("shown in c");
     expect(suit.description.toLowerCase()).toContain("not shown");
     expect(value.description.toLowerCase()).toContain("format c");
+
+    const deckNew = json.options
+      .find((option) => option.name === "deck")
+      .options.find((option) => option.name === "new");
+    const cardset = deckNew.options.find((option) => option.name === "cardset");
+    expect(cardset.description.toLowerCase()).toContain("empty");
+    expect(cardset.description.length).toBeLessThanOrEqual(GameFormatter.DISCORD_OPTION_DESCRIPTION_MAX);
   });
 
   test("required and autocomplete flags stay set on high-traffic options", () => {

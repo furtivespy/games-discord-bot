@@ -99,7 +99,7 @@ class GameDatabase {
     
     CurrentCardList = [
         [ "Custom - From CSV", "custom-csv" ],
-        [ "Empty", "empty" ],
+        [ "empty (start from scratch)", "empty" ],
         [ "Standard 52 Card Poker Deck", "standard" ],
         [ "Pear/Triangle (one 1, two 2s ... ten 10s)", "pear" ],
         [ "Dune Imperium Intrigue (Base)", "imperium"],

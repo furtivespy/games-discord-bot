@@ -90,7 +90,7 @@ class Cards extends SlashCommand {
                     .setName("new")
                     .setDescription("Add a new deck of cards to the channel")
                     .addStringOption(option => option.setName('name').setDescription('Name of the deck').setRequired(true))
-                    .addStringOption(option => option.setName('cardset').setDescription('What set of cards to use').setRequired(true).setAutocomplete(true))
+                    .addStringOption(option => option.setName('cardset').setDescription('What set of cards to use. Choose empty to start from scratch.').setRequired(true).setAutocomplete(true))
                     .addStringOption(option => option.setName('customlist').setDescription('list of cards for the new custom deck. separate with commas'))
                 ) 
             .addSubcommand(subcommand =>

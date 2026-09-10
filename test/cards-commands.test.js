@@ -1,5 +1,6 @@
 const { describe, expect, test } = require("bun:test");
 const Cards = require("../slashcommands/genericgame/cards");
+const GameHelper = require("../modules/GlobalGameHelper");
 const {
   collectedReplyText,
   createActiveGame,
@@ -8,6 +9,10 @@ const {
   createPlayer,
   withHarness,
 } = require("./helpers/harness");
+
+function emptyCardsetChoice(choices) {
+  return choices.find((choice) => choice.value === "empty");
+}
 
 async function runCards(harness) {
   const command = new Cards(harness.client);
@@ -38,6 +43,33 @@ function gameWithDeck({
     decks: [createDeck({ name: "Main", draw, discard })],
   });
 }
+
+describe("cardset autocomplete", () => {
+  test("unfiltered list pins empty near the top and keeps the name starting with empty", () => {
+    const choices = GameHelper.getCardLists("");
+    expect(choices.length).toBeLessThanOrEqual(25);
+    const emptyChoice = emptyCardsetChoice(choices);
+    expect(emptyChoice).toEqual({ name: "empty (start from scratch)", value: "empty" });
+    expect(choices.findIndex((choice) => choice.value === "empty")).toBeLessThan(3);
+    expect(emptyChoice.name.startsWith("empty")).toBe(true);
+  });
+
+  test("typing empty or Empty keeps a prefix-matching empty choice", () => {
+    const lower = emptyCardsetChoice(GameHelper.getCardLists("empty"));
+    expect(lower).toBeDefined();
+    expect(lower.name.startsWith("empty")).toBe(true);
+
+    const mixed = emptyCardsetChoice(GameHelper.getCardLists("Empty"));
+    expect(mixed).toBeDefined();
+    expect(mixed.name.startsWith("Empty")).toBe(true);
+    expect(mixed.name.toLowerCase()).toContain("start from scratch");
+  });
+
+  test("id match still finds empty when the display name would not prefix-match the query", () => {
+    const byId = emptyCardsetChoice(GameHelper.getCardLists("empty"));
+    expect(byId?.value).toBe("empty");
+  });
+});
 
 describe("/cards command handlers", () => {
   test("help is reachable without a subcommand group", async () => {
@@ -156,7 +188,7 @@ describe("/cards command handlers", () => {
     );
   });
 
-  test("deck new unfiltered autocomplete includes Empty as a cardset", async () => {
+  test("deck new unfiltered autocomplete includes empty as a cardset", async () => {
     await withHarness(
       {
         isAutocomplete: true,
@@ -164,6 +196,8 @@ describe("/cards command handlers", () => {
           subcommandGroup: "deck",
           subcommand: "new",
           strings: { cardset: "" },
+          focused: "",
+          focusedName: "cardset",
         },
       },
       async (harness) => {
@@ -171,8 +205,52 @@ describe("/cards command handlers", () => {
         const choices = harness.calls.respond[0];
         expect(choices.length).toBeLessThanOrEqual(25);
         expect(choices).toEqual(
-          expect.arrayContaining([{ name: "Empty", value: "empty" }])
+          expect.arrayContaining([{ name: "empty (start from scratch)", value: "empty" }])
         );
+        expect(choices.find((choice) => choice.value === "empty")?.name.toLowerCase().startsWith("empty")).toBe(true);
+      }
+    );
+  });
+
+  test("deck new autocomplete shows empty when the user types empty", async () => {
+    await withHarness(
+      {
+        isAutocomplete: true,
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "new",
+          strings: { cardset: "empty" },
+          focused: "empty",
+          focusedName: "cardset",
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const choices = harness.calls.respond[0];
+        const emptyChoice = choices.find((choice) => choice.value === "empty");
+        expect(emptyChoice).toBeDefined();
+        expect(emptyChoice.name.startsWith("empty")).toBe(true);
+        expect(emptyChoice.name.toLowerCase()).toContain("start from scratch");
+      }
+    );
+  });
+
+  test("deck new autocomplete keeps empty visible when the user types Empty", async () => {
+    await withHarness(
+      {
+        isAutocomplete: true,
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "new",
+          focused: "Empty",
+          focusedName: "cardset",
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const emptyChoice = harness.calls.respond[0].find((choice) => choice.value === "empty");
+        expect(emptyChoice).toBeDefined();
+        expect(emptyChoice.name.startsWith("Empty")).toBe(true);
       }
     );
   });

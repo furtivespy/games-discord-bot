@@ -22,13 +22,26 @@ class GameHelper {
   }
 
   // Instance-only starters stay visible in the default Discord picker (25 max).
-  // Empty sorts after El Grande / Empire's End and would otherwise fall off the list.
+  // empty sorts after El Grande / Empire's End and would otherwise fall off the list.
   static PINNED_CARDSET_IDS = ["custom-csv", "empty"]
+  static AUTOCOMPLETE_NAME_MAX = 100
+
+  // Discord's client prefix-filters returned names against the typed string.
+  // "Empty" disappears when the user types "empty"; keep the visible label
+  // starting with their input when the canonical name already matches.
+  static autocompleteChoiceName(userInput, displayName) {
+    const raw = String(userInput ?? "")
+    let name = displayName
+    if (raw && displayName.toLowerCase().startsWith(raw.toLowerCase())) {
+      name = raw + displayName.slice(raw.length)
+    }
+    return name.slice(0, GameHelper.AUTOCOMPLETE_NAME_MAX)
+  }
 
   static getCardLists(searchTerm) {
     const term = String(searchTerm ?? "").toLowerCase()
     const matches = GameDB.CurrentCardList.filter((cl) =>
-      cl[0].toLowerCase().includes(term)
+      cl[0].toLowerCase().includes(term) || cl[1].toLowerCase().includes(term)
     )
     const pinned = GameHelper.PINNED_CARDSET_IDS
       .map((id) => matches.find((cl) => cl[1] === id))
@@ -41,7 +54,10 @@ class GameHelper {
 
     return [...pinned, ...catalog]
       .slice(0, 25)
-      .map((cl) => ({ name: cl[0], value: cl[1] }))
+      .map((cl) => ({
+        name: GameHelper.autocompleteChoiceName(searchTerm, cl[0]),
+        value: cl[1],
+      }))
   }
 
   static getCardsAutocomplete(searchTerm, cardList) {

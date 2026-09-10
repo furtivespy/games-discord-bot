@@ -876,15 +876,19 @@ class GameFormatter {
   // suit is sort-only and never shown. value is always used to sort, and is
   // shown to users only in format C. type is shown in formats A and B.
   static HAND_SORT_KEYS = ["suit", "value", "name"];
+  static DISCORD_CHOICE_NAME_MAX = 100;
+  static DISCORD_OPTION_DESCRIPTION_MAX = 100;
 
+  // Choice names are the dropdown labels (100-char Discord max). They must
+  // show the real cardShortName template AND call out sort fields.
   static CARD_FORMAT_CHOICES = [
-    { name: "A - {name} of {type}", value: "A" },
-    { name: "B - {type}: {name}", value: "B" },
-    { name: "C - {value}: {name}", value: "C" },
+    { name: "A - {name} of {type} (sort: suit hidden, value hidden)", value: "A" },
+    { name: "B - {type}: {name} (sort: suit hidden, value hidden)", value: "B" },
+    { name: "C - {value}: {name} (sort: suit hidden, value shown)", value: "C" },
   ];
 
   static CARD_FORMAT_OPTION_DESCRIPTION =
-    "How the card is shown. Hands sort by suit, then value, then name.";
+    "How the card is shown. Sort: suit (hidden), value (shown in C), name.";
 
   static cardSort(cardArry) {
     return sortBy(cardArry, this.HAND_SORT_KEYS);
