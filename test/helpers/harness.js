@@ -5,6 +5,7 @@ const { PermissionsBitField } = require("discord.js");
 const GameDB = require("../../db/anygame.js");
 const GameStore = require("../../db/gameStore.js");
 const Formatter = require("../../modules/GameFormatter");
+const GameStatusHelper = require("../../modules/GameStatusHelper");
 const BoardGameGeek = require("../../modules/BoardGameGeek");
 
 const DEFAULT_GUILD_ID = "guild-1";
@@ -423,17 +424,29 @@ function createHarness({
       }
       return memory.get(memoryKey(serverId, collection, channelKey)) ?? null;
     },
-    async setGameDataV2(serverId, collection, channelKey, data) {
+    async setGameDataV2(serverId, collection, channelKey, data, options = {}) {
       persistCalls.push([serverId, collection, channelKey, data]);
       if (store) {
         store.upsertGameData(serverId, collection, channelKey, data);
-        return;
-      }
-      if (isDefaultGame(serverId, collection, channelKey)) {
+      } else if (isDefaultGame(serverId, collection, channelKey)) {
         replaceStoredGame(data);
-        return;
+      } else {
+        memory.set(memoryKey(serverId, collection, channelKey), structuredClone(data));
       }
-      memory.set(memoryKey(serverId, collection, channelKey), structuredClone(data));
+
+      if (collection === "game") {
+        await GameStatusHelper.refreshPinnedStatusAfterGameSave(
+          client,
+          {
+            guildId: serverId,
+            channelId: channelKey,
+            channel,
+            interaction: { guildId: serverId, channelId: channelKey },
+          },
+          data,
+          options
+        );
+      }
     },
   };
 
