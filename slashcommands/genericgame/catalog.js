@@ -5,7 +5,11 @@ const Show = require("../../subcommands/catalog/show.js");
 const Disable = require("../../subcommands/catalog/disable.js");
 const Enable = require("../../subcommands/catalog/enable.js");
 const Publish = require("../../subcommands/catalog/publish.js");
-const { isBotOwner, notOwnerReply } = require("../../subcommands/catalog/shared.js");
+const {
+  catalogEmbed,
+  isBotOwner,
+  notOwnerReply,
+} = require("../../subcommands/catalog/shared.js");
 
 class Catalog extends SlashCommand {
   constructor(client) {
@@ -118,7 +122,9 @@ class Catalog extends SlashCommand {
           break;
         default:
           await interaction.reply({
-            content: "Unknown catalog subcommand.",
+            embeds: [
+              catalogEmbed({ description: "Unknown catalog subcommand." }),
+            ],
             flags: MessageFlags.Ephemeral,
           });
       }
@@ -130,7 +136,11 @@ class Catalog extends SlashCommand {
           return;
         }
         const reply = {
-          content: "Something went wrong — please try again.",
+          embeds: [
+            catalogEmbed({
+              description: "Something went wrong — please try again.",
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         };
         if (interaction.deferred || interaction.replied) {

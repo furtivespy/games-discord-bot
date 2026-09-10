@@ -1,15 +1,19 @@
 const {
   autocompleteTemplates,
-  enabledLabel,
-  formatCardEntry,
+  buildCardListEmbeds,
+  enabledHeading,
+  formatHandCardLine,
+  formatLayoutLabel,
+  formatCreatorName,
   migrateHintReply,
   openReadyCatalog,
   replyEphemeral,
-  truncateWithMore,
+  replyEphemeralEmbeds,
+  resolveCreatorNames,
 } = require("./shared.js");
 
 class CatalogShow {
-  async execute(interaction) {
+  async execute(interaction, client) {
     const { ready, catalog } = openReadyCatalog();
     if (interaction.isAutocomplete()) {
       try {
@@ -43,16 +47,28 @@ class CatalogShow {
       }
 
       const count = Array.isArray(template.cards) ? template.cards.length : 0;
+      const creatorNames = await resolveCreatorNames(
+        client || interaction.client,
+        [template.created_by]
+      );
+      const creator = formatCreatorName(template.created_by, creatorNames);
       const header = [
-        `**${template.name}** (\`${template.id}\`)`,
-        `Enabled: ${enabledLabel(template.enabled)}`,
-        `Cards: ${count}`,
-        "",
-      ].join("\n");
-      const cardLines = (template.cards || []).map(formatCardEntry);
-      await replyEphemeral(
+        `\`${template.id}\``,
+        enabledHeading(template.enabled),
+        `${count} cards`,
+        formatLayoutLabel(template.cards),
+        creator ? `by ${creator}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+
+      await replyEphemeralEmbeds(
         interaction,
-        truncateWithMore(cardLines, { header, joiner: "\n" })
+        buildCardListEmbeds({
+          title: template.name,
+          header,
+          cardLines: (template.cards || []).map(formatHandCardLine),
+        })
       );
     } finally {
       catalog.close();

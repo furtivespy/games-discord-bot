@@ -2,12 +2,17 @@ const GameHelper = require("../../modules/GlobalGameHelper");
 const { find } = require("lodash");
 const { publishToCatalog } = require("../../db/catalogPublish.js");
 const {
-  formatCardEntry,
+  buildCardListEmbeds,
+  formatHandCardLine,
+  formatLayoutLabel,
   migrateHintReply,
   openReadyCatalog,
   replyEphemeral,
-  truncateWithMore,
+  replyEphemeralEmbeds,
 } = require("./shared.js");
+
+const CUTOVER_NOTE =
+  "This set will not appear in `/cards deck new` until catalog cutover (FUR-38).";
 
 class CatalogPublish {
   async execute(interaction, client) {
@@ -58,20 +63,19 @@ class CatalogPublish {
 
       const count = result.template.cards.length;
       const header = [
-        `Published **${result.template.name}** (\`${result.template.id}\`) with ${count} cards.`,
-        "",
-      ].join("\n");
-      const cardBlock = truncateWithMore(
-        result.template.cards.map(formatCardEntry),
-        { header, joiner: ", " }
-      );
-      await replyEphemeral(
+        `Published \`${result.template.id}\``,
+        `${count} cards`,
+        formatLayoutLabel(result.template.cards),
+      ].join(" · ");
+
+      await replyEphemeralEmbeds(
         interaction,
-        [
-          cardBlock,
-          "",
-          "This set will not appear in `/cards deck new` until catalog cutover (FUR-38).",
-        ].join("\n")
+        buildCardListEmbeds({
+          title: result.template.name,
+          header,
+          cardLines: result.template.cards.map(formatHandCardLine),
+          footer: CUTOVER_NOTE,
+        })
       );
     } finally {
       catalog.close();

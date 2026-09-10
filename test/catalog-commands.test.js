@@ -63,9 +63,44 @@ describe("/catalog command handlers", () => {
         seedDeckCatalog();
         await runCatalog(harness);
         const text = collectedReplyText(harness);
-        expect(text).toContain("standard — Standard 52 Card Poker Deck — enabled");
-        expect(text).toMatch(/Catalog templates \(6\d\)/);
-        expect(text.toLowerCase()).toContain("cards");
+        expect(text).toContain("Standard 52 Card Poker Deck (standard): 52 cards, Layout A");
+        expect(text).toContain("Brass Birmingham - 2 Players (brass-two): 40 cards, Layout B");
+        expect(text).toContain("Enabled (");
+        expect(text).toMatch(/Enabled \(6\d\)/);
+        expect(text).toContain("Disabled (0)");
+        expect(text).not.toMatch(/— enabled —/);
+        expect(harness.calls.reply[0].embeds.length).toBeGreaterThanOrEqual(2);
+        expect(harness.calls.reply[0].embeds[0].data.title).toMatch(/^Enabled \(/);
+        expect(harness.calls.reply[0].embeds.at(-1).data.title).toMatch(/^Disabled \(/);
+      }
+    );
+  });
+
+  test("list splits disabled decks into a second embed", async () => {
+    await withHarness(
+      { user: OWNER, options: { subcommand: "list" } },
+      async (harness) => {
+        seedDeckCatalog();
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        catalog.setEnabled("standard", 0);
+        catalog.close();
+
+        await runCatalog(harness);
+        const text = collectedReplyText(harness);
+        expect(text).toContain("Disabled (1)");
+        expect(text).toContain(
+          "Standard 52 Card Poker Deck (standard): 52 cards, Layout A"
+        );
+        const disabledEmbed = harness.calls.reply[0].embeds.find((embed) =>
+          String(embed.data.title).startsWith("Disabled")
+        );
+        expect(disabledEmbed.data.description).toContain(
+          "Standard 52 Card Poker Deck (standard)"
+        );
+        const enabledEmbed = harness.calls.reply[0].embeds.find((embed) =>
+          String(embed.data.title).startsWith("Enabled")
+        );
+        expect(enabledEmbed.data.description).not.toContain("(standard):");
       }
     );
   });
@@ -82,10 +117,12 @@ describe("/catalog command handlers", () => {
         const text = collectedReplyText(harness);
         expect(text).toContain("Standard 52 Card Poker Deck");
         expect(text).toContain("`standard`");
-        expect(text).toContain("Enabled: enabled");
-        expect(text).toContain("Cards: 52");
-        expect(text).toContain("A of ♣");
-        expect(text).toContain("K of ♠");
+        expect(text).toContain("Enabled");
+        expect(text).toContain("52 cards");
+        expect(text).toContain("Layout A");
+        expect(text).toContain("• A of ♣");
+        expect(text).toContain("• K of ♠");
+        expect(harness.calls.reply[0].embeds.length).toBeGreaterThanOrEqual(1);
       }
     );
   });
@@ -167,9 +204,13 @@ describe("/catalog command handlers", () => {
         }
 
         await runCatalog(harness);
-        expect(harness.lastContent()).toContain("Published **My Custom** (`my-custom`) with 2 cards");
-        expect(harness.lastContent()).toContain("Ace (https://example.test/ace.png)");
+        expect(harness.lastContent()).toContain("Published `my-custom`");
+        expect(harness.lastContent()).toContain("My Custom");
+        expect(harness.lastContent()).toContain("2 cards");
+        expect(harness.lastContent()).toContain("• Ace [image](https://example.test/ace.png)");
+        expect(harness.lastContent()).toContain("• King");
         expect(harness.lastContent()).toContain("FUR-38");
+        expect(harness.calls.reply[0].embeds[0].data.footer.text).toContain("FUR-38");
 
         const catalog = new DeckCatalog({ dataDir: harness.dataDir });
         try {

@@ -1,12 +1,15 @@
 const {
-  formatTemplateSummary,
+  embedsFromLines,
+  formatTemplateListLine,
   migrateHintReply,
   openReadyCatalog,
   replyEphemeral,
+  replyEphemeralEmbeds,
+  resolveCreatorNames,
 } = require("./shared.js");
 
 class CatalogList {
-  async execute(interaction) {
+  async execute(interaction, client) {
     if (interaction.isAutocomplete()) {
       await interaction.respond([]);
       return;
@@ -27,9 +30,28 @@ class CatalogList {
         return;
       }
 
-      const header = `Catalog templates (${templates.length}), sorted by name:\n`;
-      const body = templates.map(formatTemplateSummary).join("\n");
-      await replyEphemeral(interaction, `${header}${body}`);
+      const creatorNames = await resolveCreatorNames(
+        client || interaction.client,
+        templates.map((template) => template.created_by)
+      );
+      const enabled = templates.filter((template) => Number(template.enabled) === 1);
+      const disabled = templates.filter((template) => Number(template.enabled) !== 1);
+      const lineFor = (template) =>
+        formatTemplateListLine(template, { creatorNames });
+
+      const embeds = [
+        ...embedsFromLines({
+          title: `Enabled (${enabled.length})`,
+          lines: enabled.map(lineFor),
+          emptyText: "None",
+        }),
+        ...embedsFromLines({
+          title: `Disabled (${disabled.length})`,
+          lines: disabled.map(lineFor),
+          emptyText: "None",
+        }),
+      ];
+      await replyEphemeralEmbeds(interaction, embeds);
     } finally {
       catalog.close();
     }
