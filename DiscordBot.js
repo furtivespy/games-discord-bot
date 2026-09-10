@@ -16,6 +16,7 @@ const GameStore = require("./db/gameStore.js");
 const GoogleSearch = require("./modules/GoogleSearch.js");
 const _ = require("lodash");
 const modalSubmission = require('./events/modalSubmission.js');
+const GatherInterest = require("./modules/GatherInterest.js");
 const ReminderSystem = require("./modules/ReminderSystem.js");
 const GameStatusHelper = require("./modules/GameStatusHelper");
 
@@ -800,6 +801,21 @@ client.on("interactionCreate", async (interaction) => {
         );
       }
     });
+  } else if (interaction.isButton()) {
+    try {
+      await GatherInterest.handleButton(interaction, interaction.client);
+    } catch (error) {
+      console.error(error);
+      if (interaction.deferred || interaction.replied) {
+        return interaction.editReply({
+          content: "There was an error while processing this button!",
+        });
+      }
+      return interaction.reply({
+        content: "There was an error while processing this button!",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
   } else if (interaction.isModalSubmit()) {
     try {
       await modalSubmission.execute(interaction);
