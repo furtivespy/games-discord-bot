@@ -235,9 +235,9 @@ class DiscordBot extends Client {
     //this.db.testConnection();
     this.gamedata.set(gameName, updatedData);
   }
-  async setGameDataV2(serverId, gameName, channelId, updatedData) {
+  async setGameDataV2(serverId, gameName, channelId, updatedData, options = {}) {
     const tracer = trace.getTracer("discord-bot");
-    return tracer.startActiveSpan("game.save", (span) => {
+    tracer.startActiveSpan("game.save", (span) => {
       span.setAttributes({
         "game.collection": gameName,
         "game.player_count": updatedData?.players?.length ?? 0,
@@ -253,6 +253,22 @@ class DiscordBot extends Client {
         span.end();
       }
     });
+
+    if (gameName === "game") {
+      try {
+        await GameStatusHelper.refreshPinnedStatusAfterGameSave(
+          this,
+          { guildId: serverId, channelId },
+          updatedData,
+          options
+        );
+      } catch (err) {
+        this.logger.log(
+          `Pinned status refresh after save failed [guild=${serverId} channel=${channelId}]: ${err}`,
+          "error"
+        );
+      }
+    }
   }
   async getGameDataV2(serverId, gameName, channelId) {
     const tracer = trace.getTracer("discord-bot");

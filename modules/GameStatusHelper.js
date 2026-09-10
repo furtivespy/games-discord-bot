@@ -309,7 +309,11 @@ class GameStatusHelper {
     if (publicUpdateResult) {
       gameData.lastStatusMessageId = publicUpdateResult.lastStatusMessageId;
       gameData.lastStatusMessageTimestamp = publicUpdateResult.lastStatusMessageTimestamp;
-      await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
+      // Chat-status metadata only. sendGameStatus / sendPublicStatusUpdate already
+      // refresh the pin after this persist; skipping the save hook avoids a loop.
+      await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData, {
+        skipPinnedRefresh: true,
+      });
     }
   }
 
@@ -324,7 +328,59 @@ class GameStatusHelper {
     fresh.pinnedStatusMessageId = gameData.pinnedStatusMessageId;
     fresh.pinnedStatusChannelId = gameData.pinnedStatusChannelId;
     fresh.pinnedStatusPinned = gameData.pinnedStatusPinned;
-    await client.setGameDataV2(guildId, "game", channelId, fresh);
+    await client.setGameDataV2(guildId, "game", channelId, fresh, { skipPinnedRefresh: true });
+  }
+
+  // After a successful channel-game persist, keep the live pin in sync when
+  // pinned mode is on/full. Does not post a new chat status table.
+  // Callers that only write pin/chat metadata (persistPinFields,
+  // persistStatusUpdate) pass options.skipPinnedRefresh to avoid recursion.
+  static async refreshPinnedStatusAfterGameSave(client, context, gameData, options = {}) {
+    if (options.skipPinnedRefresh) {
+      return;
+    }
+    if (!gameData || typeof gameData !== "object" || gameData.isdeleted) {
+      return;
+    }
+    if (!this.isPinnedStatusEnabled(gameData)) {
+      return;
+    }
+
+    const channel = await this.resolveChannelForPinnedRefresh(client, context);
+    if (!channel) {
+      return;
+    }
+
+    const interaction = context?.interaction || {
+      guildId: context?.guildId,
+      channelId: context?.channelId || channel.id,
+    };
+
+    await this.safeUpsertPinnedStatus(channel, client, interaction, gameData);
+  }
+
+  static async resolveChannelForPinnedRefresh(client, context) {
+    if (context?.channel) {
+      return context.channel;
+    }
+
+    const channelId = context?.channelId;
+    if (!channelId || !client) {
+      return null;
+    }
+
+    try {
+      const cached = client.channels?.cache?.get(channelId);
+      if (cached) {
+        return cached;
+      }
+      if (typeof client.channels?.fetch === "function") {
+        return await client.channels.fetch(channelId);
+      }
+    } catch (error) {
+      console.error("Could not resolve channel for pinned status refresh after save.", error);
+    }
+    return null;
   }
 
   static async safeUpsertPinnedStatus(channel, client, interaction, gameData, snapshotReply) {
