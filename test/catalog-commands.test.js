@@ -5,7 +5,6 @@ const Catalog = require("../slashcommands/genericgame/catalog");
 const Cards = require("../slashcommands/genericgame/cards");
 const DeckCatalog = require("../db/deckCatalog.js");
 const { seedDeckCatalog } = require("../db/seedDeckCatalog.js");
-const GameDB = require("../db/anygame.js");
 const {
   collectedReplyText,
   createActiveGame,
@@ -144,7 +143,7 @@ describe("/catalog command handlers", () => {
 
         await runCatalog(harness);
         expect(harness.lastContent()).toContain("Disabled `standard`");
-        expect(harness.lastContent()).toContain("still JS");
+        expect(harness.lastContent()).toContain("no longer appear");
 
         const catalog = new DeckCatalog({ dataDir: harness.dataDir });
         try {
@@ -209,8 +208,6 @@ describe("/catalog command handlers", () => {
         expect(harness.lastContent()).toContain("2 cards");
         expect(harness.lastContent()).toContain("• Ace [image](https://example.test/ace.png)");
         expect(harness.lastContent()).toContain("• King");
-        expect(harness.lastContent()).toContain("FUR-38");
-        expect(harness.calls.reply[0].embeds[0].data.footer.text).toContain("FUR-38");
 
         const catalog = new DeckCatalog({ dataDir: harness.dataDir });
         try {
@@ -370,14 +367,14 @@ describe("/catalog command handlers", () => {
     );
   });
 
-  test("/cards deck new autocomplete still reads CurrentCardList JS only", async () => {
+  test("/cards deck new autocomplete reads enabled catalog templates plus custom-csv", async () => {
     await withHarness(
       {
         isAutocomplete: true,
         options: {
           subcommandGroup: "deck",
           subcommand: "new",
-          strings: { cardset: "standard" },
+          strings: { cardset: "only" },
         },
       },
       async (harness) => {
@@ -394,10 +391,23 @@ describe("/catalog command handlers", () => {
         const command = new Cards(harness.client);
         await command.execute(harness.interaction);
         const values = harness.calls.respond[0].map((choice) => choice.value);
-        expect(values).toContain("standard");
-        expect(values).not.toContain("only-in-sqlite");
-        expect(GameDB.CurrentCardList.some(([, id]) => id === "standard")).toBe(
-          true
+        expect(values).toContain("only-in-sqlite");
+        expect(values).not.toContain("standard");
+
+        harness.interaction.options.getString = (name) =>
+          name === "cardset" ? "custom" : null;
+        harness.calls.respond.length = 0;
+        await command.execute(harness.interaction);
+        expect(harness.calls.respond[0].map((choice) => choice.value)).toContain(
+          "custom-csv"
+        );
+
+        harness.interaction.options.getString = (name) =>
+          name === "cardset" ? "standard" : null;
+        harness.calls.respond.length = 0;
+        await command.execute(harness.interaction);
+        expect(harness.calls.respond[0].map((choice) => choice.value)).not.toContain(
+          "standard"
         );
       }
     );

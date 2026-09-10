@@ -1,18 +1,14 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
-const { find, chain, cloneDeep, shuffle } = require('lodash')
+const { find, cloneDeep, shuffle } = require('lodash')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
 const GameDB = require("../../db/anygame.js")
+const { materializeDeck, UNKNOWN_OR_DISABLED_CARD_SET } = require("../../db/catalogDecks.js")
 
 class NewDeck {
     async execute(interaction, client) {
         if (interaction.isAutocomplete()) {
             await interaction.respond(
-                chain(GameDB.CurrentCardList)
-                .filter(cl => cl[0].toLowerCase().includes(interaction.options.getString("cardset").toLowerCase()))
-                .sortBy(cl => cl[0])
-                .map(cl => ({name: cl[0], value: cl[1]}))
-                .slice(0, 25)
-                .value()
+                GameHelper.getCardLists(interaction.options.getString("cardset"))
             );
             return
         }
@@ -47,8 +43,16 @@ class NewDeck {
             name: inputName,
         });
 
+        let cardSetDisplay = inputSet
         if (inputSet != "custom-csv" && inputSet != "customempty") {
-            newdeck.allCards = GameDB.MakeSpecificDeck(inputName, inputSet);
+            const materialized = materializeDeck(inputName, inputSet);
+            if (!materialized.ok) {
+                await interaction.editReply({
+                    content: UNKNOWN_OR_DISABLED_CARD_SET});
+                return;
+            }
+            newdeck.allCards = materialized.cards;
+            cardSetDisplay = materialized.name;
         } else {
             if (inputSet == "customempty") {
                 newdeck.allCards = [];
@@ -65,7 +69,7 @@ class NewDeck {
             const actorDisplayName = interaction.member?.displayName || interaction.user.username
             const cardSetType = inputSet === "custom-csv" ? "custom CSV" : 
                                inputSet === "customempty" ? "empty deck" :
-                               (GameDB.CurrentCardList.find(cl => cl[1] === inputSet)?.[0] || inputSet)
+                               cardSetDisplay
             
             GameHelper.recordMove(
                 gameData,

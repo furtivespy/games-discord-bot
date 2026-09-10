@@ -11,9 +11,6 @@ const {
   replyEphemeralEmbeds,
 } = require("./shared.js");
 
-const CUTOVER_NOTE =
-  "This set will not appear in `/cards deck new` until catalog cutover (FUR-38).";
-
 class CatalogPublish {
   async execute(interaction, client) {
     if (interaction.isAutocomplete()) {
@@ -74,7 +71,6 @@ class CatalogPublish {
           title: result.template.name,
           header,
           cardLines: result.template.cards.map(formatHandCardLine),
-          footer: CUTOVER_NOTE,
         })
       );
     } finally {
