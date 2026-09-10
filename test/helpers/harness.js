@@ -98,9 +98,29 @@ function createActiveGame(overrides = {}) {
   });
 }
 
+function embedPlainText(embed) {
+  if (!embed) return "";
+  const data =
+    typeof embed.toJSON === "function" ? embed.toJSON() : embed.data || embed;
+  const parts = [];
+  if (data.title) parts.push(data.title);
+  if (data.description) parts.push(data.description);
+  for (const field of data.fields || []) {
+    if (field.name) parts.push(field.name);
+    if (field.value) parts.push(field.value);
+  }
+  if (data.footer?.text) parts.push(data.footer.text);
+  return parts.filter(Boolean).join("\n");
+}
+
 function replyContent(payload) {
   if (payload == null) return undefined;
   if (typeof payload === "string") return payload;
+  if (payload.content) return payload.content;
+  if (Array.isArray(payload.embeds) && payload.embeds.length) {
+    const text = payload.embeds.map(embedPlainText).filter(Boolean).join("\n");
+    return text || undefined;
+  }
   return payload.content;
 }
 

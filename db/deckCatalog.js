@@ -1,3 +1,4 @@
+const fs = require("fs");
 const path = require("path");
 const { Database } = require("bun:sqlite");
 const { ensureDataDir } = require("./dataDir.js");
@@ -6,9 +7,42 @@ const DECK_CATALOG_FILENAME = "deck_catalog.sqlite";
 
 class DeckCatalog {
   constructor(options = {}) {
-    const dataDir = options.dataDir || ensureDataDir();
-    this.dbPath = options.dbPath || path.join(dataDir, DECK_CATALOG_FILENAME);
+    this.dbPath = DeckCatalog.resolvePath(options);
     this.db = openDeckCatalogDatabase(this.dbPath);
+  }
+
+  static resolvePath(options = {}) {
+    if (options.dbPath) return options.dbPath;
+    const dataDir = options.dataDir || ensureDataDir();
+    return path.join(dataDir, DECK_CATALOG_FILENAME);
+  }
+
+  static inspect(options = {}) {
+    const dbPath = DeckCatalog.resolvePath(options);
+    if (!fs.existsSync(dbPath)) {
+      return { exists: false, hasSchema: false, count: 0, dbPath };
+    }
+    try {
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        const table = db
+          .query(
+            `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'deck_templates'`
+          )
+          .get();
+        if (!table) {
+          return { exists: true, hasSchema: false, count: 0, dbPath };
+        }
+        const count =
+          db.query(`SELECT COUNT(*) AS count FROM deck_templates`).get()
+            ?.count ?? 0;
+        return { exists: true, hasSchema: true, count, dbPath };
+      } finally {
+        db.close();
+      }
+    } catch {
+      return { exists: true, hasSchema: false, count: 0, dbPath };
+    }
   }
 
   listTemplates() {
