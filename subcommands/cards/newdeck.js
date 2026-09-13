@@ -1,18 +1,17 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
-const { find, chain, cloneDeep, shuffle } = require('lodash')
+const { find, cloneDeep, shuffle } = require('lodash')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
 const GameDB = require("../../db/anygame.js")
 
 class NewDeck {
     async execute(interaction, client) {
         if (interaction.isAutocomplete()) {
+            let searchTerm = interaction.options.getString("cardset")
+            try {
+                searchTerm = interaction.options.getFocused()
+            } catch (_) {}
             await interaction.respond(
-                chain(GameDB.CurrentCardList)
-                .filter(cl => cl[0].toLowerCase().includes(interaction.options.getString("cardset").toLowerCase()))
-                .sortBy(cl => cl[0])
-                .map(cl => ({name: cl[0], value: cl[1]}))
-                .slice(0, 25)
-                .value()
+                GameHelper.getCardLists(searchTerm)
             );
             return
         }
@@ -47,14 +46,13 @@ class NewDeck {
             name: inputName,
         });
 
-        if (inputSet != "custom-csv" && inputSet != "customempty") {
+        const isEmptySet = GameDB.isEmptyCardSet(inputSet)
+        if (inputSet != "custom-csv" && !isEmptySet) {
             newdeck.allCards = GameDB.MakeSpecificDeck(inputName, inputSet);
+        } else if (isEmptySet) {
+            newdeck.allCards = [];
         } else {
-            if (inputSet == "customempty") {
-                newdeck.allCards = [];
-            } else {
-                newdeck.allCards = GameDB.createCardFromStrList(inputName, inputCustom.split(',').map(card => card.trim()));
-            }
+            newdeck.allCards = GameDB.createCardFromStrList(inputName, inputCustom.split(',').map(card => card.trim()));
         }
 
         newdeck.piles.draw.cards = cloneDeep(shuffle(newdeck.allCards));
@@ -63,8 +61,8 @@ class NewDeck {
         // Record history
         try {
             const actorDisplayName = interaction.member?.displayName || interaction.user.username
-            const cardSetType = inputSet === "custom-csv" ? "custom CSV" : 
-                               inputSet === "customempty" ? "empty deck" :
+            const cardSetType = inputSet === "custom-csv" ? "custom CSV" :
+                               isEmptySet ? "empty deck" :
                                (GameDB.CurrentCardList.find(cl => cl[1] === inputSet)?.[0] || inputSet)
             
             GameHelper.recordMove(
@@ -78,7 +76,7 @@ class NewDeck {
                     cardSetType: inputSet,
                     cardSetDisplay: cardSetType,
                     cardCount: newdeck.allCards.length,
-                    isCustom: inputSet === "custom-csv" || inputSet === "customempty",
+                    isCustom: inputSet === "custom-csv" || isEmptySet,
                     customList: inputSet === "custom-csv" ? inputCustom : undefined
                 }
             )

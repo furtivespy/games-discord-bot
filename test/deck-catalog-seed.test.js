@@ -67,6 +67,7 @@ describe("seedDeckCatalog", () => {
 
       expect(catalog.getTemplate("custom-csv")).toBeNull();
       expect(catalog.getTemplate("customempty")).toBeNull();
+      expect(catalog.getTemplate("empty")).toBeNull();
       expect(fs.existsSync(path.join(dataDir, "game_documents.sqlite"))).toBe(
         false
       );
