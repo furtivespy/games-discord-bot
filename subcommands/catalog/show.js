@@ -2,6 +2,7 @@ const {
   autocompleteTemplates,
   buildCardListEmbeds,
   enabledHeading,
+  deferCatalogReply,
   formatHandCardLine,
   formatLayoutLabel,
   formatCreatorName,
@@ -54,6 +55,7 @@ class CatalogShow {
         return;
       }
 
+      await deferCatalogReply(interaction);
       const cards = Array.isArray(template.cards) ? template.cards : [];
       const count = cards.length;
       const creatorNames = await resolveCreatorNames(

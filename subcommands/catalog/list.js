@@ -4,6 +4,7 @@ const {
   isTemplateEnabled,
   catalogUnavailableReply,
   openReadyCatalog,
+  deferCatalogReply,
   replyEphemeral,
   replyEphemeralEmbeds,
   resolveCreatorNames,
@@ -31,6 +32,7 @@ class CatalogList {
         return;
       }
 
+      await deferCatalogReply(interaction);
       const creatorNames = await resolveCreatorNames(
         client || interaction.client,
         templates.map((template) => template.created_by)
