@@ -135,6 +135,9 @@ class Catalog extends SlashCommand {
           await interaction.respond([]);
           return;
         }
+        if (e?.catalogPrimarySent) {
+          return;
+        }
         const reply = {
           embeds: [
             catalogEmbed({

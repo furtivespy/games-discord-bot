@@ -5,7 +5,7 @@ const {
   buildCardListEmbeds,
   formatHandCardLine,
   formatLayoutLabel,
-  migrateHintReply,
+  catalogUnavailableReply,
   openReadyCatalog,
   replyEphemeral,
   replyEphemeralEmbeds,
@@ -19,9 +19,9 @@ class CatalogPublish {
       return;
     }
 
-    const { ready, catalog } = openReadyCatalog();
+    const { ready, catalog, info } = openReadyCatalog();
     if (!ready) {
-      return interaction.reply(migrateHintReply());
+      return interaction.reply(catalogUnavailableReply(info));
     }
 
     try {

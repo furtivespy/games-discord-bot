@@ -3,11 +3,12 @@ const DeckCatalog = require("./deckCatalog.js");
 const { INSTANCE_ONLY_IDS } = require("./seedDeckCatalog.js");
 
 const CUSTOM_CSV_CARDSET = ["Custom - From CSV", "custom-csv"];
+const EMPTY_CARDSET = ["empty (start from scratch)", "empty"];
 const UNKNOWN_OR_DISABLED_CARD_SET = "unknown or disabled card set";
 
 function logCatalogUnavailable(info, reason) {
   console.error(
-    `Deck catalog ${reason} at ${info.dbPath}; /cards deck new will only offer custom-csv. Run /migrate with job deck-catalog first.`
+    `Deck catalog ${reason} at ${info.dbPath}; /cards deck new will only offer custom-csv and empty. Run /migrate with job deck-catalog first.`
   );
 }
 
@@ -37,7 +38,7 @@ function withCatalog(options, fn) {
 }
 
 function listCardSets(options = {}) {
-  const entries = [CUSTOM_CSV_CARDSET];
+  const entries = [CUSTOM_CSV_CARDSET, EMPTY_CARDSET];
   try {
     withCatalog(options, (catalog) => {
       if (!catalog) return;
@@ -63,7 +64,7 @@ function readEnabledTemplate(id, options = {}) {
     return withCatalog(options, (catalog) => {
       if (!catalog) return null;
       const template = catalog.getTemplate(id);
-      if (!template || Number(template.enabled) !== 1) return null;
+      if (!template || !DeckCatalog.isCatalogEnabled(template.enabled)) return null;
       if (!Array.isArray(template.cards)) return null;
       return template;
     });
@@ -91,6 +92,7 @@ function materializeDeck(instanceDeckName, templateId, options = {}) {
 
 module.exports = {
   CUSTOM_CSV_CARDSET,
+  EMPTY_CARDSET,
   UNKNOWN_OR_DISABLED_CARD_SET,
   listCardSets,
   readEnabledTemplate,

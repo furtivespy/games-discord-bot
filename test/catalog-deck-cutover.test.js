@@ -6,6 +6,7 @@ const DeckCatalog = require("../db/deckCatalog.js");
 const GameHelper = require("../modules/GlobalGameHelper");
 const {
   CUSTOM_CSV_CARDSET,
+  EMPTY_CARDSET,
   UNKNOWN_OR_DISABLED_CARD_SET,
   listCardSets,
   materializeDeck,
@@ -100,16 +101,19 @@ describe("catalog deck cutover", () => {
 
       const source = listCardSets({ dataDir });
       expect(source[0]).toEqual(CUSTOM_CSV_CARDSET);
+      expect(source[1]).toEqual(EMPTY_CARDSET);
       expect(source.map(([, id]) => id)).toEqual([
         "custom-csv",
+        "empty",
         "alpha-set",
       ]);
       expect(source.some(([, id]) => id === "zeta-disabled")).toBe(false);
 
       const choices = GameHelper.getCardLists("", { dataDir });
       expect(choices).toEqual([
-        { name: "Alpha Set", value: "alpha-set" },
         { name: "Custom - From CSV", value: "custom-csv" },
+        { name: "empty (start from scratch)", value: "empty" },
+        { name: "Alpha Set", value: "alpha-set" },
       ]);
 
       expect(GameHelper.getCardLists("alpha", { dataDir })).toEqual([
@@ -145,14 +149,14 @@ describe("catalog deck cutover", () => {
     });
   });
 
-  test("missing catalog db does not throw in the list helper and still offers custom-csv", () => {
+  test("missing catalog db does not throw in the list helper and still offers custom-csv and empty", () => {
     withTempDataDir(({ dataDir }) => {
       expect(fs.existsSync(path.join(dataDir, "deck_catalog.sqlite"))).toBe(
         false
       );
 
       const { result, errors } = captureErrors(() => listCardSets({ dataDir }));
-      expect(result).toEqual([CUSTOM_CSV_CARDSET]);
+      expect(result).toEqual([CUSTOM_CSV_CARDSET, EMPTY_CARDSET]);
       expect(errors.some((line) => line.includes("missing"))).toBe(true);
       expect(errors.some((line) => line.includes("custom-csv"))).toBe(true);
 
