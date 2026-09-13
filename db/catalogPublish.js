@@ -2,6 +2,7 @@ const {
   catalogCardFromGenerated,
   INSTANCE_ONLY_IDS,
 } = require("./seedDeckCatalog.js");
+const { sqliteUniqueField } = require("./deckCatalog.js");
 
 const CATALOG_ID_PATTERN = /^[a-z0-9-]{1,100}$/;
 
@@ -24,18 +25,31 @@ function validateCatalogId(id) {
   return { ok: true, id };
 }
 
+function isPublishableCard(card) {
+  return card != null && typeof card === "object" && !Array.isArray(card);
+}
+
 function buildPublishCards(allCards) {
-  if (!Array.isArray(allCards) || allCards.length === 0) {
+  if (allCards == null || !Array.isArray(allCards) || allCards.length === 0) {
     return {
       ok: false,
       code: "empty_cards",
       error: "This deck has no cards in allCards to publish.",
     };
   }
-  return {
-    ok: true,
-    cards: allCards.map(catalogCardFromGenerated),
-  };
+  const cards = [];
+  for (const card of allCards) {
+    if (!isPublishableCard(card)) {
+      return {
+        ok: false,
+        code: "invalid_cards",
+        error:
+          "This deck has invalid card data (null or non-object entries) and cannot be published.",
+      };
+    }
+    cards.push(catalogCardFromGenerated(card));
+  }
+  return { ok: true, cards };
 }
 
 function buildPublishPayload({ id, name, allCards, createdBy }) {
@@ -84,25 +98,55 @@ function assertUnique(catalog, { id, name }) {
   return { ok: true };
 }
 
+function duplicateResult(field, { id, name }) {
+  if (field === "name") {
+    return {
+      ok: false,
+      code: "duplicate_name",
+      error: `A catalog template named "${name}" already exists. Choose a unique display name.`,
+    };
+  }
+  return {
+    ok: false,
+    code: "duplicate_id",
+    error: `A catalog template with id "${id}" already exists. Publish always saves as a new id and will not overwrite.`,
+  };
+}
+
 function publishToCatalog(catalog, input) {
   const built = buildPublishPayload(input);
   if (!built.ok) return built;
 
-  const unique = assertUnique(catalog, built.payload);
-  if (!unique.ok) return unique;
+  const run = () => {
+    const unique = assertUnique(catalog, built.payload);
+    if (!unique.ok) return unique;
 
-  catalog.insertTemplate({
-    id: built.payload.id,
-    name: built.payload.name,
-    cards: built.payload.cards,
-    createdBy: built.payload.createdBy,
-    enabled: 1,
-  });
+    catalog.insertTemplate({
+      id: built.payload.id,
+      name: built.payload.name,
+      cards: built.payload.cards,
+      createdBy: built.payload.createdBy,
+      enabled: 1,
+    });
 
-  return {
-    ok: true,
-    template: catalog.getTemplate(built.payload.id),
+    return {
+      ok: true,
+      template: catalog.getTemplate(built.payload.id),
+    };
   };
+
+  try {
+    if (typeof catalog.transaction === "function") {
+      return catalog.transaction(run);
+    }
+    return run();
+  } catch (error) {
+    const field = sqliteUniqueField(error);
+    if (field) {
+      return duplicateResult(field, built.payload);
+    }
+    throw error;
+  }
 }
 
 module.exports = {
