@@ -284,7 +284,7 @@ describe("/cards command handlers", () => {
 
         await runCards(harness);
         const choices = harness.calls.respond[0];
-        expect(choices).toEqual([{ name: "Alpha Set", value: "alpha-set" }]);
+        expect(choices).toEqual([{ name: "alpha Set", value: "alpha-set" }]);
         expect(choices.some((choice) => choice.value === "zeta-disabled")).toBe(
           false
         );

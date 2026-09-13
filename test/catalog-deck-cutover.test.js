@@ -117,7 +117,7 @@ describe("catalog deck cutover", () => {
       ]);
 
       expect(GameHelper.getCardLists("alpha", { dataDir })).toEqual([
-        { name: "Alpha Set", value: "alpha-set" },
+        { name: "alpha Set", value: "alpha-set" },
       ]);
       const zeta = GameHelper.getCardLists("zeta", { dataDir });
       expect(zeta).toEqual([]);
@@ -164,7 +164,7 @@ describe("catalog deck cutover", () => {
         GameHelper.getCardLists("custom", { dataDir })
       );
       expect(choices).toEqual([
-        { name: "Custom - From CSV", value: "custom-csv" },
+        { name: "custom - From CSV", value: "custom-csv" },
       ]);
     });
   });
