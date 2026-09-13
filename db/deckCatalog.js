@@ -5,6 +5,21 @@ const { ensureDataDir } = require("./dataDir.js");
 
 const DECK_CATALOG_FILENAME = "deck_catalog.sqlite";
 
+const LOCKED_CODES = new Set([
+  "SQLITE_BUSY",
+  "SQLITE_LOCKED",
+  "SQLITE_BUSY_SNAPSHOT",
+  "SQLITE_BUSY_RECOVERY",
+  "SQLITE_BUSY_TIMEOUT",
+]);
+
+const CORRUPT_CODES = new Set([
+  "SQLITE_CORRUPT",
+  "SQLITE_NOTADB",
+  "SQLITE_CORRUPT_VTAB",
+  "SQLITE_IOERR_SHORT_READ",
+]);
+
 class DeckCatalog {
   constructor(options = {}) {
     this.dbPath = DeckCatalog.resolvePath(options);
@@ -20,7 +35,7 @@ class DeckCatalog {
   static inspect(options = {}) {
     const dbPath = DeckCatalog.resolvePath(options);
     if (!fs.existsSync(dbPath)) {
-      return { exists: false, hasSchema: false, count: 0, dbPath };
+      return inspectResult({ dbPath, exists: false, hasSchema: false });
     }
     try {
       const db = new Database(dbPath, { readonly: true });
@@ -31,17 +46,28 @@ class DeckCatalog {
           )
           .get();
         if (!table) {
-          return { exists: true, hasSchema: false, count: 0, dbPath };
+          return inspectResult({ dbPath, exists: true, hasSchema: false });
         }
         const count =
           db.query(`SELECT COUNT(*) AS count FROM deck_templates`).get()
             ?.count ?? 0;
-        return { exists: true, hasSchema: true, count, dbPath };
+        return inspectResult({
+          dbPath,
+          exists: true,
+          hasSchema: true,
+          count,
+        });
       } finally {
         db.close();
       }
-    } catch {
-      return { exists: true, hasSchema: false, count: 0, dbPath };
+    } catch (error) {
+      return inspectResult({
+        dbPath,
+        exists: true,
+        hasSchema: false,
+        error: classifySqliteOpenError(error),
+        errorMessage: String(error?.message || error),
+      });
     }
   }
 
@@ -95,7 +121,7 @@ class DeckCatalog {
       .run(
         id,
         name,
-        enabled ? 1 : 0,
+        normalizeEnabled(enabled),
         createdBy,
         JSON.stringify(cards)
       );
@@ -108,7 +134,11 @@ class DeckCatalog {
          SET enabled = ?, updated_at = datetime('now')
          WHERE id = ?`
       )
-      .run(enabled ? 1 : 0, id);
+      .run(normalizeEnabled(enabled), id);
+  }
+
+  transaction(fn) {
+    return this.db.transaction(fn)();
   }
 
   count() {
@@ -123,16 +153,86 @@ class DeckCatalog {
   }
 }
 
+function inspectResult({
+  dbPath,
+  exists,
+  hasSchema,
+  count = 0,
+  error = null,
+  errorMessage = null,
+}) {
+  return { exists, hasSchema, count, dbPath, error, errorMessage };
+}
+
+function isCatalogEnabled(enabled) {
+  return Number(enabled) === 1;
+}
+
+function normalizeEnabled(enabled) {
+  return isCatalogEnabled(enabled) ? 1 : 0;
+}
+
+function classifySqliteOpenError(error) {
+  const code = error?.code;
+  const message = String(error?.message || "");
+  if (LOCKED_CODES.has(code) || /database is locked/i.test(message)) {
+    return "locked";
+  }
+  if (
+    CORRUPT_CODES.has(code) ||
+    /malformed|not a database/i.test(message)
+  ) {
+    return "corrupt";
+  }
+  return "unreadable";
+}
+
+function sqliteUniqueField(error) {
+  const code = error?.code;
+  const message = String(error?.message || "");
+  const isUnique =
+    code === "SQLITE_CONSTRAINT_UNIQUE" ||
+    code === "SQLITE_CONSTRAINT_PRIMARYKEY" ||
+    /UNIQUE constraint failed/i.test(message);
+  if (!isUnique) return null;
+  if (/\.id\b/.test(message) || code === "SQLITE_CONSTRAINT_PRIMARYKEY") {
+    return "id";
+  }
+  if (/\.name\b/.test(message)) {
+    return "name";
+  }
+  return "unknown";
+}
+
+function parseCardsJson(raw) {
+  if (raw == null || raw === "") {
+    return { cards: [], cardsError: "missing" };
+  }
+  let parsed;
+  try {
+    parsed = typeof raw === "string" ? JSON.parse(raw) : JSON.parse(String(raw));
+  } catch {
+    return { cards: [], cardsError: "invalid_json" };
+  }
+  if (!Array.isArray(parsed)) {
+    return { cards: [], cardsError: "not_array" };
+  }
+  return { cards: parsed, cardsError: null };
+}
+
 function parseTemplateRow(row) {
-  return {
+  const { cards, cardsError } = parseCardsJson(row.cards);
+  const template = {
     id: row.id,
     name: row.name,
-    enabled: row.enabled,
+    enabled: normalizeEnabled(row.enabled),
     created_by: row.created_by,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    cards: JSON.parse(row.cards),
+    cards,
   };
+  if (cardsError) template.cardsError = cardsError;
+  return template;
 }
 
 function openDeckCatalogDatabase(dbPath) {
@@ -154,3 +254,8 @@ function openDeckCatalogDatabase(dbPath) {
 
 module.exports = DeckCatalog;
 module.exports.DECK_CATALOG_FILENAME = DECK_CATALOG_FILENAME;
+module.exports.isCatalogEnabled = isCatalogEnabled;
+module.exports.normalizeEnabled = normalizeEnabled;
+module.exports.classifySqliteOpenError = classifySqliteOpenError;
+module.exports.sqliteUniqueField = sqliteUniqueField;
+module.exports.parseTemplateRow = parseTemplateRow;

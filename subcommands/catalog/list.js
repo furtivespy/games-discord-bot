@@ -1,7 +1,8 @@
 const {
   embedsFromLines,
   formatTemplateListLine,
-  migrateHintReply,
+  isTemplateEnabled,
+  catalogUnavailableReply,
   openReadyCatalog,
   deferCatalogReply,
   replyEphemeral,
@@ -16,9 +17,9 @@ class CatalogList {
       return;
     }
 
-    const { ready, catalog } = openReadyCatalog();
+    const { ready, catalog, info } = openReadyCatalog();
     if (!ready) {
-      return interaction.reply(migrateHintReply());
+      return interaction.reply(catalogUnavailableReply(info));
     }
 
     try {
@@ -36,8 +37,8 @@ class CatalogList {
         client || interaction.client,
         templates.map((template) => template.created_by)
       );
-      const enabled = templates.filter((template) => Number(template.enabled) === 1);
-      const disabled = templates.filter((template) => Number(template.enabled) !== 1);
+      const enabled = templates.filter(isTemplateEnabled);
+      const disabled = templates.filter((template) => !isTemplateEnabled(template));
       const lineFor = (template) =>
         formatTemplateListLine(template, { creatorNames });
 
