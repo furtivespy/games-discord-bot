@@ -56,6 +56,64 @@ describe("/catalog command handlers", () => {
     );
   });
 
+  test("corrupt catalog db does not hint /migrate", async () => {
+    await withHarness(
+      { user: OWNER, options: { subcommand: "list" } },
+      async (harness) => {
+        fs.writeFileSync(
+          path.join(harness.dataDir, "deck_catalog.sqlite"),
+          "this is not a sqlite database\n"
+        );
+        await runCatalog(harness);
+        const text = harness.lastContent();
+        expect(text).not.toContain("deck-catalog");
+        expect(text).not.toContain("Something went wrong");
+        expect(text.toLowerCase()).toMatch(/corrupt|not a valid sqlite/);
+      }
+    );
+  });
+
+  test("list keeps other templates when one has unreadable cards JSON", async () => {
+    await withHarness(
+      { user: OWNER, options: { subcommand: "list" } },
+      async (harness) => {
+        seedDeckCatalog();
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        catalog.db
+          .query(`UPDATE deck_templates SET cards = ? WHERE id = ?`)
+          .run("{not-json", "standard");
+        catalog.close();
+
+        await runCatalog(harness);
+        const text = collectedReplyText(harness);
+        expect(text).toContain("unreadable cards");
+        expect(text).toContain("Brass Birmingham - 2 Players (brass-two)");
+        expect(text).not.toContain("Something went wrong");
+      }
+    );
+  });
+
+  test("show surfaces unreadable cards instead of a generic error", async () => {
+    await withHarness(
+      {
+        user: OWNER,
+        options: { subcommand: "show", strings: { id: "standard" } },
+      },
+      async (harness) => {
+        seedDeckCatalog();
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        catalog.db
+          .query(`UPDATE deck_templates SET cards = ? WHERE id = ?`)
+          .run("{not-json", "standard");
+        catalog.close();
+
+        await runCatalog(harness);
+        expect(harness.lastContent()).toMatch(/unreadable cards data/i);
+        expect(harness.lastContent()).not.toContain("Something went wrong");
+      }
+    );
+  });
+
   test("list shows seeded templates including standard", async () => {
     await withHarness(
       { user: OWNER, options: { subcommand: "list" } },
@@ -366,6 +424,77 @@ describe("/catalog command handlers", () => {
         expect(harness.calls.respond[0].map((choice) => choice.value)).toEqual([
           "standard",
         ]);
+      }
+    );
+  });
+
+  test("enabled=2 is listed disabled and offered by enable autocomplete", async () => {
+    await withHarness(
+      { user: OWNER, options: { subcommand: "list" } },
+      async (harness) => {
+        seedDeckCatalog();
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        catalog.db
+          .query(`UPDATE deck_templates SET enabled = 2 WHERE id = ?`)
+          .run("standard");
+        catalog.close();
+
+        await runCatalog(harness);
+        const text = collectedReplyText(harness);
+        expect(text).toContain("Disabled (1)");
+        const disabledEmbed = harness.calls.reply[0].embeds.find((embed) =>
+          String(embed.data.title).startsWith("Disabled")
+        );
+        expect(disabledEmbed.data.description).toContain("(standard)");
+      }
+    );
+
+    await withHarness(
+      {
+        user: OWNER,
+        isAutocomplete: true,
+        options: {
+          subcommand: "enable",
+          focused: "stand",
+          focusedName: "id",
+        },
+      },
+      async (harness) => {
+        seedDeckCatalog();
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        catalog.db
+          .query(`UPDATE deck_templates SET enabled = 2 WHERE id = ?`)
+          .run("standard");
+        catalog.close();
+
+        await runCatalog(harness);
+        expect(harness.calls.respond[0].map((choice) => choice.value)).toEqual([
+          "standard",
+        ]);
+      }
+    );
+
+    await withHarness(
+      {
+        user: OWNER,
+        isAutocomplete: true,
+        options: {
+          subcommand: "disable",
+          focused: "stand",
+          focusedName: "id",
+        },
+      },
+      async (harness) => {
+        seedDeckCatalog();
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        catalog.db
+          .query(`UPDATE deck_templates SET enabled = 2 WHERE id = ?`)
+          .run("standard");
+        catalog.close();
+
+        await runCatalog(harness);
+        const values = harness.calls.respond[0].map((choice) => choice.value);
+        expect(values).not.toContain("standard");
       }
     );
   });

@@ -1,5 +1,9 @@
 const { EmbedBuilder, MessageFlags } = require("discord.js");
 const DeckCatalog = require("../../db/deckCatalog.js");
+const {
+  isCatalogEnabled,
+  classifySqliteOpenError,
+} = DeckCatalog;
 const Formatter = require("../../modules/GameFormatter");
 
 const NOT_OWNER =
@@ -46,20 +50,57 @@ function migrateHintReply() {
   return ephemeralEmbedPayload(catalogEmbed({ description: MIGRATE_HINT }));
 }
 
+function catalogInspectErrorMessage(info) {
+  if (info?.error === "locked") {
+    return "Deck catalog database is locked. Try again in a moment.";
+  }
+  if (info?.error === "corrupt") {
+    return "Deck catalog database is corrupt or not a valid sqlite file. Do not run `/migrate` — restore or replace the catalog database.";
+  }
+  const detail = info?.errorMessage ? ` (${info.errorMessage})` : "";
+  return `Deck catalog database could not be read${detail}.`;
+}
+
+function catalogUnavailableReply(info) {
+  if (info?.error) {
+    return ephemeralEmbedPayload(
+      catalogEmbed({ description: catalogInspectErrorMessage(info) })
+    );
+  }
+  return migrateHintReply();
+}
+
 function openReadyCatalog() {
   const info = DeckCatalog.inspect();
-  if (!info.exists || !info.hasSchema) {
+  if (info.error || !info.exists || !info.hasSchema) {
     return { ready: false, catalog: null, info };
   }
-  return { ready: true, catalog: new DeckCatalog(), info };
+  try {
+    return { ready: true, catalog: new DeckCatalog(), info };
+  } catch (error) {
+    return {
+      ready: false,
+      catalog: null,
+      info: {
+        ...info,
+        hasSchema: false,
+        error: classifySqliteOpenError(error),
+        errorMessage: String(error?.message || error),
+      },
+    };
+  }
+}
+
+function isTemplateEnabled(template) {
+  return isCatalogEnabled(template?.enabled);
 }
 
 function enabledLabel(enabled) {
-  return Number(enabled) === 1 ? "enabled" : "disabled";
+  return isCatalogEnabled(enabled) ? "enabled" : "disabled";
 }
 
 function enabledHeading(enabled) {
-  return Number(enabled) === 1 ? "Enabled" : "Disabled";
+  return isCatalogEnabled(enabled) ? "Enabled" : "Disabled";
 }
 
 function cardViewCode(card) {
@@ -114,10 +155,13 @@ function formatCreatorName(createdBy, creatorNames = new Map()) {
 }
 
 function formatTemplateListLine(template, { creatorNames } = {}) {
-  const count = Array.isArray(template.cards) ? template.cards.length : 0;
-  const layout = formatLayoutLabel(template.cards);
   const creator = formatCreatorName(template.created_by, creatorNames);
   const suffix = creator ? `, by ${creator}` : "";
+  if (template.cardsError) {
+    return `${template.name} (${template.id}): unreadable cards${suffix}`;
+  }
+  const count = Array.isArray(template.cards) ? template.cards.length : 0;
+  const layout = formatLayoutLabel(template.cards);
   return `${template.name} (${template.id}): ${count} cards, ${layout}${suffix}`;
 }
 
@@ -272,7 +316,7 @@ function autocompleteTemplates(templates, focused, predicate = () => true) {
     })
     .slice(0, 25)
     .map((template) => {
-      const prefix = Number(template.enabled) === 1 ? "" : "[disabled] ";
+      const prefix = isTemplateEnabled(template) ? "" : "[disabled] ";
       const name = `${prefix}${template.name} (${template.id})`;
       return {
         name: name.slice(0, 100),
@@ -317,7 +361,10 @@ module.exports = {
   catalogEmbed,
   notOwnerReply,
   migrateHintReply,
+  catalogUnavailableReply,
+  catalogInspectErrorMessage,
   openReadyCatalog,
+  isTemplateEnabled,
   enabledLabel,
   enabledHeading,
   formatLayoutLabel,
