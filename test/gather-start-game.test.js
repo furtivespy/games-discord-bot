@@ -88,6 +88,16 @@ describe("GatherInterest seat picker helpers", () => {
     expect(GatherInterest.defaultSeatCount(gather, 9)).toBe(9);
   });
 
+  test("seat select maxValues is interested count, not BGG max", () => {
+    const gather = sampleGather({ game: sampleGame({ maxPlayers: 2 }) });
+    addInterest(gather, "a", "very", "Ann");
+    addInterest(gather, "b", "somewhat", "Bob");
+    addInterest(gather, "c", "flexible", "Casey");
+    const meta = GatherStartGame.buildSeatSelectRow(gather);
+    expect(meta.maxValues).toBe(3);
+    expect(meta.row.components[0].data.max_values).toBe(3);
+  });
+
   test("keeps the top 25 by strength when more than 25 people are interested", () => {
     const gather = sampleGather();
     for (let i = 0; i < 20; i++) {
@@ -149,6 +159,8 @@ function createThreadEnv({
   pinThrows = null,
   failGameSave = false,
   failThreadCreate = false,
+  failCreatePostTimes = 0,
+  failGatherSaves = 0,
   parentType = ChannelType.GuildText,
 } = {}) {
   const threadSends = [];
@@ -156,12 +168,23 @@ function createThreadEnv({
   const renamed = [];
   const created = [];
   let nextMessageId = 1;
+  let createPostFailuresLeft = failCreatePostTimes;
+  let gatherFailuresLeft = failGatherSaves;
 
   const thread = {
     id: "thread-1",
     name: "Wingspan",
     guildId: "guild-1",
     send: async (payload) => {
+      const content =
+        typeof payload === "string" ? payload : payload?.content || "";
+      if (
+        String(content).includes("is on the table.") &&
+        createPostFailuresLeft > 0
+      ) {
+        createPostFailuresLeft--;
+        throw new Error("Missing Permissions");
+      }
       const message = {
         id: `msg-${nextMessageId++}`,
         payload,
@@ -214,11 +237,18 @@ function createThreadEnv({
   const client = memoryClient({
     [`${gather.guildId}:${GatherInterest.COLLECTION}:${gather.id}`]: gather,
   });
-  if (failGameSave) {
+  if (failGameSave || failGatherSaves) {
     const original = client.setGameDataV2;
     client.setGameDataV2 = async (guildId, collection, id, data, options) => {
-      if (collection === "game") {
+      if (failGameSave && collection === "game") {
         throw new Error("sqlite boom");
+      }
+      if (
+        collection === GatherInterest.COLLECTION &&
+        gatherFailuresLeft > 0
+      ) {
+        gatherFailuresLeft--;
+        throw new Error("gather sqlite boom");
       }
       return original(guildId, collection, id, data, options);
     };
@@ -592,6 +622,204 @@ describe("GatherStartGame start flow", () => {
     const hostReply = replies.find((r) => String(r.content || "").includes("Game started"));
     expect(hostReply.content).toContain("minimum of 3");
     expect(env.threadSends[1].payload.content).toContain("minimum of 3");
+  });
+
+  test("warns when seating above BGG max instead of blocking the select", async () => {
+    gather.game.minPlayers = 1;
+    gather.game.maxPlayers = 2;
+    const env = createThreadEnv({ gather });
+    await env.client.setGameDataV2(
+      gather.guildId,
+      GatherInterest.COLLECTION,
+      gather.id,
+      gather
+    );
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a", "b", "c"],
+    });
+    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
+      shuffle: (players) => players,
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+    const hostReply = replies.find((r) =>
+      String(r.content || "").includes("Game started")
+    );
+    expect(hostReply.content).toContain("maximum of 2");
+    expect(env.threadSends[1].payload.content).toContain("maximum of 2");
+  });
+
+  test("create-post failure is an error, keeps the table, and marks the gather started", async () => {
+    const env = createThreadEnv({ gather, failCreatePostTimes: 2 });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
+      shuffle: (players) => players,
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+    expect(env.deleted).toEqual([]);
+    expect(env.threadSends.some((s) => String(s.payload?.content || "").includes("on the table"))).toBe(
+      false
+    );
+    expect(
+      replies.some((r) => String(r.content || "").includes("Game started"))
+    ).toBe(false);
+    expect(
+      replies.some((r) =>
+        String(r.content || "").includes("couldn't post the table announcement")
+      )
+    ).toBe(true);
+    const stored = await env.client.getGameDataV2(
+      gather.guildId,
+      GatherInterest.COLLECTION,
+      gather.id
+    );
+    expect(stored.status).toBe("started");
+    expect(stored.startedThreadId).toBe("thread-1");
+    const game = await env.client.getGameDataV2(gather.guildId, "game", "thread-1");
+    expect(game.isdeleted).toBe(false);
+
+    const secondReplies = [];
+    await GatherInterest.handleButton(
+      startInteraction({
+        gather,
+        client: env.client,
+        edits: [],
+        replies: secondReplies,
+      }),
+      env.client
+    );
+    expect(secondReplies[0].content).toContain("already started");
+    expect(env.created).toHaveLength(1);
+  });
+
+  test("create-post succeeds on retry", async () => {
+    const env = createThreadEnv({ gather, failCreatePostTimes: 1 });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
+      shuffle: (players) => players,
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+    expect(env.deleted).toEqual([]);
+    expect(env.threadSends[1].payload.content).toContain("on the table");
+    expect(
+      replies.some((r) => String(r.content || "").includes("Game started"))
+    ).toBe(true);
+    const stored = await env.client.getGameDataV2(
+      gather.guildId,
+      GatherInterest.COLLECTION,
+      gather.id
+    );
+    expect(stored.status).toBe("started");
+  });
+
+  test("gather save failure after status still marks started on retry and refuses a second Start", async () => {
+    const env = createThreadEnv({ gather, failGatherSaves: 1 });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
+      shuffle: (players) => players,
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+    expect(env.deleted).toEqual([]);
+    const stored = await env.client.getGameDataV2(
+      gather.guildId,
+      GatherInterest.COLLECTION,
+      gather.id
+    );
+    expect(stored.status).toBe("started");
+    expect(stored.startedThreadId).toBe("thread-1");
+    expect(
+      replies.some((r) => String(r.content || "").includes("Game started"))
+    ).toBe(true);
+
+    const secondReplies = [];
+    await GatherInterest.handleButton(
+      startInteraction({
+        gather,
+        client: env.client,
+        edits: [],
+        replies: secondReplies,
+      }),
+      env.client
+    );
+    expect(secondReplies[0].content).toContain("already started");
+    expect(env.created).toHaveLength(1);
+  });
+
+  test("status post then gather-save outage keeps the table and still persists started", async () => {
+    // persistGatherStarted tries twice per call; createGameInThread calls it
+    // after status, again after the announcement, and once more in catch.
+    const env = createThreadEnv({ gather, failGatherSaves: 2 });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
+      shuffle: (players) => players,
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+    expect(env.deleted).toEqual([]);
+    expect(env.threadSends[1].payload.content).toContain("on the table");
+    const stored = await env.client.getGameDataV2(
+      gather.guildId,
+      GatherInterest.COLLECTION,
+      gather.id
+    );
+    expect(stored.status).toBe("started");
+    expect(env.created).toHaveLength(1);
   });
 
   test("forum parents are refused before a thread is created", () => {

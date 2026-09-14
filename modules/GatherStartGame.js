@@ -49,7 +49,7 @@ class GatherStartGame {
         : "";
     const lines = [
       `Select who sits for **${gameName}**.`,
-      `${range}Choose 1–${selectMeta.maxValues}. Fewer than the BGG minimum is allowed (you'll get a warning).`,
+      `${range}Choose 1–${selectMeta.maxValues}. Seating outside the BGG min/max is allowed (you'll get a warning).`,
     ];
     if (selectMeta.truncated) {
       lines.push(
@@ -62,9 +62,10 @@ class GatherStartGame {
   static buildSeatSelectRow(gather) {
     const { options, truncated, total, shown } =
       GatherInterest.buildSeatSelectOptions(gather);
+    // Spec: warn outside BGG min/max rather than hard-blocking over-max via maxValues.
     const maxValues = Math.max(
       1,
-      Math.min(GatherInterest.defaultSeatCount(gather, options.length), options.length)
+      Math.min(options.length, GatherInterest.DISCORD_SELECT_LIMIT)
     );
     const select = new StringSelectMenuBuilder()
       .setCustomId(GatherInterest.seatsCustomId(gather.id))
@@ -474,30 +475,47 @@ class GatherStartGame {
       );
       statusPosted = true;
 
-      await client.setGameDataV2(gather.guildId, "game", thread.id, gameData, {
-        skipPinnedRefresh: true,
-      });
+      // Table is kept from here: persist started before later steps that can fail,
+      // so a retry cannot open a second live game.
+      let gatherPersisted = await this.persistGatherStarted(
+        client,
+        gather,
+        thread,
+        seated
+      );
 
       try {
-        await thread.send(this.buildCreatePost(gather, seated, warnings));
+        await client.setGameDataV2(gather.guildId, "game", thread.id, gameData, {
+          skipPinnedRefresh: true,
+        });
       } catch (error) {
         console.error(
-          "Failed to post game-creation announcement after LFG start.",
+          "Failed to save pin fields after LFG status post.",
           error
         );
       }
 
-      GatherInterest.markStarted(gather, {
-        threadId: thread.id,
-        gameId: thread.id,
-        seatedUserIds: seated.map((person) => person.userId),
-      });
-      await GatherInterest.saveGather(client, gather);
+      await this.postCreateAnnouncement(thread, gather, seated, warnings);
+
+      if (!gatherPersisted) {
+        gatherPersisted = await this.persistGatherStarted(
+          client,
+          gather,
+          thread,
+          seated
+        );
+      }
 
       try {
         await GatherInterest.editPanel(interaction, gather);
       } catch (error) {
         console.error("Failed to lock the LFG panel after start.", error);
+      }
+
+      if (!gatherPersisted) {
+        throw this.hostError(
+          `The game thread is live: <#${thread.id}>. I couldn't record that this gather started, so a second Start might open another table. Jump to the thread instead of clicking Start again.`
+        );
       }
 
       const warnText = warnings.length ? `\n⚠️ ${warnings.join(" ")}` : "";
@@ -508,17 +526,63 @@ class GatherStartGame {
           .join(" ")}${warnText}`
       );
     } catch (error) {
+      if (statusPosted) {
+        await this.persistGatherStarted(client, gather, thread, seated);
+        try {
+          await GatherInterest.editPanel(interaction, gather);
+        } catch (panelError) {
+          console.error("Failed to lock the LFG panel after start.", panelError);
+        }
+      }
       const hostMessage = error.hostMessage
         ? error
         : this.hostError(
             statusPosted
-              ? `The game thread is live: <#${thread.id}>. I couldn't finish every start step — don't click Start again.`
+              ? `The game thread is live: <#${thread.id}>. I couldn't finish every start step. Don't click Start again.`
               : "I created a thread but couldn't finish creating the game. I cleaned up so you can try again."
           );
       hostMessage.keepThread = statusPosted;
       hostMessage.gameCommitted = gameCommitted && !statusPosted;
       throw hostMessage;
     }
+  }
+
+  static async persistGatherStarted(client, gather, thread, seated) {
+    GatherInterest.markStarted(gather, {
+      threadId: thread.id,
+      gameId: thread.id,
+      seatedUserIds: seated.map((person) => person.userId),
+    });
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await GatherInterest.saveGather(client, gather);
+        return true;
+      } catch (error) {
+        console.error(
+          `Failed to persist gather started status (attempt ${attempt}).`,
+          error
+        );
+      }
+    }
+    return false;
+  }
+
+  static async postCreateAnnouncement(thread, gather, seated, warnings) {
+    const payload = this.buildCreatePost(gather, seated, warnings);
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await thread.send(payload);
+        return;
+      } catch (error) {
+        console.error(
+          `Failed to post game-creation announcement after LFG start (attempt ${attempt}).`,
+          error
+        );
+      }
+    }
+    throw this.hostError(
+      `The game is live in <#${thread.id}>, but I couldn't post the table announcement. Don't click Start again. Open the thread and continue from there.`
+    );
   }
 
   static async postFirstStatusMessage(
