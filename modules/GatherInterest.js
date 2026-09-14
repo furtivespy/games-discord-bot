@@ -67,7 +67,13 @@ class GatherInterest {
   }
 
   static normalizeGather(gather) {
-    if (!gather?.interests) return gather;
+    if (!gather) return gather;
+    if (!gather.status) gather.status = "open";
+    if (!Array.isArray(gather.seatedUserIds)) gather.seatedUserIds = [];
+    if (gather.startedThreadId === undefined) gather.startedThreadId = null;
+    if (gather.startedGameId === undefined) gather.startedGameId = null;
+    if (gather.startedAt === undefined) gather.startedAt = null;
+    if (!gather.interests) return gather;
     for (const entry of Object.values(gather.interests)) {
       const next = this.canonicalizeLevel(entry.level);
       if (next) {
@@ -87,7 +93,7 @@ class GatherInterest {
     if (parts.length !== 3 || parts[0] !== CUSTOM_ID_PREFIX) return null;
     const [, action, gatherId] = parts;
     if (!gatherId) return null;
-    if (action === "close" || action === "reopen") {
+    if (action === "close" || action === "reopen" || action === "start") {
       return { action, gatherId };
     }
     const level = this.canonicalizeLevel(action);
@@ -107,6 +113,14 @@ class GatherInterest {
 
   static reopenCustomId(gatherId) {
     return `${CUSTOM_ID_PREFIX}:reopen:${gatherId}`;
+  }
+
+  static startCustomId(gatherId) {
+    return `${CUSTOM_ID_PREFIX}:start:${gatherId}`;
+  }
+
+  static seatsCustomId(gatherId) {
+    return `${CUSTOM_ID_PREFIX}:seats:${gatherId}`;
   }
 
   static snapshotFromBgg(bgg) {
@@ -148,6 +162,10 @@ class GatherInterest {
       createdAt,
       closedAt: null,
       updatedAt: createdAt,
+      startedAt: null,
+      startedThreadId: null,
+      startedGameId: null,
+      seatedUserIds: [],
       game: { ...game },
       interests: {},
     };
@@ -178,6 +196,21 @@ class GatherInterest {
 
   static isOpen(gather) {
     return gather?.status === "open";
+  }
+
+  static isStarted(gather) {
+    return gather?.status === "started";
+  }
+
+  static markStarted(gather, { threadId, gameId, seatedUserIds, now = new Date() }) {
+    const updatedAt = now instanceof Date ? now.toISOString() : String(now);
+    gather.status = "started";
+    gather.updatedAt = updatedAt;
+    gather.startedAt = updatedAt;
+    gather.startedThreadId = threadId != null ? String(threadId) : null;
+    gather.startedGameId = gameId != null ? String(gameId) : null;
+    gather.seatedUserIds = (seatedUserIds || []).map(String);
+    return gather;
   }
 
   static isHost(gather, userId) {
@@ -224,6 +257,55 @@ class GatherInterest {
     return groups;
   }
 
+  static interestedSorted(gather) {
+    const groups = this.rosterGroups(gather);
+    const people = [];
+    for (const key of LEVEL_ORDER) {
+      for (const person of groups[key]) {
+        people.push({ ...person, level: key });
+      }
+    }
+    return people;
+  }
+
+  static DISCORD_SELECT_LIMIT = 25;
+
+  static defaultSeatCount(gather, interestedCount) {
+    const available = Math.max(0, Number(interestedCount) || 0);
+    const max = gather.game?.maxPlayers;
+    if (max != null && Number(max) > 0) {
+      return Math.max(1, Math.min(Number(max), available, this.DISCORD_SELECT_LIMIT));
+    }
+    return Math.max(1, Math.min(available, this.DISCORD_SELECT_LIMIT));
+  }
+
+  static seatOptionLabel(person) {
+    const tag = LEVELS[person.level]?.header || person.level;
+    const suffix = ` · ${tag}`;
+    let name = person.displayName || `User ${person.userId}`;
+    name = name.replace(/[\r\n]+/g, " ").trim() || `User ${person.userId}`;
+    const maxName = Math.max(1, 100 - suffix.length);
+    if (name.length > maxName) {
+      name = `${name.slice(0, Math.max(1, maxName - 1))}…`;
+    }
+    return `${name}${suffix}`.slice(0, 100);
+  }
+
+  static buildSeatSelectOptions(gather) {
+    const people = this.interestedSorted(gather);
+    const truncated = people.length > this.DISCORD_SELECT_LIMIT;
+    const shownPeople = people.slice(0, this.DISCORD_SELECT_LIMIT);
+    return {
+      options: shownPeople.map((person) => ({
+        label: this.seatOptionLabel(person),
+        value: String(person.userId),
+      })),
+      truncated,
+      total: people.length,
+      shown: shownPeople.length,
+    };
+  }
+
   static buildRosterText(gather) {
     const groups = this.rosterGroups(gather);
     const sections = [];
@@ -258,9 +340,23 @@ class GatherInterest {
     const title = game.url ? `[${game.name}](${game.url})` : (game.name || "Unknown game");
     const summary = this.gameSummaryLine(game);
     const hostLine = `Host: ${this.formatPerson(gather.hostUserId, gather.hostDisplayName)}`;
-    const statusLine = this.isOpen(gather)
-      ? "Click a button to register. Clicking again updates your level."
-      : "**Interest is closed.** The list is frozen.";
+    let statusLine;
+    if (this.isStarted(gather)) {
+      const seatedLines = (gather.seatedUserIds || []).map((userId) => {
+        const entry = gather.interests?.[userId];
+        return `• ${this.formatPerson(userId, entry?.displayName)}`;
+      });
+      const seatedBlock =
+        seatedLines.length > 0 ? `\n${seatedLines.join("\n")}` : " (none recorded)";
+      const jump = gather.startedThreadId
+        ? `\nJump to the game: <#${gather.startedThreadId}>`
+        : "";
+      statusLine = `**Started.** Seated:${seatedBlock}${jump}`;
+    } else if (this.isOpen(gather)) {
+      statusLine = "Click a button to register. Clicking again updates your level.";
+    } else {
+      statusLine = "**Interest is closed.** The list is frozen.";
+    }
     const header = this.headerCounts(gather);
     const roster = this.buildRosterText(gather);
 
@@ -273,14 +369,24 @@ class GatherInterest {
 
   static buildPanelEmbed(gather) {
     const game = gather.game || {};
+    const started = this.isStarted(gather);
+    const open = this.isOpen(gather);
     const embed = new EmbedBuilder()
-      .setTitle(this.isOpen(gather) ? "Who's interested?" : "Who's interested? (closed)")
+      .setTitle(
+        started
+          ? "Who's interested? (started)"
+          : open
+            ? "Who's interested?"
+            : "Who's interested? (closed)"
+      )
       .setDescription(this.buildPanelDescription(gather))
-      .setColor(this.isOpen(gather) ? 0x2ecc71 : 0x95a5a6)
+      .setColor(started ? 0x3498db : open ? 0x2ecc71 : 0x95a5a6)
       .setFooter({
-        text: this.isOpen(gather)
-          ? "Latest click wins · same level keeps you registered"
-          : "Host closed interest · list is frozen",
+        text: started
+          ? "Game started · interest is locked"
+          : open
+            ? "Latest click wins · same level keeps you registered"
+            : "Host closed interest · list is frozen",
       });
     if (game.image) {
       embed.setThumbnail(game.image);
@@ -292,6 +398,7 @@ class GatherInterest {
   }
 
   static buildPanelComponents(gather) {
+    const started = this.isStarted(gather);
     const closed = !this.isOpen(gather);
     const interestRow = new ActionRowBuilder();
     for (const key of LEVEL_ORDER) {
@@ -307,25 +414,46 @@ class GatherInterest {
     }
 
     const hostRow = new ActionRowBuilder();
-    if (closed) {
-      hostRow.addComponents(
-        new ButtonBuilder()
-          .setCustomId(this.reopenCustomId(gather.id))
-          .setLabel("Re-open interest")
-          .setEmoji("🔓")
-          .setStyle(ButtonStyle.Primary)
-      );
+    if (started) {
+      if (gather.startedThreadId && gather.guildId) {
+        hostRow.addComponents(
+          new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setLabel("Jump to game")
+            .setEmoji("🎲")
+            .setURL(
+              `https://discord.com/channels/${gather.guildId}/${gather.startedThreadId}`
+            )
+        );
+      }
     } else {
+      if (closed) {
+        hostRow.addComponents(
+          new ButtonBuilder()
+            .setCustomId(this.reopenCustomId(gather.id))
+            .setLabel("Re-open interest")
+            .setEmoji("🔓")
+            .setStyle(ButtonStyle.Primary)
+        );
+      } else {
+        hostRow.addComponents(
+          new ButtonBuilder()
+            .setCustomId(this.closeCustomId(gather.id))
+            .setLabel("Close interest")
+            .setEmoji("🔒")
+            .setStyle(ButtonStyle.Danger)
+        );
+      }
       hostRow.addComponents(
         new ButtonBuilder()
-          .setCustomId(this.closeCustomId(gather.id))
-          .setLabel("Close interest")
-          .setEmoji("🔒")
-          .setStyle(ButtonStyle.Danger)
+          .setCustomId(this.startCustomId(gather.id))
+          .setLabel("Start game")
+          .setEmoji("🎲")
+          .setStyle(ButtonStyle.Success)
       );
     }
 
-    return [interestRow, hostRow];
+    return hostRow.components.length > 0 ? [interestRow, hostRow] : [interestRow];
   }
 
   static buildPanelPayload(gather) {
@@ -412,6 +540,10 @@ class GatherInterest {
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+    if (parsed.action === "start") {
+      return this.handleStartButton(interaction, client, parsed.gatherId);
+    }
+
     return this.withGatherLock(parsed.gatherId, async () => {
       const gather = await this.loadGather(client, interaction.guildId, parsed.gatherId);
       if (!gather) {
@@ -441,6 +573,10 @@ class GatherInterest {
           await this.replyEphemeral(interaction, "Only the host can close interest.");
           return true;
         }
+        if (this.isStarted(gather)) {
+          await this.replyEphemeral(interaction, "This gather already started a game.");
+          return true;
+        }
         if (!this.isOpen(gather)) {
           await this.replyEphemeral(interaction, "Interest is already closed.");
           return true;
@@ -457,6 +593,13 @@ class GatherInterest {
           await this.replyEphemeral(interaction, "Only the host can re-open interest.");
           return true;
         }
+        if (this.isStarted(gather)) {
+          await this.replyEphemeral(
+            interaction,
+            "This gather already started a game. Interest can't be re-opened."
+          );
+          return true;
+        }
         if (this.isOpen(gather)) {
           await this.replyEphemeral(interaction, "Interest is already open.");
           return true;
@@ -471,6 +614,27 @@ class GatherInterest {
       await this.replyEphemeral(interaction, "Unknown gather action.");
       return true;
     });
+  }
+
+  static async handleStartButton(interaction, client, gatherId) {
+    const GatherStartGame = require("./GatherStartGame");
+    const preview = await this.withGatherLock(gatherId, async () => {
+      const gather = await this.loadGather(client, interaction.guildId, gatherId);
+      const error = GatherStartGame.startPreconditionsError(
+        gather,
+        interaction.user.id,
+        client,
+        interaction.guild
+      );
+      if (error) return { error };
+      return { gather };
+    });
+    if (preview.error) {
+      await this.replyEphemeral(interaction, preview.error);
+      return true;
+    }
+    await GatherStartGame.promptAndStart(interaction, client, preview.gather);
+    return true;
   }
 
   static async editPanel(interaction, gather) {

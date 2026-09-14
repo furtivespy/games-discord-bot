@@ -106,7 +106,8 @@ The bot uses Discord's slash command system. Here are some common commands:
 
 ### Information
 - `/bgg` - Look up games on Board Game Geek
-- `/lfg` - Gather Interest: look up a game on BGG and post a persistent “Who’s interested?” panel (very / somewhat / flexibly interested)
+- `/lfg` - Gather Interest: look up a game on BGG and post a persistent “Who’s interested?” panel (very / somewhat / flexibly interested). Hosts can **Start game** to open a play thread in the configured games channel.
+- `/config games-channel` - Administrators set the parent channel where `/lfg` Start game creates those threads
 
 ## Contributing
 
