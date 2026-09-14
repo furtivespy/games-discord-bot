@@ -50,6 +50,42 @@ function mockReplyInteraction(overrides = {}) {
   return { interaction, calls };
 }
 
+function payloadsFromCalls(calls) {
+  const primary = calls.editReply[0] || calls.reply[0];
+  return primary ? [primary, ...calls.followUp] : [...calls.followUp];
+}
+
+function embedText(embeds) {
+  return (embeds || []).map((embed) => embed.data?.description || "").join("\n");
+}
+
+function payloadsText(payloads) {
+  return payloads.map((payload) => embedText(payload.embeds)).join("\n");
+}
+
+function expectPayloadsWithinDiscordLimits(payloads) {
+  for (const payload of payloads) {
+    expect(payload.flags).toBe(MessageFlags.Ephemeral);
+    expect(payload.embeds.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
+    const chars = (payload.embeds || []).reduce(
+      (sum, embed) => sum + embedCharCount(embed),
+      0
+    );
+    expect(chars).toBeLessThanOrEqual(EMBED_TOTAL_CHAR_LIMIT);
+    for (const embed of payload.embeds) {
+      expect((embed.data.description || "").length).toBeLessThanOrEqual(
+        EMBED_DESCRIPTION_LIMIT
+      );
+    }
+  }
+}
+
+function expectOverflowMarkers(text, markers) {
+  for (const marker of markers) {
+    expect(text).toContain(marker);
+  }
+}
+
 describe("catalog format helpers", () => {
   test("list line puts name first, then id, count, layout, and creator", () => {
     const line = formatTemplateListLine(
@@ -295,10 +331,13 @@ describe("huge-deck catalog fixture (FUR-81)", () => {
   const {
     HUGE_DECK_CARD_COUNT,
     HUGE_DECK_LONG_URL_CHARS,
+    HUGE_DECK_LONG_URL_INDEXES,
     HUGE_LIST_TEMPLATE_COUNT,
     buildHugeShowEmbeds,
     createHugeShowTemplate,
     hugeListLines,
+    hugeListOverflowMarkers,
+    hugeShowOverflowMarkers,
     hugeShowRawStats,
     payloadCharCount,
     payloadsHaveBrokenMarkdownImageLinks,
@@ -339,6 +378,7 @@ describe("huge-deck catalog fixture (FUR-81)", () => {
         );
       }
     }
+    expectOverflowMarkers(embedText(embeds), hugeShowOverflowMarkers());
   });
 
   test("list helper overflow stays inside Discord per-message limits", () => {
@@ -354,27 +394,29 @@ describe("huge-deck catalog fixture (FUR-81)", () => {
       expect(batch.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
       const chars = batch.reduce((sum, embed) => sum + embedCharCount(embed), 0);
       expect(chars).toBeLessThanOrEqual(EMBED_TOTAL_CHAR_LIMIT);
+      for (const embed of batch) {
+        expect((embed.data.description || "").length).toBeLessThanOrEqual(
+          EMBED_DESCRIPTION_LIMIT
+        );
+      }
     }
+    expectOverflowMarkers(embedText(embeds), hugeListOverflowMarkers());
   });
 
   test("replyEphemeralEmbeds does not pack the huge show deck into one illegal payload", async () => {
-    const { interaction, calls } = mockReplyInteraction();
+    const { interaction, calls } = mockReplyInteraction({ deferred: true });
     await replyEphemeralEmbeds(interaction, buildHugeShowEmbeds());
-    expect(calls.reply).toHaveLength(1);
+    expect(calls.editReply).toHaveLength(1);
+    expect(calls.reply).toHaveLength(0);
     expect(calls.followUp.length).toBeGreaterThanOrEqual(1);
-    expect(calls.editReply).toHaveLength(0);
-    const sent = [...calls.reply, ...calls.followUp];
-    const sentEmbeds = sent.reduce((n, payload) => n + payload.embeds.length, 0);
-    expect(sentEmbeds).toBe(buildHugeShowEmbeds().length);
-    for (const payload of sent) {
-      expect(payload.flags).toBe(MessageFlags.Ephemeral);
-      expect(payload.embeds.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
-      expect(payloadCharCount(payload)).toBeLessThanOrEqual(EMBED_TOTAL_CHAR_LIMIT);
-    }
+    const sent = payloadsFromCalls(calls);
+    expectPayloadsWithinDiscordLimits(sent);
+    expectOverflowMarkers(payloadsText(sent), hugeShowOverflowMarkers());
   });
 
   test("follow-up failure leaves the huge-deck first page in place", async () => {
     const { interaction, calls } = mockReplyInteraction({
+      deferred: true,
       followUp: async () => {
         throw new Error("discord follow-up failed");
       },
@@ -387,14 +429,45 @@ describe("huge-deck catalog fixture (FUR-81)", () => {
     }
     expect(caught).toBeTruthy();
     expect(caught.catalogPrimarySent).toBe(true);
-    expect(calls.reply).toHaveLength(1);
-    expect(calls.reply[0].embeds[0].data.title).toBe(
+    expect(calls.editReply).toHaveLength(1);
+    expect(calls.reply).toHaveLength(0);
+    expect(calls.editReply[0].embeds[0].data.title).toBe(
       createHugeShowTemplate().name
     );
-    expect(payloadCharCount(calls.reply[0])).toBeLessThanOrEqual(
+    expect(payloadCharCount(calls.editReply[0])).toBeLessThanOrEqual(
       EMBED_TOTAL_CHAR_LIMIT
     );
-    expect(calls.editReply).toHaveLength(0);
+    expect(calls.followUp).toHaveLength(0);
+  });
+
+  test("follow-up failure leaves the huge-list first page in place", async () => {
+    const { interaction, calls } = mockReplyInteraction({
+      deferred: true,
+      followUp: async () => {
+        throw new Error("discord follow-up failed");
+      },
+    });
+    const embeds = embedsFromLines({
+      title: `Enabled (${HUGE_LIST_TEMPLATE_COUNT})`,
+      lines: hugeListLines(),
+    });
+    let caught;
+    try {
+      await replyEphemeralEmbeds(interaction, embeds);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeTruthy();
+    expect(caught.catalogPrimarySent).toBe(true);
+    expect(calls.editReply).toHaveLength(1);
+    expect(calls.reply).toHaveLength(0);
+    expect(calls.editReply[0].embeds[0].data.title).toBe(
+      `Enabled (${HUGE_LIST_TEMPLATE_COUNT})`
+    );
+    expect(payloadCharCount(calls.editReply[0])).toBeLessThanOrEqual(
+      EMBED_TOTAL_CHAR_LIMIT
+    );
+    expect(calls.followUp).toHaveLength(0);
   });
 
   test("long markdown image URLs on huge-deck lines are not mid-clamped", () => {
@@ -404,10 +477,12 @@ describe("huge-deck catalog fixture (FUR-81)", () => {
     expect(longLine).toContain("[image](https://example.test/huge-regression/");
 
     const embeds = buildHugeShowEmbeds(template);
-    const text = embeds.map((embed) => embed.data.description || "").join("\n");
+    const text = embedText(embeds);
     expect(payloadsHaveBrokenMarkdownImageLinks([{ embeds }])).toBe(false);
-    expect(text).toContain("Huge Card 000");
+    expectOverflowMarkers(text, hugeShowOverflowMarkers());
+    expect(HUGE_DECK_LONG_URL_INDEXES).toEqual([0, 50, HUGE_DECK_CARD_COUNT - 1]);
     expect(text).not.toMatch(/\[image\]\([^)\n]*$/m);
+    expect(text).not.toContain("[image](https://example.test/huge-regression/");
     expect(text).not.toContain("u".repeat(80));
     expect(text).not.toMatch(/\[image\]\([^)]*…/);
   });

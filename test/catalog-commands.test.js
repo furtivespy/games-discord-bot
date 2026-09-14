@@ -19,7 +19,10 @@ const {
   HUGE_DECK_ID,
   HUGE_DECK_NAME,
   HUGE_DECK_CARD_COUNT,
+  HUGE_DECK_LONG_URL_INDEXES,
   HUGE_LIST_TEMPLATE_COUNT,
+  hugeListOverflowMarkers,
+  hugeShowOverflowMarkers,
   insertHugeListTemplates,
   insertHugeShowTemplate,
   payloadCharCount,
@@ -41,6 +44,32 @@ async function runCatalog(harness) {
 
 function primaryPayload(harness) {
   return harness.calls.editReply[0] || harness.calls.reply[0];
+}
+
+function sentCatalogPayloads(harness) {
+  const primary = primaryPayload(harness);
+  return primary ? [primary, ...harness.calls.followUp] : [...harness.calls.followUp];
+}
+
+function expectPayloadsWithinDiscordLimits(payloads, { ephemeral = false } = {}) {
+  for (const payload of payloads) {
+    if (ephemeral) {
+      expect(payload.flags).toBe(MessageFlags.Ephemeral);
+    }
+    expect(payload.embeds.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
+    expect(payloadCharCount(payload)).toBeLessThanOrEqual(EMBED_TOTAL_CHAR_LIMIT);
+    for (const embed of payload.embeds) {
+      expect((embed.data.description || "").length).toBeLessThanOrEqual(
+        EMBED_DESCRIPTION_LIMIT
+      );
+    }
+  }
+}
+
+function expectOverflowMarkers(text, markers) {
+  for (const marker of markers) {
+    expect(text).toContain(marker);
+  }
 }
 
 function insertPackedTemplates(dataDir, count, { enabled = 1 } = {}) {
@@ -730,35 +759,24 @@ describe("/catalog command handlers", () => {
 
         const primary = primaryPayload(harness);
         expect(primary.embeds[0].data.title).toBe(HUGE_DECK_NAME);
-        expect(primary.embeds.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
         expect(payloadCharCount(primary)).toBeGreaterThan(
           EMBED_TOTAL_CHAR_LIMIT / 2
         );
-        expect(payloadCharCount(primary)).toBeLessThanOrEqual(
-          EMBED_TOTAL_CHAR_LIMIT
-        );
         expect(harness.calls.followUp.length).toBeGreaterThanOrEqual(1);
 
-        const sent = [primary, ...harness.calls.followUp];
-        for (const payload of sent) {
-          expect(payload.flags).toBe(MessageFlags.Ephemeral);
-          expect(payload.embeds.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
-          expect(payloadCharCount(payload)).toBeLessThanOrEqual(
-            EMBED_TOTAL_CHAR_LIMIT
-          );
-          for (const embed of payload.embeds) {
-            expect((embed.data.description || "").length).toBeLessThanOrEqual(
-              EMBED_DESCRIPTION_LIMIT
-            );
-          }
-        }
+        const sent = sentCatalogPayloads(harness);
+        expectPayloadsWithinDiscordLimits(sent, { ephemeral: true });
 
         const text = collectedReplyText(harness);
         expect(text).toContain(`\`${HUGE_DECK_ID}\``);
         expect(text).toContain(`${HUGE_DECK_CARD_COUNT} cards`);
-        expect(text).toContain("Huge Card 000");
+        // Tail + long-URL indexes (0, 50, 299): header counts alone do not
+        // prove overflow lines survived a truncation after the first follow-up.
+        expectOverflowMarkers(text, hugeShowOverflowMarkers());
+        expect(HUGE_DECK_LONG_URL_INDEXES).toEqual([0, 50, HUGE_DECK_CARD_COUNT - 1]);
         expect(payloadsHaveBrokenMarkdownImageLinks(sent)).toBe(false);
         expect(text).not.toMatch(/\[image\]\([^)\n]*$/m);
+        expect(text).not.toContain("[image](https://example.test/huge-regression/");
         expect(text).not.toContain("u".repeat(80));
       }
     );
@@ -800,22 +818,38 @@ describe("/catalog command handlers", () => {
         insertHugeListTemplates(harness.dataDir);
         await runCatalog(harness);
         expect(harness.calls.followUp.length).toBeGreaterThanOrEqual(1);
-        const primary = primaryPayload(harness);
-        expect(primary.embeds.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
-        expect(payloadCharCount(primary)).toBeLessThanOrEqual(
-          EMBED_TOTAL_CHAR_LIMIT
-        );
+        const sent = sentCatalogPayloads(harness);
+        expectPayloadsWithinDiscordLimits(sent, { ephemeral: true });
         const text = collectedReplyText(harness);
         expect(text).toContain(`Enabled (${HUGE_LIST_TEMPLATE_COUNT})`);
-        expect(text).toContain("Huge List 000");
         expect(text).toContain("Disabled (0)");
-        const sent = [primary, ...harness.calls.followUp];
-        for (const payload of sent) {
-          expect(payload.embeds.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
-          expect(payloadCharCount(payload)).toBeLessThanOrEqual(
-            EMBED_TOTAL_CHAR_LIMIT
-          );
-        }
+        expectOverflowMarkers(text, hugeListOverflowMarkers());
+      }
+    );
+  });
+
+  test("list huge-template follow-up failure does not editReply the first page away", async () => {
+    await withHarness(
+      { user: OWNER, options: { subcommand: "list" } },
+      async (harness) => {
+        insertHugeListTemplates(harness.dataDir);
+        harness.interaction.followUp = async () => {
+          throw new Error("discord follow-up failed");
+        };
+
+        await runCatalog(harness);
+        const primary = primaryPayload(harness);
+        expect(primary.embeds[0].data.title).toMatch(/^Enabled \(/);
+        expect(collectedReplyText(harness)).toContain("Huge List 000");
+        expect(collectedReplyText(harness)).not.toContain(
+          "Something went wrong"
+        );
+        const errorEdits = harness.calls.editReply.filter((payload) =>
+          String(payload?.embeds?.[0]?.data?.description || "").includes(
+            "Something went wrong"
+          )
+        );
+        expect(errorEdits).toHaveLength(0);
       }
     );
   });

@@ -1,8 +1,5 @@
 const DeckCatalog = require("../../db/deckCatalog.js");
 const {
-  EMBED_DESCRIPTION_LIMIT,
-  EMBED_TOTAL_CHAR_LIMIT,
-  EMBEDS_PER_MESSAGE,
   buildCardListEmbeds,
   embedCharCount,
   enabledHeading,
@@ -37,9 +34,33 @@ const HUGE_LIST_NAME_PAD = 70;
 
 const HUGE_DECK_LONG_URL_INDEXES = [0, 50, HUGE_DECK_CARD_COUNT - 1];
 
+function paddedIndex(index) {
+  return String(index).padStart(3, "0");
+}
+
+function hugeCardMarker(index) {
+  return `Huge Card ${paddedIndex(index)}`;
+}
+
+function hugeListMarker(index) {
+  return `Huge List ${paddedIndex(index)}`;
+}
+
+// Names that must appear in overflow replies. Header counts alone do not
+// prove the last cards/templates survived batching.
+function hugeShowOverflowMarkers() {
+  const indexes = [
+    ...new Set([0, ...HUGE_DECK_LONG_URL_INDEXES, HUGE_DECK_CARD_COUNT - 1]),
+  ].sort((a, b) => a - b);
+  return indexes.map(hugeCardMarker);
+}
+
+function hugeListOverflowMarkers() {
+  return [hugeListMarker(0), hugeListMarker(HUGE_LIST_TEMPLATE_COUNT - 1)];
+}
+
 function paddedCardName(index) {
-  const n = String(index).padStart(3, "0");
-  return `Huge Card ${n} ${"N".repeat(HUGE_DECK_NAME_PAD)}`;
+  return `${hugeCardMarker(index)} ${"N".repeat(HUGE_DECK_NAME_PAD)}`;
 }
 
 function isLongUrlCard(index) {
@@ -107,7 +128,7 @@ function hugeShowRawStats(template = createHugeShowTemplate()) {
 function createHugeListTemplates(count = HUGE_LIST_TEMPLATE_COUNT) {
   return Array.from({ length: count }, (_, i) => ({
     id: `huge-list-${i}`,
-    name: `Huge List ${String(i).padStart(3, "0")} ${"W".repeat(HUGE_LIST_NAME_PAD)}`,
+    name: `${hugeListMarker(i)} ${"W".repeat(HUGE_LIST_NAME_PAD)}`,
     cards: [
       {
         name: "A",
@@ -194,17 +215,10 @@ module.exports = {
   HUGE_DECK_ID,
   HUGE_DECK_NAME,
   HUGE_DECK_CARD_COUNT,
-  HUGE_DECK_NAME_PAD,
   HUGE_DECK_LONG_URL_CHARS,
   HUGE_DECK_LONG_URL_INDEXES,
   HUGE_LIST_TEMPLATE_COUNT,
-  HUGE_LIST_NAME_PAD,
-  EMBED_DESCRIPTION_LIMIT,
-  EMBED_TOTAL_CHAR_LIMIT,
-  EMBEDS_PER_MESSAGE,
   createHugeShowTemplate,
-  createHugeShowCard,
-  hugeShowHeader,
   buildHugeShowEmbeds,
   hugeShowRawStats,
   createHugeListTemplates,
@@ -212,6 +226,7 @@ module.exports = {
   insertHugeShowTemplate,
   insertHugeListTemplates,
   payloadCharCount,
-  descriptionHasBrokenMarkdownImageLink,
   payloadsHaveBrokenMarkdownImageLinks,
+  hugeShowOverflowMarkers,
+  hugeListOverflowMarkers,
 };
