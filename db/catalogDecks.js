@@ -64,7 +64,7 @@ function readEnabledTemplate(id, options = {}) {
     return withCatalog(options, (catalog) => {
       if (!catalog) return null;
       const template = catalog.getTemplate(id);
-      if (!template || !DeckCatalog.isCatalogEnabled(template.enabled)) return null;
+      if (!template || !DeckCatalog.isEnabled(template)) return null;
       if (!Array.isArray(template.cards)) return null;
       return template;
     });
