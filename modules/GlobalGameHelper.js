@@ -1,5 +1,6 @@
 const GameDB = require('../db/anygame.js')
 const GameFormatter = require('./GameFormatter')
+const { listCardSets } = require('../db/catalogDecks.js')
 const { cloneDeep, chain, find } = require("lodash");
 const { nanoid } = require('nanoid');
 
@@ -38,9 +39,9 @@ class GameHelper {
     return name.slice(0, GameHelper.AUTOCOMPLETE_NAME_MAX)
   }
 
-  static getCardLists(searchTerm) {
+  static getCardLists(searchTerm, options) {
     const term = String(searchTerm ?? "").toLowerCase()
-    const matches = GameDB.CurrentCardList.filter((cl) =>
+    const matches = listCardSets(options).filter((cl) =>
       cl[0].toLowerCase().includes(term) || cl[1].toLowerCase().includes(term)
     )
     const pinned = GameHelper.PINNED_CARDSET_IDS

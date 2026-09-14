@@ -2,6 +2,7 @@ const GameHelper = require('../../modules/GlobalGameHelper')
 const { find, cloneDeep, shuffle } = require('lodash')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
 const GameDB = require("../../db/anygame.js")
+const { materializeDeck, UNKNOWN_OR_DISABLED_CARD_SET } = require("../../db/catalogDecks.js")
 
 class NewDeck {
     async execute(interaction, client) {
@@ -47,8 +48,16 @@ class NewDeck {
         });
 
         const isEmptySet = GameDB.isEmptyCardSet(inputSet)
+        let cardSetDisplay = inputSet
         if (inputSet != "custom-csv" && !isEmptySet) {
-            newdeck.allCards = GameDB.MakeSpecificDeck(inputName, inputSet);
+            const materialized = materializeDeck(inputName, inputSet);
+            if (!materialized.ok) {
+                await interaction.editReply({
+                    content: UNKNOWN_OR_DISABLED_CARD_SET});
+                return;
+            }
+            newdeck.allCards = materialized.cards;
+            cardSetDisplay = materialized.name;
         } else if (isEmptySet) {
             newdeck.allCards = [];
         } else {
@@ -63,7 +72,7 @@ class NewDeck {
             const actorDisplayName = interaction.member?.displayName || interaction.user.username
             const cardSetType = inputSet === "custom-csv" ? "custom CSV" :
                                isEmptySet ? "empty deck" :
-                               (GameDB.CurrentCardList.find(cl => cl[1] === inputSet)?.[0] || inputSet)
+                               cardSetDisplay
             
             GameHelper.recordMove(
                 gameData,

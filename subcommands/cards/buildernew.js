@@ -2,6 +2,7 @@ const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { find, cloneDeep, shuffle } = require('lodash')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
+const { materializeDeck, readEnabledTemplate, UNKNOWN_OR_DISABLED_CARD_SET } = require('../../db/catalogDecks.js')
 const haiku = require('haikunator')
 
 class builderNew {
@@ -28,6 +29,11 @@ class builderNew {
       const inputSet = interaction.options.getString("basecardset");
       const allCardSet = interaction.options.getString("supplyset");
 
+      if (!readEnabledTemplate(inputSet) || !readEnabledTemplate(allCardSet)) {
+        await interaction.editReply({ content: UNKNOWN_OR_DISABLED_CARD_SET })
+        return
+      }
+
       for (const player of gameData.players) {
         let deckName = interaction.guild.members.cache.get(player.userId)?.displayName ?? player.name
         if (find(gameData.decks, { name: deckName })) {
@@ -37,7 +43,12 @@ class builderNew {
           name: deckName,
           id: player.userId,
         });
-        newDeck.allCards = GameDB.MakeSpecificDeck(deckName, inputSet);
+        const playerCards = materializeDeck(deckName, inputSet);
+        if (!playerCards.ok) {
+          await interaction.editReply({ content: UNKNOWN_OR_DISABLED_CARD_SET })
+          return
+        }
+        newDeck.allCards = playerCards.cards;
         newDeck.piles.draw.cards = cloneDeep(shuffle(newDeck.allCards));
         gameData.decks.push(newDeck);
       }
@@ -47,7 +58,12 @@ class builderNew {
       let newDeck = Object.assign({}, cloneDeep(GameDB.defaultDeck), {
         name: `Supply-${h.haikunate({tokenLength: 0})}`,
       });
-      newDeck.allCards = GameDB.MakeSpecificDeck("Supply", allCardSet);
+      const supplyCards = materializeDeck("Supply", allCardSet);
+      if (!supplyCards.ok) {
+        await interaction.editReply({ content: UNKNOWN_OR_DISABLED_CARD_SET })
+        return
+      }
+      newDeck.allCards = supplyCards.cards;
       newDeck.piles.draw.cards = cloneDeep(shuffle(newDeck.allCards));
       gameData.decks.push(newDeck);
 
