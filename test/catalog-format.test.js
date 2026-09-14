@@ -6,8 +6,10 @@ const {
   buildCardListEmbeds,
   catalogEmbed,
   embedCharCount,
+  embedsFromLines,
   EMBED_DESCRIPTION_LIMIT,
   EMBED_FOOTER_LIMIT,
+  EMBEDS_PER_MESSAGE,
   EMBED_TITLE_LIMIT,
   EMBED_TOTAL_CHAR_LIMIT,
   formatHandCardLine,
@@ -286,5 +288,127 @@ describe("catalog format helpers", () => {
     const embed = catalogEmbed({ title: "Enabled (1)", description: "Hello" });
     expect(embed).toBeInstanceOf(EmbedBuilder);
     expect(embed.data.color).toBe(13502711);
+  });
+});
+
+describe("huge-deck catalog fixture (FUR-81)", () => {
+  const {
+    HUGE_DECK_CARD_COUNT,
+    HUGE_DECK_LONG_URL_CHARS,
+    HUGE_LIST_TEMPLATE_COUNT,
+    buildHugeShowEmbeds,
+    createHugeShowTemplate,
+    hugeListLines,
+    hugeShowRawStats,
+    payloadCharCount,
+    payloadsHaveBrokenMarkdownImageLinks,
+  } = require("./helpers/hugeCatalogDeck");
+
+  test("fixture still overflows Discord combined-char budget (bump HUGE_DECK_CARD_COUNT if limits rise)", () => {
+    // Discord currently allows 6000 combined embed chars / 10 embeds per
+    // message. If those limits change and this fails because the fixture
+    // no longer overflows, increase HUGE_DECK_CARD_COUNT (and/or NAME_PAD)
+    // in test/helpers/hugeCatalogDeck.js until totalChars is again well
+    // above EMBED_TOTAL_CHAR_LIMIT. Keep HUGE_DECK_LONG_URL_CHARS > 4096.
+    const { totalChars, embedCount, embeds } = hugeShowRawStats();
+    expect(HUGE_DECK_CARD_COUNT).toBeGreaterThanOrEqual(100);
+    expect(HUGE_DECK_LONG_URL_CHARS).toBeGreaterThan(EMBED_DESCRIPTION_LIMIT);
+    expect(embeds.length).toBe(embedCount);
+    expect(embedCount).toBeGreaterThan(1);
+    expect(totalChars).toBeGreaterThan(EMBED_TOTAL_CHAR_LIMIT);
+  });
+
+  test("show helper keeps the first page legal and sends overflow as extra batches", () => {
+    const embeds = buildHugeShowEmbeds();
+    const batches = batchEmbeds(embeds);
+    expect(batches.length).toBeGreaterThan(1);
+    expect(batches[0].length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
+    const firstChars = batches[0].reduce(
+      (sum, embed) => sum + embedCharCount(embed),
+      0
+    );
+    expect(firstChars).toBeGreaterThan(EMBED_TOTAL_CHAR_LIMIT / 2);
+    expect(firstChars).toBeLessThanOrEqual(EMBED_TOTAL_CHAR_LIMIT);
+    for (const batch of batches) {
+      expect(batch.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
+      const chars = batch.reduce((sum, embed) => sum + embedCharCount(embed), 0);
+      expect(chars).toBeLessThanOrEqual(EMBED_TOTAL_CHAR_LIMIT);
+      for (const embed of batch) {
+        expect((embed.data.description || "").length).toBeLessThanOrEqual(
+          EMBED_DESCRIPTION_LIMIT
+        );
+      }
+    }
+  });
+
+  test("list helper overflow stays inside Discord per-message limits", () => {
+    expect(HUGE_LIST_TEMPLATE_COUNT).toBeGreaterThan(60);
+    const lines = hugeListLines();
+    const embeds = embedsFromLines({
+      title: `Enabled (${lines.length})`,
+      lines,
+    });
+    const batches = batchEmbeds(embeds);
+    expect(batches.length).toBeGreaterThan(1);
+    for (const batch of batches) {
+      expect(batch.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
+      const chars = batch.reduce((sum, embed) => sum + embedCharCount(embed), 0);
+      expect(chars).toBeLessThanOrEqual(EMBED_TOTAL_CHAR_LIMIT);
+    }
+  });
+
+  test("replyEphemeralEmbeds does not pack the huge show deck into one illegal payload", async () => {
+    const { interaction, calls } = mockReplyInteraction();
+    await replyEphemeralEmbeds(interaction, buildHugeShowEmbeds());
+    expect(calls.reply).toHaveLength(1);
+    expect(calls.followUp.length).toBeGreaterThanOrEqual(1);
+    expect(calls.editReply).toHaveLength(0);
+    const sent = [...calls.reply, ...calls.followUp];
+    const sentEmbeds = sent.reduce((n, payload) => n + payload.embeds.length, 0);
+    expect(sentEmbeds).toBe(buildHugeShowEmbeds().length);
+    for (const payload of sent) {
+      expect(payload.flags).toBe(MessageFlags.Ephemeral);
+      expect(payload.embeds.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
+      expect(payloadCharCount(payload)).toBeLessThanOrEqual(EMBED_TOTAL_CHAR_LIMIT);
+    }
+  });
+
+  test("follow-up failure leaves the huge-deck first page in place", async () => {
+    const { interaction, calls } = mockReplyInteraction({
+      followUp: async () => {
+        throw new Error("discord follow-up failed");
+      },
+    });
+    let caught;
+    try {
+      await replyEphemeralEmbeds(interaction, buildHugeShowEmbeds());
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeTruthy();
+    expect(caught.catalogPrimarySent).toBe(true);
+    expect(calls.reply).toHaveLength(1);
+    expect(calls.reply[0].embeds[0].data.title).toBe(
+      createHugeShowTemplate().name
+    );
+    expect(payloadCharCount(calls.reply[0])).toBeLessThanOrEqual(
+      EMBED_TOTAL_CHAR_LIMIT
+    );
+    expect(calls.editReply).toHaveLength(0);
+  });
+
+  test("long markdown image URLs on huge-deck lines are not mid-clamped", () => {
+    const template = createHugeShowTemplate();
+    const longLine = formatHandCardLine(template.cards[0]);
+    expect(longLine.length).toBeGreaterThan(EMBED_DESCRIPTION_LIMIT);
+    expect(longLine).toContain("[image](https://example.test/huge-regression/");
+
+    const embeds = buildHugeShowEmbeds(template);
+    const text = embeds.map((embed) => embed.data.description || "").join("\n");
+    expect(payloadsHaveBrokenMarkdownImageLinks([{ embeds }])).toBe(false);
+    expect(text).toContain("Huge Card 000");
+    expect(text).not.toMatch(/\[image\]\([^)\n]*$/m);
+    expect(text).not.toContain("u".repeat(80));
+    expect(text).not.toMatch(/\[image\]\([^)]*…/);
   });
 });

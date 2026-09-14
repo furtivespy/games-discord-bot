@@ -15,6 +15,21 @@ const {
   withHarness,
 } = require("./helpers/harness");
 const { MessageFlags } = require("discord.js");
+const {
+  HUGE_DECK_ID,
+  HUGE_DECK_NAME,
+  HUGE_DECK_CARD_COUNT,
+  HUGE_LIST_TEMPLATE_COUNT,
+  insertHugeListTemplates,
+  insertHugeShowTemplate,
+  payloadCharCount,
+  payloadsHaveBrokenMarkdownImageLinks,
+} = require("./helpers/hugeCatalogDeck");
+const {
+  EMBED_DESCRIPTION_LIMIT,
+  EMBED_TOTAL_CHAR_LIMIT,
+  EMBEDS_PER_MESSAGE,
+} = require("../subcommands/catalog/shared.js");
 
 const OWNER = createUser({ id: "owner-1", username: "Owner" });
 const SNOWFLAKE_CREATOR = "123456789012345678";
@@ -699,6 +714,108 @@ describe("/catalog command handlers", () => {
           )
         );
         expect(errorEdits).toHaveLength(0);
+      }
+    );
+  });
+
+  test("show huge deck keeps the first page under Discord limits and follow-ups the rest", async () => {
+    await withHarness(
+      {
+        user: OWNER,
+        options: { subcommand: "show", strings: { id: HUGE_DECK_ID } },
+      },
+      async (harness) => {
+        insertHugeShowTemplate(harness.dataDir);
+        await runCatalog(harness);
+
+        const primary = primaryPayload(harness);
+        expect(primary.embeds[0].data.title).toBe(HUGE_DECK_NAME);
+        expect(primary.embeds.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
+        expect(payloadCharCount(primary)).toBeGreaterThan(
+          EMBED_TOTAL_CHAR_LIMIT / 2
+        );
+        expect(payloadCharCount(primary)).toBeLessThanOrEqual(
+          EMBED_TOTAL_CHAR_LIMIT
+        );
+        expect(harness.calls.followUp.length).toBeGreaterThanOrEqual(1);
+
+        const sent = [primary, ...harness.calls.followUp];
+        for (const payload of sent) {
+          expect(payload.flags).toBe(MessageFlags.Ephemeral);
+          expect(payload.embeds.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
+          expect(payloadCharCount(payload)).toBeLessThanOrEqual(
+            EMBED_TOTAL_CHAR_LIMIT
+          );
+          for (const embed of payload.embeds) {
+            expect((embed.data.description || "").length).toBeLessThanOrEqual(
+              EMBED_DESCRIPTION_LIMIT
+            );
+          }
+        }
+
+        const text = collectedReplyText(harness);
+        expect(text).toContain(`\`${HUGE_DECK_ID}\``);
+        expect(text).toContain(`${HUGE_DECK_CARD_COUNT} cards`);
+        expect(text).toContain("Huge Card 000");
+        expect(payloadsHaveBrokenMarkdownImageLinks(sent)).toBe(false);
+        expect(text).not.toMatch(/\[image\]\([^)\n]*$/m);
+        expect(text).not.toContain("u".repeat(80));
+      }
+    );
+  });
+
+  test("show huge-deck follow-up failure does not editReply the first page away", async () => {
+    await withHarness(
+      {
+        user: OWNER,
+        options: { subcommand: "show", strings: { id: HUGE_DECK_ID } },
+      },
+      async (harness) => {
+        insertHugeShowTemplate(harness.dataDir);
+        harness.interaction.followUp = async () => {
+          throw new Error("discord follow-up failed");
+        };
+
+        await runCatalog(harness);
+        const primary = primaryPayload(harness);
+        expect(primary.embeds[0].data.title).toBe(HUGE_DECK_NAME);
+        expect(collectedReplyText(harness)).toContain("Huge Card 000");
+        expect(collectedReplyText(harness)).not.toContain(
+          "Something went wrong"
+        );
+        const errorEdits = harness.calls.editReply.filter((payload) =>
+          String(payload?.embeds?.[0]?.data?.description || "").includes(
+            "Something went wrong"
+          )
+        );
+        expect(errorEdits).toHaveLength(0);
+      }
+    );
+  });
+
+  test("list huge template names overflow into follow-ups without an illegal first page", async () => {
+    await withHarness(
+      { user: OWNER, options: { subcommand: "list" } },
+      async (harness) => {
+        insertHugeListTemplates(harness.dataDir);
+        await runCatalog(harness);
+        expect(harness.calls.followUp.length).toBeGreaterThanOrEqual(1);
+        const primary = primaryPayload(harness);
+        expect(primary.embeds.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
+        expect(payloadCharCount(primary)).toBeLessThanOrEqual(
+          EMBED_TOTAL_CHAR_LIMIT
+        );
+        const text = collectedReplyText(harness);
+        expect(text).toContain(`Enabled (${HUGE_LIST_TEMPLATE_COUNT})`);
+        expect(text).toContain("Huge List 000");
+        expect(text).toContain("Disabled (0)");
+        const sent = [primary, ...harness.calls.followUp];
+        for (const payload of sent) {
+          expect(payload.embeds.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
+          expect(payloadCharCount(payload)).toBeLessThanOrEqual(
+            EMBED_TOTAL_CHAR_LIMIT
+          );
+        }
       }
     );
   });
