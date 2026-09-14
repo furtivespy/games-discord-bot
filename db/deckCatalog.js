@@ -108,10 +108,10 @@ class DeckCatalog {
   }
 
   hasName(name) {
-    return (
-      this.db.query(`SELECT 1 FROM deck_templates WHERE name = ?`).get(name) !=
-      null
-    );
+    const key = normalizeDisplayName(name);
+    if (!key) return false;
+    const rows = this.db.query(`SELECT name FROM deck_templates`).all();
+    return rows.some((row) => normalizeDisplayName(row.name) === key);
   }
 
   insertTemplate({
@@ -128,7 +128,7 @@ class DeckCatalog {
       )
       .run(
         id,
-        name,
+        canonicalDisplayName(name),
         normalizeEnabled(enabled),
         createdBy,
         JSON.stringify(cards)
@@ -195,6 +195,14 @@ function classifySqliteOpenError(error) {
   return "unreadable";
 }
 
+function canonicalDisplayName(name) {
+  return String(name ?? "").trim().replace(/\s+/g, " ");
+}
+
+function normalizeDisplayName(name) {
+  return canonicalDisplayName(name).toLowerCase();
+}
+
 function sqliteUniqueField(error) {
   const code = error?.code;
   const message = String(error?.message || "");
@@ -206,7 +214,10 @@ function sqliteUniqueField(error) {
   if (/\.id\b/.test(message) || code === "SQLITE_CONSTRAINT_PRIMARYKEY") {
     return "id";
   }
-  if (/\.name\b/.test(message)) {
+  if (
+    /\.name\b/.test(message) ||
+    /idx_deck_templates_name_nocase/i.test(message)
+  ) {
     return "name";
   }
   return "unknown";
@@ -257,6 +268,10 @@ function openDeckCatalogDatabase(dbPath) {
       cards TEXT NOT NULL
     );
   `);
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_deck_templates_name_nocase
+    ON deck_templates(name COLLATE NOCASE);
+  `);
   return db;
 }
 
@@ -267,3 +282,5 @@ module.exports.normalizeEnabled = normalizeEnabled;
 module.exports.classifySqliteOpenError = classifySqliteOpenError;
 module.exports.sqliteUniqueField = sqliteUniqueField;
 module.exports.parseTemplateRow = parseTemplateRow;
+module.exports.canonicalDisplayName = canonicalDisplayName;
+module.exports.normalizeDisplayName = normalizeDisplayName;

@@ -50,6 +50,8 @@ class CatalogPublish {
         id: interaction.options.getString("id"),
         name: interaction.options.getString("name"),
         allCards: deck.allCards,
+        deck,
+        players: gameData.players,
         createdBy: interaction.user.id,
       });
 

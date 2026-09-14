@@ -3,6 +3,12 @@ const DeckCatalog = require("./deckCatalog.js");
 
 const INSTANCE_ONLY_IDS = new Set(["custom-csv", "customempty", "empty"]);
 
+const OFFICIAL_SEED_IDS = new Set(
+  GameDB.CurrentCardList.filter(([, id]) => !INSTANCE_ONLY_IDS.has(id)).map(
+    ([, id]) => id
+  )
+);
+
 function catalogCardFromGenerated(card) {
   const src = card != null && typeof card === "object" ? card : {};
   return {
@@ -58,4 +64,5 @@ module.exports = {
   seedDeckCatalog,
   catalogCardFromGenerated,
   INSTANCE_ONLY_IDS,
+  OFFICIAL_SEED_IDS,
 };

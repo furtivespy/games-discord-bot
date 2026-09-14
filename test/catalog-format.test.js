@@ -2,6 +2,7 @@ const { describe, expect, test } = require("bun:test");
 const { EmbedBuilder, MessageFlags } = require("discord.js");
 const Formatter = require("../modules/GameFormatter");
 const {
+  autocompleteTemplates,
   batchEmbeds,
   buildCardListEmbeds,
   catalogEmbed,
@@ -286,5 +287,28 @@ describe("catalog format helpers", () => {
     const embed = catalogEmbed({ title: "Enabled (1)", description: "Hello" });
     expect(embed).toBeInstanceOf(EmbedBuilder);
     expect(embed.data.color).toBe(13502711);
+  });
+
+  test("autocompleteTemplates filters by focus so the 25-cap does not hide later names", () => {
+    const templates = [
+      ...Array.from({ length: 30 }, (_, i) => ({
+        id: `aaa-${String(i).padStart(2, "0")}`,
+        name: `AAA ${String(i).padStart(2, "0")}`,
+        enabled: 1,
+      })),
+      { id: "zebra-late", name: "Zebra Late", enabled: 1 },
+    ];
+
+    const empty = autocompleteTemplates(templates, "");
+    expect(empty).toHaveLength(25);
+    expect(empty.map((choice) => choice.value)).not.toContain("zebra-late");
+
+    const focused = autocompleteTemplates(templates, "zeb");
+    expect(focused.map((choice) => choice.value)).toEqual(["zebra-late"]);
+    expect(focused[0].name.toLowerCase()).toContain("zebra");
+
+    const byId = autocompleteTemplates(templates, "zebra-late");
+    expect(byId.map((choice) => choice.value)).toEqual(["zebra-late"]);
+    expect(byId[0].name.toLowerCase().startsWith("zebra-late")).toBe(true);
   });
 });

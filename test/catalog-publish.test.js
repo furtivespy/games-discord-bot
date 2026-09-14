@@ -5,11 +5,14 @@ const path = require("path");
 const DeckCatalog = require("../db/deckCatalog.js");
 const {
   classifySqliteOpenError,
+  normalizeDisplayName,
   normalizeEnabled,
   parseTemplateRow,
+  sqliteUniqueField,
 } = DeckCatalog;
-const { seedDeckCatalog } = require("../db/seedDeckCatalog.js");
+const { seedDeckCatalog, OFFICIAL_SEED_IDS } = require("../db/seedDeckCatalog.js");
 const {
+  EMPTY_CARDS_ERROR,
   buildPublishPayload,
   publishToCatalog,
   validateCatalogId,
@@ -82,11 +85,17 @@ describe("catalog publish payload builder", () => {
     });
   });
 
-  test("rejects invalid slugs and reserved instance-only ids", () => {
+  test("rejects invalid slugs, instance-only ids, and official seed ids", () => {
     expect(validateCatalogId("Standard").ok).toBe(false);
     expect(validateCatalogId("has_underscore").error).toContain("^[a-z0-9-]{1,100}$");
     expect(validateCatalogId("custom-csv").code).toBe("reserved_id");
     expect(validateCatalogId("customempty").code).toBe("reserved_id");
+    expect(validateCatalogId("empty").code).toBe("reserved_id");
+    expect(validateCatalogId("standard").code).toBe("reserved_id");
+    expect(validateCatalogId("standard").error).toMatch(/official catalog seed/i);
+    expect(OFFICIAL_SEED_IDS.has("standard")).toBe(true);
+    expect(OFFICIAL_SEED_IDS.has("uno-classic")).toBe(true);
+    expect(OFFICIAL_SEED_IDS.has("custom-csv")).toBe(false);
     expect(
       buildPublishPayload({
         id: "ok-id",
@@ -95,6 +104,14 @@ describe("catalog publish payload builder", () => {
         createdBy: "1",
       }).code
     ).toBe("empty_cards");
+    expect(
+      buildPublishPayload({
+        id: "ok-id",
+        name: "Ok",
+        allCards: [],
+        createdBy: "1",
+      }).error
+    ).toBe(EMPTY_CARDS_ERROR);
     expect(
       buildPublishPayload({
         id: "ok-id",
@@ -120,6 +137,56 @@ describe("catalog publish payload builder", () => {
     expect(hostile.ok).toBe(false);
     expect(hostile.code).toBe("invalid_cards");
     expect(hostile.error).toMatch(/invalid card data/i);
+  });
+
+  test("empty allCards publishes cards from draw, discard, and matching hands", () => {
+    const draw = runtimeCard({ id: "d1", name: "Draw" });
+    const discard = runtimeCard({ id: "d2", name: "Discard" });
+    const hand = runtimeCard({ id: "h1", name: "Hand" });
+    const otherDeck = runtimeCard({
+      id: "o1",
+      name: "Other",
+      origin: "OtherDeck",
+    });
+    const result = buildPublishPayload({
+      id: "from-live",
+      name: "From Live",
+      createdBy: "1",
+      allCards: [],
+      deck: {
+        name: "Main",
+        piles: {
+          draw: { cards: [draw] },
+          discard: { cards: [discard] },
+        },
+      },
+      players: [{ hands: { main: [hand, otherDeck] } }],
+    });
+    expect(result.ok).toBe(true);
+    expect(result.payload.cards.map((card) => card.name).sort()).toEqual([
+      "Discard",
+      "Draw",
+      "Hand",
+    ]);
+  });
+
+  test("empty allCards with no live cards explains draw, discard, and hands", () => {
+    const result = buildPublishPayload({
+      id: "ok-id",
+      name: "Ok",
+      createdBy: "1",
+      allCards: [],
+      deck: {
+        name: "Main",
+        piles: { draw: { cards: [] }, discard: { cards: [] } },
+      },
+      players: [{ hands: { main: [] } }],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("empty_cards");
+    expect(result.error).toMatch(/draw pile/i);
+    expect(result.error).toMatch(/discard pile/i);
+    expect(result.error).toMatch(/player hands/i);
   });
 
   test("publish inserts a row; same id or display name refuses without overwrite", () => {
@@ -159,6 +226,41 @@ describe("catalog publish payload builder", () => {
     });
   });
 
+  test("display names are unique after case and whitespace folding", () => {
+    withTempCatalog(({ catalog }) => {
+      const first = publishToCatalog(catalog, {
+        id: "uno-copy",
+        name: "  Uno   Classic ",
+        createdBy: "owner-1",
+        allCards: [runtimeCard()],
+      });
+      expect(first.ok).toBe(true);
+      expect(first.template.name).toBe("Uno Classic");
+      expect(normalizeDisplayName("Uno Classic")).toBe("uno classic");
+
+      const sameCase = publishToCatalog(catalog, {
+        id: "uno-copy-2",
+        name: "uno classic",
+        createdBy: "owner-1",
+        allCards: [runtimeCard({ name: "Queen" })],
+      });
+      expect(sameCase.ok).toBe(false);
+      expect(sameCase.code).toBe("duplicate_name");
+      expect(catalog.hasName("UNO CLASSIC")).toBe(true);
+      expect(catalog.hasId("uno-copy-2")).toBe(false);
+
+      const sameSpaces = publishToCatalog(catalog, {
+        id: "uno-copy-3",
+        name: "Uno  Classic",
+        createdBy: "owner-1",
+        allCards: [runtimeCard({ name: "Queen" })],
+      });
+      expect(sameSpaces.ok).toBe(false);
+      expect(sameSpaces.code).toBe("duplicate_name");
+      expect(catalog.count()).toBe(1);
+    });
+  });
+
   test("disable then enable flips the flag only", () => {
     withTempCatalog(({ catalog }) => {
       publishToCatalog(catalog, {
@@ -184,8 +286,21 @@ describe("catalog publish payload builder", () => {
     });
   });
 
-  test("seed rows are not updated by publish", () => {
+  test("seed rows are not updated by publish; official seed ids cannot be claimed before seed", () => {
     withTempCatalog(({ catalog }) => {
+      expect(catalog.count()).toBe(0);
+      const beforeSeed = publishToCatalog(catalog, {
+        id: "standard",
+        name: "Hijack Standard",
+        createdBy: "owner-1",
+        allCards: [runtimeCard()],
+      });
+      expect(beforeSeed.ok).toBe(false);
+      expect(beforeSeed.code).toBe("reserved_id");
+      expect(beforeSeed.error).toMatch(/deck-catalog/);
+      expect(catalog.hasId("standard")).toBe(false);
+      expect(catalog.count()).toBe(0);
+
       seedDeckCatalog({ catalog });
       const seededStandard = catalog.getTemplate("standard");
       expect(seededStandard).not.toBeNull();
@@ -198,7 +313,7 @@ describe("catalog publish payload builder", () => {
         allCards: [runtimeCard()],
       });
       expect(overwriteSeed.ok).toBe(false);
-      expect(overwriteSeed.code).toBe("duplicate_id");
+      expect(overwriteSeed.code).toBe("reserved_id");
       expect(catalog.getTemplate("standard")).toEqual(seededStandard);
 
       const sameSeedName = publishToCatalog(catalog, {
@@ -257,6 +372,18 @@ describe("catalog publish payload builder", () => {
       expect(sameName.code).toBe("duplicate_name");
       expect(catalog.getTemplate("other-id")).toBeNull();
       expect(catalog.count()).toBe(1);
+
+      catalog.hasId = () => false;
+      catalog.hasName = () => false;
+      const sameCase = publishToCatalog(catalog, {
+        id: "case-id",
+        name: "my custom",
+        createdBy: "owner-1",
+        allCards: [runtimeCard({ name: "Queen" })],
+      });
+      expect(sameCase.ok).toBe(false);
+      expect(sameCase.code).toBe("duplicate_name");
+      expect(catalog.getTemplate("case-id")).toBeNull();
     });
   });
 });
@@ -356,6 +483,21 @@ describe("DeckCatalog.inspect", () => {
     expect(
       classifySqliteOpenError({ code: "SQLITE_CANTOPEN", message: "unable to open database file" })
     ).toBe("unreadable");
+  });
+
+  test("sqliteUniqueField maps name nocase index failures to name", () => {
+    expect(
+      sqliteUniqueField({
+        code: "SQLITE_CONSTRAINT_UNIQUE",
+        message: "UNIQUE constraint failed: idx_deck_templates_name_nocase",
+      })
+    ).toBe("name");
+    expect(
+      sqliteUniqueField({
+        code: "SQLITE_CONSTRAINT_UNIQUE",
+        message: "UNIQUE constraint failed: deck_templates.name",
+      })
+    ).toBe("name");
   });
 });
 

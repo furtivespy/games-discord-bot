@@ -17,9 +17,22 @@ class GameHelper {
   static async getDeckAutocomplete(gameData, interaction) {
     if (gameData.isdeleted || gameData.decks.length < 1) {
       await interaction.respond([])
-    } else {
-      await interaction.respond(gameData.decks.map(d => ({ name: d.name, value: d.name })))
+      return
     }
+    let focused = ""
+    try {
+      focused = interaction.options.getFocused() ?? ""
+    } catch (_) {}
+    const term = String(focused).toLowerCase()
+    const matches = gameData.decks.filter(
+      (d) => !term || String(d.name).toLowerCase().includes(term)
+    )
+    await interaction.respond(
+      matches.slice(0, 25).map((d) => ({
+        name: GameHelper.autocompleteChoiceName(focused, d.name),
+        value: d.name,
+      }))
+    )
   }
 
   // Instance-only starters stay visible in the default Discord picker (25 max).
