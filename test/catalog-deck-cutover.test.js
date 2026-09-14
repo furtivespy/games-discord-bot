@@ -181,4 +181,32 @@ describe("catalog deck cutover", () => {
       expect(result.error).toBe(UNKNOWN_OR_DISABLED_CARD_SET);
     });
   });
+
+  test("listing card sets still works when BINARY-unique names collide under NOCASE", () => {
+    withTempDataDir(({ dataDir }) => {
+      const catalog = new DeckCatalog({ dataDir });
+      try {
+        catalog.insertTemplate({
+          id: "foo-upper",
+          name: "Foo",
+          cards: STORED_CARDS,
+          enabled: 1,
+        });
+        catalog.insertTemplate({
+          id: "foo-lower",
+          name: "foo",
+          cards: STORED_CARDS,
+          enabled: 1,
+        });
+      } finally {
+        catalog.close();
+      }
+
+      const { result, errors } = captureErrors(() => listCardSets({ dataDir }));
+      expect(errors).toEqual([]);
+      expect(result.map(([, id]) => id)).toEqual(
+        expect.arrayContaining(["custom-csv", "empty", "foo-upper", "foo-lower"])
+      );
+    });
+  });
 });

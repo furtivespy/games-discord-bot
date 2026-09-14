@@ -156,6 +156,10 @@ class DeckCatalog {
     );
   }
 
+  ensureNameNocaseUniqueIndex() {
+    return ensureNameNocaseUniqueIndex(this.db);
+  }
+
   close() {
     this.db.close();
   }
@@ -254,6 +258,63 @@ function parseTemplateRow(row) {
   return template;
 }
 
+const NAME_NOCASE_INDEX = "idx_deck_templates_name_nocase";
+
+function nameNocaseIndexExists(db) {
+  return (
+    db
+      .query(
+        `SELECT 1 AS ok FROM sqlite_master WHERE type = 'index' AND name = ?`
+      )
+      .get(NAME_NOCASE_INDEX) != null
+  );
+}
+
+function findNameNocaseCollisions(db) {
+  return db
+    .query(
+      `SELECT json_group_array(id) AS ids,
+              json_group_array(name) AS names,
+              COUNT(*) AS count
+       FROM deck_templates
+       GROUP BY name COLLATE NOCASE
+       HAVING COUNT(*) > 1`
+    )
+    .all()
+    .map((row) => ({
+      ids: JSON.parse(row.ids),
+      names: JSON.parse(row.names),
+      count: Number(row.count),
+    }));
+}
+
+// Precedence: keep every existing row. Do not merge, rename, or delete
+// case-variant names. If any NOCASE collision exists, skip the unique index.
+function ensureNameNocaseUniqueIndex(db) {
+  if (nameNocaseIndexExists(db)) {
+    return { status: "already", collisions: [] };
+  }
+  const collisions = findNameNocaseCollisions(db);
+  if (collisions.length > 0) {
+    return { status: "skipped", collisions };
+  }
+  db.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS ${NAME_NOCASE_INDEX}
+     ON deck_templates(name COLLATE NOCASE)`
+  );
+  return { status: "created", collisions: [] };
+}
+
+function formatNameNocaseIndexSkip(collisions) {
+  const groups = (collisions || []).map((group) =>
+    (group.ids || [])
+      .map((id, i) => `"${group.names?.[i] ?? ""}" (${id})`)
+      .join(", ")
+  );
+  const detail = groups.length ? groups.join("; ") : "case-variant names";
+  return `Case-insensitive name index was not created: existing templates already differ only by case (all rows kept): ${detail}.`;
+}
+
 function openDeckCatalogDatabase(dbPath) {
   const db = new Database(dbPath, { create: true });
   db.exec(`PRAGMA journal_mode = WAL`);
@@ -268,15 +329,16 @@ function openDeckCatalogDatabase(dbPath) {
       cards TEXT NOT NULL
     );
   `);
-  db.exec(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_deck_templates_name_nocase
-    ON deck_templates(name COLLATE NOCASE);
-  `);
+  // idx_deck_templates_name_nocase is created by seedDeckCatalog /migrate
+  // after collision detection. Old name TEXT UNIQUE is BINARY, so "Foo" and
+  // "foo" can already coexist; creating the index here would throw and make
+  // every command/autocomplete open treat the catalog as unreadable.
   return db;
 }
 
 module.exports = DeckCatalog;
 module.exports.DECK_CATALOG_FILENAME = DECK_CATALOG_FILENAME;
+module.exports.NAME_NOCASE_INDEX = NAME_NOCASE_INDEX;
 module.exports.isCatalogEnabled = isCatalogEnabled;
 module.exports.normalizeEnabled = normalizeEnabled;
 module.exports.classifySqliteOpenError = classifySqliteOpenError;
@@ -284,3 +346,6 @@ module.exports.sqliteUniqueField = sqliteUniqueField;
 module.exports.parseTemplateRow = parseTemplateRow;
 module.exports.canonicalDisplayName = canonicalDisplayName;
 module.exports.normalizeDisplayName = normalizeDisplayName;
+module.exports.findNameNocaseCollisions = findNameNocaseCollisions;
+module.exports.ensureNameNocaseUniqueIndex = ensureNameNocaseUniqueIndex;
+module.exports.formatNameNocaseIndexSkip = formatNameNocaseIndexSkip;

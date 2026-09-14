@@ -49,6 +49,13 @@ function cardsFromPile(pile) {
   return [];
 }
 
+function cardBelongsToDeck(card, deckName) {
+  if (!card || typeof card !== "object") return false;
+  const origin = card.origin;
+  if (origin == null || origin === "") return true;
+  return String(origin).toLowerCase() === String(deckName ?? "").toLowerCase();
+}
+
 function cardsFromHands(players, deckName) {
   const cards = [];
   for (const player of players || []) {
@@ -56,7 +63,7 @@ function cardsFromHands(players, deckName) {
     if (!hands || typeof hands !== "object") continue;
     for (const location of Object.values(hands)) {
       for (const card of cardsFromPile(location)) {
-        if (card && card.origin === deckName) {
+        if (cardBelongsToDeck(card, deckName)) {
           cards.push(card);
         }
       }

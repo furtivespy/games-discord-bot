@@ -5,6 +5,8 @@ const path = require("path");
 const DeckCatalog = require("../db/deckCatalog.js");
 const {
   classifySqliteOpenError,
+  formatNameNocaseIndexSkip,
+  NAME_NOCASE_INDEX,
   normalizeDisplayName,
   normalizeEnabled,
   parseTemplateRow,
@@ -139,10 +141,22 @@ describe("catalog publish payload builder", () => {
     expect(hostile.error).toMatch(/invalid card data/i);
   });
 
-  test("empty allCards publishes cards from draw, discard, and matching hands", () => {
+  test("empty allCards publishes cards from draw, discard, and hands with empty or case-mismatched origin", () => {
     const draw = runtimeCard({ id: "d1", name: "Draw" });
     const discard = runtimeCard({ id: "d2", name: "Discard" });
     const hand = runtimeCard({ id: "h1", name: "Hand" });
+    const emptyOrigin = runtimeCard({
+      id: "h2",
+      name: "No Origin",
+      origin: "",
+    });
+    const missingOrigin = runtimeCard({ id: "h3", name: "Missing Origin" });
+    delete missingOrigin.origin;
+    const caseMismatch = runtimeCard({
+      id: "h4",
+      name: "Case Origin",
+      origin: "main",
+    });
     const otherDeck = runtimeCard({
       id: "o1",
       name: "Other",
@@ -160,13 +174,18 @@ describe("catalog publish payload builder", () => {
           discard: { cards: [discard] },
         },
       },
-      players: [{ hands: { main: [hand, otherDeck] } }],
+      players: [
+        { hands: { main: [hand, emptyOrigin, missingOrigin, caseMismatch, otherDeck] } },
+      ],
     });
     expect(result.ok).toBe(true);
     expect(result.payload.cards.map((card) => card.name).sort()).toEqual([
+      "Case Origin",
       "Discard",
       "Draw",
       "Hand",
+      "Missing Origin",
+      "No Origin",
     ]);
   });
 
@@ -341,6 +360,7 @@ describe("catalog publish payload builder", () => {
 
   test("UNIQUE constraint on insert maps to duplicate_id or duplicate_name", () => {
     withTempCatalog(({ catalog }) => {
+      expect(catalog.ensureNameNocaseUniqueIndex().status).toBe("created");
       const first = publishToCatalog(catalog, {
         id: "my-custom",
         name: "My Custom",
@@ -578,6 +598,94 @@ describe("DeckCatalog row parsing", () => {
       expect(template.enabled).toBe(0);
       const listed = catalog.listTemplates();
       expect(listed[0].enabled).toBe(0);
+    });
+  });
+});
+
+function sampleCards() {
+  return [{ name: "A", description: "", type: "", suit: "", value: "", url: null, format: "A" }];
+}
+
+function hasNameNocaseIndex(catalog) {
+  return (
+    catalog.db
+      .query(
+        `SELECT 1 AS ok FROM sqlite_master WHERE type = 'index' AND name = ?`
+      )
+      .get(NAME_NOCASE_INDEX) != null
+  );
+}
+
+describe("NOCASE name unique index migration", () => {
+  test("opening a catalog with BINARY case-variant names does not create the index or throw", () => {
+    withTempCatalog(({ catalog }) => {
+      catalog.insertTemplate({ id: "foo-upper", name: "Foo", cards: sampleCards() });
+      catalog.insertTemplate({ id: "foo-lower", name: "foo", cards: sampleCards() });
+      expect(catalog.count()).toBe(2);
+      expect(hasNameNocaseIndex(catalog)).toBe(false);
+
+      const listed = catalog.listTemplates().map((row) => row.name).sort();
+      expect(listed).toEqual(["Foo", "foo"]);
+      expect(catalog.hasName("FOO")).toBe(true);
+    });
+  });
+
+  test("ensure creates the index when names are unique under NOCASE", () => {
+    withTempCatalog(({ catalog }) => {
+      catalog.insertTemplate({ id: "foo", name: "Foo", cards: sampleCards() });
+      catalog.insertTemplate({ id: "bar", name: "Bar", cards: sampleCards() });
+
+      const first = catalog.ensureNameNocaseUniqueIndex();
+      expect(first.status).toBe("created");
+      expect(first.collisions).toEqual([]);
+      expect(hasNameNocaseIndex(catalog)).toBe(true);
+
+      const second = catalog.ensureNameNocaseUniqueIndex();
+      expect(second.status).toBe("already");
+      expect(catalog.count()).toBe(2);
+
+      expect(() =>
+        catalog.insertTemplate({ id: "foo-2", name: "foo", cards: sampleCards() })
+      ).toThrow();
+      expect(catalog.hasId("foo-2")).toBe(false);
+      expect(catalog.getTemplate("foo").name).toBe("Foo");
+    });
+  });
+
+  test("ensure skips when case-variant names already exist and keeps every row", () => {
+    withTempCatalog(({ catalog }) => {
+      catalog.insertTemplate({ id: "foo-upper", name: "Foo", cards: sampleCards() });
+      catalog.insertTemplate({ id: "foo-lower", name: "foo", cards: sampleCards() });
+      catalog.insertTemplate({ id: "bar-mixed", name: "Bar", cards: sampleCards() });
+      catalog.insertTemplate({ id: "bar-upper", name: "BAR", cards: sampleCards() });
+      catalog.insertTemplate({ id: "solo", name: "Solo", cards: sampleCards() });
+
+      const first = catalog.ensureNameNocaseUniqueIndex();
+      expect(first.status).toBe("skipped");
+      expect(hasNameNocaseIndex(catalog)).toBe(false);
+      expect(first.collisions).toHaveLength(2);
+      const collisionIds = first.collisions.flatMap((group) => group.ids).sort();
+      expect(collisionIds).toEqual([
+        "bar-mixed",
+        "bar-upper",
+        "foo-lower",
+        "foo-upper",
+      ]);
+      expect(catalog.count()).toBe(5);
+      expect(catalog.getTemplate("foo-upper").name).toBe("Foo");
+      expect(catalog.getTemplate("foo-lower").name).toBe("foo");
+      expect(catalog.getTemplate("bar-mixed").name).toBe("Bar");
+      expect(catalog.getTemplate("bar-upper").name).toBe("BAR");
+      expect(catalog.getTemplate("solo").name).toBe("Solo");
+
+      const second = catalog.ensureNameNocaseUniqueIndex();
+      expect(second.status).toBe("skipped");
+      expect(hasNameNocaseIndex(catalog)).toBe(false);
+      expect(catalog.count()).toBe(5);
+      expect(formatNameNocaseIndexSkip(first.collisions)).toMatch(
+        /all rows kept/i
+      );
+      expect(formatNameNocaseIndexSkip(first.collisions)).toMatch(/Foo|foo/);
     });
   });
 });

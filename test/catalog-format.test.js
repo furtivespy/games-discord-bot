@@ -310,5 +310,10 @@ describe("catalog format helpers", () => {
     const byId = autocompleteTemplates(templates, "zebra-late");
     expect(byId.map((choice) => choice.value)).toEqual(["zebra-late"]);
     expect(byId[0].name.toLowerCase().startsWith("zebra-late")).toBe(true);
+
+    const substring = autocompleteTemplates(templates, "late");
+    expect(substring.map((choice) => choice.value)).toEqual(["zebra-late"]);
+    expect(substring[0].name.startsWith("late")).toBe(true);
+    expect(substring[0].name).toContain("Zebra Late");
   });
 });

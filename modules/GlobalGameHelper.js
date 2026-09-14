@@ -45,11 +45,13 @@ class GameHelper {
   // starting with their input when the canonical name already matches.
   static autocompleteChoiceName(userInput, displayName) {
     const raw = String(userInput ?? "")
-    let name = displayName
-    if (raw && displayName.toLowerCase().startsWith(raw.toLowerCase())) {
-      name = raw + displayName.slice(raw.length)
+    const label = String(displayName ?? "")
+    if (!raw) return label.slice(0, GameHelper.AUTOCOMPLETE_NAME_MAX)
+    if (label.toLowerCase().startsWith(raw.toLowerCase())) {
+      return (raw + label.slice(raw.length)).slice(0, GameHelper.AUTOCOMPLETE_NAME_MAX)
     }
-    return name.slice(0, GameHelper.AUTOCOMPLETE_NAME_MAX)
+    // Discord prefix-filters choice names; keep substring/id matches visible.
+    return `${raw} — ${label}`.slice(0, GameHelper.AUTOCOMPLETE_NAME_MAX)
   }
 
   static getCardLists(searchTerm, options) {

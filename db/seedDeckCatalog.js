@@ -50,10 +50,15 @@ function seedDeckCatalog(options = {}) {
       inserted += 1;
     }
 
+    // After inserts: skip the unique index when BINARY-unique names already
+    // collide under NOCASE, so migrate does not throw or drop rows.
+    const nameIndex = catalog.ensureNameNocaseUniqueIndex();
+
     return {
       inserted,
       skipped,
       total: catalog.count(),
+      nameIndex,
     };
   } finally {
     if (owned) catalog.close();

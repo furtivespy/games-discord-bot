@@ -398,13 +398,7 @@ function autocompleteMatchRank(template, q) {
 }
 
 function catalogAutocompleteChoiceName(focused, label) {
-  const raw = String(focused || "");
-  if (!raw) return String(label || "").slice(0, GameHelper.AUTOCOMPLETE_NAME_MAX);
-  if (String(label).toLowerCase().startsWith(raw.toLowerCase())) {
-    return GameHelper.autocompleteChoiceName(raw, label);
-  }
-  // Discord prefix-filters choice names; keep id/substring matches visible.
-  return `${raw} — ${label}`.slice(0, GameHelper.AUTOCOMPLETE_NAME_MAX);
+  return GameHelper.autocompleteChoiceName(focused, label);
 }
 
 function autocompleteTemplates(templates, focused, predicate = () => true) {

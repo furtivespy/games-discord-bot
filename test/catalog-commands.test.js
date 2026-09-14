@@ -87,6 +87,56 @@ describe("/catalog command handlers", () => {
     );
   });
 
+  test("list still works when BINARY-unique names collide under NOCASE", async () => {
+    await withHarness(
+      { user: OWNER, options: { subcommand: "list" } },
+      async (harness) => {
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        try {
+          catalog.insertTemplate({
+            id: "foo-upper",
+            name: "Foo",
+            cards: [
+              {
+                name: "A",
+                description: "",
+                type: "",
+                suit: "",
+                value: "",
+                url: null,
+                format: "A",
+              },
+            ],
+          });
+          catalog.insertTemplate({
+            id: "foo-lower",
+            name: "foo",
+            cards: [
+              {
+                name: "B",
+                description: "",
+                type: "",
+                suit: "",
+                value: "",
+                url: null,
+                format: "A",
+              },
+            ],
+          });
+        } finally {
+          catalog.close();
+        }
+
+        await runCatalog(harness);
+        const text = collectedReplyText(harness);
+        expect(text).toContain("Foo (foo-upper)");
+        expect(text).toContain("foo (foo-lower)");
+        expect(text.toLowerCase()).not.toMatch(/unreadable|could not be read/);
+        expect(text).not.toContain("Something went wrong");
+      }
+    );
+  });
+
   test("corrupt catalog db does not hint /migrate", async () => {
     await withHarness(
       { user: OWNER, options: { subcommand: "list" } },
@@ -647,11 +697,13 @@ describe("/catalog command handlers", () => {
 
         harness.calls.respond.length = 0;
         harness.interaction.options.getFocused = (whole = false) =>
-          whole ? { name: "deck", value: "zeta" } : "zeta";
+          whole ? { name: "deck", value: "only" } : "only";
         await runCatalog(harness);
         expect(harness.calls.respond[0].map((choice) => choice.value)).toEqual([
           "Zeta Only",
         ]);
+        expect(harness.calls.respond[0][0].name.startsWith("only")).toBe(true);
+        expect(harness.calls.respond[0][0].name).toContain("Zeta Only");
       }
     );
   });
