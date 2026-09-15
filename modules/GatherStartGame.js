@@ -682,7 +682,7 @@ class GatherStartGame {
     gameData.bggGameId = gather.game?.bggId || null;
     GameStatusHelper.setPinnedStatusMode(
       gameData,
-      GameStatusHelper.PINNED_STATUS_MODES.ON
+      GameStatusHelper.PINNED_STATUS_MODES.FULL
     );
 
     const ordered = shuffleFn([...seated]);

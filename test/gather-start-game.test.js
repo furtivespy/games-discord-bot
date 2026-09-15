@@ -575,7 +575,7 @@ describe("GatherStartGame start flow", () => {
     const game = await env.client.getGameDataV2(gather.guildId, "game", "thread-1");
     expect(game.isdeleted).toBe(false);
     expect(game.bggGameId).toBe("266192");
-    expect(game.pinnedStatusMode).toBe("on");
+    expect(game.pinnedStatusMode).toBe("full");
     expect(game.pinnedStatusMessageId).toBe("msg-1");
     expect(game.players.map((p) => p.userId)).toEqual(["host-1", "a", "b"]);
 
