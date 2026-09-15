@@ -62,6 +62,12 @@ class GatherStartGame {
     return this.uniqueIds([...this.asIdList(interestedIds), ...this.asIdList(anyoneIds)]);
   }
 
+  static ensureHostSeated(seatedIds, hostUserId) {
+    const hostId = hostUserId != null ? String(hostUserId) : "";
+    if (!hostId) return this.uniqueIds(seatedIds);
+    return this.uniqueIds([hostId, ...this.asIdList(seatedIds)]);
+  }
+
   static formatSelectedLine(interestedIds, anyoneIds) {
     const seated = this.mergeSeatSelections(interestedIds, anyoneIds);
     if (seated.length === 0) return "Currently selected: (none yet)";
@@ -134,7 +140,7 @@ class GatherStartGame {
       );
     }
     lines.push(
-      `Server members: searchable picker, up to ${GatherInterest.DISCORD_SELECT_LIMIT}. Then click **Start with these seats**.`
+      `Server members: searchable picker, up to ${GatherInterest.DISCORD_SELECT_LIMIT}. Then click **Start with these seats**. The host is always seated.`
     );
     if (selectMeta.truncated) {
       lines.push(
@@ -428,7 +434,10 @@ class GatherStartGame {
             return;
           }
           if (component.customId === GatherInterest.confirmSeatsCustomId(gather.id)) {
-            const seatedIds = this.mergeSeatSelections(interestedIds, anyoneIds);
+            const seatedIds = this.ensureHostSeated(
+              this.mergeSeatSelections(interestedIds, anyoneIds),
+              gather.hostUserId
+            );
             if (seatedIds.length < 1) {
               await refreshPicker(
                 component,
@@ -484,11 +493,22 @@ class GatherStartGame {
         return false;
       }
 
+      const seatedIdsWithHost = this.ensureHostSeated(seatedIds, gather.hostUserId);
       const extraNames = {
         ...(deps.displayNames || {}),
-        ...this.memberDisplayNames(interaction.guild, seatedIds),
+        ...this.memberDisplayNames(interaction.guild, seatedIdsWithHost),
       };
-      const seated = this.resolveSeatedPeople(gather, seatedIds, extraNames);
+      if (gather.hostUserId && gather.hostDisplayName) {
+        const hostId = String(gather.hostUserId);
+        if (!extraNames[hostId]) {
+          extraNames[hostId] = gather.hostDisplayName;
+        }
+      }
+      const seated = this.resolveSeatedPeople(
+        gather,
+        seatedIdsWithHost,
+        extraNames
+      );
       if (seated.length < 1) {
         await GatherInterest.replyEphemeral(
           interaction,

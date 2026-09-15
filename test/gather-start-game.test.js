@@ -182,6 +182,19 @@ describe("GatherInterest seat picker helpers", () => {
     expect(seated[1].displayName).toBe("Guest");
   });
 
+  test("always includes the host in the seated list even when not selected", () => {
+    expect(GatherStartGame.ensureHostSeated(["a", "b"], "host-1")).toEqual([
+      "host-1",
+      "a",
+      "b",
+    ]);
+    expect(GatherStartGame.ensureHostSeated(["host-1", "a"], "host-1")).toEqual([
+      "host-1",
+      "a",
+    ]);
+    expect(GatherStartGame.ensureHostSeated([], "host-1")).toEqual(["host-1"]);
+  });
+
   test("collector unions interested and server-member picks on confirm", async () => {
     const gather = sampleGather();
     addInterest(gather, "a", "very", "Ann");
@@ -215,7 +228,43 @@ describe("GatherInterest seat picker helpers", () => {
       customId: GatherInterest.confirmSeatsCustomId(gather.id),
       deferUpdate: async () => {},
     });
-    await expect(seatedPromise).resolves.toEqual(["a", "ghost"]);
+    await expect(seatedPromise).resolves.toEqual(["host-1", "a", "ghost"]);
+  });
+
+  test("successful start clears picker components from the ephemeral reply", async () => {
+    const gather = sampleGather();
+    addInterest(gather, "a", "very", "Ann");
+    gather.interestMessageId = "panel-1";
+    const env = createThreadEnv({ gather });
+    await env.client.setGameDataV2(
+      gather.guildId,
+      GatherInterest.COLLECTION,
+      gather.id,
+      gather
+    );
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+    interaction.deferred = true;
+    interaction.replied = true;
+    await runStart(interaction, env.client, gather, {
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+    const started = replies.find((r) =>
+      String(r.content || "").includes("Game started")
+    );
+    expect(started).toBeTruthy();
+    expect(started.components).toEqual([]);
   });
 
   test("keeps the top 25 by strength when more than 25 people are interested", () => {
@@ -518,7 +567,7 @@ describe("GatherStartGame start flow", () => {
     expect(env.parent.id).toBe("games-channel");
     expect(env.threadSends[0].payload.content).toContain("Live game status");
     expect(env.threadSends[1].payload.content).toContain("**Wingspan** is on the table.");
-    expect(env.threadSends[1].payload.content).toContain("Seated: <@a> <@b>");
+    expect(env.threadSends[1].payload.content).toContain("Seated: <@host-1> <@a> <@b>");
     expect(env.threadSends[1].payload.content).toContain("lfg-channel");
     expect(env.threadSends[1].payload.embeds).toEqual(STUB_BGG.embeds);
     expect(pinOrder).toEqual(["status"]);
@@ -528,7 +577,7 @@ describe("GatherStartGame start flow", () => {
     expect(game.bggGameId).toBe("266192");
     expect(game.pinnedStatusMode).toBe("on");
     expect(game.pinnedStatusMessageId).toBe("msg-1");
-    expect(game.players.map((p) => p.userId)).toEqual(["a", "b"]);
+    expect(game.players.map((p) => p.userId)).toEqual(["host-1", "a", "b"]);
 
     const stored = await env.client.getGameDataV2(
       gather.guildId,
@@ -538,7 +587,7 @@ describe("GatherStartGame start flow", () => {
     expect(stored.status).toBe("started");
     expect(stored.startedThreadId).toBe("thread-1");
     expect(stored.startedGameId).toBe("thread-1");
-    expect(stored.seatedUserIds).toEqual(["a", "b"]);
+    expect(stored.seatedUserIds).toEqual(["host-1", "a", "b"]);
 
     expect(edits[0].embeds[0].data.title).toBe("Game started");
     expect(edits[0].components[0].components.every((c) => c.data.disabled)).toBe(true);
@@ -705,7 +754,7 @@ describe("GatherStartGame start flow", () => {
       gather.id
     );
     expect(stored.status).toBe("started");
-    expect(stored.seatedUserIds).toEqual(["c"]);
+    expect(stored.seatedUserIds).toEqual(["host-1", "c"]);
   });
 
   test("warns when seating below BGG min", async () => {
@@ -724,7 +773,7 @@ describe("GatherStartGame start flow", () => {
       client: env.client,
       edits: [],
       replies,
-      values: ["a", "b"],
+      values: ["a"],
     });
     await runStart(interaction, env.client, gather, {
       upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
@@ -966,6 +1015,30 @@ describe("GatherStartGame start flow", () => {
     expect(game.pinnedStatusMessageId).toBe("thread-1");
   });
 
+  test("starts with the host seated even when they only pick other players", async () => {
+    const env = createThreadEnv({ gather });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a", "b"],
+    });
+    await runStart(interaction, env.client, gather, {
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+    const game = await env.client.getGameDataV2(gather.guildId, "game", "thread-1");
+    expect(game.players.map((p) => p.userId)).toEqual(["host-1", "a", "b"]);
+    const started = replies.find((r) => String(r.content || "").includes("Game started"));
+    expect(started.content).toContain("<@host-1>");
+  });
+
   test("host can seat a server member who never logged interest", async () => {
     const env = createThreadEnv({ gather });
     const edits = [];
@@ -987,16 +1060,18 @@ describe("GatherStartGame start flow", () => {
       },
     });
     const game = await env.client.getGameDataV2(gather.guildId, "game", "thread-1");
-    expect(game.players.map((p) => p.userId)).toEqual(["a", "ghost"]);
+    expect(game.players.map((p) => p.userId)).toEqual(["host-1", "a", "ghost"]);
     expect(game.players.find((p) => p.userId === "ghost").name).toBe("Guest");
+    expect(game.players.find((p) => p.userId === "host-1").name).toBe("Hosty");
     expect(env.threadSends[1].payload.content).toContain("<@ghost>");
     const stored = await env.client.getGameDataV2(
       gather.guildId,
       GatherInterest.COLLECTION,
       gather.id
     );
-    expect(stored.seatedUserIds).toEqual(["a", "ghost"]);
+    expect(stored.seatedUserIds).toEqual(["host-1", "a", "ghost"]);
     expect(stored.seatedDisplayNames.ghost).toBe("Guest");
+    expect(stored.seatedDisplayNames["host-1"]).toBe("Hosty");
     const description = GatherInterest.buildPanelDescription(stored);
     expect(description.indexOf("**Currently Playing**")).toBeLessThan(
       description.indexOf("**Interest**")

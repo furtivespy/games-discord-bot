@@ -551,7 +551,8 @@ class GatherInterest {
   }
 
   static async replyEphemeral(interaction, content) {
-    const payload = { content, flags: MessageFlags.Ephemeral };
+    // Always clear components so prior picker/controls don't linger on this reply.
+    const payload = { content, components: [], flags: MessageFlags.Ephemeral };
     if (interaction.deferred || interaction.replied) {
       return interaction.editReply(payload);
     }
