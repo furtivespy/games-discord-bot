@@ -173,6 +173,7 @@ class GameDatabase {
         isdeleted: true,
         winner: null,
         bggGameId: null,
+        isCustomGame: false, // true when started with /game newgame customname (not on BGG)
         reverseOrder: false,
         tokens: [],
         customDice: [], // Added for custom dice feature

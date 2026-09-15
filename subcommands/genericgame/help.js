@@ -13,7 +13,7 @@ Here's a list of commands to get you started. Don't worry, they're super easy to
             flags: MessageFlags.Ephemeral 
         });
 
-        const commands_chunk_1 = `*   **/game newgame** 🎮 - Let's get this party started! Starts a brand new game. 🥳
+        const commands_chunk_1 = `*   **/game newgame** 🎮 - Let's get this party started! Starts a brand new game. Pick a BGG title, or use customname for a playtest that is not on BoardGameGeek. 🥳
 *   **/game newgameplus** ✨ - Feeling fancy? Starts a new game with ✨advanced options✨. Ooh la la!
 *   **/game status** 📊 - Curious about what's happening? Shows the current game status, including play area details and images. 🤔
 *   **/game next** ⏭️ - Onwards and upwards! Advances to the next turn. Whose turn is it anyway?

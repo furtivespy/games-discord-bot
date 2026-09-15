@@ -72,13 +72,18 @@ describe("slash command definition contracts", () => {
     );
 
     const newgame = json.options.find((option) => option.name === "newgame");
-    expect(newgame.options.find((option) => option.name === "game")).toMatchObject({
-      required: true,
-      autocomplete: true,
-    });
     expect(newgame.options.find((option) => option.name === "player1").required).toBe(
       true
     );
+    expect(newgame.options.find((option) => option.name === "game")).toMatchObject({
+      required: false,
+      autocomplete: true,
+    });
+    expect(newgame.options.find((option) => option.name === "customname")).toMatchObject({
+      required: false,
+      min_length: 1,
+      max_length: 100,
+    });
   });
 
   test("/cards registers deck, hand, and pile groups", () => {

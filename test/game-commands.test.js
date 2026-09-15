@@ -274,6 +274,7 @@ describe("/game command handlers", () => {
             const saved = await harness.getSavedGame();
             expect(saved.isdeleted).toBe(false);
             expect(saved.bggGameId).toBe("13");
+            expect(saved.isCustomGame).toBe(false);
             expect(saved.players).toHaveLength(2);
             expect(saved.players.map((player) => player.userId).sort()).toEqual([
               "user-1",
@@ -281,6 +282,139 @@ describe("/game command handlers", () => {
             ]);
             expect(harness.calls.editReply[0].content).toBe("New Game Created!");
             expect(harness.calls.editReply[0].embeds[0].title).toBe("Stubbed Catan");
+          }
+        );
+      }
+    );
+  });
+
+  test("newgame with customname creates a session without calling BGG", async () => {
+    await withBggStub(
+      {
+        CreateAndLoad: async () => {
+          throw new Error("BGG should not be called for custom games");
+        },
+        Search: async () => {
+          throw new Error("BGG search should not run on custom newgame");
+        },
+      },
+      async () => {
+        await withHarness(
+          {
+            options: {
+              subcommand: "newgame",
+              strings: { customname: "My Prototype v3" },
+              users: {
+                player1: createUser({ id: "user-1", username: "Alice" }),
+                player2: createUser({ id: "user-2", username: "Bob" }),
+              },
+            },
+          },
+          async (harness) => {
+            await runGame(harness);
+            const saved = await harness.getSavedGame();
+            expect(saved.isdeleted).toBe(false);
+            expect(saved.isCustomGame).toBe(true);
+            expect(saved.bggGameId).toBeNull();
+            expect(saved.name).toBe("My Prototype v3");
+            expect(saved.players).toHaveLength(2);
+            expect(harness.calls.editReply[0].content).toBe("New Game Created!");
+            const embed = harness.calls.editReply[0].embeds[0];
+            const data = embed.toJSON();
+            expect(data.title).toBe("My Prototype v3");
+            expect(data.description).toContain("Custom game");
+            expect(data.description).toContain("not on BoardGameGeek");
+            expect(data.url).toBeUndefined();
+          }
+        );
+      }
+    );
+  });
+
+  test("newgame refuses BGG and custom name together", async () => {
+    await withBggStub(
+      {
+        CreateAndLoad: async () => {
+          throw new Error("BGG should not be called when both options are set");
+        },
+      },
+      async () => {
+        await withHarness(
+          {
+            options: {
+              subcommand: "newgame",
+              strings: { game: "13", customname: "My Prototype v3" },
+              users: { player1: createUser() },
+            },
+          },
+          async (harness) => {
+            await runGame(harness);
+            expect(harness.lastContent()).toContain("not both");
+            expect(await harness.getSavedGame()).toBeNull();
+          }
+        );
+      }
+    );
+  });
+
+  test("newgame refuses an empty custom name", async () => {
+    await withHarness(
+      {
+        options: {
+          subcommand: "newgame",
+          strings: { customname: "   " },
+          users: { player1: createUser() },
+        },
+      },
+      async (harness) => {
+        await runGame(harness);
+        expect(harness.lastContent()).toContain("1-100");
+        expect(await harness.getSavedGame()).toBeNull();
+      }
+    );
+  });
+
+  test("newgame refuses when neither BGG game nor custom name is set", async () => {
+    await withHarness(
+      {
+        options: {
+          subcommand: "newgame",
+          users: { player1: createUser() },
+        },
+      },
+      async (harness) => {
+        await runGame(harness);
+        expect(harness.lastContent()).toContain("BGG game or a custom name");
+        expect(await harness.getSavedGame()).toBeNull();
+      }
+    );
+  });
+
+  test("newgame on an existing channel stores a custom name without a BGG id", async () => {
+    await withBggStub(
+      {
+        CreateAndLoad: async () => {
+          throw new Error("BGG should not be called for custom games");
+        },
+      },
+      async () => {
+        await withHarness(
+          {
+            gameData: createActiveGame({ name: "Already Going", bggGameId: "13" }),
+            options: {
+              subcommand: "newgame",
+              strings: { customname: "My Prototype v3" },
+              users: { player1: createUser() },
+            },
+          },
+          async (harness) => {
+            await runGame(harness);
+            const saved = await harness.getSavedGame();
+            expect(saved.isCustomGame).toBe(true);
+            expect(saved.bggGameId).toBeNull();
+            expect(saved.name).toBe("My Prototype v3");
+            expect(saved.players).toHaveLength(2);
+            expect(harness.lastContent()).toContain("custom name");
           }
         );
       }
