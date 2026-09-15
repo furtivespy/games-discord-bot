@@ -27,6 +27,13 @@ class BoardGameGeek {
     return bgg;
   }
 
+  /** Same BGG payload `/game newgame` posts when a table is created. */
+  static async loadNewGameDetails(gameId, discordClient, interaction) {
+    const bgg = await this.CreateAndLoad(gameId, discordClient, interaction);
+    await bgg.LoadEmbeds(this.DetailsEnum.ALLPLUS);
+    return bgg;
+  }
+
   static async Search(query, bggToken) {
     const resp = await fetch(
       `https://api.geekdo.com/xmlapi2/search.cgi?type=boardgame&query=${encodeURIComponent(query)}`,
