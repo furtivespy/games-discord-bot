@@ -59,6 +59,30 @@ function addInterest(gather, userId, level, displayName, at) {
   );
 }
 
+const STUB_BGG = {
+  embeds: [{ title: "Stubbed Wingspan" }],
+  attachments: [],
+  otherAttachments: [],
+};
+
+function startDeps(values, extra = {}) {
+  return {
+    selectedUserIds: extra.selectedUserIds || values,
+    shuffle: extra.shuffle || ((players) => players),
+    loadBgg: extra.loadBgg || (async () => STUB_BGG),
+    ...extra,
+  };
+}
+
+function runStart(interaction, client, gather, extra = {}) {
+  return GatherStartGame.promptAndStart(
+    interaction,
+    client,
+    gather,
+    startDeps(interaction._values || extra.selectedUserIds || ["a"], extra)
+  );
+}
+
 describe("GatherInterest seat picker helpers", () => {
   test("sorts Very → Somewhat → Flexibly and tags labels", () => {
     const gather = sampleGather();
@@ -96,6 +120,102 @@ describe("GatherInterest seat picker helpers", () => {
     const meta = GatherStartGame.buildSeatSelectRow(gather);
     expect(meta.maxValues).toBe(3);
     expect(meta.row.components[0].data.max_values).toBe(3);
+    expect(meta.row.components[0].data.min_values).toBe(0);
+  });
+
+  test("picker includes interested select, searchable server members, and confirm", () => {
+    const gather = sampleGather();
+    addInterest(gather, "a", "very", "Ann");
+    const rows = GatherStartGame.buildSeatPickerComponents(gather).map((row) =>
+      row.toJSON()
+    );
+    expect(rows).toHaveLength(3);
+    expect(rows[0].components[0].custom_id).toBe(
+      GatherInterest.seatsCustomId(gather.id)
+    );
+    expect(rows[1].components[0].custom_id).toBe(
+      GatherInterest.anyoneCustomId(gather.id)
+    );
+    expect(rows[1].components[0].type).toBe(5); // User select
+    expect(rows[1].components[0].min_values).toBe(0);
+    expect(rows[1].components[0].max_values).toBe(25);
+    expect(rows[2].components[0].label).toBe("Start with these seats");
+  });
+
+  test("empty interest still offers the server-member picker", () => {
+    const gather = sampleGather();
+    expect(GatherStartGame.startPreconditionsError(
+      gather,
+      gather.hostUserId,
+      memoryClient(),
+      { id: gather.guildId }
+    )).toBeNull();
+    const rows = GatherStartGame.buildSeatPickerComponents(gather).map((row) =>
+      row.toJSON()
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0].components[0].custom_id).toBe(
+      GatherInterest.anyoneCustomId(gather.id)
+    );
+    expect(rows[1].components[0].label).toBe("Start with these seats");
+    const content = GatherStartGame.buildPickerContent(
+      gather,
+      GatherStartGame.buildSeatSelectRow(gather)
+    );
+    expect(content).toContain("Nobody has logged interest yet");
+    expect(content).toContain("any other member of this server");
+  });
+
+  test("merges interested and server-member picks without duplicates", () => {
+    expect(GatherStartGame.mergeSeatSelections(["a", "b"], ["b", "ghost"])).toEqual([
+      "a",
+      "b",
+      "ghost",
+    ]);
+    const gather = sampleGather();
+    addInterest(gather, "a", "very", "Ann");
+    const seated = GatherStartGame.resolveSeatedPeople(gather, ["a", "ghost"], {
+      ghost: "Guest",
+    });
+    expect(seated.map((p) => p.userId)).toEqual(["a", "ghost"]);
+    expect(seated[0].displayName).toBe("Ann");
+    expect(seated[1].displayName).toBe("Guest");
+  });
+
+  test("collector unions interested and server-member picks on confirm", async () => {
+    const gather = sampleGather();
+    addInterest(gather, "a", "very", "Ann");
+    const handlers = {};
+    const fakeCollector = {
+      on(event, handler) {
+        handlers[event] = handler;
+      },
+      stop(reason) {
+        handlers.end?.([], reason);
+      },
+    };
+    const seatedPromise = GatherStartGame.collectSeatSelections(
+      {},
+      { user: { id: "host-1" }, editReply: async () => {} },
+      gather,
+      { createCollector: () => fakeCollector }
+    );
+    await handlers.collect({
+      customId: GatherInterest.seatsCustomId(gather.id),
+      values: ["a"],
+      update: async () => {},
+    });
+    await handlers.collect({
+      customId: GatherInterest.anyoneCustomId(gather.id),
+      values: ["ghost"],
+      users: { values: () => [{ id: "ghost", username: "Guest" }] },
+      update: async () => {},
+    });
+    await handlers.collect({
+      customId: GatherInterest.confirmSeatsCustomId(gather.id),
+      deferUpdate: async () => {},
+    });
+    await expect(seatedPromise).resolves.toEqual(["a", "ghost"]);
   });
 
   test("keeps the top 25 by strength when more than 25 people are interested", () => {
@@ -145,6 +265,23 @@ describe("GatherStartGame warnings and create post", () => {
     expect(post.content).toContain("/game help");
     expect(post.content).toContain("minimum of 3");
     expect(post.allowedMentions.users).toEqual(["host-1", "a", "b"]);
+  });
+
+  test("create post includes /game newgame BGG embeds and files", () => {
+    const gather = sampleGather();
+    const post = GatherStartGame.buildCreatePost(
+      gather,
+      [{ userId: "a", displayName: "Ann" }],
+      [],
+      {
+        embeds: [{ title: "Stubbed Wingspan" }],
+        attachments: ["cover.png"],
+        otherAttachments: ["rules.pdf"],
+      }
+    );
+    expect(post.embeds).toEqual([{ title: "Stubbed Wingspan" }]);
+    expect(post.files).toEqual(["cover.png"]);
+    expect(post.content).toContain("**Wingspan** is on the table.");
   });
 
   test("thread names truncate to Discord's 100-character limit", () => {
@@ -299,6 +436,7 @@ function startInteraction({ gather, client, edits, replies, values = ["a"] }) {
       replies.push(payload);
       return pickerMessage;
     },
+    _values: values,
   };
   return interaction;
 }
@@ -335,7 +473,7 @@ describe("GatherStartGame start flow", () => {
     expect(stored.status).toBe("open");
   });
 
-  test("Start refuses non-hosts and empty rosters", async () => {
+  test("Start refuses non-hosts", async () => {
     const { client } = createThreadEnv({ gather });
     const edits = [];
     const replies = [];
@@ -347,25 +485,6 @@ describe("GatherStartGame start flow", () => {
       client
     );
     expect(replies[0].content).toBe("Only the host can start the game.");
-
-    const empty = sampleGather();
-    await client.setGameDataV2(
-      empty.guildId,
-      GatherInterest.COLLECTION,
-      empty.id,
-      empty
-    );
-    const emptyReplies = [];
-    await GatherInterest.handleButton(
-      startInteraction({
-        gather: empty,
-        client,
-        edits: [],
-        replies: emptyReplies,
-      }),
-      client
-    );
-    expect(emptyReplies[0].content).toContain("No one has registered interest");
   });
 
   test("host picks seats, thread is created in the games channel, status is first, create post is second", async () => {
@@ -381,8 +500,7 @@ describe("GatherStartGame start flow", () => {
     });
 
     const pinOrder = [];
-    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
-      shuffle: (players) => players,
+    await runStart(interaction, env.client, gather, {
       upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
         pinOrder.push("status");
         expect(thread.id).toBe("thread-1");
@@ -402,6 +520,7 @@ describe("GatherStartGame start flow", () => {
     expect(env.threadSends[1].payload.content).toContain("**Wingspan** is on the table.");
     expect(env.threadSends[1].payload.content).toContain("Seated: <@a> <@b>");
     expect(env.threadSends[1].payload.content).toContain("lfg-channel");
+    expect(env.threadSends[1].payload.embeds).toEqual(STUB_BGG.embeds);
     expect(pinOrder).toEqual(["status"]);
 
     const game = await env.client.getGameDataV2(gather.guildId, "game", "thread-1");
@@ -421,7 +540,7 @@ describe("GatherStartGame start flow", () => {
     expect(stored.startedGameId).toBe("thread-1");
     expect(stored.seatedUserIds).toEqual(["a", "b"]);
 
-    expect(edits[0].embeds[0].data.title).toContain("started");
+    expect(edits[0].embeds[0].data.title).toBe("Game started");
     expect(edits[0].components[0].components.every((c) => c.data.disabled)).toBe(true);
     expect(replies.some((r) => String(r.content || "").includes("<#thread-1>"))).toBe(
       true
@@ -493,8 +612,7 @@ describe("GatherStartGame start flow", () => {
       replies,
       values: ["a"],
     });
-    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
-      shuffle: (players) => players,
+    await runStart(interaction, env.client, gather, {
       upsertPinnedStatus: async () => {
         throw new Error("should not pin if save failed");
       },
@@ -527,8 +645,7 @@ describe("GatherStartGame start flow", () => {
     const logs = [];
     env.client.logger = { log: (msg) => logs.push(String(msg)) };
 
-    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
-      shuffle: (players) => players,
+    await runStart(interaction, env.client, gather, {
       upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
         const sent = await thread.send({ content: "📌 Live game status" });
         gameData.pinnedStatusMessageId = sent.id;
@@ -574,8 +691,7 @@ describe("GatherStartGame start flow", () => {
       replies,
       values: ["c"],
     });
-    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
-      shuffle: (players) => players,
+    await runStart(interaction, env.client, gather, {
       upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
         const sent = await thread.send({ content: "📌 Live game status" });
         gameData.pinnedStatusMessageId = sent.id;
@@ -610,8 +726,7 @@ describe("GatherStartGame start flow", () => {
       replies,
       values: ["a", "b"],
     });
-    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
-      shuffle: (players) => players,
+    await runStart(interaction, env.client, gather, {
       upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
         const sent = await thread.send({ content: "📌 Live game status" });
         gameData.pinnedStatusMessageId = sent.id;
@@ -642,8 +757,7 @@ describe("GatherStartGame start flow", () => {
       replies,
       values: ["a", "b", "c"],
     });
-    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
-      shuffle: (players) => players,
+    await runStart(interaction, env.client, gather, {
       upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
         const sent = await thread.send({ content: "📌 Live game status" });
         gameData.pinnedStatusMessageId = sent.id;
@@ -668,8 +782,7 @@ describe("GatherStartGame start flow", () => {
       replies,
       values: ["a"],
     });
-    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
-      shuffle: (players) => players,
+    await runStart(interaction, env.client, gather, {
       upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
         const sent = await thread.send({ content: "📌 Live game status" });
         gameData.pinnedStatusMessageId = sent.id;
@@ -723,8 +836,7 @@ describe("GatherStartGame start flow", () => {
       replies,
       values: ["a"],
     });
-    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
-      shuffle: (players) => players,
+    await runStart(interaction, env.client, gather, {
       upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
         const sent = await thread.send({ content: "📌 Live game status" });
         gameData.pinnedStatusMessageId = sent.id;
@@ -755,8 +867,7 @@ describe("GatherStartGame start flow", () => {
       replies,
       values: ["a"],
     });
-    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
-      shuffle: (players) => players,
+    await runStart(interaction, env.client, gather, {
       upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
         const sent = await thread.send({ content: "📌 Live game status" });
         gameData.pinnedStatusMessageId = sent.id;
@@ -802,8 +913,7 @@ describe("GatherStartGame start flow", () => {
       replies,
       values: ["a"],
     });
-    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
-      shuffle: (players) => players,
+    await runStart(interaction, env.client, gather, {
       upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
         const sent = await thread.send({ content: "📌 Live game status" });
         gameData.pinnedStatusMessageId = sent.id;
@@ -841,8 +951,7 @@ describe("GatherStartGame start flow", () => {
       values: ["a"],
     });
 
-    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
-      shuffle: (players) => players,
+    await runStart(interaction, env.client, gather, {
       upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
         expect(gameData.pinnedStatusMessageId).toBe(thread.id);
         expect(gameData.pinnedStatusChannelId).toBe(thread.id);
@@ -855,5 +964,84 @@ describe("GatherStartGame start flow", () => {
     expect(env.threadSends[0].payload.content).toContain("is on the table");
     const game = await env.client.getGameDataV2(gather.guildId, "game", "thread-1");
     expect(game.pinnedStatusMessageId).toBe("thread-1");
+  });
+
+  test("host can seat a server member who never logged interest", async () => {
+    const env = createThreadEnv({ gather });
+    const edits = [];
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits,
+      replies,
+      values: ["a", "ghost"],
+    });
+    await runStart(interaction, env.client, gather, {
+      displayNames: { ghost: "Guest" },
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+    const game = await env.client.getGameDataV2(gather.guildId, "game", "thread-1");
+    expect(game.players.map((p) => p.userId)).toEqual(["a", "ghost"]);
+    expect(game.players.find((p) => p.userId === "ghost").name).toBe("Guest");
+    expect(env.threadSends[1].payload.content).toContain("<@ghost>");
+    const stored = await env.client.getGameDataV2(
+      gather.guildId,
+      GatherInterest.COLLECTION,
+      gather.id
+    );
+    expect(stored.seatedUserIds).toEqual(["a", "ghost"]);
+    expect(stored.seatedDisplayNames.ghost).toBe("Guest");
+    const description = GatherInterest.buildPanelDescription(stored);
+    expect(description.indexOf("**Currently Playing**")).toBeLessThan(
+      description.indexOf("**Interest**")
+    );
+    expect(description).toContain("Guest · <@ghost>");
+  });
+
+  test("BGG announce load failure is an error after the table is live", async () => {
+    const env = createThreadEnv({ gather });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+    let bggAttempts = 0;
+    await runStart(interaction, env.client, gather, {
+      loadBgg: async () => {
+        bggAttempts += 1;
+        throw new Error("bgg down");
+      },
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+    expect(bggAttempts).toBe(2);
+    expect(env.deleted).toEqual([]);
+    expect(
+      replies.some((r) =>
+        String(r.content || "").includes("couldn't post the table announcement")
+      )
+    ).toBe(true);
+    expect(
+      replies.some((r) => String(r.content || "").includes("Game started"))
+    ).toBe(false);
+    const stored = await env.client.getGameDataV2(
+      gather.guildId,
+      GatherInterest.COLLECTION,
+      gather.id
+    );
+    expect(stored.status).toBe("started");
   });
 });

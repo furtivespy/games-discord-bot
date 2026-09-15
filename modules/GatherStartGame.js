@@ -1,9 +1,12 @@
 const {
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ChannelType,
   MessageFlags,
   StringSelectMenuBuilder,
   ThreadAutoArchiveDuration,
+  UserSelectMenuBuilder,
 } = require("discord.js");
 const { cloneDeep, shuffle } = require("lodash");
 const GatherInterest = require("./GatherInterest");
@@ -39,7 +42,81 @@ class GatherStartGame {
     return warnings;
   }
 
-  static buildPickerContent(gather, selectMeta) {
+  static asIdList(values) {
+    if (!Array.isArray(values)) return [];
+    return values.map(String).filter(Boolean);
+  }
+
+  static uniqueIds(ids) {
+    const seen = new Set();
+    const out = [];
+    for (const id of this.asIdList(ids)) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+    }
+    return out;
+  }
+
+  static mergeSeatSelections(interestedIds, anyoneIds) {
+    return this.uniqueIds([...this.asIdList(interestedIds), ...this.asIdList(anyoneIds)]);
+  }
+
+  static formatSelectedLine(interestedIds, anyoneIds) {
+    const seated = this.mergeSeatSelections(interestedIds, anyoneIds);
+    if (seated.length === 0) return "Currently selected: (none yet)";
+    return `Currently selected (${seated.length}): ${seated.map((id) => `<@${id}>`).join(" ")}`;
+  }
+
+  static memberDisplayNames(guild, userIds) {
+    const names = {};
+    const cache = guild?.members?.cache;
+    if (!cache) return names;
+    for (const id of this.asIdList(userIds)) {
+      const member =
+        typeof cache.get === "function" ? cache.get(id) : cache[id];
+      if (!member) continue;
+      names[id] =
+        member.displayName || member.user?.username || member.username || `User ${id}`;
+    }
+    return names;
+  }
+
+  static resolveSeatedPeople(gather, seatedIds, extraNames = {}) {
+    const interested = new Map(
+      GatherInterest.interestedSorted(gather).map((person) => [
+        String(person.userId),
+        person,
+      ])
+    );
+    const seated = [];
+    for (const id of this.uniqueIds(seatedIds)) {
+      const person = interested.get(id);
+      if (person) {
+        seated.push(person);
+        continue;
+      }
+      seated.push({
+        userId: id,
+        displayName: extraNames[id] || `User ${id}`,
+        level: null,
+      });
+    }
+    return seated;
+  }
+
+  static seatedDisplayNameMap(seated) {
+    const names = {};
+    for (const person of seated) {
+      if (person?.userId) {
+        names[String(person.userId)] =
+          person.displayName || `User ${person.userId}`;
+      }
+    }
+    return names;
+  }
+
+  static buildPickerContent(gather, selectMeta, selection = {}) {
     const gameName = gather.game?.name || "this game";
     const min = gather.game?.minPlayers;
     const max = gather.game?.maxPlayers;
@@ -49,19 +126,43 @@ class GatherStartGame {
         : "";
     const lines = [
       `Select who sits for **${gameName}**.`,
-      `${range}Choose 1–${selectMeta.maxValues}. Seating outside the BGG min/max is allowed (you'll get a warning).`,
+      `${range}Pick from people who showed interest and/or any other member of this server. Both lists are combined. Seating outside the BGG min/max is allowed (you'll get a warning).`,
     ];
-    if (selectMeta.truncated) {
+    if (selectMeta.hasInterested) {
       lines.push(
-        `Showing the top ${selectMeta.shown} of ${selectMeta.total} interested (Very → Somewhat → Flexibly).`
+        `Interested list: choose 0–${selectMeta.maxValues} (Very → Somewhat → Flexibly).`
       );
     }
+    lines.push(
+      `Server members: searchable picker, up to ${GatherInterest.DISCORD_SELECT_LIMIT}. Then click **Start with these seats**.`
+    );
+    if (selectMeta.truncated) {
+      lines.push(
+        `Showing the top ${selectMeta.shown} of ${selectMeta.total} interested. Use the server member picker for anyone else, including people not on that list.`
+      );
+    }
+    if (!selectMeta.hasInterested) {
+      lines.push("Nobody has logged interest yet — pick players from the server list.");
+    }
+    lines.push(
+      this.formatSelectedLine(selection.interestedIds, selection.anyoneIds)
+    );
     return lines.join("\n");
   }
 
   static buildSeatSelectRow(gather) {
     const { options, truncated, total, shown } =
       GatherInterest.buildSeatSelectOptions(gather);
+    if (options.length < 1) {
+      return {
+        row: null,
+        truncated: false,
+        total: 0,
+        shown: 0,
+        maxValues: 0,
+        hasInterested: false,
+      };
+    }
     // Spec: warn outside BGG min/max rather than hard-blocking over-max via maxValues.
     const maxValues = Math.max(
       1,
@@ -69,8 +170,8 @@ class GatherStartGame {
     );
     const select = new StringSelectMenuBuilder()
       .setCustomId(GatherInterest.seatsCustomId(gather.id))
-      .setPlaceholder("Choose seated players")
-      .setMinValues(1)
+      .setPlaceholder("Interested players")
+      .setMinValues(0)
       .setMaxValues(maxValues)
       .addOptions(options);
     return {
@@ -79,7 +180,35 @@ class GatherStartGame {
       total,
       shown,
       maxValues,
+      hasInterested: true,
     };
+  }
+
+  static buildAnyoneSelectRow(gather) {
+    const select = new UserSelectMenuBuilder()
+      .setCustomId(GatherInterest.anyoneCustomId(gather.id))
+      .setPlaceholder("Anyone on this server")
+      .setMinValues(0)
+      .setMaxValues(GatherInterest.DISCORD_SELECT_LIMIT);
+    return new ActionRowBuilder().addComponents(select);
+  }
+
+  static buildConfirmRow(gather) {
+    const button = new ButtonBuilder()
+      .setCustomId(GatherInterest.confirmSeatsCustomId(gather.id))
+      .setLabel("Start with these seats")
+      .setEmoji("🎲")
+      .setStyle(ButtonStyle.Success);
+    return new ActionRowBuilder().addComponents(button);
+  }
+
+  static buildSeatPickerComponents(gather) {
+    const interested = this.buildSeatSelectRow(gather);
+    const rows = [];
+    if (interested.row) rows.push(interested.row);
+    rows.push(this.buildAnyoneSelectRow(gather));
+    rows.push(this.buildConfirmRow(gather));
+    return rows;
   }
 
   static startPreconditionsError(gather, userId, client, guild) {
@@ -95,9 +224,6 @@ class GatherStartGame {
     }
     if (!GuildConfig.getLfgGameParentChannelId(client, guild)) {
       return GuildConfig.unsetStartMessage();
-    }
-    if (GatherInterest.interestedSorted(gather).length < 1) {
-      return "No one has registered interest yet. People need to click an interest level before you can start.";
     }
     return null;
   }
@@ -170,10 +296,20 @@ class GatherStartGame {
   }
 
   static async promptAndStart(interaction, client, gatherSnapshot, deps = {}) {
+    if (Array.isArray(deps.selectedUserIds)) {
+      return this.confirmStart(
+        interaction,
+        client,
+        gatherSnapshot.id,
+        deps.selectedUserIds,
+        deps
+      );
+    }
+
     const selectMeta = this.buildSeatSelectRow(gatherSnapshot);
     const picker = {
       content: this.buildPickerContent(gatherSnapshot, selectMeta),
-      components: [selectMeta.row],
+      components: this.buildSeatPickerComponents(gatherSnapshot),
     };
 
     let pickerMessage;
@@ -193,38 +329,13 @@ class GatherStartGame {
       pickerMessage = await interaction.fetchReply();
     }
 
-    const customId = GatherInterest.seatsCustomId(gatherSnapshot.id);
-    const filter = (component) =>
-      component.user.id === interaction.user.id && component.customId === customId;
-
-    let selectInteraction;
-    try {
-      const awaitComponent =
-        deps.awaitComponent ||
-        ((message, options) => message.awaitMessageComponent(options));
-      selectInteraction = await awaitComponent(pickerMessage, {
-        filter,
-        time: deps.timeoutMs ?? this.SELECT_TIMEOUT_MS,
-      });
-    } catch (error) {
-      await interaction.editReply({
-        content: "No players selected. Click **Start game** to try again.",
-        components: [],
-      });
-      return false;
-    }
-
-    if (typeof selectInteraction.deferUpdate === "function") {
-      try {
-        await selectInteraction.deferUpdate();
-      } catch (_) {
-        // Already acknowledged or token expired; continue with the original reply.
-      }
-    }
-
-    const seatedIds = Array.isArray(selectInteraction.values)
-      ? selectInteraction.values.map(String)
-      : [];
+    const seatedIds = await this.collectSeatSelections(
+      pickerMessage,
+      interaction,
+      gatherSnapshot,
+      deps
+    );
+    if (!seatedIds) return false;
     return this.confirmStart(
       interaction,
       client,
@@ -232,6 +343,127 @@ class GatherStartGame {
       seatedIds,
       deps
     );
+  }
+
+  static pickerCustomIds(gatherId) {
+    return [
+      GatherInterest.seatsCustomId(gatherId),
+      GatherInterest.anyoneCustomId(gatherId),
+      GatherInterest.confirmSeatsCustomId(gatherId),
+    ];
+  }
+
+  static async collectSeatSelections(pickerMessage, interaction, gather, deps = {}) {
+    const interestedIds = [];
+    const anyoneIds = [];
+    const allowedIds = this.pickerCustomIds(gather.id);
+    const filter = (component) =>
+      component.user.id === interaction.user.id &&
+      allowedIds.includes(component.customId);
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
+
+      const createCollector =
+        deps.createCollector ||
+        ((message, options) => message.createMessageComponentCollector(options));
+      const collector = createCollector(pickerMessage, {
+        filter,
+        time: deps.timeoutMs ?? this.SELECT_TIMEOUT_MS,
+      });
+
+      const refreshPicker = async (component, extraLine = null) => {
+        const content = [
+          this.buildPickerContent(gather, this.buildSeatSelectRow(gather), {
+            interestedIds,
+            anyoneIds,
+          }),
+          extraLine,
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        await component.update({
+          content,
+          components: this.buildSeatPickerComponents(gather),
+        });
+      };
+
+      collector.on("collect", async (component) => {
+        try {
+          if (component.customId === GatherInterest.seatsCustomId(gather.id)) {
+            interestedIds.splice(
+              0,
+              interestedIds.length,
+              ...this.asIdList(component.values)
+            );
+            await refreshPicker(component);
+            return;
+          }
+          if (component.customId === GatherInterest.anyoneCustomId(gather.id)) {
+            anyoneIds.splice(
+              0,
+              anyoneIds.length,
+              ...this.asIdList(component.values)
+            );
+            const users = component.users || component.members;
+            if (users && typeof users.values === "function") {
+              deps.displayNames = { ...(deps.displayNames || {}) };
+              for (const user of users.values()) {
+                const id = String(user.id || user.user?.id || "");
+                if (!id) continue;
+                deps.displayNames[id] =
+                  user.displayName ||
+                  user.globalName ||
+                  user.username ||
+                  user.user?.username ||
+                  `User ${id}`;
+              }
+            }
+            await refreshPicker(component);
+            return;
+          }
+          if (component.customId === GatherInterest.confirmSeatsCustomId(gather.id)) {
+            const seatedIds = this.mergeSeatSelections(interestedIds, anyoneIds);
+            if (seatedIds.length < 1) {
+              await refreshPicker(
+                component,
+                "Select at least one player, then click **Start with these seats**."
+              );
+              return;
+            }
+            if (typeof collector.stop === "function") collector.stop("confirmed");
+            if (typeof component.deferUpdate === "function") {
+              try {
+                await component.deferUpdate();
+              } catch (_) {
+                // Already acknowledged or token expired.
+              }
+            }
+            finish(seatedIds);
+          }
+        } catch (error) {
+          console.error("LFG seat picker interaction failed.", error);
+        }
+      });
+
+      collector.on("end", async (_collected, reason) => {
+        if (reason === "confirmed" || settled) return;
+        try {
+          await interaction.editReply({
+            content: "No players selected. Click **Start game** to try again.",
+            components: [],
+          });
+        } catch (_) {
+          // Ephemeral token may already be gone.
+        }
+        finish(null);
+      });
+    });
   }
 
   static async confirmStart(interaction, client, gatherId, seatedIds, deps = {}) {
@@ -252,21 +484,15 @@ class GatherStartGame {
         return false;
       }
 
-      const interested = new Map(
-        GatherInterest.interestedSorted(gather).map((person) => [
-          String(person.userId),
-          person,
-        ])
-      );
-      const seated = [];
-      for (const id of seatedIds) {
-        const person = interested.get(String(id));
-        if (person) seated.push(person);
-      }
+      const extraNames = {
+        ...(deps.displayNames || {}),
+        ...this.memberDisplayNames(interaction.guild, seatedIds),
+      };
+      const seated = this.resolveSeatedPeople(gather, seatedIds, extraNames);
       if (seated.length < 1) {
         await GatherInterest.replyEphemeral(
           interaction,
-          "Select at least one interested person. Click **Start game** to try again."
+          "Select at least one player. Click **Start game** to try again."
         );
         return false;
       }
@@ -523,7 +749,14 @@ class GatherStartGame {
         );
       }
 
-      await this.postCreateAnnouncement(thread, gather, seated, warnings);
+      const bgg = await this.loadNewGameAnnounce(
+        client,
+        interaction,
+        gather,
+        thread,
+        deps
+      );
+      await this.postCreateAnnouncement(thread, gather, seated, warnings, bgg);
 
       if (!gatherPersisted) {
         gatherPersisted = await this.persistGatherStarted(
@@ -580,6 +813,7 @@ class GatherStartGame {
       threadId: thread.id,
       gameId: thread.id,
       seatedUserIds: seated.map((person) => person.userId),
+      seatedDisplayNames: this.seatedDisplayNameMap(seated),
     });
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
@@ -595,11 +829,45 @@ class GatherStartGame {
     return false;
   }
 
-  static async postCreateAnnouncement(thread, gather, seated, warnings) {
-    const payload = this.buildCreatePost(gather, seated, warnings);
+  static async loadNewGameAnnounce(client, interaction, gather, thread, deps = {}) {
+    const bggId = gather.game?.bggId;
+    if (!bggId) return null;
+    const load =
+      deps.loadBgg ||
+      ((id) => {
+        const BoardGameGeek = require("./BoardGameGeek");
+        return BoardGameGeek.loadNewGameDetails(id, client, interaction);
+      });
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        return await load(bggId);
+      } catch (error) {
+        console.error(
+          `Failed to load BGG details for LFG start (attempt ${attempt}).`,
+          error
+        );
+      }
+    }
+    throw this.hostError(
+      `The game is live in <#${thread.id}>, but I couldn't post the table announcement. Don't click Start again. Open the thread and continue from there.`
+    );
+  }
+
+  static async postCreateAnnouncement(thread, gather, seated, warnings, bgg = null) {
+    const payload = this.buildCreatePost(gather, seated, warnings, bgg);
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         await thread.send(payload);
+        if (bgg?.otherAttachments?.length) {
+          try {
+            await thread.send({ files: bgg.otherAttachments });
+          } catch (error) {
+            console.error(
+              "Failed to post extra BGG attachments after LFG start.",
+              error
+            );
+          }
+        }
         return;
       } catch (error) {
         console.error(
@@ -659,7 +927,7 @@ class GatherStartGame {
     }
   }
 
-  static buildCreatePost(gather, seated, warnings) {
+  static buildCreatePost(gather, seated, warnings, bgg = null) {
     const gameName = gather.game?.name || "Game";
     const seatedLine = seated.map((person) => `<@${person.userId}>`).join(" ");
     const lfgLink = this.jumpUrl(
@@ -685,10 +953,13 @@ class GatherStartGame {
         ...seated.map((person) => String(person.userId)),
       ]),
     ];
-    return {
+    const payload = {
       content,
       allowedMentions: { users: mentionIds },
     };
+    if (bgg?.embeds?.length) payload.embeds = bgg.embeds;
+    if (bgg?.attachments?.length) payload.files = bgg.attachments;
+    return payload;
   }
 }
 

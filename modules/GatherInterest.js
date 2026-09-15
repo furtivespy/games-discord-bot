@@ -70,6 +70,9 @@ class GatherInterest {
     if (!gather) return gather;
     if (!gather.status) gather.status = "open";
     if (!Array.isArray(gather.seatedUserIds)) gather.seatedUserIds = [];
+    if (!gather.seatedDisplayNames || typeof gather.seatedDisplayNames !== "object") {
+      gather.seatedDisplayNames = {};
+    }
     if (gather.startedThreadId === undefined) gather.startedThreadId = null;
     if (gather.startedGameId === undefined) gather.startedGameId = null;
     if (gather.startedAt === undefined) gather.startedAt = null;
@@ -123,6 +126,14 @@ class GatherInterest {
     return `${CUSTOM_ID_PREFIX}:seats:${gatherId}`;
   }
 
+  static anyoneCustomId(gatherId) {
+    return `${CUSTOM_ID_PREFIX}:anyone:${gatherId}`;
+  }
+
+  static confirmSeatsCustomId(gatherId) {
+    return `${CUSTOM_ID_PREFIX}:confirm:${gatherId}`;
+  }
+
   static snapshotFromBgg(bgg) {
     const info = bgg?.gameInfo || {};
     const gameId = bgg?.gameId;
@@ -166,6 +177,7 @@ class GatherInterest {
       startedThreadId: null,
       startedGameId: null,
       seatedUserIds: [],
+      seatedDisplayNames: {},
       game: { ...game },
       interests: {},
     };
@@ -202,7 +214,7 @@ class GatherInterest {
     return gather?.status === "started";
   }
 
-  static markStarted(gather, { threadId, gameId, seatedUserIds, now = new Date() }) {
+  static markStarted(gather, { threadId, gameId, seatedUserIds, seatedDisplayNames, now = new Date() }) {
     const updatedAt = now instanceof Date ? now.toISOString() : String(now);
     gather.status = "started";
     gather.updatedAt = updatedAt;
@@ -210,6 +222,9 @@ class GatherInterest {
     gather.startedThreadId = threadId != null ? String(threadId) : null;
     gather.startedGameId = gameId != null ? String(gameId) : null;
     gather.seatedUserIds = (seatedUserIds || []).map(String);
+    gather.seatedDisplayNames = seatedDisplayNames && typeof seatedDisplayNames === "object"
+      ? { ...seatedDisplayNames }
+      : {};
     return gather;
   }
 
@@ -335,32 +350,46 @@ class GatherInterest {
     return bits.join(" · ");
   }
 
+  static seatedDisplayName(gather, userId) {
+    return gather.interests?.[userId]?.displayName
+      || gather.seatedDisplayNames?.[userId]
+      || `User ${userId}`;
+  }
+
+  static buildCurrentlyPlayingBlock(gather) {
+    const seatedLines = (gather.seatedUserIds || []).map((userId) => {
+      return `• ${this.formatPerson(userId, this.seatedDisplayName(gather, userId))}`;
+    });
+    const seatedBlock =
+      seatedLines.length > 0 ? seatedLines.join("\n") : "(none recorded)";
+    return `**Currently Playing**\n${seatedBlock}`;
+  }
+
+  static buildInterestSection(gather) {
+    const header = this.headerCounts(gather);
+    const roster = this.buildRosterText(gather);
+    return `**Interest**\n**${header}**\n${FLEXIBLE_MEANING}\n\n${roster}`;
+  }
+
   static buildPanelDescription(gather) {
     const game = gather.game || {};
     const title = game.url ? `[${game.name}](${game.url})` : (game.name || "Unknown game");
     const summary = this.gameSummaryLine(game);
     const hostLine = `Host: ${this.formatPerson(gather.hostUserId, gather.hostDisplayName)}`;
-    let statusLine;
+    let description;
     if (this.isStarted(gather)) {
-      const seatedLines = (gather.seatedUserIds || []).map((userId) => {
-        const entry = gather.interests?.[userId];
-        return `• ${this.formatPerson(userId, entry?.displayName)}`;
-      });
-      const seatedBlock =
-        seatedLines.length > 0 ? `\n${seatedLines.join("\n")}` : " (none recorded)";
       const jump = gather.startedThreadId
         ? `\nJump to the game: <#${gather.startedThreadId}>`
         : "";
-      statusLine = `**Started.** Seated:${seatedBlock}${jump}`;
-    } else if (this.isOpen(gather)) {
-      statusLine = "Click a button to register. Clicking again updates your level.";
+      description = `${title}${summary ? `\n${summary}` : ""}\n${hostLine}\n\n**Game Started**${jump}\n\n${this.buildCurrentlyPlayingBlock(gather)}\n\n${this.buildInterestSection(gather)}`;
     } else {
-      statusLine = "**Interest is closed.** The list is frozen.";
+      const statusLine = this.isOpen(gather)
+        ? "Click a button to register. Clicking again updates your level."
+        : "**Interest is closed.** The list is frozen.";
+      const header = this.headerCounts(gather);
+      const roster = this.buildRosterText(gather);
+      description = `${title}${summary ? `\n${summary}` : ""}\n${hostLine}\n\n**${header}**\n${statusLine}\n${FLEXIBLE_MEANING}\n\n${roster}`;
     }
-    const header = this.headerCounts(gather);
-    const roster = this.buildRosterText(gather);
-
-    let description = `${title}${summary ? `\n${summary}` : ""}\n${hostLine}\n\n**${header}**\n${statusLine}\n${FLEXIBLE_MEANING}\n\n${roster}`;
     if (description.length > MAX_DESCRIPTION) {
       description = `${description.substring(0, MAX_DESCRIPTION - 3)}...`;
     }
@@ -374,7 +403,7 @@ class GatherInterest {
     const embed = new EmbedBuilder()
       .setTitle(
         started
-          ? "Who's interested? (started)"
+          ? "Game started"
           : open
             ? "Who's interested?"
             : "Who's interested? (closed)"

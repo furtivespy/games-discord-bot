@@ -196,11 +196,39 @@ describe("GatherInterest panel components", () => {
       "https://discord.com/channels/guild-1/thread-1"
     );
     const description = GatherInterest.buildPanelDescription(gather);
-    expect(description).toContain("**Started.**");
+    expect(description).toContain("**Game Started**");
+    expect(description).toContain("**Currently Playing**");
+    expect(description).toContain("**Interest**");
+    expect(description.indexOf("**Currently Playing**")).toBeLessThan(
+      description.indexOf("**Interest**")
+    );
+    expect(description.indexOf("**Game Started**")).toBeLessThan(
+      description.indexOf("**Currently Playing**")
+    );
     expect(description).toContain("<#thread-1>");
     expect(description).toContain("Ann · <@a>");
+    expect(description).not.toContain("**Started.**");
     expect(gather.status).toBe("started");
     expect(gather.startedAt).toBe("2026-09-07T14:00:00.000Z");
+  });
+
+  test("started panel keeps Currently Playing above Interest for non-interest seats", () => {
+    const gather = sampleGather();
+    GatherInterest.upsertInterest(gather, "a", "very", "Ann");
+    GatherInterest.markStarted(gather, {
+      threadId: "thread-1",
+      gameId: "thread-1",
+      seatedUserIds: ["a", "ghost"],
+      seatedDisplayNames: { ghost: "Guest" },
+    });
+    const description = GatherInterest.buildPanelDescription(gather);
+    expect(description).toContain("Guest · <@ghost>");
+    expect(description.indexOf("Guest · <@ghost>")).toBeLessThan(
+      description.indexOf("**Interest**")
+    );
+    expect(description.indexOf("**Very interested**")).toBeGreaterThan(
+      description.indexOf("**Interest**")
+    );
   });
 });
 
@@ -346,6 +374,7 @@ describe("GatherInterest persistence shape", () => {
     expect(gather.startedThreadId).toBeNull();
     expect(gather.startedGameId).toBeNull();
     expect(gather.seatedUserIds).toEqual([]);
+    expect(gather.seatedDisplayNames).toEqual({});
     expect(gather.startedAt).toBeNull();
   });
 
