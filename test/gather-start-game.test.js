@@ -822,13 +822,38 @@ describe("GatherStartGame start flow", () => {
     expect(env.created).toHaveLength(1);
   });
 
-  test("forum parents are refused before a thread is created", () => {
+  test("forum parents are allowed and create posts with a starter message", async () => {
     expect(
       GatherStartGame.parentChannelError({
         type: ChannelType.GuildForum,
         threads: { create: async () => ({}) },
         isThread: () => false,
       })
-    ).toContain("text channel");
+    ).toBeNull();
+
+    const env = createThreadEnv({ gather, parentType: ChannelType.GuildForum });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+
+    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
+      shuffle: (players) => players,
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        expect(gameData.pinnedStatusMessageId).toBe(thread.id);
+        expect(gameData.pinnedStatusChannelId).toBe(thread.id);
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+
+    expect(env.created).toHaveLength(1);
+    expect(env.created[0].message?.content).toContain("Last updated:");
+    expect(env.threadSends[0].payload.content).toContain("is on the table");
+    const game = await env.client.getGameDataV2(gather.guildId, "game", "thread-1");
+    expect(game.pinnedStatusMessageId).toBe("thread-1");
   });
 });

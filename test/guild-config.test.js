@@ -72,6 +72,42 @@ describe("/config command", () => {
     expect(replies[0].flags).toBe(MessageFlags.Ephemeral);
   });
 
+  test("games-channel accepts a forum channel", async () => {
+    const client = settingsClient();
+    const command = new Config(client);
+    const replies = [];
+    await command.execute({
+      guildId: "guild-1",
+      guild: { id: "guild-1" },
+      memberPermissions: { has: (flag) => flag === PermissionsBitField.Flags.Administrator },
+      options: {
+        getSubcommand: () => "games-channel",
+        getChannel: () => ({
+          id: "forum-42",
+          type: ChannelType.GuildForum,
+        }),
+      },
+      reply: async (payload) => {
+        replies.push(payload);
+        return payload;
+      },
+    });
+    expect(client.store.guild.lfg_game_parent_channel_id).toBe("forum-42");
+    expect(replies[0].content).toContain("<#forum-42>");
+  });
+
+  test("games-channel option lists forum alongside text channels", () => {
+    const command = new Config(settingsClient());
+    const json = command.data.toJSON();
+    const games = json.options.find((option) => option.name === "games-channel");
+    const channel = games.options.find((option) => option.name === "channel");
+    expect(channel.channel_types).toEqual([
+      ChannelType.GuildText,
+      ChannelType.GuildAnnouncement,
+      ChannelType.GuildForum,
+    ]);
+  });
+
   test("show reports when the games channel is missing", async () => {
     const client = settingsClient();
     const command = new Config(client);

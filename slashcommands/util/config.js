@@ -24,12 +24,20 @@ class Config extends SlashCommand {
       .addSubcommand((subcommand) =>
         subcommand
           .setName("games-channel")
-          .setDescription("Set the parent text channel where /lfg Start game opens play threads")
+          .setDescription(
+            "Set the text or forum channel where /lfg Start game opens play threads"
+          )
           .addChannelOption((option) =>
             option
               .setName("channel")
-              .setDescription("Text channel for game threads (not the LFG channel)")
-              .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+              .setDescription(
+                "Text or forum channel for game threads (not the LFG channel)"
+              )
+              .addChannelTypes(
+                ChannelType.GuildText,
+                ChannelType.GuildAnnouncement,
+                ChannelType.GuildForum
+              )
               .setRequired(true)
           )
       )

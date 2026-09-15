@@ -102,16 +102,17 @@ class GatherStartGame {
     return null;
   }
 
-  static canCreateStandaloneThread(channel) {
-    if (!channel || typeof channel.threads?.create !== "function") return false;
-    if (typeof channel.isThread === "function" && channel.isThread()) return false;
-    const type = channel.type;
-    if (
+  static isForumLikeParent(channel) {
+    const type = channel?.type;
+    return (
       type === ChannelType.GuildForum ||
       (ChannelType.GuildMedia != null && type === ChannelType.GuildMedia)
-    ) {
-      return false;
-    }
+    );
+  }
+
+  static canCreatePlayThread(channel) {
+    if (!channel || typeof channel.threads?.create !== "function") return false;
+    if (typeof channel.isThread === "function" && channel.isThread()) return false;
     return true;
   }
 
@@ -119,10 +120,27 @@ class GatherStartGame {
     if (!channel) {
       return "The configured games channel is missing or I can't see it. An administrator should run `/config games-channel` again.";
     }
-    if (!this.canCreateStandaloneThread(channel)) {
-      return "The games channel must be a text channel that can have threads (not a forum, voice, or thread). An administrator can pick a different channel with `/config games-channel`.";
+    if (!this.canCreatePlayThread(channel)) {
+      return "The games channel must be a text or forum channel that can have threads (not a voice channel or an existing thread). An administrator can pick a different channel with `/config games-channel`.";
     }
     return null;
+  }
+
+  static buildThreadCreateOptions(gather, parent) {
+    const options = {
+      name: this.threadNameFromGame(gather.game?.name),
+      autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
+      reason: `Game Bot: start from /lfg (${gather.game?.name || "game"})`,
+    };
+    if (this.isForumLikeParent(parent)) {
+      // Forum/media posts require a starter message; Discord uses that message's
+      // id as the thread id, so we seed pinned live status from it after create.
+      const GameStatusHelper = require("./GameStatusHelper");
+      options.message = {
+        content: GameStatusHelper.buildPinnedStatusContent(),
+      };
+    }
+    return options;
   }
 
   static hostError(message, extra = {}) {
@@ -310,16 +328,17 @@ class GatherStartGame {
     }
 
     let thread;
+    const forumLike = this.isForumLikeParent(parent);
     try {
-      thread = await parent.threads.create({
-        name: this.threadNameFromGame(gather.game?.name),
-        autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
-        reason: `Game Bot: start from /lfg (${gather.game?.name || "game"})`,
-      });
+      thread = await parent.threads.create(
+        this.buildThreadCreateOptions(gather, parent)
+      );
     } catch (error) {
       console.error("Failed to create game thread for LFG start.", error);
       throw this.hostError(
-        "I couldn't create a thread in the games channel. I need permission to create public threads and send messages there."
+        forumLike
+          ? "I couldn't create a forum post in the games channel. I need permission to create posts and send messages there."
+          : "I couldn't create a thread in the games channel. I need permission to create public threads and send messages there."
       );
     }
 
@@ -331,7 +350,11 @@ class GatherStartGame {
         seated,
         thread,
         warnings,
-        deps
+        {
+          ...deps,
+          // Forum post id === starter message id; reuse it as the pinned status.
+          forumStarterMessageId: forumLike ? thread.id : null,
+        }
       );
     } catch (error) {
       if (!error.keepThread) {
@@ -464,6 +487,11 @@ class GatherStartGame {
         skipPinnedRefresh: true,
       });
       gameCommitted = true;
+
+      if (deps.forumStarterMessageId) {
+        gameData.pinnedStatusMessageId = String(deps.forumStarterMessageId);
+        gameData.pinnedStatusChannelId = thread.id;
+      }
 
       await this.postFirstStatusMessage(
         thread,

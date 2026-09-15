@@ -199,6 +199,7 @@ describe("slash command definition contracts", () => {
   });
 
   test("/config is an admin guild command that sets the LFG games parent channel", () => {
+    const { ChannelType } = require("discord.js");
     const Config = require("../slashcommands/util/config");
     const command = new Config(stubClient);
     expect(command.conf.permLevel).toBe("Administrator");
@@ -216,5 +217,10 @@ describe("slash command definition contracts", () => {
       (option) => option.name === "channel"
     );
     expect(channel.required).toBe(true);
+    expect(channel.channel_types).toEqual([
+      ChannelType.GuildText,
+      ChannelType.GuildAnnouncement,
+      ChannelType.GuildForum,
+    ]);
   });
 });
