@@ -1,5 +1,6 @@
 const SlashCommand = require("../../base/SlashCommand.js");
 const { SlashCommandBuilder, MessageFlags } = require("discord.js");
+const { formatNameNocaseIndexSkip } = require("../../db/deckCatalog.js");
 const { seedDeckCatalog } = require("../../db/seedDeckCatalog.js");
 
 // /migrate is intentionally single-purpose: one Bot Owner job at a time.
@@ -40,13 +41,17 @@ class Migrate extends SlashCommand {
 
     try {
       const result = seedDeckCatalog();
+      const lines = [
+        "Deck catalog seed complete.",
+        `Templates inserted: ${result.inserted}`,
+        `Templates skipped (already present): ${result.skipped}`,
+        `Total rows: ${result.total}`,
+      ];
+      if (result.nameIndex?.status === "skipped") {
+        lines.push(formatNameNocaseIndexSkip(result.nameIndex.collisions));
+      }
       await interaction.editReply({
-        content: [
-          "Deck catalog seed complete.",
-          `Templates inserted: ${result.inserted}`,
-          `Templates skipped (already present): ${result.skipped}`,
-          `Total rows: ${result.total}`,
-        ].join("\n"),
+        content: lines.join("\n"),
       });
     } catch (error) {
       this.client.logger.log(error, "error");

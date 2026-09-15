@@ -131,6 +131,56 @@ describe("/catalog command handlers", () => {
     );
   });
 
+  test("list still works when BINARY-unique names collide under NOCASE", async () => {
+    await withHarness(
+      { user: OWNER, options: { subcommand: "list" } },
+      async (harness) => {
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        try {
+          catalog.insertTemplate({
+            id: "foo-upper",
+            name: "Foo",
+            cards: [
+              {
+                name: "A",
+                description: "",
+                type: "",
+                suit: "",
+                value: "",
+                url: null,
+                format: "A",
+              },
+            ],
+          });
+          catalog.insertTemplate({
+            id: "foo-lower",
+            name: "foo",
+            cards: [
+              {
+                name: "B",
+                description: "",
+                type: "",
+                suit: "",
+                value: "",
+                url: null,
+                format: "A",
+              },
+            ],
+          });
+        } finally {
+          catalog.close();
+        }
+
+        await runCatalog(harness);
+        const text = collectedReplyText(harness);
+        expect(text).toContain("Foo (foo-upper)");
+        expect(text).toContain("foo (foo-lower)");
+        expect(text.toLowerCase()).not.toMatch(/unreadable|could not be read/);
+        expect(text).not.toContain("Something went wrong");
+      }
+    );
+  });
+
   test("corrupt catalog db does not hint /migrate", async () => {
     await withHarness(
       { user: OWNER, options: { subcommand: "list" } },
@@ -435,6 +485,92 @@ describe("/catalog command handlers", () => {
     );
   });
 
+  test("publish uses draw, discard, and hands when allCards is empty", async () => {
+    const draw = createCard({ id: "d1", name: "Draw", origin: "Main" });
+    const discard = createCard({ id: "d2", name: "Discard", origin: "Main" });
+    const hand = createCard({ id: "h1", name: "Hand", origin: "Main" });
+    const game = createActiveGame({
+      players: [
+        createPlayer({
+          userId: "owner-1",
+          name: "Owner",
+          order: 0,
+          hands: {
+            main: [hand],
+            played: [],
+            passed: [],
+            received: [],
+            simultaneous: [],
+          },
+        }),
+      ],
+      decks: [createDeck({ name: "Main", draw: [draw], discard: [discard] })],
+    });
+    game.decks[0].allCards = [];
+
+    await withHarness(
+      {
+        user: OWNER,
+        gameData: game,
+        options: {
+          subcommand: "publish",
+          strings: { deck: "Main", id: "live-set", name: "Live Set" },
+        },
+      },
+      async (harness) => {
+        seedDeckCatalog();
+        await runCatalog(harness);
+        expect(harness.lastContent()).toContain("Published `live-set`");
+        expect(harness.lastContent()).toContain("3 cards");
+        expect(harness.lastContent()).toContain("• Draw");
+        expect(harness.lastContent()).toContain("• Discard");
+        expect(harness.lastContent()).toContain("• Hand");
+
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        try {
+          expect(catalog.getTemplate("live-set").cards.map((card) => card.name)).toEqual([
+            "Draw",
+            "Discard",
+            "Hand",
+          ]);
+        } finally {
+          catalog.close();
+        }
+      }
+    );
+  });
+
+  test("publish cannot claim an official seed id on an empty catalog", async () => {
+    await withHarness(
+      {
+        user: OWNER,
+        gameData: gameWithDeck([createCard()]),
+        options: {
+          subcommand: "publish",
+          strings: { deck: "Main", id: "standard", name: "Hijack Standard" },
+        },
+      },
+      async (harness) => {
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        expect(catalog.count()).toBe(0);
+        catalog.close();
+
+        await runCatalog(harness);
+        expect(harness.lastContent()).toMatch(/reserved/i);
+        expect(harness.lastContent()).toContain("standard");
+        expect(harness.lastContent()).toContain("deck-catalog");
+
+        const after = new DeckCatalog({ dataDir: harness.dataDir });
+        try {
+          expect(after.hasId("standard")).toBe(false);
+          expect(after.count()).toBe(0);
+        } finally {
+          after.close();
+        }
+      }
+    );
+  });
+
   test("show autocomplete includes disabled templates; disable/enable filter by flag", async () => {
     await withHarness(
       {
@@ -502,6 +638,116 @@ describe("/catalog command handlers", () => {
         expect(harness.calls.respond[0].map((choice) => choice.value)).toEqual([
           "standard",
         ]);
+      }
+    );
+  });
+
+  test("show autocomplete filters by focus so names after the first 25 are still reachable", async () => {
+    await withHarness(
+      {
+        user: OWNER,
+        isAutocomplete: true,
+        options: {
+          subcommand: "show",
+          focused: "",
+          focusedName: "id",
+        },
+      },
+      async (harness) => {
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        try {
+          for (let i = 0; i < 30; i++) {
+            catalog.insertTemplate({
+              id: `aaa-${String(i).padStart(2, "0")}`,
+              name: `AAA ${String(i).padStart(2, "0")}`,
+              cards: [
+                {
+                  name: "A",
+                  description: "",
+                  type: "",
+                  suit: "",
+                  value: "",
+                  url: null,
+                  format: "A",
+                },
+              ],
+            });
+          }
+          catalog.insertTemplate({
+            id: "zebra-late",
+            name: "Zebra Late",
+            cards: [
+              {
+                name: "Z",
+                description: "",
+                type: "",
+                suit: "",
+                value: "",
+                url: null,
+                format: "A",
+              },
+            ],
+          });
+        } finally {
+          catalog.close();
+        }
+
+        await runCatalog(harness);
+        const emptyValues = harness.calls.respond[0].map((choice) => choice.value);
+        expect(emptyValues).toHaveLength(25);
+        expect(emptyValues).not.toContain("zebra-late");
+
+        harness.calls.respond.length = 0;
+        harness.interaction.options.getFocused = (whole = false) =>
+          whole ? { name: "id", value: "zeb" } : "zeb";
+        await runCatalog(harness);
+        const focused = harness.calls.respond[0];
+        expect(focused.map((choice) => choice.value)).toContain("zebra-late");
+        expect(focused.length).toBeLessThanOrEqual(25);
+      }
+    );
+  });
+
+  test("publish deck autocomplete filters by focus and caps at 25", async () => {
+    const decks = Array.from({ length: 30 }, (_, i) =>
+      createDeck({
+        name: `Alpha ${String(i).padStart(2, "0")}`,
+        draw: [createCard({ id: `c${i}`, name: "A" })],
+      })
+    );
+    decks.push(
+      createDeck({
+        name: "Zeta Only",
+        draw: [createCard({ id: "z", name: "Z" })],
+      })
+    );
+    await withHarness(
+      {
+        user: OWNER,
+        isAutocomplete: true,
+        gameData: createActiveGame({ decks }),
+        options: {
+          subcommand: "publish",
+          focused: "",
+          focusedName: "deck",
+        },
+      },
+      async (harness) => {
+        await runCatalog(harness);
+        expect(harness.calls.respond[0]).toHaveLength(25);
+        expect(
+          harness.calls.respond[0].map((choice) => choice.value)
+        ).not.toContain("Zeta Only");
+
+        harness.calls.respond.length = 0;
+        harness.interaction.options.getFocused = (whole = false) =>
+          whole ? { name: "deck", value: "only" } : "only";
+        await runCatalog(harness);
+        expect(harness.calls.respond[0].map((choice) => choice.value)).toEqual([
+          "Zeta Only",
+        ]);
+        expect(harness.calls.respond[0][0].name.startsWith("only")).toBe(true);
+        expect(harness.calls.respond[0][0].name).toContain("Zeta Only");
       }
     );
   });

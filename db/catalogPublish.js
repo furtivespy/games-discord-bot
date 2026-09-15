@@ -1,10 +1,17 @@
 const {
   catalogCardFromGenerated,
   INSTANCE_ONLY_IDS,
+  OFFICIAL_SEED_IDS,
 } = require("./seedDeckCatalog.js");
-const { sqliteUniqueField } = require("./deckCatalog.js");
+const {
+  canonicalDisplayName,
+  sqliteUniqueField,
+} = require("./deckCatalog.js");
 
 const CATALOG_ID_PATTERN = /^[a-z0-9-]{1,100}$/;
+
+const EMPTY_CARDS_ERROR =
+  "This deck has no cards to publish. allCards is empty, and there are no cards in the draw pile, discard pile, or player hands.";
 
 function validateCatalogId(id) {
   if (typeof id !== "string" || !CATALOG_ID_PATTERN.test(id)) {
@@ -22,6 +29,13 @@ function validateCatalogId(id) {
       error: `Cannot publish as "${id}"; that id is reserved for in-channel custom decks.`,
     };
   }
+  if (OFFICIAL_SEED_IDS.has(id)) {
+    return {
+      ok: false,
+      code: "reserved_id",
+      error: `Cannot publish as "${id}"; that id is reserved for the official catalog seed. Run \`/migrate\` with job \`deck-catalog\` if it is missing.`,
+    };
+  }
   return { ok: true, id };
 }
 
@@ -29,12 +43,59 @@ function isPublishableCard(card) {
   return card != null && typeof card === "object" && !Array.isArray(card);
 }
 
+function cardsFromPile(pile) {
+  if (Array.isArray(pile)) return pile;
+  if (pile && Array.isArray(pile.cards)) return pile.cards;
+  return [];
+}
+
+function cardBelongsToDeck(card, deckName) {
+  if (!card || typeof card !== "object") return false;
+  const origin = card.origin;
+  if (origin == null || origin === "") return true;
+  return String(origin).toLowerCase() === String(deckName ?? "").toLowerCase();
+}
+
+function cardsFromHands(players, deckName) {
+  const cards = [];
+  for (const player of players || []) {
+    const hands = player?.hands;
+    if (!hands || typeof hands !== "object") continue;
+    for (const location of Object.values(hands)) {
+      for (const card of cardsFromPile(location)) {
+        if (cardBelongsToDeck(card, deckName)) {
+          cards.push(card);
+        }
+      }
+    }
+  }
+  return cards;
+}
+
+function collectLiveDeckCards(deck, players) {
+  const cards = [];
+  const seen = new Set();
+  const add = (list) => {
+    for (const card of list) {
+      if (isPublishableCard(card) && card.id) {
+        if (seen.has(card.id)) continue;
+        seen.add(card.id);
+      }
+      cards.push(card);
+    }
+  };
+  add(cardsFromPile(deck?.piles?.draw));
+  add(cardsFromPile(deck?.piles?.discard));
+  add(cardsFromHands(players, deck?.name));
+  return cards;
+}
+
 function buildPublishCards(allCards) {
   if (allCards == null || !Array.isArray(allCards) || allCards.length === 0) {
     return {
       ok: false,
       code: "empty_cards",
-      error: "This deck has no cards in allCards to publish.",
+      error: EMPTY_CARDS_ERROR,
     };
   }
   const cards = [];
@@ -52,11 +113,26 @@ function buildPublishCards(allCards) {
   return { ok: true, cards };
 }
 
-function buildPublishPayload({ id, name, allCards, createdBy }) {
+function resolvePublishCards({ allCards, deck, players }) {
+  if (Array.isArray(allCards) && allCards.length > 0) {
+    return buildPublishCards(allCards);
+  }
+  const live = collectLiveDeckCards(deck, players);
+  if (live.length > 0) {
+    return buildPublishCards(live);
+  }
+  return {
+    ok: false,
+    code: "empty_cards",
+    error: EMPTY_CARDS_ERROR,
+  };
+}
+
+function buildPublishPayload({ id, name, allCards, deck, players, createdBy }) {
   const idCheck = validateCatalogId(id);
   if (!idCheck.ok) return idCheck;
 
-  const trimmedName = typeof name === "string" ? name.trim() : "";
+  const trimmedName = canonicalDisplayName(name);
   if (!trimmedName) {
     return {
       ok: false,
@@ -65,7 +141,7 @@ function buildPublishPayload({ id, name, allCards, createdBy }) {
     };
   }
 
-  const cardsCheck = buildPublishCards(allCards);
+  const cardsCheck = resolvePublishCards({ allCards, deck, players });
   if (!cardsCheck.ok) return cardsCheck;
 
   return {
@@ -151,7 +227,9 @@ function publishToCatalog(catalog, input) {
 
 module.exports = {
   CATALOG_ID_PATTERN,
+  EMPTY_CARDS_ERROR,
   validateCatalogId,
+  collectLiveDeckCards,
   buildPublishCards,
   buildPublishPayload,
   assertUnique,
