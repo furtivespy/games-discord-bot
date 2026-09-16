@@ -79,8 +79,7 @@ class NewGame {
         content += `${players[i]} `;
       }
 
-      let bgg = await BoardGameGeek.CreateAndLoad(search, client, interaction);
-      await bgg.LoadEmbeds(BoardGameGeek.DetailsEnum.ALLPLUS);
+      let bgg = await BoardGameGeek.loadNewGameDetails(search, client, interaction);
 
       try {
         const actorDisplayName = interaction.member?.displayName || interaction.user.username

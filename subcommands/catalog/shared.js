@@ -6,6 +6,7 @@ const {
   batchEmbeds,
   textEmbed,
 } = require("../../modules/DiscordEmbeds");
+const GameHelper = require("../../modules/GlobalGameHelper");
 
 const NOT_OWNER =
   "You do not have permission to use this command. (Bot Owner Only)";
@@ -145,26 +146,46 @@ function formatTemplateListLine(template, { creatorNames } = {}) {
   return `${template.name} (${template.id}): ${count} cards, ${layout}${suffix}`;
 }
 
+function autocompleteMatchRank(template, q) {
+  const id = String(template.id || "").toLowerCase();
+  const name = String(template.name || "").toLowerCase();
+  if (id === q || name === q) return 0;
+  if (id.startsWith(q) || name.startsWith(q)) return 1;
+  return 2;
+}
+
+function catalogAutocompleteChoiceName(focused, label) {
+  return GameHelper.autocompleteChoiceName(focused, label);
+}
+
 function autocompleteTemplates(templates, focused, predicate = () => true) {
   const q = String(focused || "").toLowerCase();
-  return templates
-    .filter(predicate)
-    .filter((template) => {
-      if (!q) return true;
-      return (
-        template.id.toLowerCase().includes(q) ||
-        template.name.toLowerCase().includes(q)
-      );
-    })
-    .slice(0, 25)
-    .map((template) => {
-      const prefix = isEnabled(template) ? "" : "[disabled] ";
-      const name = `${prefix}${template.name} (${template.id})`;
-      return {
-        name: name.slice(0, 100),
-        value: template.id,
-      };
+  const matched = templates.filter(predicate).filter((template) => {
+    if (!q) return true;
+    return (
+      String(template.id || "")
+        .toLowerCase()
+        .includes(q) ||
+      String(template.name || "")
+        .toLowerCase()
+        .includes(q)
+    );
+  });
+  if (q) {
+    matched.sort((a, b) => {
+      const rank = autocompleteMatchRank(a, q) - autocompleteMatchRank(b, q);
+      if (rank !== 0) return rank;
+      return String(a.name || "").localeCompare(String(b.name || ""));
     });
+  }
+  return matched.slice(0, 25).map((template) => {
+    const prefix = isEnabled(template) ? "" : "[disabled] ";
+    const label = `${prefix}${template.name} (${template.id})`;
+    return {
+      name: catalogAutocompleteChoiceName(focused, label),
+      value: template.id,
+    };
+  });
 }
 
 async function deferCatalogReply(interaction) {

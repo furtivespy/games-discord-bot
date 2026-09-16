@@ -166,6 +166,55 @@ describe("seedDeckCatalog", () => {
     });
   });
 
+  test("fresh seed creates the NOCASE name index", () => {
+    withTempDataDir(({ catalog }) => {
+      const result = seedDeckCatalog({ catalog });
+      expect(result.nameIndex.status).toBe("created");
+      expect(
+        catalog.db
+          .query(
+            `SELECT 1 AS ok FROM sqlite_master WHERE type = 'index' AND name = 'idx_deck_templates_name_nocase'`
+          )
+          .get()
+      ).toBeTruthy();
+    });
+  });
+
+  test("seed with NOCASE collisions skips the index and keeps every existing row", () => {
+    withTempDataDir(({ catalog }) => {
+      catalog.insertTemplate({
+        id: "foo-upper",
+        name: "Foo",
+        cards: [{ name: "A", description: "", type: "", suit: "", value: "", url: null, format: "A" }],
+      });
+      catalog.insertTemplate({
+        id: "foo-lower",
+        name: "foo",
+        cards: [{ name: "B", description: "", type: "", suit: "", value: "", url: null, format: "A" }],
+      });
+
+      const result = seedDeckCatalog({ catalog });
+      expect(result.nameIndex.status).toBe("skipped");
+      expect(result.inserted).toBe(expectedSeedIds().length);
+      expect(catalog.getTemplate("foo-upper").name).toBe("Foo");
+      expect(catalog.getTemplate("foo-lower").name).toBe("foo");
+      expect(catalog.getTemplate("standard")).not.toBeNull();
+      expect(
+        catalog.db
+          .query(
+            `SELECT 1 AS ok FROM sqlite_master WHERE type = 'index' AND name = 'idx_deck_templates_name_nocase'`
+          )
+          .get()
+      ).toBeFalsy();
+
+      const again = seedDeckCatalog({ catalog });
+      expect(again.nameIndex.status).toBe("skipped");
+      expect(again.inserted).toBe(0);
+      expect(catalog.getTemplate("foo-upper").name).toBe("Foo");
+      expect(catalog.getTemplate("foo-lower").name).toBe("foo");
+    });
+  });
+
   test("does not write game_documents.sqlite even when that file already exists", () => {
     withTempDataDir(({ catalog, dataDir }) => {
       const gameDocsPath = path.join(dataDir, "game_documents.sqlite");
@@ -241,5 +290,65 @@ describe("/migrate", () => {
 
     await command.execute(interaction);
     expect(replies[0].content).toBe("A migration is already running.");
+  });
+
+  test("reports skipped NOCASE index when case-variant names already exist", async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "deck-catalog-migrate-"));
+    const previousDataDir = process.env.GAMEBOT_DATA_DIR;
+    process.env.GAMEBOT_DATA_DIR = dataDir;
+
+    const catalog = new DeckCatalog({ dataDir });
+    catalog.insertTemplate({
+      id: "foo-upper",
+      name: "Foo",
+      cards: [{ name: "A", description: "", type: "", suit: "", value: "", url: null, format: "A" }],
+    });
+    catalog.insertTemplate({
+      id: "foo-lower",
+      name: "foo",
+      cards: [{ name: "B", description: "", type: "", suit: "", value: "", url: null, format: "A" }],
+    });
+    catalog.close();
+
+    const replies = [];
+    const command = new Migrate({
+      config: { botOwnerId: "owner" },
+      logger: { log: () => {} },
+    });
+    const interaction = {
+      user: { id: "owner" },
+      deferReply: async () => {},
+      editReply: async (response) => replies.push(response),
+      options: {},
+    };
+
+    try {
+      await command.execute(interaction);
+      expect(replies[0].content).toMatch(/all rows kept/i);
+      expect(replies[0].content).toMatch(/Foo|foo/);
+
+      const after = new DeckCatalog({ dataDir });
+      try {
+        expect(after.getTemplate("foo-upper").name).toBe("Foo");
+        expect(after.getTemplate("foo-lower").name).toBe("foo");
+        expect(after.getTemplate("standard")).not.toBeNull();
+        expect(
+          after.db
+            .query(
+              `SELECT 1 AS ok FROM sqlite_master WHERE type = 'index' AND name = 'idx_deck_templates_name_nocase'`
+            )
+            .get()
+        ).toBeFalsy();
+      } finally {
+        after.close();
+      }
+    } finally {
+      if (previousDataDir === undefined) {
+        delete process.env.GAMEBOT_DATA_DIR;
+      } else {
+        process.env.GAMEBOT_DATA_DIR = previousDataDir;
+      }
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
   });
 });

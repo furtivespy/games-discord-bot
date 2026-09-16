@@ -146,7 +146,7 @@ describe("GatherInterest levels and roster", () => {
 });
 
 describe("GatherInterest panel components", () => {
-  test("open panel has three interest buttons plus host Close", () => {
+  test("open panel has three interest buttons plus host Close and Start game", () => {
     const gather = sampleGather();
     const rows = GatherInterest.buildPanelComponents(gather).map((row) => row.toJSON());
     expect(rows[0].components.map((c) => c.label)).toEqual([
@@ -155,25 +155,85 @@ describe("GatherInterest panel components", () => {
       "Flexibly interested",
     ]);
     expect(rows[0].components.every((c) => c.disabled === false)).toBe(true);
-    expect(rows[1].components[0].label).toBe("Close interest");
+    expect(rows[1].components.map((c) => c.label)).toEqual([
+      "Close interest",
+      "Start game",
+    ]);
     expect(rows[0].components[2].custom_id).toBe(
       GatherInterest.interestCustomId(gather.id, "flexible")
     );
+    expect(rows[1].components[1].custom_id).toBe(
+      GatherInterest.startCustomId(gather.id)
+    );
   });
 
-  test("closed panel disables interest buttons and offers Re-open", () => {
+  test("closed panel disables interest buttons and offers Re-open plus Start game", () => {
     const gather = sampleGather();
     GatherInterest.setStatus(gather, "closed", new Date("2026-09-07T13:00:00Z"));
     const rows = GatherInterest.buildPanelComponents(gather).map((row) => row.toJSON());
     expect(rows[0].components.every((c) => c.disabled === true)).toBe(true);
-    expect(rows[1].components[0].label).toBe("Re-open interest");
+    expect(rows[1].components.map((c) => c.label)).toEqual([
+      "Re-open interest",
+      "Start game",
+    ]);
     expect(gather.status).toBe("closed");
     expect(gather.closedAt).toBe("2026-09-07T13:00:00.000Z");
+  });
+
+  test("started panel locks interest and links to the game thread", () => {
+    const gather = sampleGather();
+    GatherInterest.upsertInterest(gather, "a", "very", "Ann");
+    GatherInterest.markStarted(gather, {
+      threadId: "thread-1",
+      gameId: "thread-1",
+      seatedUserIds: ["a"],
+      now: new Date("2026-09-07T14:00:00Z"),
+    });
+    const rows = GatherInterest.buildPanelComponents(gather).map((row) => row.toJSON());
+    expect(rows[0].components.every((c) => c.disabled === true)).toBe(true);
+    expect(rows[1].components[0].style).toBe(5); // Link
+    expect(rows[1].components[0].url).toBe(
+      "https://discord.com/channels/guild-1/thread-1"
+    );
+    const description = GatherInterest.buildPanelDescription(gather);
+    expect(description).toContain("**Game Started**");
+    expect(description).toContain("**Currently Playing**");
+    expect(description).toContain("**Interest**");
+    expect(description.indexOf("**Currently Playing**")).toBeLessThan(
+      description.indexOf("**Interest**")
+    );
+    expect(description.indexOf("**Game Started**")).toBeLessThan(
+      description.indexOf("**Currently Playing**")
+    );
+    expect(description).toContain("<#thread-1>");
+    expect(description).toContain("Ann · <@a>");
+    expect(description).not.toContain("**Started.**");
+    expect(gather.status).toBe("started");
+    expect(gather.startedAt).toBe("2026-09-07T14:00:00.000Z");
+  });
+
+  test("started panel keeps Currently Playing above Interest for non-interest seats", () => {
+    const gather = sampleGather();
+    GatherInterest.upsertInterest(gather, "a", "very", "Ann");
+    GatherInterest.markStarted(gather, {
+      threadId: "thread-1",
+      gameId: "thread-1",
+      seatedUserIds: ["a", "ghost"],
+      seatedDisplayNames: { ghost: "Guest" },
+    });
+    const description = GatherInterest.buildPanelDescription(gather);
+    expect(description).toContain("Guest · <@ghost>");
+    expect(description.indexOf("Guest · <@ghost>")).toBeLessThan(
+      description.indexOf("**Interest**")
+    );
+    expect(description.indexOf("**Very interested**")).toBeGreaterThan(
+      description.indexOf("**Interest**")
+    );
   });
 });
 
 describe("GatherInterest custom ids", () => {
-  test("parses interest, close, and reopen ids", () => {
+  test("parses interest, close, reopen, and start ids", () => {
     expect(GatherInterest.parseCustomId("gather:somewhat:abc")).toEqual({
       action: "interest",
       level: "somewhat",
@@ -185,6 +245,10 @@ describe("GatherInterest custom ids", () => {
     });
     expect(GatherInterest.parseCustomId("gather:reopen:abc")).toEqual({
       action: "reopen",
+      gatherId: "abc",
+    });
+    expect(GatherInterest.parseCustomId("gather:start:abc")).toEqual({
+      action: "start",
       gatherId: "abc",
     });
     expect(GatherInterest.parseCustomId("gather:little:abc")).toEqual({
@@ -306,6 +370,12 @@ describe("GatherInterest persistence shape", () => {
     expect(gather.decks).toBeUndefined();
     expect(gather.tokens).toBeUndefined();
     expect(gather.game.name).toBe("Wingspan");
+    expect(gather.status).toBe("open");
+    expect(gather.startedThreadId).toBeNull();
+    expect(gather.startedGameId).toBeNull();
+    expect(gather.seatedUserIds).toEqual([]);
+    expect(gather.seatedDisplayNames).toEqual({});
+    expect(gather.startedAt).toBeNull();
   });
 
   test("survives JSON round-trip used by sqlite documents", () => {
@@ -487,6 +557,34 @@ describe("GatherInterest button handler", () => {
     );
     expect(stored.status).toBe("open");
     expect(edits[0].components[0].components.every((c) => !c.data.disabled)).toBe(true);
+  });
+
+  test("host cannot re-open a gather that already started", async () => {
+    GatherInterest.markStarted(gather, {
+      threadId: "thread-1",
+      gameId: "thread-1",
+      seatedUserIds: ["user-1"],
+    });
+    await client.setGameDataV2(gather.guildId, GatherInterest.COLLECTION, gather.id, gather);
+
+    await GatherInterest.handleButton(
+      buttonInteraction({
+        customId: GatherInterest.reopenCustomId(gather.id),
+        userId: "host-1",
+        displayName: "Hosty",
+        edits,
+        replies,
+      }),
+      client
+    );
+    expect(replies[0].content).toContain("already started");
+    const stored = await client.getGameDataV2(
+      gather.guildId,
+      GatherInterest.COLLECTION,
+      gather.id
+    );
+    expect(stored.status).toBe("started");
+    expect(edits).toHaveLength(0);
   });
 
   test("ignores unrelated buttons so collectors keep working", async () => {

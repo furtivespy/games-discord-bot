@@ -3,6 +3,12 @@ const DeckCatalog = require("./deckCatalog.js");
 
 const INSTANCE_ONLY_IDS = new Set(["custom-csv", "customempty", "empty"]);
 
+const OFFICIAL_SEED_IDS = new Set(
+  GameDB.CurrentCardList.filter(([, id]) => !INSTANCE_ONLY_IDS.has(id)).map(
+    ([, id]) => id
+  )
+);
+
 function catalogCardFromGenerated(card) {
   const src = card != null && typeof card === "object" ? card : {};
   return {
@@ -44,10 +50,15 @@ function seedDeckCatalog(options = {}) {
       inserted += 1;
     }
 
+    // After inserts: skip the unique index when BINARY-unique names already
+    // collide under NOCASE, so migrate does not throw or drop rows.
+    const nameIndex = catalog.ensureNameNocaseUniqueIndex();
+
     return {
       inserted,
       skipped,
       total: catalog.count(),
+      nameIndex,
     };
   } finally {
     if (owned) catalog.close();
@@ -58,4 +69,5 @@ module.exports = {
   seedDeckCatalog,
   catalogCardFromGenerated,
   INSTANCE_ONLY_IDS,
+  OFFICIAL_SEED_IDS,
 };
