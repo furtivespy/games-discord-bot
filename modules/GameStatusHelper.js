@@ -306,14 +306,29 @@ class GameStatusHelper {
   }
 
   static async persistStatusUpdate(client, interaction, gameData, publicUpdateResult) {
-    if (publicUpdateResult) {
-      gameData.lastStatusMessageId = publicUpdateResult.lastStatusMessageId;
-      gameData.lastStatusMessageTimestamp = publicUpdateResult.lastStatusMessageTimestamp;
-      // Chat-status metadata only. sendGameStatus / sendPublicStatusUpdate already
-      // refresh the pin after this persist; skipping the save hook avoids a loop.
-      await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData, {
+    if (!publicUpdateResult) {
+      return;
+    }
+
+    gameData.lastStatusMessageId = publicUpdateResult.lastStatusMessageId;
+    gameData.lastStatusMessageTimestamp = publicUpdateResult.lastStatusMessageTimestamp;
+
+    // Chat-status metadata only — merge into the latest saved document so a
+    // later persist cannot clobber a newer command write (same idea as
+    // persistPinFields). Swallow persist errors so they cannot leave a
+    // deferred slash reply unresolved after the chat message already posted.
+    try {
+      const guildId = interaction.guildId;
+      const channelId = interaction.channelId;
+      const fresh = await client.getGameDataV2(guildId, "game", channelId);
+      const toSave = fresh && !fresh.isdeleted ? fresh : gameData;
+      toSave.lastStatusMessageId = gameData.lastStatusMessageId;
+      toSave.lastStatusMessageTimestamp = gameData.lastStatusMessageTimestamp;
+      await client.setGameDataV2(guildId, "game", channelId, toSave, {
         skipPinnedRefresh: true,
       });
+    } catch (error) {
+      console.error("Failed to persist chat status metadata.", error);
     }
   }
 
