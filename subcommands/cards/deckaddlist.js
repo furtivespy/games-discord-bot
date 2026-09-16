@@ -28,13 +28,14 @@ class DeckAddList {
         }
 
         const customlist = interaction.options.getString('customlist')
-        const names = DeckRecipeHelper.parseNameList(customlist)
-        if (names.length < 1) {
-            await interaction.editReply({ content: `No card names found in the list. Use comma-separated names, same as /cards deck new custom-csv.` })
+        const result = DeckRecipeHelper.addCardsFromCustomList(deck, customlist)
+        if (!result.ok) {
+            await interaction.editReply({ content: result.error })
             return
         }
 
-        const added = DeckRecipeHelper.addCardsFromNameList(deck, customlist)
+        const added = result.added
+        const names = result.names
 
         try {
             const actorDisplayName = interaction.member?.displayName || interaction.user.username

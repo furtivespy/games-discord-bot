@@ -2,6 +2,7 @@ const SlashCommand = require('../../base/SlashCommand.js')
 const {SlashCommandBuilder, MessageFlags} = require('discord.js');
 const GameDB = require('../../db/anygame.js')
 const GameFormatter = require('../../modules/GameFormatter')
+const DeckRecipeHelper = require('../../modules/DeckRecipeHelper')
 const BuildNew = require('../../subcommands/cards/buildernew')
 const BuildAdd = require('../../subcommands/cards/builderadd')
 const BuildRemove = require('../../subcommands/cards/builderremove')
@@ -223,8 +224,11 @@ class Cards extends SlashCommand {
             .addSubcommand(subcommand =>
                 subcommand
                     .setName("addlist")
-                    .setDescription("Bulk-add name-only cards to an in-game deck recipe (goes to discard, not draw)")
-                    .addStringOption(option => option.setName('customlist').setDescription('Comma-separated card names').setRequired(true))
+                    .setDescription(DeckRecipeHelper.ADDLIST_COMMAND_DESCRIPTION)
+                    .addStringOption(option => option.setName('customlist')
+                        .setDescription(DeckRecipeHelper.ADDLIST_OPTION_DESCRIPTION)
+                        .setRequired(true)
+                        .setMaxLength(DeckRecipeHelper.DISCORD_STRING_OPTION_MAX))
                     .addStringOption(option => option.setName('deck').setDescription('Deck to add to').setAutocomplete(true))
             );
         });

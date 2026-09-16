@@ -605,4 +605,80 @@ describe("/cards command handlers", () => {
       }
     );
   });
+
+  test("deck addlist still accepts comma-separated names into discard and allCards", async () => {
+    await withHarness(
+      {
+        gameData: gameWithDeck(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "addlist",
+          strings: { deck: "Main", customlist: "Ace, King, Queen" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        const deck = saved.decks[0];
+        expect(deck.allCards.map((card) => card.name)).toEqual(
+          expect.arrayContaining(["Ace", "King", "Queen"])
+        );
+        expect(deck.piles.discard.cards.map((card) => card.name)).toEqual(
+          expect.arrayContaining(["Ace", "King", "Queen"])
+        );
+        expect(deck.piles.draw.cards).toHaveLength(1);
+        expect(harness.lastContent()).toContain("Ace, King, Queen");
+        expect(harness.persistCalls).toHaveLength(1);
+      }
+    );
+  });
+
+  test("deck addlist headered CSV with copies=2 lands illustrated cards in discard and allCards", async () => {
+    const csv = "name,url,copies\nPromo,https://example.com/promo.png,2";
+    await withHarness(
+      {
+        gameData: gameWithDeck(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "addlist",
+          strings: { deck: "Main", customlist: csv },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        const deck = saved.decks[0];
+        const added = deck.allCards.filter((card) => card.name === "Promo");
+        expect(added).toHaveLength(2);
+        expect(added.every((card) => card.url === "https://example.com/promo.png")).toBe(true);
+        expect(deck.piles.discard.cards.filter((card) => card.name === "Promo")).toHaveLength(2);
+        expect(deck.piles.draw.cards).toHaveLength(1);
+        expect(harness.persistCalls).toHaveLength(1);
+      }
+    );
+  });
+
+  test("deck addlist CSV missing a name does not persist a partial write", async () => {
+    const csv = "name,url\nAce,https://example.com/ace.png\n,https://example.com/blank.png";
+    await withHarness(
+      {
+        gameData: gameWithDeck(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "addlist",
+          strings: { deck: "Main", customlist: csv },
+        },
+      },
+      async (harness) => {
+        const before = structuredClone(harness.storedGame);
+        await runCards(harness);
+        expect(harness.lastContent().toLowerCase()).toContain("name");
+        expect(harness.lastContent().toLowerCase()).toContain("no cards were added");
+        expect(harness.persistCalls).toHaveLength(0);
+        const saved = await harness.getSavedGame();
+        expect(saved.decks[0].allCards).toEqual(before.decks[0].allCards);
+        expect(saved.decks[0].piles.discard.cards).toEqual(before.decks[0].piles.discard.cards);
+      }
+    );
+  });
 });

@@ -2,6 +2,7 @@ const { describe, expect, test } = require("bun:test");
 const fs = require("fs");
 const path = require("path");
 const { PermissionsBitField } = require("discord.js");
+const DeckRecipeHelper = require("../modules/DeckRecipeHelper");
 
 const SLASH_ROOT = path.join(__dirname, "..", "slashcommands");
 
@@ -179,6 +180,19 @@ describe("slash command definition contracts", () => {
     expect(format.description.toLowerCase()).toContain("shown in c");
     expect(suit.description.toLowerCase()).toContain("not shown");
     expect(value.description.toLowerCase()).toContain("format c");
+
+    const addlist = json.options
+      .find((option) => option.name === "deck")
+      .options.find((option) => option.name === "addlist");
+    const customlist = addlist.options.find((option) => option.name === "customlist");
+    expect(addlist.description).toBe(DeckRecipeHelper.ADDLIST_COMMAND_DESCRIPTION);
+    expect(addlist.description.length).toBeLessThanOrEqual(GameFormatter.DISCORD_OPTION_DESCRIPTION_MAX);
+    expect(customlist.description).toBe(DeckRecipeHelper.ADDLIST_OPTION_DESCRIPTION);
+    expect(customlist.description.toLowerCase()).toContain("csv");
+    expect(customlist.description).toContain("4000");
+    expect(customlist.description.length).toBeLessThanOrEqual(GameFormatter.DISCORD_OPTION_DESCRIPTION_MAX);
+    expect(customlist.max_length).toBe(DeckRecipeHelper.DISCORD_STRING_OPTION_MAX);
+    expect(customlist.required).toBe(true);
 
     const deckNew = json.options
       .find((option) => option.name === "deck")

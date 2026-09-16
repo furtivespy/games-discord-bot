@@ -62,8 +62,11 @@ test("addlist 'A, B, C' adds three name-only format A cards to allCards and disc
   const deck = makeDeck();
   const drawBefore = cloneDeep(deck.piles.draw.cards);
 
-  const added = DeckRecipeHelper.addCardsFromNameList(deck, "A, B, C");
+  const result = DeckRecipeHelper.addCardsFromCustomList(deck, "A, B, C");
 
+  expect(result.ok).toBe(true);
+  expect(result.mode).toBe("names");
+  const added = result.added;
   expect(added).toHaveLength(3);
   expect(added.map(c => c.name)).toEqual(["A", "B", "C"]);
   expect(added.every(c => c.format === "A")).toBe(true);
@@ -76,6 +79,154 @@ test("addlist 'A, B, C' adds three name-only format A cards to allCards and disc
   expect(deck.piles.draw.cards).toEqual(drawBefore);
   expect(deck.allCards.slice(-3).map(c => c.name)).toEqual(["A", "B", "C"]);
   expect(deck.piles.discard.cards.slice(-3).map(c => c.name)).toEqual(["A", "B", "C"]);
+});
+
+test("headered CSV with url + copies=2 creates two cards with that url in allCards and discard", () => {
+  const deck = makeDeck();
+  const drawBefore = cloneDeep(deck.piles.draw.cards);
+  const csv = [
+    "name,url,copies",
+    "Promo,https://example.com/promo.png,2",
+  ].join("\n");
+
+  const result = DeckRecipeHelper.addCardsFromCustomList(deck, csv);
+
+  expect(result.ok).toBe(true);
+  expect(result.mode).toBe("csv");
+  expect(result.added).toHaveLength(2);
+  expect(result.added[0].id).not.toBe(result.added[1].id);
+  expect(result.added.every(card => card.name === "Promo")).toBe(true);
+  expect(result.added.every(card => card.url === "https://example.com/promo.png")).toBe(true);
+  expect(result.added.every(card => card.format === "A")).toBe(true);
+  expect(result.added.every(card => card.origin === "Main")).toBe(true);
+
+  expect(deck.allCards).toHaveLength(3);
+  expect(deck.piles.discard.cards).toHaveLength(3);
+  expect(deck.piles.draw.cards).toEqual(drawBefore);
+  expect(deck.allCards.slice(-2).map(card => card.url)).toEqual([
+    "https://example.com/promo.png",
+    "https://example.com/promo.png",
+  ]);
+  expect(deck.piles.discard.cards.slice(-2).map(card => card.url)).toEqual([
+    "https://example.com/promo.png",
+    "https://example.com/promo.png",
+  ]);
+});
+
+test("missing CSV name column does not write any cards", () => {
+  const deck = makeDeck();
+  const before = cloneDeep(deck);
+  const csv = [
+    "url,copies",
+    "https://example.com/promo.png,2",
+  ].join("\n");
+
+  const result = DeckRecipeHelper.addCardsFromCustomList(deck, csv);
+
+  expect(result.ok).toBe(false);
+  expect(result.error).toContain("name");
+  expect(result.error.toLowerCase()).toContain("no cards were added");
+  expect(deck).toEqual(before);
+});
+
+test("missing name on a CSV data row does not write any cards", () => {
+  const deck = makeDeck();
+  const before = cloneDeep(deck);
+  const csv = [
+    "name,url",
+    "Ace,https://example.com/ace.png",
+    ",https://example.com/blank.png",
+  ].join("\n");
+
+  const result = DeckRecipeHelper.addCardsFromCustomList(deck, csv);
+
+  expect(result.ok).toBe(false);
+  expect(result.error).toContain("row 3");
+  expect(result.error.toLowerCase()).toContain("name");
+  expect(result.error.toLowerCase()).toContain("no cards were added");
+  expect(deck).toEqual(before);
+});
+
+test("unknown CSV columns error instead of being ignored, with no partial write", () => {
+  const deck = makeDeck();
+  const before = cloneDeep(deck);
+  const csv = [
+    "name,url,color",
+    "Ace,https://example.com/ace.png,red",
+  ].join("\n");
+
+  const result = DeckRecipeHelper.addCardsFromCustomList(deck, csv);
+
+  expect(result.ok).toBe(false);
+  expect(result.error).toContain("color");
+  expect(result.error).toContain("Allowed columns");
+  expect(deck).toEqual(before);
+});
+
+test("CSV detection requires a newline and a name header; otherwise names-only parsing stays", () => {
+  expect(DeckRecipeHelper.looksLikeHeaderedCsv("Ace, King, Queen")).toBe(false);
+  expect(DeckRecipeHelper.looksLikeHeaderedCsv("name,url,Ace,https://example.com/ace.png")).toBe(false);
+  expect(DeckRecipeHelper.looksLikeHeaderedCsv("Ace, King\nQueen")).toBe(false);
+  expect(DeckRecipeHelper.looksLikeHeaderedCsv("name,url\nAce,https://example.com/ace.png")).toBe(true);
+  expect(DeckRecipeHelper.looksLikeHeaderedCsv("Name, URL\nAce,https://example.com/ace.png")).toBe(true);
+  expect(DeckRecipeHelper.looksLikeHeaderedCsv("url,copies\nhttps://example.com/promo.png,2")).toBe(true);
+
+  const deck = makeDeck();
+  const namesOnly = DeckRecipeHelper.addCardsFromCustomList(deck, "name, King, Queen");
+  expect(namesOnly.ok).toBe(true);
+  expect(namesOnly.mode).toBe("names");
+  expect(namesOnly.added.map(card => card.name)).toEqual(["name", "King", "Queen"]);
+});
+
+test("headered CSV accepts extra fields, quoted commas, and defaults copies/format", () => {
+  const deck = makeDeck();
+  const csv = [
+    "NAME,type,suit,value,description,format",
+    'Ace,Spades,Hearts,14,"A, special card",C',
+    "King,Spades,Hearts,13,,",
+  ].join("\n");
+
+  const result = DeckRecipeHelper.addCardsFromCustomList(deck, csv);
+
+  expect(result.ok).toBe(true);
+  expect(result.added).toHaveLength(2);
+  expect(result.added[0]).toMatchObject({
+    name: "Ace",
+    type: "Spades",
+    suit: "Hearts",
+    value: "14",
+    description: "A, special card",
+    format: "C",
+  });
+  expect(result.added[1]).toMatchObject({
+    name: "King",
+    format: "A",
+    description: "",
+  });
+});
+
+test("invalid CSV url or format fails before writing cards", () => {
+  const deck = makeDeck();
+  const before = cloneDeep(deck);
+
+  const badUrl = DeckRecipeHelper.addCardsFromCustomList(deck, "name,url\nAce,not-a-url");
+  expect(badUrl.ok).toBe(false);
+  expect(badUrl.error).toContain(DeckRecipeHelper.INVALID_IMAGE_URL_MESSAGE);
+  expect(deck).toEqual(before);
+
+  const badFormat = DeckRecipeHelper.addCardsFromCustomList(deck, "name,format\nAce,Z");
+  expect(badFormat.ok).toBe(false);
+  expect(badFormat.error).toContain("format");
+  expect(deck).toEqual(before);
+});
+
+test("addlist option copy documents the 4000-character Discord limit", () => {
+  expect(DeckRecipeHelper.DISCORD_STRING_OPTION_MAX).toBe(4000);
+  expect(DeckRecipeHelper.ADDLIST_OPTION_DESCRIPTION).toContain("4000");
+  expect(DeckRecipeHelper.ADDLIST_OPTION_DESCRIPTION.length).toBeLessThanOrEqual(100);
+  expect(DeckRecipeHelper.ADDLIST_COMMAND_DESCRIPTION.length).toBeLessThanOrEqual(100);
+  expect(DeckRecipeHelper.EMPTY_LIST_MESSAGE).toContain("4000");
+  expect(DeckRecipeHelper.EMPTY_LIST_MESSAGE).toContain("addlist");
 });
 
 test("recipe add does not shuffle — draw pile stays untouched", () => {
