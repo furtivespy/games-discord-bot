@@ -3,10 +3,6 @@ const GameDB = require('../../db/anygame.js')
 const { find } = require('lodash')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
 
-function cardLabel(count) {
-    return count === 1 ? 'card' : 'cards'
-}
-
 class GameBoardClear {
     async execute(interaction, client) {
         const [, gameData] = await Promise.all([
@@ -24,33 +20,43 @@ class GameBoardClear {
             return
         }
 
-        const cardCount = gameData.gameBoard.length
         const actorDisplayName = interaction.member?.displayName || interaction.user.username
-        const content = `${actorDisplayName} cleared the Game Board (${cardCount} ${cardLabel(cardCount)} moved to discard piles)`
+        const discardedByDeck = {}
+        const remaining = []
 
-        // Move all cards to their respective discard piles
-        let discardedByDeck = {}
-        gameData.gameBoard.forEach(card => {
-            let deck = find(gameData.decks, {name: card.origin})
+        for (const card of gameData.gameBoard) {
+            const deck = find(gameData.decks, {name: card.origin})
             if (deck && deck.piles && deck.piles.discard) {
                 deck.piles.discard.cards.push(card)
                 discardedByDeck[deck.name] = (discardedByDeck[deck.name] || 0) + 1
+            } else {
+                remaining.push(card)
             }
-        })
+        }
 
-        gameData.gameBoard = []
+        const discardedCount = gameData.gameBoard.length - remaining.length
+        gameData.gameBoard = remaining
 
-        // Record history
+        if (discardedCount === 0) {
+            await interaction.editReply({
+                content: `Could not move Game Board cards to discard piles.`
+            })
+            return
+        }
+
+        const cardWord = discardedCount === 1 ? 'card' : 'cards'
+        const content = `${actorDisplayName} cleared the Game Board (${discardedCount} ${cardWord} moved to discard piles)`
+
         try {
             GameHelper.recordMove(
                 gameData,
                 interaction.user,
                 GameDB.ACTION_CATEGORIES.GAME,
                 GameDB.ACTION_TYPES.MODIFY,
-                `${actorDisplayName} cleared Game Board (${cardCount} ${cardLabel(cardCount)} to discard)`,
+                `${actorDisplayName} cleared Game Board (${discardedCount} ${cardWord} to discard)`,
                 {
                     source: 'gameboard',
-                    cardCount: cardCount,
+                    cardCount: discardedCount,
                     discardedByDeck: discardedByDeck
                 },
                 actorDisplayName
@@ -59,12 +65,12 @@ class GameBoardClear {
             console.warn('Failed to record game board clear in history:', error)
         }
 
-        await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+        // Skip pin refresh on this save so Discord ACK is not blocked on pin
+        // image/API work. sendPublicStatusUpdate updates the pin after editReply.
+        await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData, {
+            skipPinnedRefresh: true
+        })
 
-        // Resolve the deferred slash reply with this status. Without
-        // resolveDeferredReply, Discord is left on "thinking..." / "The
-        // application did not respond" while a disconnected channel message
-        // posts the success text (FUR-97).
         try {
             await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
                 content,
@@ -72,8 +78,12 @@ class GameBoardClear {
             })
         } catch (error) {
             console.error('Failed to send game board clear status update:', error)
-            if (!interaction.replied) {
-                await interaction.editReply({ content })
+            try {
+                if (interaction.deferred && !interaction.replied) {
+                    await interaction.editReply({ content })
+                }
+            } catch (replyError) {
+                console.error('Failed to resolve game board clear interaction:', replyError)
             }
         }
     }
