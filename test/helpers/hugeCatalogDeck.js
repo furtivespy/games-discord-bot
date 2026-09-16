@@ -2,8 +2,10 @@ const DeckCatalog = require("../../db/deckCatalog.js");
 const {
   buildCardListEmbeds,
   embedCharCount,
+} = require("../../modules/DiscordEmbeds");
+const Formatter = require("../../modules/GameFormatter");
+const {
   enabledHeading,
-  formatHandCardLine,
   formatLayoutLabel,
   formatTemplateListLine,
 } = require("../../subcommands/catalog/shared.js");
@@ -115,7 +117,7 @@ function buildHugeShowEmbeds(template = createHugeShowTemplate()) {
   return buildCardListEmbeds({
     title: template.name,
     header: hugeShowHeader(template),
-    cardLines: template.cards.map(formatHandCardLine),
+    cardLines: template.cards.map((card) => Formatter.cardHandLine(card)),
   });
 }
 

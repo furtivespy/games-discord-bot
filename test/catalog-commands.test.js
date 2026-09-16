@@ -32,7 +32,7 @@ const {
   EMBED_DESCRIPTION_LIMIT,
   EMBED_TOTAL_CHAR_LIMIT,
   EMBEDS_PER_MESSAGE,
-} = require("../subcommands/catalog/shared.js");
+} = require("../modules/DiscordEmbeds");
 
 const OWNER = createUser({ id: "owner-1", username: "Owner" });
 const SNOWFLAKE_CREATOR = "123456789012345678";
@@ -355,6 +355,38 @@ describe("/catalog command handlers", () => {
         } finally {
           catalogAfter.close();
         }
+      }
+    );
+  });
+
+  test("disable and enable share one flag-setter and skip work when already set", async () => {
+    const Disable = require("../subcommands/catalog/disable.js");
+    const Enable = require("../subcommands/catalog/enable.js");
+    const { disable, enable, setCatalogEnabled } = require("../subcommands/catalog/setEnabled.js");
+    expect(Disable).toBe(disable);
+    expect(Enable).toBe(enable);
+    expect(typeof setCatalogEnabled).toBe("function");
+
+    await withHarness(
+      {
+        user: OWNER,
+        options: { subcommand: "disable", strings: { id: "standard" } },
+      },
+      async (harness) => {
+        seedDeckCatalog();
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        catalog.setEnabled("standard", 0);
+        catalog.close();
+
+        await runCatalog(harness);
+        expect(harness.lastContent()).toContain("already disabled");
+
+        harness.interaction.options.getSubcommand = () => "enable";
+        await runCatalog(harness);
+        expect(harness.lastContent()).toContain("Enabled `standard`");
+
+        await runCatalog(harness);
+        expect(harness.lastContent()).toContain("already enabled");
       }
     );
   });
