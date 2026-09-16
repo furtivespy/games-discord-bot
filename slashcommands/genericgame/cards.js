@@ -81,7 +81,7 @@ class Cards extends SlashCommand {
         this.data.addSubcommand(subcommand =>
             subcommand
                 .setName("help")
-                .setDescription("Quick reference for all the /cards commands")
+                .setDescription("How to create a deck and add a card (same as /help topic:decks)")
             )
         this.data.addSubcommandGroup(group => {
             return group.setName("deck").setDescription("Manage decks of cards")

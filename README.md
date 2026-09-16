@@ -89,9 +89,10 @@ To add this bot to your Discord server, you'll need to:
 
 ## Usage
 
-The bot uses Discord's slash command system. Here are some common commands:
+The bot uses Discord's slash command system. **Start with `/help`** — it groups commands by area and includes how-tos (create a table, create a deck and add a card, addlist, draw/shuffle, Gather Interest). Deep-link a confused user with `/help topic:decks`.
 
 ### Basic Commands
+- `/help` - Discover commands and how-tos
 - `/game newgame` - Start a new game session
 - `/game next` - Notify the next player
 - `/game status` - Check current game status
@@ -99,6 +100,8 @@ The bot uses Discord's slash command system. Here are some common commands:
 
 ### Card Management
 - `/cards deck new` - Create a new deck
+- `/cards deck addcard` - Add a card to the in-game recipe (goes to discard)
+- `/cards deck addlist` - Bulk-add comma-separated card names
 - `/cards deck draw` - Draw cards
 - `/cards hand show` - View your hand
 - `/cards hand play` - Play a card
@@ -107,7 +110,7 @@ The bot uses Discord's slash command system. Here are some common commands:
 ### Information
 - `/bgg` - Look up games on Board Game Geek
 - `/lfg` - Gather Interest: look up a game on BGG and post a persistent “Who’s interested?” panel (very / somewhat / flexibly interested). Hosts can **Start game**, pick seated players from the interest list and/or anyone on the server, and open a play thread in the configured games channel.
-- `/config games-channel` - Administrators set the parent channel where `/lfg` Start game creates those threads
+- `/config games-channel` - Administrators set the parent channel where `/lfg` Start game creates those threads. Owner-only: `/catalog`.
 
 ## Contributing
 

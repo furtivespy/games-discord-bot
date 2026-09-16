@@ -14,15 +14,15 @@ async function runGame(harness) {
 }
 
 describe("/game command handlers", () => {
-  test("help replies with the generic game intro and follow-up chunks", async () => {
+  test("help replies with the table how-to from /help", async () => {
     await withHarness(
       { options: { subcommand: "help" } },
       async (harness) => {
         await runGame(harness);
         const bodies = collectedReplyText(harness);
-        expect(bodies).toContain("Generic Game Zone");
         expect(bodies).toContain("/game newgame");
-        expect(harness.calls.followUp.length).toBeGreaterThanOrEqual(2);
+        expect(bodies).toContain("Create a game session");
+        expect(harness.calls.followUp).toHaveLength(0);
       }
     );
   });

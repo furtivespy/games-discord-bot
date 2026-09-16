@@ -311,7 +311,8 @@ describe("GatherStartGame warnings and create post", () => {
     expect(post.content).toContain(
       "https://discord.com/channels/guild-1/lfg-channel/panel-9"
     );
-    expect(post.content).toContain("/game help");
+    expect(post.content).toContain("/help");
+    expect(post.content).toContain("/help topic:decks");
     expect(post.content).toContain("minimum of 3");
     expect(post.allowedMentions.users).toEqual(["host-1", "a", "b"]);
   });
