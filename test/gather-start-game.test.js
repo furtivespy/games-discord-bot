@@ -2,6 +2,7 @@ const { describe, expect, test, beforeEach } = require("bun:test");
 const { ChannelType, MessageFlags } = require("discord.js");
 const GatherInterest = require("../modules/GatherInterest");
 const GatherStartGame = require("../modules/GatherStartGame");
+const GameHelper = require("../modules/GlobalGameHelper");
 
 function sampleGame(overrides = {}) {
   return {
@@ -66,12 +67,19 @@ const STUB_BGG = {
 };
 
 function startDeps(values, extra = {}) {
-  return {
-    selectedUserIds: extra.selectedUserIds || values,
-    shuffle: extra.shuffle || ((players) => players),
-    loadBgg: extra.loadBgg || (async () => STUB_BGG),
-    ...extra,
+  const { useProductionShuffle = false, ...rest } = extra;
+  const deps = {
+    selectedUserIds: rest.selectedUserIds || values,
+    loadBgg: rest.loadBgg || (async () => STUB_BGG),
+    ...rest,
   };
+  if (useProductionShuffle) {
+    delete deps.shuffle;
+  } else if (typeof deps.shuffle !== "function") {
+    // Identity keeps most flow tests deterministic; production omits this dep.
+    deps.shuffle = (players) => players;
+  }
+  return deps;
 }
 
 function runStart(interaction, client, gather, extra = {}) {
@@ -1054,6 +1062,51 @@ describe("GatherStartGame start flow", () => {
       String(reply.content || "").includes("Game started")
     );
     expect(started.content).toContain("<@b> <@a> <@host-1>");
+  });
+
+  test("omitting deps.shuffle still goes through GameHelper.shufflePlayerOrder", async () => {
+    const env = createThreadEnv({ gather });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a", "b"],
+    });
+    const calls = [];
+    const original = GameHelper.shufflePlayerOrder;
+    GameHelper.shufflePlayerOrder = (players, shuffleFn) => {
+      calls.push({
+        ids: players.map((person) => person.userId),
+        shuffleFn,
+      });
+      return original(players, shuffleFn);
+    };
+    try {
+      await runStart(interaction, env.client, gather, {
+        useProductionShuffle: true,
+        upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+          const sent = await thread.send({ content: "📌 Live game status" });
+          gameData.pinnedStatusMessageId = sent.id;
+          gameData.pinnedStatusChannelId = thread.id;
+          gameData.pinnedStatusPinned = true;
+        },
+      });
+    } finally {
+      GameHelper.shufflePlayerOrder = original;
+    }
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].ids).toEqual(["host-1", "a", "b"]);
+    expect(calls[0].shuffleFn).toBeUndefined();
+    const game = await env.client.getGameDataV2(gather.guildId, "game", "thread-1");
+    expect(game.players.map((player) => player.userId).sort()).toEqual([
+      "a",
+      "b",
+      "host-1",
+    ]);
+    expect(game.players.map((player) => player.order)).toEqual([0, 1, 2]);
   });
 
   test("starts with the host seated even when they only pick other players", async () => {
