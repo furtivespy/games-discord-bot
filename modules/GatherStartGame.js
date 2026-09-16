@@ -8,7 +8,7 @@ const {
   ThreadAutoArchiveDuration,
   UserSelectMenuBuilder,
 } = require("discord.js");
-const { cloneDeep, shuffle } = require("lodash");
+const { cloneDeep } = require("lodash");
 const GatherInterest = require("./GatherInterest");
 const GuildConfig = require("./GuildConfig");
 
@@ -675,7 +675,6 @@ class GatherStartGame {
       );
     }
 
-    const shuffleFn = deps.shuffle || shuffle;
     const gameData = Object.assign({}, cloneDeep(GameDB.defaultGameData));
     gameData.isdeleted = false;
     gameData.name = thread.name || this.threadNameFromGame(gather.game?.name);
@@ -685,7 +684,7 @@ class GatherStartGame {
       GameStatusHelper.PINNED_STATUS_MODES.FULL
     );
 
-    const ordered = shuffleFn([...seated]);
+    const ordered = GameHelper.shufflePlayerOrder(seated, deps.shuffle);
     for (let i = 0; i < ordered.length; i++) {
       const person = ordered[i];
       gameData.players.push(
@@ -776,7 +775,7 @@ class GatherStartGame {
         thread,
         deps
       );
-      await this.postCreateAnnouncement(thread, gather, seated, warnings, bgg);
+      await this.postCreateAnnouncement(thread, gather, ordered, warnings, bgg);
 
       if (!gatherPersisted) {
         gatherPersisted = await this.persistGatherStarted(
@@ -802,7 +801,7 @@ class GatherStartGame {
       const warnText = warnings.length ? `\n⚠️ ${warnings.join(" ")}` : "";
       await GatherInterest.replyEphemeral(
         interaction,
-        `Game started in <#${thread.id}>. Seated: ${seated
+        `Game started in <#${thread.id}>. Seated: ${ordered
           .map((person) => `<@${person.userId}>`)
           .join(" ")}${warnText}`
       );

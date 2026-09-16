@@ -1015,6 +1015,47 @@ describe("GatherStartGame start flow", () => {
     expect(game.pinnedStatusMessageId).toBe("thread-1");
   });
 
+  test("randomizes player seat order the same way as /game newgame", async () => {
+    const env = createThreadEnv({ gather });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a", "b"],
+    });
+    const seen = [];
+    await runStart(interaction, env.client, gather, {
+      shuffle: (players) => {
+        seen.push(players.map((person) => person.userId));
+        return [...players].reverse();
+      },
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+
+    expect(seen).toEqual([["host-1", "a", "b"]]);
+    const game = await env.client.getGameDataV2(gather.guildId, "game", "thread-1");
+    expect(game.players.map((player) => player.userId)).toEqual([
+      "b",
+      "a",
+      "host-1",
+    ]);
+    expect(game.players.map((player) => player.order)).toEqual([0, 1, 2]);
+    expect(env.threadSends[1].payload.content).toContain(
+      "Seated: <@b> <@a> <@host-1>"
+    );
+    const started = replies.find((reply) =>
+      String(reply.content || "").includes("Game started")
+    );
+    expect(started.content).toContain("<@b> <@a> <@host-1>");
+  });
+
   test("starts with the host seated even when they only pick other players", async () => {
     const env = createThreadEnv({ gather });
     const replies = [];

@@ -1,7 +1,7 @@
 const { MessageFlags } = require("discord.js");
 const GameDB = require("../../db/anygame.js");
 const GameHelper = require('../../modules/GlobalGameHelper');
-const { cloneDeep, shuffle, sample } = require("lodash");
+const { cloneDeep, sample } = require("lodash");
 const GameStatusHelper = require('../../modules/GameStatusHelper');
 const BoardGameGeek = require('../../modules/BoardGameGeek');
 const GameIdentity = require('../../modules/GameIdentity');
@@ -92,7 +92,7 @@ class NewGame {
       } else {
         GameIdentity.applyBggGameIdentity(gameData, identity.bggGameId);
       }
-      players = shuffle(players);
+      players = GameHelper.shufflePlayerOrder(players);
       for (let i = 0; i < players.length; i++) {
         gameData.players.push(
           Object.assign({}, cloneDeep(GameDB.defaultPlayer), {

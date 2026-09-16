@@ -1,10 +1,20 @@
 const GameDB = require('../db/anygame.js')
 const GameFormatter = require('./GameFormatter')
 const { listCardSets } = require('../db/catalogDecks.js')
-const { cloneDeep, chain, find } = require("lodash");
+const { cloneDeep, chain, find, shuffle } = require("lodash");
 const { nanoid } = require('nanoid');
 
 class GameHelper {
+
+  /**
+   * Randomize player/seat order the same way `/game newgame` does.
+   * Copies first so the caller's list is left unchanged.
+   */
+  static shufflePlayerOrder(players, shuffleFn = shuffle) {
+    const list = Array.isArray(players) ? [...players] : []
+    const randomize = typeof shuffleFn === "function" ? shuffleFn : shuffle
+    return randomize(list)
+  }
 
   static async getGameData(client, interaction) {
     return Object.assign(

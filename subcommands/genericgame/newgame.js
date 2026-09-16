@@ -1,6 +1,6 @@
 const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
-const { cloneDeep, shuffle } = require('lodash')
+const { cloneDeep } = require('lodash')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class NewGame {
@@ -33,7 +33,7 @@ class NewGame {
             let content = `New Game Created.\nPlayer Order Randomized!\n`
             gameData.isdeleted = false
             gameData.name = interaction.channel.name
-            players = shuffle(players)
+            players = GameHelper.shufflePlayerOrder(players)
             for (let i = 0; i < players.length; i++) {
                 gameData.players.push(
                     Object.assign(
