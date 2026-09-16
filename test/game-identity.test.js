@@ -2,8 +2,12 @@ const { describe, expect, test } = require("bun:test");
 const GameIdentity = require("../modules/GameIdentity");
 
 describe("GameIdentity for /game newgame", () => {
+  test("resolveGameIdentity is the shared helper used by newgame and lfg", () => {
+    expect(GameIdentity.resolveGameIdentity).toBe(GameIdentity.resolveNewGameIdentity);
+  });
+
   test("resolves a BGG numeric id", () => {
-    expect(GameIdentity.resolveNewGameIdentity({ game: "13" })).toEqual({
+    expect(GameIdentity.resolveGameIdentity({ game: "13" })).toEqual({
       kind: "bgg",
       bggGameId: "13",
     });
@@ -11,7 +15,7 @@ describe("GameIdentity for /game newgame", () => {
 
   test("resolves and trims a custom playtest name", () => {
     expect(
-      GameIdentity.resolveNewGameIdentity({ customname: "  My Prototype v3  " })
+      GameIdentity.resolveGameIdentity({ customname: "  My Prototype v3  " })
     ).toEqual({
       kind: "custom",
       name: "My Prototype v3",
@@ -20,7 +24,7 @@ describe("GameIdentity for /game newgame", () => {
 
   test("refuses BGG and custom name together", () => {
     expect(
-      GameIdentity.resolveNewGameIdentity({
+      GameIdentity.resolveGameIdentity({
         game: "13",
         customname: "My Prototype v3",
       })
@@ -28,25 +32,25 @@ describe("GameIdentity for /game newgame", () => {
   });
 
   test("refuses whitespace-only custom names", () => {
-    expect(GameIdentity.resolveNewGameIdentity({ customname: "   " })).toEqual({
+    expect(GameIdentity.resolveGameIdentity({ customname: "   " })).toEqual({
       error: GameIdentity.INVALID_CUSTOM_ERROR,
     });
   });
 
   test("refuses custom names over 100 characters", () => {
     expect(
-      GameIdentity.resolveNewGameIdentity({ customname: "x".repeat(101) })
+      GameIdentity.resolveGameIdentity({ customname: "x".repeat(101) })
     ).toEqual({ error: GameIdentity.INVALID_CUSTOM_ERROR });
   });
 
   test("refuses a missing identity", () => {
-    expect(GameIdentity.resolveNewGameIdentity({})).toEqual({
+    expect(GameIdentity.resolveGameIdentity({})).toEqual({
       error: GameIdentity.MISSING_IDENTITY_ERROR,
     });
   });
 
   test("refuses a non-numeric BGG id", () => {
-    expect(GameIdentity.resolveNewGameIdentity({ game: "not-an-id" })).toEqual({
+    expect(GameIdentity.resolveGameIdentity({ game: "not-an-id" })).toEqual({
       error: GameIdentity.INVALID_BGG_ERROR,
     });
   });
@@ -72,5 +76,33 @@ describe("GameIdentity for /game newgame", () => {
     expect(data.description).toContain("Custom game");
     expect(data.description).toContain("not on BoardGameGeek");
     expect(data.url).toBeUndefined();
+  });
+
+  test("applyIdentityFromGather maps custom gather snapshots to FUR-91 session fields", () => {
+    const gameData = { name: "thread-name", bggGameId: "99", isCustomGame: false };
+    GameIdentity.applyIdentityFromGather(gameData, {
+      isCustom: true,
+      customName: "My Prototype v3",
+      name: "My Prototype v3",
+      bggId: null,
+    });
+    expect(gameData).toMatchObject({
+      name: "My Prototype v3",
+      bggGameId: null,
+      isCustomGame: true,
+    });
+  });
+
+  test("applyIdentityFromGather keeps BGG gathers on the published-title path", () => {
+    const gameData = { name: "Wingspan", bggGameId: null, isCustomGame: false };
+    GameIdentity.applyIdentityFromGather(gameData, {
+      bggId: "266192",
+      name: "Wingspan",
+    });
+    expect(gameData).toMatchObject({
+      name: "Wingspan",
+      bggGameId: "266192",
+      isCustomGame: false,
+    });
   });
 });

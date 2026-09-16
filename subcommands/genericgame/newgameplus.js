@@ -20,7 +20,7 @@ class NewGame {
       return;
     }
 
-    const identity = GameIdentity.resolveNewGameIdentity({
+    const identity = GameIdentity.resolveGameIdentity({
       game: search,
       customname: interaction.options.getString("customname"),
     });

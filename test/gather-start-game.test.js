@@ -333,6 +333,21 @@ describe("GatherStartGame warnings and create post", () => {
     expect(post.content).toContain("**Wingspan** is on the table.");
   });
 
+  test("custom create post uses the playtest name and has no BGG embed", () => {
+    const gather = sampleGather({
+      game: GatherInterest.snapshotFromCustom("My Prototype v3"),
+    });
+    gather.interestMessageId = "panel-9";
+    const post = GatherStartGame.buildCreatePost(
+      gather,
+      [{ userId: "a", displayName: "Ann" }],
+      []
+    );
+    expect(post.content).toContain("**My Prototype v3** is on the table.");
+    expect(post.embeds).toBeUndefined();
+    expect(post.files).toBeUndefined();
+  });
+
   test("thread names truncate to Discord's 100-character limit", () => {
     const name = GatherStartGame.threadNameFromGame(`${"A".repeat(120)}\nB`);
     expect(name.length).toBe(100);
@@ -403,6 +418,7 @@ function createThreadEnv({
         if (failThreadCreate) {
           throw new Error("Missing Permissions");
         }
+        if (opts?.name) thread.name = opts.name;
         return thread;
       },
     },
@@ -575,6 +591,7 @@ describe("GatherStartGame start flow", () => {
     const game = await env.client.getGameDataV2(gather.guildId, "game", "thread-1");
     expect(game.isdeleted).toBe(false);
     expect(game.bggGameId).toBe("266192");
+    expect(game.isCustomGame).toBe(false);
     expect(game.pinnedStatusMode).toBe("full");
     expect(game.pinnedStatusMessageId).toBe("msg-1");
     expect(game.players.map((p) => p.userId)).toEqual(["host-1", "a", "b"]);
@@ -1118,5 +1135,56 @@ describe("GatherStartGame start flow", () => {
       gather.id
     );
     expect(stored.status).toBe("started");
+  });
+
+  test("custom gather starts a session with FUR-91 metadata and skips BGG", async () => {
+    gather.game = GatherInterest.snapshotFromCustom("My Prototype v3");
+    const env = createThreadEnv({ gather });
+    await env.client.setGameDataV2(
+      gather.guildId,
+      GatherInterest.COLLECTION,
+      gather.id,
+      gather
+    );
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+    let bggAttempts = 0;
+    await runStart(interaction, env.client, gather, {
+      loadBgg: async () => {
+        bggAttempts += 1;
+        throw new Error("BGG should not load for custom gathers");
+      },
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+
+    expect(bggAttempts).toBe(0);
+    expect(env.created[0].name).toBe("My Prototype v3");
+    expect(env.threadSends[1].payload.content).toContain(
+      "**My Prototype v3** is on the table."
+    );
+    expect(env.threadSends[1].payload.embeds).toBeUndefined();
+
+    const game = await env.client.getGameDataV2(gather.guildId, "game", "thread-1");
+    expect(game.name).toBe("My Prototype v3");
+    expect(game.isCustomGame).toBe(true);
+    expect(game.bggGameId).toBeNull();
+
+    const picker = GatherStartGame.buildPickerContent(
+      gather,
+      GatherStartGame.buildSeatSelectRow(gather)
+    );
+    expect(picker).toContain("**My Prototype v3**");
+    expect(picker).not.toContain("BGG player count");
   });
 });

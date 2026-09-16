@@ -134,6 +134,8 @@ class GatherInterest {
     return `${CUSTOM_ID_PREFIX}:confirm:${gatherId}`;
   }
 
+  static CUSTOM_PLAYTEST_LABEL = "Custom / playtest";
+
   static snapshotFromBgg(bgg) {
     const info = bgg?.gameInfo || {};
     const gameId = bgg?.gameId;
@@ -149,6 +151,38 @@ class GatherInterest {
       yearPublished: info.yearpublished ?? null,
       url: gameId != null ? `https://boardgamegeek.com/boardgame/${gameId}` : null,
     };
+  }
+
+  static snapshotFromCustom(name) {
+    return {
+      bggId: null,
+      customName: name,
+      isCustom: true,
+      name,
+      image: null,
+      minPlayers: null,
+      maxPlayers: null,
+      minPlaytime: null,
+      maxPlaytime: null,
+      weight: null,
+      yearPublished: null,
+      url: null,
+    };
+  }
+
+  static isCustomGather(gather) {
+    return Boolean(gather?.game?.isCustom);
+  }
+
+  static gameDisplayName(gather) {
+    const game = gather?.game || {};
+    return game.customName || game.name || "Unknown game";
+  }
+
+  static buildCustomGameEmbed(name) {
+    return new EmbedBuilder()
+      .setTitle(name)
+      .setDescription(this.CUSTOM_PLAYTEST_LABEL);
   }
 
   static createGather({
@@ -374,21 +408,23 @@ class GatherInterest {
   static buildPanelDescription(gather) {
     const game = gather.game || {};
     const title = game.url ? `[${game.name}](${game.url})` : (game.name || "Unknown game");
+    const customLine = this.isCustomGather(gather) ? this.CUSTOM_PLAYTEST_LABEL : "";
     const summary = this.gameSummaryLine(game);
     const hostLine = `Host: ${this.formatPerson(gather.hostUserId, gather.hostDisplayName)}`;
+    const titleBlock = [title, customLine, summary].filter(Boolean).join("\n");
     let description;
     if (this.isStarted(gather)) {
       const jump = gather.startedThreadId
         ? `\nJump to the game: <#${gather.startedThreadId}>`
         : "";
-      description = `${title}${summary ? `\n${summary}` : ""}\n${hostLine}\n\n**Game Started**${jump}\n\n${this.buildCurrentlyPlayingBlock(gather)}\n\n${this.buildInterestSection(gather)}`;
+      description = `${titleBlock}\n${hostLine}\n\n**Game Started**${jump}\n\n${this.buildCurrentlyPlayingBlock(gather)}\n\n${this.buildInterestSection(gather)}`;
     } else {
       const statusLine = this.isOpen(gather)
         ? "Click a button to register. Clicking again updates your level."
         : "**Interest is closed.** The list is frozen.";
       const header = this.headerCounts(gather);
       const roster = this.buildRosterText(gather);
-      description = `${title}${summary ? `\n${summary}` : ""}\n${hostLine}\n\n**${header}**\n${statusLine}\n${FLEXIBLE_MEANING}\n\n${roster}`;
+      description = `${titleBlock}\n${hostLine}\n\n**${header}**\n${statusLine}\n${FLEXIBLE_MEANING}\n\n${roster}`;
     }
     if (description.length > MAX_DESCRIPTION) {
       description = `${description.substring(0, MAX_DESCRIPTION - 3)}...`;
@@ -417,10 +453,10 @@ class GatherInterest {
             ? "Latest click wins · same level keeps you registered"
             : "Host closed interest · list is frozen",
       });
-    if (game.image) {
+    if (game.image && !this.isCustomGather(gather)) {
       embed.setThumbnail(game.image);
     }
-    if (game.url) {
+    if (game.url && !this.isCustomGather(gather)) {
       embed.setURL(game.url);
     }
     return embed;

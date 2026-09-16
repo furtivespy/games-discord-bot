@@ -10,6 +10,7 @@ const {
 } = require("discord.js");
 const { cloneDeep, shuffle } = require("lodash");
 const GatherInterest = require("./GatherInterest");
+const GameIdentity = require("./GameIdentity");
 const GuildConfig = require("./GuildConfig");
 
 class GatherStartGame {
@@ -123,16 +124,20 @@ class GatherStartGame {
   }
 
   static buildPickerContent(gather, selectMeta, selection = {}) {
-    const gameName = gather.game?.name || "this game";
+    const gameName = GatherInterest.gameDisplayName(gather);
+    const custom = GatherInterest.isCustomGather(gather);
     const min = gather.game?.minPlayers;
     const max = gather.game?.maxPlayers;
     const range =
-      min != null || max != null
+      !custom && (min != null || max != null)
         ? `BGG player count: ${min ?? "?"}–${max ?? "?"}. `
         : "";
+    const seatingNote = custom
+      ? "Pick from people who showed interest and/or any other member of this server. Both lists are combined."
+      : `${range}Pick from people who showed interest and/or any other member of this server. Both lists are combined. Seating outside the BGG min/max is allowed (you'll get a warning).`;
     const lines = [
       `Select who sits for **${gameName}**.`,
-      `${range}Pick from people who showed interest and/or any other member of this server. Both lists are combined. Seating outside the BGG min/max is allowed (you'll get a warning).`,
+      seatingNote,
     ];
     if (selectMeta.hasInterested) {
       lines.push(
@@ -259,10 +264,11 @@ class GatherStartGame {
   }
 
   static buildThreadCreateOptions(gather, parent) {
+    const gameName = GatherInterest.gameDisplayName(gather);
     const options = {
-      name: this.threadNameFromGame(gather.game?.name),
+      name: this.threadNameFromGame(gameName),
       autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
-      reason: `Game Bot: start from /lfg (${gather.game?.name || "game"})`,
+      reason: `Game Bot: start from /lfg (${gameName})`,
     };
     if (this.isForumLikeParent(parent)) {
       // Forum/media posts require a starter message; Discord uses that message's
@@ -678,8 +684,8 @@ class GatherStartGame {
     const shuffleFn = deps.shuffle || shuffle;
     const gameData = Object.assign({}, cloneDeep(GameDB.defaultGameData));
     gameData.isdeleted = false;
-    gameData.name = thread.name || this.threadNameFromGame(gather.game?.name);
-    gameData.bggGameId = gather.game?.bggId || null;
+    gameData.name = thread.name || this.threadNameFromGame(GatherInterest.gameDisplayName(gather));
+    GameIdentity.applyIdentityFromGather(gameData, gather.game);
     GameStatusHelper.setPinnedStatusMode(
       gameData,
       GameStatusHelper.PINNED_STATUS_MODES.FULL
@@ -850,6 +856,7 @@ class GatherStartGame {
   }
 
   static async loadNewGameAnnounce(client, interaction, gather, thread, deps = {}) {
+    if (GatherInterest.isCustomGather(gather)) return null;
     const bggId = gather.game?.bggId;
     if (!bggId) return null;
     const load =
@@ -948,7 +955,7 @@ class GatherStartGame {
   }
 
   static buildCreatePost(gather, seated, warnings, bgg = null) {
-    const gameName = gather.game?.name || "Game";
+    const gameName = GatherInterest.gameDisplayName(gather);
     const seatedLine = seated.map((person) => `<@${person.userId}>`).join(" ");
     const lfgLink = this.jumpUrl(
       gather.guildId,
