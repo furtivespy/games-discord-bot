@@ -102,6 +102,44 @@ describe("GameStatusHelper pinned live status", () => {
     expect(harness.gameData.pinnedStatusMessageId).toBeNull();
   });
 
+  test("sendPublicStatusUpdate without resolveDeferredReply leaves a deferred interaction unresolved", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusEnabled: false }),
+    });
+    expect(harness.interaction.deferred).toBe(true);
+    expect(harness.interaction.replied).toBe(false);
+
+    await GameStatusHelper.sendPublicStatusUpdate(harness.interaction, harness.client, harness.gameData, {
+      content: "Forest cleared the Game Board (1 cards moved to discard piles)",
+    });
+
+    expect(harness.sendCalls).toHaveLength(1);
+    expect(harness.chatReplyCalls).toHaveLength(0);
+    expect(harness.interaction.deferred).toBe(true);
+    expect(harness.interaction.replied).toBe(false);
+  });
+
+  test("sendPublicStatusUpdate with resolveDeferredReply edits the deferred reply instead of posting a new channel message", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusEnabled: false }),
+    });
+
+    await GameStatusHelper.sendPublicStatusUpdate(harness.interaction, harness.client, harness.gameData, {
+      content: "Forest cleared the Game Board (1 card moved to discard piles)",
+      resolveDeferredReply: true,
+    });
+
+    expect(harness.chatReplyCalls).toHaveLength(1);
+    expect(harness.chatReplyCalls[0].content).toBe(
+      "Forest cleared the Game Board (1 card moved to discard piles)"
+    );
+    const chatSends = harness.sendCalls.filter(
+      (payload) => payload.content === "Forest cleared the Game Board (1 card moved to discard piles)"
+    );
+    expect(chatSends).toHaveLength(0);
+    expect(harness.interaction.replied).toBe(true);
+  });
+
   test("persistPinFields merges pin ids into the latest saved game state", async () => {
     const harness = createHarness({
       gameData: createGameData({

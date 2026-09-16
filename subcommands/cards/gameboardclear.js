@@ -1,8 +1,11 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
 const { find } = require('lodash')
-const Formatter = require('../../modules/GameFormatter')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
+
+function cardLabel(count) {
+    return count === 1 ? 'card' : 'cards'
+}
 
 class GameBoardClear {
     async execute(interaction, client) {
@@ -22,6 +25,8 @@ class GameBoardClear {
         }
 
         const cardCount = gameData.gameBoard.length
+        const actorDisplayName = interaction.member?.displayName || interaction.user.username
+        const content = `${actorDisplayName} cleared the Game Board (${cardCount} ${cardLabel(cardCount)} moved to discard piles)`
 
         // Move all cards to their respective discard piles
         let discardedByDeck = {}
@@ -37,14 +42,12 @@ class GameBoardClear {
 
         // Record history
         try {
-            const actorDisplayName = interaction.member?.displayName || interaction.user.username
-            
             GameHelper.recordMove(
                 gameData,
                 interaction.user,
                 GameDB.ACTION_CATEGORIES.GAME,
                 GameDB.ACTION_TYPES.MODIFY,
-                `${actorDisplayName} cleared Game Board (${cardCount} cards to discard)`,
+                `${actorDisplayName} cleared Game Board (${cardCount} ${cardLabel(cardCount)} to discard)`,
                 {
                     source: 'gameboard',
                     cardCount: cardCount,
@@ -58,9 +61,21 @@ class GameBoardClear {
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
-        await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
-            content: `${interaction.member.displayName} cleared the Game Board (${cardCount} cards moved to discard piles)`
-        })
+        // Resolve the deferred slash reply with this status. Without
+        // resolveDeferredReply, Discord is left on "thinking..." / "The
+        // application did not respond" while a disconnected channel message
+        // posts the success text (FUR-97).
+        try {
+            await GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
+                content,
+                resolveDeferredReply: true
+            })
+        } catch (error) {
+            console.error('Failed to send game board clear status update:', error)
+            if (!interaction.replied) {
+                await interaction.editReply({ content })
+            }
+        }
     }
 }
 
