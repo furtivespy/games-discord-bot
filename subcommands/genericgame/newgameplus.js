@@ -4,6 +4,7 @@ const GameHelper = require('../../modules/GlobalGameHelper');
 const { cloneDeep, shuffle, sample } = require("lodash");
 const GameStatusHelper = require('../../modules/GameStatusHelper');
 const BoardGameGeek = require('../../modules/BoardGameGeek');
+const GameIdentity = require('../../modules/GameIdentity');
 
 class NewGame {
   async execute(interaction, client) {
@@ -19,9 +20,13 @@ class NewGame {
       return;
     }
 
-    if (!search || isNaN(search)){
+    const identity = GameIdentity.resolveNewGameIdentity({
+      game: search,
+      customname: interaction.options.getString("customname"),
+    });
+    if (identity.error) {
       await interaction.reply({
-        content: `Please provide a game name or ID from the available options.`,
+        content: identity.error,
         flags: MessageFlags.Ephemeral
       });
       return;
@@ -34,28 +39,44 @@ class NewGame {
     let gameData = rawGameData;
 
     if (gameData && !gameData.isdeleted) {
-      gameData.bggGameId = search;
+      if (identity.kind === "custom") {
+        GameIdentity.applyCustomGameIdentity(gameData, identity.name);
+      } else {
+        GameIdentity.applyBggGameIdentity(gameData, identity.bggGameId);
+      }
       try {
         const actorDisplayName = interaction.member?.displayName || interaction.user.username
-        GameHelper.recordMove(
-          gameData,
-          interaction.user,
-          GameDB.ACTION_CATEGORIES.GAME,
-          'bgg_link',
-          `${actorDisplayName} linked the game to BGG ID: ${search}`,
-          { bggGameId: search }
-        )
+        if (identity.kind === "custom") {
+          GameHelper.recordMove(
+            gameData,
+            interaction.user,
+            GameDB.ACTION_CATEGORIES.GAME,
+            'custom_name',
+            `${actorDisplayName} set a custom game name: ${identity.name}`,
+            { customName: identity.name, isCustomGame: true }
+          )
+        } else {
+          GameHelper.recordMove(
+            gameData,
+            interaction.user,
+            GameDB.ACTION_CATEGORIES.GAME,
+            'bgg_link',
+            `${actorDisplayName} linked the game to BGG ID: ${identity.bggGameId}`,
+            { bggGameId: identity.bggGameId }
+          )
+        }
       } catch (error) {
-        console.warn('Failed to record BGG link action in history:', error)
+        console.warn('Failed to record game identity action in history:', error)
       }
       
       await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
       
       await interaction.editReply({
-        content: `There is an existing game in this channel. I've assigned the BGG ID, but did not change players.`});
+        content: identity.kind === "custom"
+          ? `There is an existing game in this channel. I've assigned the custom name, but did not change players.`
+          : `There is an existing game in this channel. I've assigned the BGG ID, but did not change players.`});
     } else {
       gameData = Object.assign({}, cloneDeep(GameDB.defaultGameData));
-      gameData.bggGameId = search;
       let players = [];
 
       for (let i = 1; i <= 8; i++) {
@@ -66,6 +87,11 @@ class NewGame {
       let content = `Player Order Randomized!\n`;
       gameData.isdeleted = false;
       gameData.name = interaction.channel.name;
+      if (identity.kind === "custom") {
+        GameIdentity.applyCustomGameIdentity(gameData, identity.name);
+      } else {
+        GameIdentity.applyBggGameIdentity(gameData, identity.bggGameId);
+      }
       players = shuffle(players);
       for (let i = 0; i < players.length; i++) {
         gameData.players.push(
@@ -79,8 +105,6 @@ class NewGame {
         content += `${players[i]} `;
       }
 
-      let bgg = await BoardGameGeek.loadNewGameDetails(search, client, interaction);
-
       try {
         const actorDisplayName = interaction.member?.displayName || interaction.user.username
         GameHelper.recordMove(
@@ -89,7 +113,9 @@ class NewGame {
           GameDB.ACTION_CATEGORIES.GAME,
           GameDB.ACTION_TYPES.CREATE,
           `${actorDisplayName} created a new game with ${players.length} player(s)`,
-          { playerCount: players.length, bggGameId: search }
+          identity.kind === "custom"
+            ? { playerCount: players.length, customName: identity.name, isCustomGame: true }
+            : { playerCount: players.length, bggGameId: identity.bggGameId }
         )
       } catch (error) {
         console.warn('Failed to record game creation action in history:', error)
@@ -98,23 +124,38 @@ class NewGame {
       // Save game data before sending status messages
       await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
-      // Main reply and the public status update are independent sends
-      // (editReply vs. channel.send), so they can run concurrently.
-      await Promise.all([
-        interaction.editReply({
-          content: `New Game Created!`,
-          embeds: bgg.embeds,
-          files: bgg.attachments}),
-        GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
-          content: content,
-          explicitStatus: true,
-        })
-      ]);
+      if (identity.kind === "custom") {
+        await Promise.all([
+          interaction.editReply({
+            content: `New Game Created!`,
+            embeds: [GameIdentity.buildCustomGameCreateEmbed(identity.name)],
+          }),
+          GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
+            content: content,
+            explicitStatus: true,
+          })
+        ]);
+      } else {
+        let bgg = await BoardGameGeek.loadNewGameDetails(identity.bggGameId, client, interaction);
 
-      if (bgg.otherAttachments.length > 0) {
-        await interaction.followUp({
-          files: bgg.otherAttachments,
-        });
+        // Main reply and the public status update are independent sends
+        // (editReply vs. channel.send), so they can run concurrently.
+        await Promise.all([
+          interaction.editReply({
+            content: `New Game Created!`,
+            embeds: bgg.embeds,
+            files: bgg.attachments}),
+          GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
+            content: content,
+            explicitStatus: true,
+          })
+        ]);
+
+        if (bgg.otherAttachments.length > 0) {
+          await interaction.followUp({
+            files: bgg.otherAttachments,
+          });
+        }
       }
 
       // Check for skill issue players

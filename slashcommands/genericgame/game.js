@@ -54,14 +54,23 @@ class Game extends SlashCommand {
                 subcommand
                     .setName("newgame")
                     .setDescription("Start a new game in channel")
+                    // Discord requires required options before optional ones, so player1 stays first.
+                    .addUserOption(option => option.setName("player1").setDescription("first player to add").setRequired(true))
                     .addStringOption((option) =>
                         option
                         .setName("game")
-                        .setDescription("The game being played")
+                        .setDescription("BGG title (autocomplete). Skip this if using customname.")
                         .setAutocomplete(true)
-                        .setRequired(true)
+                        .setRequired(false)
                     )
-                    .addUserOption(option => option.setName("player1").setDescription("first player to add").setRequired(true))
+                    .addStringOption((option) =>
+                        option
+                        .setName("customname")
+                        .setDescription("Playtest name when the game is not on BoardGameGeek")
+                        .setRequired(false)
+                        .setMinLength(1)
+                        .setMaxLength(100)
+                    )
                     .addUserOption(option => option.setName("player2").setDescription("second player to add"))
                     .addUserOption(option => option.setName("player3").setDescription("third player to add"))
                     .addUserOption(option => option.setName("player4").setDescription("fourth player to add"))

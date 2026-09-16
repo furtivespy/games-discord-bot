@@ -4,6 +4,7 @@ const { sortBy, floor, isArray, find, shuffle } = require("lodash");
 var AsciiTable = require("ascii-table");
 const { createCanvas, Image, loadImage } = require("canvas");
 const TableRenderer = require("./TableRenderer");
+const GameIdentity = require("./GameIdentity");
 const { trace, SpanStatusCode } = require("@opentelemetry/api");
 const colorConvert = require("color-convert");
 
@@ -88,7 +89,7 @@ class GameFormatter {
         border: { bottom: { color: '#000', width: 2 } },
       },
       title: {
-        text: `${gameData.name} Status ${gameData.reverseOrder ? "(Turn Order Reversed)" : ""}`,
+        text: `${GameIdentity.statusGameLabel(gameData)} Status ${gameData.reverseOrder ? "(Turn Order Reversed)" : ""}`,
         fontSize: 24,
         fontFamily: 'Open Sans',
       },
