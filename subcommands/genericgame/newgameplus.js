@@ -136,8 +136,7 @@ class NewGame {
           })
         ]);
       } else {
-        let bgg = await BoardGameGeek.CreateAndLoad(identity.bggGameId, client, interaction);
-        await bgg.LoadEmbeds(BoardGameGeek.DetailsEnum.ALLPLUS);
+        let bgg = await BoardGameGeek.loadNewGameDetails(identity.bggGameId, client, interaction);
 
         // Main reply and the public status update are independent sends
         // (editReply vs. channel.send), so they can run concurrently.

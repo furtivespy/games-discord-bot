@@ -1,6 +1,7 @@
 const { describe, expect, test } = require("bun:test");
 const fs = require("fs");
 const path = require("path");
+const { PermissionsBitField } = require("discord.js");
 
 const SLASH_ROOT = path.join(__dirname, "..", "slashcommands");
 
@@ -200,5 +201,31 @@ describe("slash command definition contracts", () => {
       required: true,
       autocomplete: true,
     });
+  });
+
+  test("/config is an admin guild command that sets the LFG games parent channel", () => {
+    const { ChannelType } = require("discord.js");
+    const Config = require("../slashcommands/util/config");
+    const command = new Config(stubClient);
+    expect(command.conf.permLevel).toBe("Administrator");
+    const json = command.data.toJSON();
+    expect(json.name).toBe("config");
+    expect(json.dm_permission).toBe(false);
+    expect(json.default_member_permissions).toBe(
+      String(PermissionsBitField.Flags.Administrator)
+    );
+    const subcommands = Object.fromEntries(
+      json.options.map((option) => [option.name, option])
+    );
+    expect(Object.keys(subcommands)).toEqual(["games-channel", "show"]);
+    const channel = subcommands["games-channel"].options.find(
+      (option) => option.name === "channel"
+    );
+    expect(channel.required).toBe(true);
+    expect(channel.channel_types).toEqual([
+      ChannelType.GuildText,
+      ChannelType.GuildAnnouncement,
+      ChannelType.GuildForum,
+    ]);
   });
 });

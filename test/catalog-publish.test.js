@@ -5,11 +5,18 @@ const path = require("path");
 const DeckCatalog = require("../db/deckCatalog.js");
 const {
   classifySqliteOpenError,
+  formatNameNocaseIndexSkip,
+  isCatalogEnabled,
+  isEnabled,
+  NAME_NOCASE_INDEX,
+  normalizeDisplayName,
   normalizeEnabled,
   parseTemplateRow,
+  sqliteUniqueField,
 } = DeckCatalog;
-const { seedDeckCatalog } = require("../db/seedDeckCatalog.js");
+const { seedDeckCatalog, OFFICIAL_SEED_IDS } = require("../db/seedDeckCatalog.js");
 const {
+  EMPTY_CARDS_ERROR,
   buildPublishPayload,
   publishToCatalog,
   validateCatalogId,
@@ -82,11 +89,17 @@ describe("catalog publish payload builder", () => {
     });
   });
 
-  test("rejects invalid slugs and reserved instance-only ids", () => {
+  test("rejects invalid slugs, instance-only ids, and official seed ids", () => {
     expect(validateCatalogId("Standard").ok).toBe(false);
     expect(validateCatalogId("has_underscore").error).toContain("^[a-z0-9-]{1,100}$");
     expect(validateCatalogId("custom-csv").code).toBe("reserved_id");
     expect(validateCatalogId("customempty").code).toBe("reserved_id");
+    expect(validateCatalogId("empty").code).toBe("reserved_id");
+    expect(validateCatalogId("standard").code).toBe("reserved_id");
+    expect(validateCatalogId("standard").error).toMatch(/official catalog seed/i);
+    expect(OFFICIAL_SEED_IDS.has("standard")).toBe(true);
+    expect(OFFICIAL_SEED_IDS.has("uno-classic")).toBe(true);
+    expect(OFFICIAL_SEED_IDS.has("custom-csv")).toBe(false);
     expect(
       buildPublishPayload({
         id: "ok-id",
@@ -95,6 +108,14 @@ describe("catalog publish payload builder", () => {
         createdBy: "1",
       }).code
     ).toBe("empty_cards");
+    expect(
+      buildPublishPayload({
+        id: "ok-id",
+        name: "Ok",
+        allCards: [],
+        createdBy: "1",
+      }).error
+    ).toBe(EMPTY_CARDS_ERROR);
     expect(
       buildPublishPayload({
         id: "ok-id",
@@ -120,6 +141,73 @@ describe("catalog publish payload builder", () => {
     expect(hostile.ok).toBe(false);
     expect(hostile.code).toBe("invalid_cards");
     expect(hostile.error).toMatch(/invalid card data/i);
+  });
+
+  test("empty allCards publishes cards from draw, discard, and hands with empty or case-mismatched origin", () => {
+    const draw = runtimeCard({ id: "d1", name: "Draw" });
+    const discard = runtimeCard({ id: "d2", name: "Discard" });
+    const hand = runtimeCard({ id: "h1", name: "Hand" });
+    const emptyOrigin = runtimeCard({
+      id: "h2",
+      name: "No Origin",
+      origin: "",
+    });
+    const missingOrigin = runtimeCard({ id: "h3", name: "Missing Origin" });
+    delete missingOrigin.origin;
+    const caseMismatch = runtimeCard({
+      id: "h4",
+      name: "Case Origin",
+      origin: "main",
+    });
+    const otherDeck = runtimeCard({
+      id: "o1",
+      name: "Other",
+      origin: "OtherDeck",
+    });
+    const result = buildPublishPayload({
+      id: "from-live",
+      name: "From Live",
+      createdBy: "1",
+      allCards: [],
+      deck: {
+        name: "Main",
+        piles: {
+          draw: { cards: [draw] },
+          discard: { cards: [discard] },
+        },
+      },
+      players: [
+        { hands: { main: [hand, emptyOrigin, missingOrigin, caseMismatch, otherDeck] } },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    expect(result.payload.cards.map((card) => card.name).sort()).toEqual([
+      "Case Origin",
+      "Discard",
+      "Draw",
+      "Hand",
+      "Missing Origin",
+      "No Origin",
+    ]);
+  });
+
+  test("empty allCards with no live cards explains draw, discard, and hands", () => {
+    const result = buildPublishPayload({
+      id: "ok-id",
+      name: "Ok",
+      createdBy: "1",
+      allCards: [],
+      deck: {
+        name: "Main",
+        piles: { draw: { cards: [] }, discard: { cards: [] } },
+      },
+      players: [{ hands: { main: [] } }],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("empty_cards");
+    expect(result.error).toMatch(/draw pile/i);
+    expect(result.error).toMatch(/discard pile/i);
+    expect(result.error).toMatch(/player hands/i);
   });
 
   test("publish inserts a row; same id or display name refuses without overwrite", () => {
@@ -159,6 +247,41 @@ describe("catalog publish payload builder", () => {
     });
   });
 
+  test("display names are unique after case and whitespace folding", () => {
+    withTempCatalog(({ catalog }) => {
+      const first = publishToCatalog(catalog, {
+        id: "uno-copy",
+        name: "  Uno   Classic ",
+        createdBy: "owner-1",
+        allCards: [runtimeCard()],
+      });
+      expect(first.ok).toBe(true);
+      expect(first.template.name).toBe("Uno Classic");
+      expect(normalizeDisplayName("Uno Classic")).toBe("uno classic");
+
+      const sameCase = publishToCatalog(catalog, {
+        id: "uno-copy-2",
+        name: "uno classic",
+        createdBy: "owner-1",
+        allCards: [runtimeCard({ name: "Queen" })],
+      });
+      expect(sameCase.ok).toBe(false);
+      expect(sameCase.code).toBe("duplicate_name");
+      expect(catalog.hasName("UNO CLASSIC")).toBe(true);
+      expect(catalog.hasId("uno-copy-2")).toBe(false);
+
+      const sameSpaces = publishToCatalog(catalog, {
+        id: "uno-copy-3",
+        name: "Uno  Classic",
+        createdBy: "owner-1",
+        allCards: [runtimeCard({ name: "Queen" })],
+      });
+      expect(sameSpaces.ok).toBe(false);
+      expect(sameSpaces.code).toBe("duplicate_name");
+      expect(catalog.count()).toBe(1);
+    });
+  });
+
   test("disable then enable flips the flag only", () => {
     withTempCatalog(({ catalog }) => {
       publishToCatalog(catalog, {
@@ -184,8 +307,21 @@ describe("catalog publish payload builder", () => {
     });
   });
 
-  test("seed rows are not updated by publish", () => {
+  test("seed rows are not updated by publish; official seed ids cannot be claimed before seed", () => {
     withTempCatalog(({ catalog }) => {
+      expect(catalog.count()).toBe(0);
+      const beforeSeed = publishToCatalog(catalog, {
+        id: "standard",
+        name: "Hijack Standard",
+        createdBy: "owner-1",
+        allCards: [runtimeCard()],
+      });
+      expect(beforeSeed.ok).toBe(false);
+      expect(beforeSeed.code).toBe("reserved_id");
+      expect(beforeSeed.error).toMatch(/deck-catalog/);
+      expect(catalog.hasId("standard")).toBe(false);
+      expect(catalog.count()).toBe(0);
+
       seedDeckCatalog({ catalog });
       const seededStandard = catalog.getTemplate("standard");
       expect(seededStandard).not.toBeNull();
@@ -198,7 +334,7 @@ describe("catalog publish payload builder", () => {
         allCards: [runtimeCard()],
       });
       expect(overwriteSeed.ok).toBe(false);
-      expect(overwriteSeed.code).toBe("duplicate_id");
+      expect(overwriteSeed.code).toBe("reserved_id");
       expect(catalog.getTemplate("standard")).toEqual(seededStandard);
 
       const sameSeedName = publishToCatalog(catalog, {
@@ -226,6 +362,7 @@ describe("catalog publish payload builder", () => {
 
   test("UNIQUE constraint on insert maps to duplicate_id or duplicate_name", () => {
     withTempCatalog(({ catalog }) => {
+      expect(catalog.ensureNameNocaseUniqueIndex().status).toBe("created");
       const first = publishToCatalog(catalog, {
         id: "my-custom",
         name: "My Custom",
@@ -257,6 +394,18 @@ describe("catalog publish payload builder", () => {
       expect(sameName.code).toBe("duplicate_name");
       expect(catalog.getTemplate("other-id")).toBeNull();
       expect(catalog.count()).toBe(1);
+
+      catalog.hasId = () => false;
+      catalog.hasName = () => false;
+      const sameCase = publishToCatalog(catalog, {
+        id: "case-id",
+        name: "my custom",
+        createdBy: "owner-1",
+        allCards: [runtimeCard({ name: "Queen" })],
+      });
+      expect(sameCase.ok).toBe(false);
+      expect(sameCase.code).toBe("duplicate_name");
+      expect(catalog.getTemplate("case-id")).toBeNull();
     });
   });
 });
@@ -357,6 +506,21 @@ describe("DeckCatalog.inspect", () => {
       classifySqliteOpenError({ code: "SQLITE_CANTOPEN", message: "unable to open database file" })
     ).toBe("unreadable");
   });
+
+  test("sqliteUniqueField maps name nocase index failures to name", () => {
+    expect(
+      sqliteUniqueField({
+        code: "SQLITE_CONSTRAINT_UNIQUE",
+        message: "UNIQUE constraint failed: idx_deck_templates_name_nocase",
+      })
+    ).toBe("name");
+    expect(
+      sqliteUniqueField({
+        code: "SQLITE_CONSTRAINT_UNIQUE",
+        message: "UNIQUE constraint failed: deck_templates.name",
+      })
+    ).toBe("name");
+  });
 });
 
 describe("DeckCatalog row parsing", () => {
@@ -410,6 +574,13 @@ describe("DeckCatalog row parsing", () => {
     expect(normalizeEnabled(2)).toBe(0);
     expect(normalizeEnabled(null)).toBe(0);
     expect(normalizeEnabled(undefined)).toBe(0);
+    expect(isCatalogEnabled(1)).toBe(true);
+    expect(isCatalogEnabled(0)).toBe(false);
+    expect(isCatalogEnabled(2)).toBe(false);
+    expect(isEnabled({ enabled: 1 })).toBe(true);
+    expect(isEnabled({ enabled: 0 })).toBe(false);
+    expect(isEnabled({ enabled: 2 })).toBe(false);
+    expect(isEnabled(null)).toBe(false);
 
     const fromNull = parseTemplateRow({
       id: "n",
@@ -436,6 +607,94 @@ describe("DeckCatalog row parsing", () => {
       expect(template.enabled).toBe(0);
       const listed = catalog.listTemplates();
       expect(listed[0].enabled).toBe(0);
+    });
+  });
+});
+
+function sampleCards() {
+  return [{ name: "A", description: "", type: "", suit: "", value: "", url: null, format: "A" }];
+}
+
+function hasNameNocaseIndex(catalog) {
+  return (
+    catalog.db
+      .query(
+        `SELECT 1 AS ok FROM sqlite_master WHERE type = 'index' AND name = ?`
+      )
+      .get(NAME_NOCASE_INDEX) != null
+  );
+}
+
+describe("NOCASE name unique index migration", () => {
+  test("opening a catalog with BINARY case-variant names does not create the index or throw", () => {
+    withTempCatalog(({ catalog }) => {
+      catalog.insertTemplate({ id: "foo-upper", name: "Foo", cards: sampleCards() });
+      catalog.insertTemplate({ id: "foo-lower", name: "foo", cards: sampleCards() });
+      expect(catalog.count()).toBe(2);
+      expect(hasNameNocaseIndex(catalog)).toBe(false);
+
+      const listed = catalog.listTemplates().map((row) => row.name).sort();
+      expect(listed).toEqual(["Foo", "foo"]);
+      expect(catalog.hasName("FOO")).toBe(true);
+    });
+  });
+
+  test("ensure creates the index when names are unique under NOCASE", () => {
+    withTempCatalog(({ catalog }) => {
+      catalog.insertTemplate({ id: "foo", name: "Foo", cards: sampleCards() });
+      catalog.insertTemplate({ id: "bar", name: "Bar", cards: sampleCards() });
+
+      const first = catalog.ensureNameNocaseUniqueIndex();
+      expect(first.status).toBe("created");
+      expect(first.collisions).toEqual([]);
+      expect(hasNameNocaseIndex(catalog)).toBe(true);
+
+      const second = catalog.ensureNameNocaseUniqueIndex();
+      expect(second.status).toBe("already");
+      expect(catalog.count()).toBe(2);
+
+      expect(() =>
+        catalog.insertTemplate({ id: "foo-2", name: "foo", cards: sampleCards() })
+      ).toThrow();
+      expect(catalog.hasId("foo-2")).toBe(false);
+      expect(catalog.getTemplate("foo").name).toBe("Foo");
+    });
+  });
+
+  test("ensure skips when case-variant names already exist and keeps every row", () => {
+    withTempCatalog(({ catalog }) => {
+      catalog.insertTemplate({ id: "foo-upper", name: "Foo", cards: sampleCards() });
+      catalog.insertTemplate({ id: "foo-lower", name: "foo", cards: sampleCards() });
+      catalog.insertTemplate({ id: "bar-mixed", name: "Bar", cards: sampleCards() });
+      catalog.insertTemplate({ id: "bar-upper", name: "BAR", cards: sampleCards() });
+      catalog.insertTemplate({ id: "solo", name: "Solo", cards: sampleCards() });
+
+      const first = catalog.ensureNameNocaseUniqueIndex();
+      expect(first.status).toBe("skipped");
+      expect(hasNameNocaseIndex(catalog)).toBe(false);
+      expect(first.collisions).toHaveLength(2);
+      const collisionIds = first.collisions.flatMap((group) => group.ids).sort();
+      expect(collisionIds).toEqual([
+        "bar-mixed",
+        "bar-upper",
+        "foo-lower",
+        "foo-upper",
+      ]);
+      expect(catalog.count()).toBe(5);
+      expect(catalog.getTemplate("foo-upper").name).toBe("Foo");
+      expect(catalog.getTemplate("foo-lower").name).toBe("foo");
+      expect(catalog.getTemplate("bar-mixed").name).toBe("Bar");
+      expect(catalog.getTemplate("bar-upper").name).toBe("BAR");
+      expect(catalog.getTemplate("solo").name).toBe("Solo");
+
+      const second = catalog.ensureNameNocaseUniqueIndex();
+      expect(second.status).toBe("skipped");
+      expect(hasNameNocaseIndex(catalog)).toBe(false);
+      expect(catalog.count()).toBe(5);
+      expect(formatNameNocaseIndexSkip(first.collisions)).toMatch(
+        /all rows kept/i
+      );
+      expect(formatNameNocaseIndexSkip(first.collisions)).toMatch(/Foo|foo/);
     });
   });
 });

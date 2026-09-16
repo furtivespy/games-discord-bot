@@ -15,6 +15,24 @@ const {
   withHarness,
 } = require("./helpers/harness");
 const { MessageFlags } = require("discord.js");
+const {
+  HUGE_DECK_ID,
+  HUGE_DECK_NAME,
+  HUGE_DECK_CARD_COUNT,
+  HUGE_DECK_LONG_URL_INDEXES,
+  HUGE_LIST_TEMPLATE_COUNT,
+  hugeListOverflowMarkers,
+  hugeShowOverflowMarkers,
+  insertHugeListTemplates,
+  insertHugeShowTemplate,
+  payloadCharCount,
+  payloadsHaveBrokenMarkdownImageLinks,
+} = require("./helpers/hugeCatalogDeck");
+const {
+  EMBED_DESCRIPTION_LIMIT,
+  EMBED_TOTAL_CHAR_LIMIT,
+  EMBEDS_PER_MESSAGE,
+} = require("../modules/DiscordEmbeds");
 
 const OWNER = createUser({ id: "owner-1", username: "Owner" });
 const SNOWFLAKE_CREATOR = "123456789012345678";
@@ -26,6 +44,32 @@ async function runCatalog(harness) {
 
 function primaryPayload(harness) {
   return harness.calls.editReply[0] || harness.calls.reply[0];
+}
+
+function sentCatalogPayloads(harness) {
+  const primary = primaryPayload(harness);
+  return primary ? [primary, ...harness.calls.followUp] : [...harness.calls.followUp];
+}
+
+function expectPayloadsWithinDiscordLimits(payloads, { ephemeral = false } = {}) {
+  for (const payload of payloads) {
+    if (ephemeral) {
+      expect(payload.flags).toBe(MessageFlags.Ephemeral);
+    }
+    expect(payload.embeds.length).toBeLessThanOrEqual(EMBEDS_PER_MESSAGE);
+    expect(payloadCharCount(payload)).toBeLessThanOrEqual(EMBED_TOTAL_CHAR_LIMIT);
+    for (const embed of payload.embeds) {
+      expect((embed.data.description || "").length).toBeLessThanOrEqual(
+        EMBED_DESCRIPTION_LIMIT
+      );
+    }
+  }
+}
+
+function expectOverflowMarkers(text, markers) {
+  for (const marker of markers) {
+    expect(text).toContain(marker);
+  }
 }
 
 function insertPackedTemplates(dataDir, count, { enabled = 1 } = {}) {
@@ -83,6 +127,56 @@ describe("/catalog command handlers", () => {
         ).toBe(false);
         await runCatalog(harness);
         expect(harness.lastContent()).toContain("job `deck-catalog`");
+      }
+    );
+  });
+
+  test("list still works when BINARY-unique names collide under NOCASE", async () => {
+    await withHarness(
+      { user: OWNER, options: { subcommand: "list" } },
+      async (harness) => {
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        try {
+          catalog.insertTemplate({
+            id: "foo-upper",
+            name: "Foo",
+            cards: [
+              {
+                name: "A",
+                description: "",
+                type: "",
+                suit: "",
+                value: "",
+                url: null,
+                format: "A",
+              },
+            ],
+          });
+          catalog.insertTemplate({
+            id: "foo-lower",
+            name: "foo",
+            cards: [
+              {
+                name: "B",
+                description: "",
+                type: "",
+                suit: "",
+                value: "",
+                url: null,
+                format: "A",
+              },
+            ],
+          });
+        } finally {
+          catalog.close();
+        }
+
+        await runCatalog(harness);
+        const text = collectedReplyText(harness);
+        expect(text).toContain("Foo (foo-upper)");
+        expect(text).toContain("foo (foo-lower)");
+        expect(text.toLowerCase()).not.toMatch(/unreadable|could not be read/);
+        expect(text).not.toContain("Something went wrong");
       }
     );
   });
@@ -265,6 +359,38 @@ describe("/catalog command handlers", () => {
     );
   });
 
+  test("disable and enable share one flag-setter and skip work when already set", async () => {
+    const Disable = require("../subcommands/catalog/disable.js");
+    const Enable = require("../subcommands/catalog/enable.js");
+    const { disable, enable, setCatalogEnabled } = require("../subcommands/catalog/setEnabled.js");
+    expect(Disable).toBe(disable);
+    expect(Enable).toBe(enable);
+    expect(typeof setCatalogEnabled).toBe("function");
+
+    await withHarness(
+      {
+        user: OWNER,
+        options: { subcommand: "disable", strings: { id: "standard" } },
+      },
+      async (harness) => {
+        seedDeckCatalog();
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        catalog.setEnabled("standard", 0);
+        catalog.close();
+
+        await runCatalog(harness);
+        expect(harness.lastContent()).toContain("already disabled");
+
+        harness.interaction.options.getSubcommand = () => "enable";
+        await runCatalog(harness);
+        expect(harness.lastContent()).toContain("Enabled `standard`");
+
+        await runCatalog(harness);
+        expect(harness.lastContent()).toContain("already enabled");
+      }
+    );
+  });
+
   test("publish saves allCards as a new id and refuses overwrites", async () => {
     const cards = [
       createCard({
@@ -391,6 +517,92 @@ describe("/catalog command handlers", () => {
     );
   });
 
+  test("publish uses draw, discard, and hands when allCards is empty", async () => {
+    const draw = createCard({ id: "d1", name: "Draw", origin: "Main" });
+    const discard = createCard({ id: "d2", name: "Discard", origin: "Main" });
+    const hand = createCard({ id: "h1", name: "Hand", origin: "Main" });
+    const game = createActiveGame({
+      players: [
+        createPlayer({
+          userId: "owner-1",
+          name: "Owner",
+          order: 0,
+          hands: {
+            main: [hand],
+            played: [],
+            passed: [],
+            received: [],
+            simultaneous: [],
+          },
+        }),
+      ],
+      decks: [createDeck({ name: "Main", draw: [draw], discard: [discard] })],
+    });
+    game.decks[0].allCards = [];
+
+    await withHarness(
+      {
+        user: OWNER,
+        gameData: game,
+        options: {
+          subcommand: "publish",
+          strings: { deck: "Main", id: "live-set", name: "Live Set" },
+        },
+      },
+      async (harness) => {
+        seedDeckCatalog();
+        await runCatalog(harness);
+        expect(harness.lastContent()).toContain("Published `live-set`");
+        expect(harness.lastContent()).toContain("3 cards");
+        expect(harness.lastContent()).toContain("• Draw");
+        expect(harness.lastContent()).toContain("• Discard");
+        expect(harness.lastContent()).toContain("• Hand");
+
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        try {
+          expect(catalog.getTemplate("live-set").cards.map((card) => card.name)).toEqual([
+            "Draw",
+            "Discard",
+            "Hand",
+          ]);
+        } finally {
+          catalog.close();
+        }
+      }
+    );
+  });
+
+  test("publish cannot claim an official seed id on an empty catalog", async () => {
+    await withHarness(
+      {
+        user: OWNER,
+        gameData: gameWithDeck([createCard()]),
+        options: {
+          subcommand: "publish",
+          strings: { deck: "Main", id: "standard", name: "Hijack Standard" },
+        },
+      },
+      async (harness) => {
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        expect(catalog.count()).toBe(0);
+        catalog.close();
+
+        await runCatalog(harness);
+        expect(harness.lastContent()).toMatch(/reserved/i);
+        expect(harness.lastContent()).toContain("standard");
+        expect(harness.lastContent()).toContain("deck-catalog");
+
+        const after = new DeckCatalog({ dataDir: harness.dataDir });
+        try {
+          expect(after.hasId("standard")).toBe(false);
+          expect(after.count()).toBe(0);
+        } finally {
+          after.close();
+        }
+      }
+    );
+  });
+
   test("show autocomplete includes disabled templates; disable/enable filter by flag", async () => {
     await withHarness(
       {
@@ -458,6 +670,116 @@ describe("/catalog command handlers", () => {
         expect(harness.calls.respond[0].map((choice) => choice.value)).toEqual([
           "standard",
         ]);
+      }
+    );
+  });
+
+  test("show autocomplete filters by focus so names after the first 25 are still reachable", async () => {
+    await withHarness(
+      {
+        user: OWNER,
+        isAutocomplete: true,
+        options: {
+          subcommand: "show",
+          focused: "",
+          focusedName: "id",
+        },
+      },
+      async (harness) => {
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        try {
+          for (let i = 0; i < 30; i++) {
+            catalog.insertTemplate({
+              id: `aaa-${String(i).padStart(2, "0")}`,
+              name: `AAA ${String(i).padStart(2, "0")}`,
+              cards: [
+                {
+                  name: "A",
+                  description: "",
+                  type: "",
+                  suit: "",
+                  value: "",
+                  url: null,
+                  format: "A",
+                },
+              ],
+            });
+          }
+          catalog.insertTemplate({
+            id: "zebra-late",
+            name: "Zebra Late",
+            cards: [
+              {
+                name: "Z",
+                description: "",
+                type: "",
+                suit: "",
+                value: "",
+                url: null,
+                format: "A",
+              },
+            ],
+          });
+        } finally {
+          catalog.close();
+        }
+
+        await runCatalog(harness);
+        const emptyValues = harness.calls.respond[0].map((choice) => choice.value);
+        expect(emptyValues).toHaveLength(25);
+        expect(emptyValues).not.toContain("zebra-late");
+
+        harness.calls.respond.length = 0;
+        harness.interaction.options.getFocused = (whole = false) =>
+          whole ? { name: "id", value: "zeb" } : "zeb";
+        await runCatalog(harness);
+        const focused = harness.calls.respond[0];
+        expect(focused.map((choice) => choice.value)).toContain("zebra-late");
+        expect(focused.length).toBeLessThanOrEqual(25);
+      }
+    );
+  });
+
+  test("publish deck autocomplete filters by focus and caps at 25", async () => {
+    const decks = Array.from({ length: 30 }, (_, i) =>
+      createDeck({
+        name: `Alpha ${String(i).padStart(2, "0")}`,
+        draw: [createCard({ id: `c${i}`, name: "A" })],
+      })
+    );
+    decks.push(
+      createDeck({
+        name: "Zeta Only",
+        draw: [createCard({ id: "z", name: "Z" })],
+      })
+    );
+    await withHarness(
+      {
+        user: OWNER,
+        isAutocomplete: true,
+        gameData: createActiveGame({ decks }),
+        options: {
+          subcommand: "publish",
+          focused: "",
+          focusedName: "deck",
+        },
+      },
+      async (harness) => {
+        await runCatalog(harness);
+        expect(harness.calls.respond[0]).toHaveLength(25);
+        expect(
+          harness.calls.respond[0].map((choice) => choice.value)
+        ).not.toContain("Zeta Only");
+
+        harness.calls.respond.length = 0;
+        harness.interaction.options.getFocused = (whole = false) =>
+          whole ? { name: "deck", value: "only" } : "only";
+        await runCatalog(harness);
+        expect(harness.calls.respond[0].map((choice) => choice.value)).toEqual([
+          "Zeta Only",
+        ]);
+        expect(harness.calls.respond[0][0].name.startsWith("only")).toBe(true);
+        expect(harness.calls.respond[0][0].name).toContain("Zeta Only");
       }
     );
   });
@@ -690,6 +1012,113 @@ describe("/catalog command handlers", () => {
         const primary = primaryPayload(harness);
         expect(primary.embeds[0].data.title).toMatch(/^Enabled \(/);
         expect(collectedReplyText(harness)).toContain("Packed Deck 000");
+        expect(collectedReplyText(harness)).not.toContain(
+          "Something went wrong"
+        );
+        const errorEdits = harness.calls.editReply.filter((payload) =>
+          String(payload?.embeds?.[0]?.data?.description || "").includes(
+            "Something went wrong"
+          )
+        );
+        expect(errorEdits).toHaveLength(0);
+      }
+    );
+  });
+
+  test("show huge deck keeps the first page under Discord limits and follow-ups the rest", async () => {
+    await withHarness(
+      {
+        user: OWNER,
+        options: { subcommand: "show", strings: { id: HUGE_DECK_ID } },
+      },
+      async (harness) => {
+        insertHugeShowTemplate(harness.dataDir);
+        await runCatalog(harness);
+
+        const primary = primaryPayload(harness);
+        expect(primary.embeds[0].data.title).toBe(HUGE_DECK_NAME);
+        expect(payloadCharCount(primary)).toBeGreaterThan(
+          EMBED_TOTAL_CHAR_LIMIT / 2
+        );
+        expect(harness.calls.followUp.length).toBeGreaterThanOrEqual(1);
+
+        const sent = sentCatalogPayloads(harness);
+        expectPayloadsWithinDiscordLimits(sent, { ephemeral: true });
+
+        const text = collectedReplyText(harness);
+        expect(text).toContain(`\`${HUGE_DECK_ID}\``);
+        expect(text).toContain(`${HUGE_DECK_CARD_COUNT} cards`);
+        // Tail + long-URL indexes (0, 50, 299): header counts alone do not
+        // prove overflow lines survived a truncation after the first follow-up.
+        expectOverflowMarkers(text, hugeShowOverflowMarkers());
+        expect(HUGE_DECK_LONG_URL_INDEXES).toEqual([0, 50, HUGE_DECK_CARD_COUNT - 1]);
+        expect(payloadsHaveBrokenMarkdownImageLinks(sent)).toBe(false);
+        expect(text).not.toMatch(/\[image\]\([^)\n]*$/m);
+        expect(text).not.toContain("[image](https://example.test/huge-regression/");
+        expect(text).not.toContain("u".repeat(80));
+      }
+    );
+  });
+
+  test("show huge-deck follow-up failure does not editReply the first page away", async () => {
+    await withHarness(
+      {
+        user: OWNER,
+        options: { subcommand: "show", strings: { id: HUGE_DECK_ID } },
+      },
+      async (harness) => {
+        insertHugeShowTemplate(harness.dataDir);
+        harness.interaction.followUp = async () => {
+          throw new Error("discord follow-up failed");
+        };
+
+        await runCatalog(harness);
+        const primary = primaryPayload(harness);
+        expect(primary.embeds[0].data.title).toBe(HUGE_DECK_NAME);
+        expect(collectedReplyText(harness)).toContain("Huge Card 000");
+        expect(collectedReplyText(harness)).not.toContain(
+          "Something went wrong"
+        );
+        const errorEdits = harness.calls.editReply.filter((payload) =>
+          String(payload?.embeds?.[0]?.data?.description || "").includes(
+            "Something went wrong"
+          )
+        );
+        expect(errorEdits).toHaveLength(0);
+      }
+    );
+  });
+
+  test("list huge template names overflow into follow-ups without an illegal first page", async () => {
+    await withHarness(
+      { user: OWNER, options: { subcommand: "list" } },
+      async (harness) => {
+        insertHugeListTemplates(harness.dataDir);
+        await runCatalog(harness);
+        expect(harness.calls.followUp.length).toBeGreaterThanOrEqual(1);
+        const sent = sentCatalogPayloads(harness);
+        expectPayloadsWithinDiscordLimits(sent, { ephemeral: true });
+        const text = collectedReplyText(harness);
+        expect(text).toContain(`Enabled (${HUGE_LIST_TEMPLATE_COUNT})`);
+        expect(text).toContain("Disabled (0)");
+        expectOverflowMarkers(text, hugeListOverflowMarkers());
+      }
+    );
+  });
+
+  test("list huge-template follow-up failure does not editReply the first page away", async () => {
+    await withHarness(
+      { user: OWNER, options: { subcommand: "list" } },
+      async (harness) => {
+        insertHugeListTemplates(harness.dataDir);
+        harness.interaction.followUp = async () => {
+          throw new Error("discord follow-up failed");
+        };
+
+        await runCatalog(harness);
+        const primary = primaryPayload(harness);
+        expect(primary.embeds[0].data.title).toMatch(/^Enabled \(/);
+        expect(collectedReplyText(harness)).toContain("Huge List 000");
         expect(collectedReplyText(harness)).not.toContain(
           "Something went wrong"
         );

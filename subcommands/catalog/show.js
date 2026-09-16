@@ -1,9 +1,9 @@
+const Formatter = require("../../modules/GameFormatter");
+const { buildCardListEmbeds } = require("../../modules/DiscordEmbeds");
 const {
   autocompleteTemplates,
-  buildCardListEmbeds,
   enabledHeading,
   deferCatalogReply,
-  formatHandCardLine,
   formatLayoutLabel,
   formatCreatorName,
   catalogUnavailableReply,
@@ -15,7 +15,8 @@ const {
 
 class CatalogShow {
   async execute(interaction, client) {
-    const { ready, catalog, info } = openReadyCatalog();
+    const opened = openReadyCatalog();
+    const { ready, catalog } = opened;
     if (interaction.isAutocomplete()) {
       try {
         if (!ready) {
@@ -33,7 +34,7 @@ class CatalogShow {
     }
 
     if (!ready) {
-      return interaction.reply(catalogUnavailableReply(info));
+      return interaction.reply(catalogUnavailableReply(opened.info));
     }
 
     try {
@@ -78,7 +79,7 @@ class CatalogShow {
         buildCardListEmbeds({
           title: template.name,
           header,
-          cardLines: cards.map(formatHandCardLine),
+          cardLines: cards.map((card) => Formatter.cardHandLine(card)),
         })
       );
     } finally {

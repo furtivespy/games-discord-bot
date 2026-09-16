@@ -17,9 +17,22 @@ class GameHelper {
   static async getDeckAutocomplete(gameData, interaction) {
     if (gameData.isdeleted || gameData.decks.length < 1) {
       await interaction.respond([])
-    } else {
-      await interaction.respond(gameData.decks.map(d => ({ name: d.name, value: d.name })))
+      return
     }
+    let focused = ""
+    try {
+      focused = interaction.options.getFocused() ?? ""
+    } catch (_) {}
+    const term = String(focused).toLowerCase()
+    const matches = gameData.decks.filter(
+      (d) => !term || String(d.name).toLowerCase().includes(term)
+    )
+    await interaction.respond(
+      matches.slice(0, 25).map((d) => ({
+        name: GameHelper.autocompleteChoiceName(focused, d.name),
+        value: d.name,
+      }))
+    )
   }
 
   // Instance-only starters stay visible in the default Discord picker (25 max).
@@ -32,11 +45,13 @@ class GameHelper {
   // starting with their input when the canonical name already matches.
   static autocompleteChoiceName(userInput, displayName) {
     const raw = String(userInput ?? "")
-    let name = displayName
-    if (raw && displayName.toLowerCase().startsWith(raw.toLowerCase())) {
-      name = raw + displayName.slice(raw.length)
+    const label = String(displayName ?? "")
+    if (!raw) return label.slice(0, GameHelper.AUTOCOMPLETE_NAME_MAX)
+    if (label.toLowerCase().startsWith(raw.toLowerCase())) {
+      return (raw + label.slice(raw.length)).slice(0, GameHelper.AUTOCOMPLETE_NAME_MAX)
     }
-    return name.slice(0, GameHelper.AUTOCOMPLETE_NAME_MAX)
+    // Discord prefix-filters choice names; keep substring/id matches visible.
+    return `${raw} — ${label}`.slice(0, GameHelper.AUTOCOMPLETE_NAME_MAX)
   }
 
   static getCardLists(searchTerm, options) {

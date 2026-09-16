@@ -440,11 +440,7 @@ class GameFormatter {
     if (player.hands.main.length > 0) {
       let cardList = "";
       this.cardSort(player.hands.main).forEach((card) => {
-        if (card.url) {
-          cardList += `• ${this.cardLongName(card)} [image](${card.url})\n`;
-        } else {
-          cardList += `• ${this.cardLongName(card)}\n`;
-        }
+        cardList += `${this.cardHandLine(card)}\n`;
       });
       newEmbed.addFields({ name: "Cards in Hand", value: cardList });
     }
@@ -557,14 +553,11 @@ class GameFormatter {
     // For playArea, original order is important, so we don't sort here. For hands, cardSort is used before calling.
     // If sorting is needed for other zones, it should be done before calling this function.
     cardArray.forEach((card) => {
-      let newCardInfo = "";
       if (card.url) { // Assuming card.url is the image link
         hasImages = true;
         imageUrls.push(card.url);
-        newCardInfo = `• ${this.cardLongName(card)} [image](${card.url})\n`;
-      } else {
-        newCardInfo = `• ${this.cardLongName(card)}\n`;
       }
+      const newCardInfo = `${this.cardHandLine(card)}\n`;
 
       if (cardListText.length + newCardInfo.length > 1020) { // Embed field value limit
         embed.addFields({ name: fieldTitle, value: cardListText });
@@ -921,6 +914,22 @@ class GameFormatter {
       cardStr += ` (${cardObj.description})`;
     }
     return cardStr;
+  }
+
+  // Same text shape as playerSecretHand / genericCardZoneDisplay / catalog show.
+  static cardHandLine(card) {
+    const display = {
+      name: card?.name || "(unnamed)",
+      type: card?.type || "",
+      value: card?.value ?? "",
+      format: card?.format || "A",
+      description: card?.description || "",
+    };
+    const name = this.cardLongName(display);
+    if (card?.url) {
+      return `• ${name} [image](${card.url})`;
+    }
+    return `• ${name}`;
   }
 
   static oneCard(cardObj) {
