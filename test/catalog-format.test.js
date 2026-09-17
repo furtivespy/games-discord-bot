@@ -2,22 +2,25 @@ const { describe, expect, test } = require("bun:test");
 const { EmbedBuilder, MessageFlags } = require("discord.js");
 const Formatter = require("../modules/GameFormatter");
 const {
-  autocompleteTemplates,
   batchEmbeds,
   buildCardListEmbeds,
-  catalogEmbed,
   embedCharCount,
   embedsFromLines,
+  EMBED_COLOR,
   EMBED_DESCRIPTION_LIMIT,
   EMBED_FOOTER_LIMIT,
   EMBEDS_PER_MESSAGE,
   EMBED_TITLE_LIMIT,
   EMBED_TOTAL_CHAR_LIMIT,
-  formatHandCardLine,
+  splitLinesToDescriptions,
+  textEmbed,
+} = require("../modules/DiscordEmbeds");
+const {
+  autocompleteTemplates,
+  catalogEmbed,
   formatLayoutLabel,
   formatTemplateListLine,
   replyEphemeralEmbeds,
-  splitLinesToDescriptions,
 } = require("../subcommands/catalog/shared.js");
 
 function mockReplyInteraction(overrides = {}) {
@@ -147,13 +150,17 @@ describe("catalog format helpers", () => {
       format: card.format,
       description: card.description,
     });
-    expect(formatHandCardLine(card)).toBe(
+    expect(Formatter.cardHandLine(card)).toBe(
       `• ${expectedName} [image](${card.url})`
     );
-    expect(formatHandCardLine(card)).toBe(
+    expect(Formatter.cardHandLine(card)).toBe(
       "• Location: Stafford (canal) [image](https://furtivespy.com/images/brass/stafford.png)"
     );
-    expect(formatHandCardLine({ name: "King", format: "A" })).toBe("• King");
+    expect(Formatter.cardHandLine({ name: "King", format: "A" })).toBe("• King");
+    expect(Formatter.playerSecretHand(
+      { name: "demo" },
+      { hands: { main: [card] } }
+    ).data.fields[0].value.trim()).toBe(Formatter.cardHandLine(card));
   });
 
   test("card list embeds reuse the hand-style lines and split long descriptions", () => {
@@ -168,7 +175,7 @@ describe("catalog format helpers", () => {
     const embeds = buildCardListEmbeds({
       title: "Big Deck",
       header: "`big` · Enabled · 80 cards · Layout A",
-      cardLines: cards.map(formatHandCardLine),
+      cardLines: cards.map((card) => Formatter.cardHandLine(card)),
       footer: "cutover note",
     });
     expect(embeds.length).toBeGreaterThan(1);
@@ -186,7 +193,7 @@ describe("catalog format helpers", () => {
 
   test("batchEmbeds keeps Discord per-message embed and character limits", () => {
     const embeds = Array.from({ length: 12 }, (_, i) =>
-      catalogEmbed({
+      textEmbed({
         title: `Part ${i}`,
         description: "n".repeat(800),
       })
@@ -250,7 +257,7 @@ describe("catalog format helpers", () => {
 
   test("does not mid-clamp markdown image URLs in card lines", () => {
     const url = `https://example.test/${"x".repeat(5000)}.png`;
-    const line = formatHandCardLine({ name: "Stafford", url });
+    const line = Formatter.cardHandLine({ name: "Stafford", url });
     expect(line.length).toBeGreaterThan(EMBED_DESCRIPTION_LIMIT);
     expect(line).toContain(`[image](${url})`);
 
@@ -265,7 +272,7 @@ describe("catalog format helpers", () => {
   test("replyEphemeralEmbeds sends overflow batches as follow-ups", async () => {
     const { interaction, calls } = mockReplyInteraction();
     const embeds = Array.from({ length: 12 }, (_, i) =>
-      catalogEmbed({
+      textEmbed({
         title: `Part ${i}`,
         description: "n".repeat(800),
       })
@@ -294,7 +301,7 @@ describe("catalog format helpers", () => {
       },
     });
     const embeds = Array.from({ length: 12 }, (_, i) =>
-      catalogEmbed({
+      textEmbed({
         title: `Part ${i}`,
         description: "n".repeat(800),
       })
@@ -321,10 +328,11 @@ describe("catalog format helpers", () => {
     }
   });
 
-  test("catalogEmbed is a discord.js EmbedBuilder", () => {
-    const embed = catalogEmbed({ title: "Enabled (1)", description: "Hello" });
+  test("textEmbed is a discord.js EmbedBuilder", () => {
+    const embed = textEmbed({ title: "Enabled (1)", description: "Hello" });
     expect(embed).toBeInstanceOf(EmbedBuilder);
-    expect(embed.data.color).toBe(13502711);
+    expect(embed.data.color).toBe(EMBED_COLOR);
+    expect(catalogEmbed({ description: "Hello" }).data.color).toBe(EMBED_COLOR);
   });
 
   test("autocompleteTemplates filters by focus so the 25-cap does not hide later names", () => {
@@ -501,7 +509,7 @@ describe("huge-deck catalog fixture (FUR-81)", () => {
 
   test("long markdown image URLs on huge-deck lines are not mid-clamped", () => {
     const template = createHugeShowTemplate();
-    const longLine = formatHandCardLine(template.cards[0]);
+    const longLine = Formatter.cardHandLine(template.cards[0]);
     expect(longLine.length).toBeGreaterThan(EMBED_DESCRIPTION_LIMIT);
     expect(longLine).toContain("[image](https://example.test/huge-regression/");
 

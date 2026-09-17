@@ -180,6 +180,10 @@ function isCatalogEnabled(enabled) {
   return Number(enabled) === 1;
 }
 
+function isEnabled(template) {
+  return isCatalogEnabled(template?.enabled);
+}
+
 function normalizeEnabled(enabled) {
   return isCatalogEnabled(enabled) ? 1 : 0;
 }
@@ -340,6 +344,7 @@ module.exports = DeckCatalog;
 module.exports.DECK_CATALOG_FILENAME = DECK_CATALOG_FILENAME;
 module.exports.NAME_NOCASE_INDEX = NAME_NOCASE_INDEX;
 module.exports.isCatalogEnabled = isCatalogEnabled;
+module.exports.isEnabled = isEnabled;
 module.exports.normalizeEnabled = normalizeEnabled;
 module.exports.classifySqliteOpenError = classifySqliteOpenError;
 module.exports.sqliteUniqueField = sqliteUniqueField;

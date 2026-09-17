@@ -6,6 +6,8 @@ const DeckCatalog = require("../db/deckCatalog.js");
 const {
   classifySqliteOpenError,
   formatNameNocaseIndexSkip,
+  isCatalogEnabled,
+  isEnabled,
   NAME_NOCASE_INDEX,
   normalizeDisplayName,
   normalizeEnabled,
@@ -572,6 +574,13 @@ describe("DeckCatalog row parsing", () => {
     expect(normalizeEnabled(2)).toBe(0);
     expect(normalizeEnabled(null)).toBe(0);
     expect(normalizeEnabled(undefined)).toBe(0);
+    expect(isCatalogEnabled(1)).toBe(true);
+    expect(isCatalogEnabled(0)).toBe(false);
+    expect(isCatalogEnabled(2)).toBe(false);
+    expect(isEnabled({ enabled: 1 })).toBe(true);
+    expect(isEnabled({ enabled: 0 })).toBe(false);
+    expect(isEnabled({ enabled: 2 })).toBe(false);
+    expect(isEnabled(null)).toBe(false);
 
     const fromNull = parseTemplateRow({
       id: "n",

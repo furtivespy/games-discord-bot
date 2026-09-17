@@ -5,6 +5,7 @@ const { PermissionsBitField } = require("discord.js");
 const GameDB = require("../../db/anygame.js");
 const GameStore = require("../../db/gameStore.js");
 const Formatter = require("../../modules/GameFormatter");
+const { embedPlainText } = require("../../modules/DiscordEmbeds");
 const GameStatusHelper = require("../../modules/GameStatusHelper");
 const BoardGameGeek = require("../../modules/BoardGameGeek");
 
@@ -96,21 +97,6 @@ function createActiveGame(overrides = {}) {
     ...rest,
     players,
   });
-}
-
-function embedPlainText(embed) {
-  if (!embed) return "";
-  const data =
-    typeof embed.toJSON === "function" ? embed.toJSON() : embed.data || embed;
-  const parts = [];
-  if (data.title) parts.push(data.title);
-  if (data.description) parts.push(data.description);
-  for (const field of data.fields || []) {
-    if (field.name) parts.push(field.name);
-    if (field.value) parts.push(field.value);
-  }
-  if (data.footer?.text) parts.push(data.footer.text);
-  return parts.filter(Boolean).join("\n");
 }
 
 function replyContent(payload) {

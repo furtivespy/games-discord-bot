@@ -1,7 +1,7 @@
+const { isEnabled } = require("../../db/deckCatalog.js");
+const { embedsFromLines } = require("../../modules/DiscordEmbeds");
 const {
-  embedsFromLines,
   formatTemplateListLine,
-  isTemplateEnabled,
   catalogUnavailableReply,
   openReadyCatalog,
   deferCatalogReply,
@@ -17,9 +17,10 @@ class CatalogList {
       return;
     }
 
-    const { ready, catalog, info } = openReadyCatalog();
+    const opened = openReadyCatalog();
+    const { ready, catalog } = opened;
     if (!ready) {
-      return interaction.reply(catalogUnavailableReply(info));
+      return interaction.reply(catalogUnavailableReply(opened.info));
     }
 
     try {
@@ -37,8 +38,8 @@ class CatalogList {
         client || interaction.client,
         templates.map((template) => template.created_by)
       );
-      const enabled = templates.filter(isTemplateEnabled);
-      const disabled = templates.filter((template) => !isTemplateEnabled(template));
+      const enabled = templates.filter(isEnabled);
+      const disabled = templates.filter((template) => !isEnabled(template));
       const lineFor = (template) =>
         formatTemplateListLine(template, { creatorNames });
 

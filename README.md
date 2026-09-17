@@ -103,7 +103,9 @@ The bot uses Discord's slash command system. **Start with `/help`** — it group
 - `/cards deck addcard` - Add a card to the in-game recipe (goes to discard)
 - `/cards deck addlist` - Bulk-add comma-separated card names
 - `/cards deck draw` - Draw cards
-- `/cards hand show` - View your hand
+- `/cards hand view` - View your hand
+- `/cards hand show` - Show a card from your hand
+- `/cards hand showall` - Show all cards from your hand
 - `/cards hand play` - Play a card
 - `/cards draft deal` - Start a card draft
 

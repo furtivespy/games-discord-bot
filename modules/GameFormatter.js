@@ -4,6 +4,7 @@ const { sortBy, floor, isArray, find, shuffle } = require("lodash");
 var AsciiTable = require("ascii-table");
 const { createCanvas, Image, loadImage } = require("canvas");
 const TableRenderer = require("./TableRenderer");
+const GameIdentity = require("./GameIdentity");
 const { trace, SpanStatusCode } = require("@opentelemetry/api");
 const colorConvert = require("color-convert");
 
@@ -88,7 +89,7 @@ class GameFormatter {
         border: { bottom: { color: '#000', width: 2 } },
       },
       title: {
-        text: `${gameData.name} Status ${gameData.reverseOrder ? "(Turn Order Reversed)" : ""}`,
+        text: `${GameIdentity.statusGameLabel(gameData)} Status ${gameData.reverseOrder ? "(Turn Order Reversed)" : ""}`,
         fontSize: 24,
         fontFamily: 'Open Sans',
       },
@@ -298,7 +299,7 @@ class GameFormatter {
       .setTitle(`Drafting Help`)
       .setDescription(
         `You now have draft cards in your hand. \n` +
-          `\`/cards hand show\`- Shows the cards in your hand. (as well as what you can draft) \n` +
+          `\`/cards hand view\`- Shows the cards in your hand. (as well as what you can draft) \n` +
           `\`/cards draft take\` - Take a card from the draft. \n` +
           `\`/cards draft pass\` - Passes all draft cards around the table (for all players)`
       );
@@ -439,11 +440,7 @@ class GameFormatter {
     if (player.hands.main.length > 0) {
       let cardList = "";
       this.cardSort(player.hands.main).forEach((card) => {
-        if (card.url) {
-          cardList += `• ${this.cardLongName(card)} [image](${card.url})\n`;
-        } else {
-          cardList += `• ${this.cardLongName(card)}\n`;
-        }
+        cardList += `${this.cardHandLine(card)}\n`;
       });
       newEmbed.addFields({ name: "Cards in Hand", value: cardList });
     }
@@ -556,14 +553,11 @@ class GameFormatter {
     // For playArea, original order is important, so we don't sort here. For hands, cardSort is used before calling.
     // If sorting is needed for other zones, it should be done before calling this function.
     cardArray.forEach((card) => {
-      let newCardInfo = "";
       if (card.url) { // Assuming card.url is the image link
         hasImages = true;
         imageUrls.push(card.url);
-        newCardInfo = `• ${this.cardLongName(card)} [image](${card.url})\n`;
-      } else {
-        newCardInfo = `• ${this.cardLongName(card)}\n`;
       }
+      const newCardInfo = `${this.cardHandLine(card)}\n`;
 
       if (cardListText.length + newCardInfo.length > 1020) { // Embed field value limit
         embed.addFields({ name: fieldTitle, value: cardListText });
@@ -920,6 +914,22 @@ class GameFormatter {
       cardStr += ` (${cardObj.description})`;
     }
     return cardStr;
+  }
+
+  // Same text shape as playerSecretHand / genericCardZoneDisplay / catalog show.
+  static cardHandLine(card) {
+    const display = {
+      name: card?.name || "(unnamed)",
+      type: card?.type || "",
+      value: card?.value ?? "",
+      format: card?.format || "A",
+      description: card?.description || "",
+    };
+    const name = this.cardLongName(display);
+    if (card?.url) {
+      return `• ${name} [image](${card.url})`;
+    }
+    return `• ${name}`;
   }
 
   static oneCard(cardObj) {

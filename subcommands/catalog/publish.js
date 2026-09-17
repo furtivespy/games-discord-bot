@@ -1,9 +1,9 @@
 const GameHelper = require("../../modules/GlobalGameHelper");
+const Formatter = require("../../modules/GameFormatter");
 const { find } = require("lodash");
 const { publishToCatalog } = require("../../db/catalogPublish.js");
+const { buildCardListEmbeds } = require("../../modules/DiscordEmbeds");
 const {
-  buildCardListEmbeds,
-  formatHandCardLine,
   formatLayoutLabel,
   catalogUnavailableReply,
   openReadyCatalog,
@@ -19,9 +19,10 @@ class CatalogPublish {
       return;
     }
 
-    const { ready, catalog, info } = openReadyCatalog();
+    const opened = openReadyCatalog();
+    const { ready, catalog } = opened;
     if (!ready) {
-      return interaction.reply(catalogUnavailableReply(info));
+      return interaction.reply(catalogUnavailableReply(opened.info));
     }
 
     try {
@@ -72,7 +73,9 @@ class CatalogPublish {
         buildCardListEmbeds({
           title: result.template.name,
           header,
-          cardLines: result.template.cards.map(formatHandCardLine),
+          cardLines: result.template.cards.map((card) =>
+            Formatter.cardHandLine(card)
+          ),
         })
       );
     } finally {
