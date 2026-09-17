@@ -159,7 +159,7 @@ const HOWTO_DECKS = [
   "3. `/cards deck addcard` — required `name`. Optional: image `url`, `type`, `suit`, `value`, `description`, `copies`, `format`.",
   "   • New cards go to **discard**, not draw, and are added to the deck recipe.",
   "4. `/cards deck shuffle` — mix discard into draw.",
-  "5. `/cards deck draw` — top card into your hand. `/cards hand view` to see it (only you). `/cards hand show` / `showall` show card(s) to the table without leaving your hand.",
+  "5. `/cards deck draw` — top card into your hand. `/cards hand view` to see it (only you). `/cards hand show` and `/cards hand showall` show card(s) to the table without leaving your hand.",
   "",
   "In-game card edit (`/cards deck editcard`) is coming soon. Many names at once: `/help topic:addlist`.",
 ].join("\n");
@@ -279,7 +279,7 @@ const TOPICS = {
     kind: "area",
     area: "cards",
     intro:
-      "Need the deck recipe? `/help topic:decks`. `/cards hand view` is private; `show` / `showall` are public (cards stay in hand). Commands below are the live `/cards` surface.",
+      "Need the deck recipe? `/help topic:decks`. `/cards hand view` is private; `/cards hand show` and `/cards hand showall` are public (cards stay in hand). Commands below are the live `/cards` surface.",
     commandNames: ["cards"],
   },
   catalog: {

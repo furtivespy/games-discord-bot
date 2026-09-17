@@ -212,7 +212,7 @@ describe("help catalog (FUR-95)", () => {
     expect(helpContainsStaleCopy("/cards hand reveal")).toBe(true);
     expect(
       helpContainsStaleCopy(
-        "`/cards hand view` to see it (only you). `/cards hand show` / `showall` are public."
+        "`/cards hand view` to see it (only you). `/cards hand show` and `/cards hand showall` are public."
       )
     ).toBe(false);
   });
