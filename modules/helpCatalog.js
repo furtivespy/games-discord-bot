@@ -138,7 +138,7 @@ const COMMAND_BLURBS = {
 const HOWTO_SESSION = [
   "**Create a game session**",
   "",
-  "1. In the play channel (or game thread), run `/game newgame`. Pick the game from autocomplete and add at least **player1**.",
+  "1. In the play channel (or game thread), run `/game newgame`. Pick the game from autocomplete (or `customname` for a playtest not on BGG) and add at least **player1**.",
   "2. Optional: `/game pinnedstatus` with `on` (pin + chat table) or `full` (pin only; `/game status` still prints the table).",
   "3. Change seats with `/players add` / `remove`. Set the start player with `/players first`.",
   "4. `/game next` pings the next player; `/game reverse` flips turn order.",
@@ -159,7 +159,7 @@ const HOWTO_DECKS = [
   "3. `/cards deck addcard` — required `name`. Optional: image `url`, `type`, `suit`, `value`, `description`, `copies`, `format`.",
   "   • New cards go to **discard**, not draw, and are added to the deck recipe.",
   "4. `/cards deck shuffle` — mix discard into draw.",
-  "5. `/cards deck draw` — top card into your hand. `/cards hand show` to see it (only you).",
+  "5. `/cards deck draw` — top card into your hand. `/cards hand view` to see it (only you). `/cards hand show` / `showall` show card(s) to the table without leaving your hand.",
   "",
   "In-game card edit (`/cards deck editcard`) is coming soon. Many names at once: `/help topic:addlist`.",
 ].join("\n");
@@ -182,7 +182,7 @@ const HOWTO_DRAW = [
   "2. `/cards deck shuffle` — discard into draw. Bag-style decks also reshuffle remaining draw (`/cards deck configure`).",
   "3. `/cards deck recall` — pull every card of that deck back (hands, piles, board) and reshuffle to start over.",
   "4. `/cards deck flipcard` / `flipmultiple` — turn the top card(s) face-up onto discard or a destination.",
-  "5. `/cards hand play` shows the card to the table; `/cards hand discard` does not. `/cards hand show` is private.",
+  "5. `/cards hand play` shows the card to the table; `/cards hand discard` does not. `/cards hand view` is private. `/cards hand show` (one card) and `/cards hand showall` are public; cards stay in hand.",
 ].join("\n");
 
 const HOWTO_LFG = [
@@ -243,7 +243,7 @@ const TOPICS = {
     label: "How-to: Draw & shuffle",
     emoji: "🔀",
     description: "Draw, shuffle, recall, flip",
-    aliases: ["shuffle", "recall"],
+    aliases: ["shuffle", "recall", "view", "show", "showall", "reveal"],
     kind: "howto",
     howto: HOWTO_DRAW,
     commandNames: ["cards"],
@@ -279,7 +279,7 @@ const TOPICS = {
     kind: "area",
     area: "cards",
     intro:
-      "Need the deck recipe? `/help topic:decks`. Commands below are the live `/cards` surface.",
+      "Need the deck recipe? `/help topic:decks`. `/cards hand view` is private; `show` / `showall` are public (cards stay in hand). Commands below are the live `/cards` surface.",
     commandNames: ["cards"],
   },
   catalog: {
@@ -732,6 +732,11 @@ function helpContainsStaleCopy(text) {
   const body = String(text || "");
   if (/not avaial?ble yet/i.test(body)) return true;
   if (/\/game newgameplus/i.test(body)) return true;
+  if (/\/cards hand reveal\b/i.test(body)) return true;
+  // Live `/cards hand show` is public; the old private-hand command is `view`.
+  if (/\/cards hand show\b[\s\S]{0,80}(only you|is private|privately)/i.test(body)) {
+    return true;
+  }
   return false;
 }
 

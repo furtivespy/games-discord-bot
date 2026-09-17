@@ -25,7 +25,7 @@ A versatile Discord bot designed to enhance tabletop and card game experiences i
 - Card drafting system with pass directions
 - Deck building functionality
 - Simultaneous card play and reveal
-- Hand management (play, show, reveal, return cards)
+- Hand management (play, view, show, showall, return cards)
 - Card stealing mechanics
 
 ### Board Game Geek Integration

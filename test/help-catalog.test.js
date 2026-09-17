@@ -90,7 +90,12 @@ describe("help catalog (FUR-95)", () => {
     expect(decks).toContain("discard");
     expect(decks).toContain("/cards deck shuffle");
     expect(decks).toContain("/cards deck draw");
+    expect(decks).toContain("/cards hand view");
+    expect(decks).toContain("/cards hand show");
+    expect(decks).toContain("/cards hand showall");
+    expect(decks).not.toContain("/cards hand reveal");
     expect(HOWTO_DECKS).toMatch(/1\./);
+    expect(HOWTO_DECKS).toMatch(/\/cards hand view` to see it \(only you\)/);
     expect(helpContainsStaleCopy(decks)).toBe(false);
   });
 
@@ -106,6 +111,11 @@ describe("help catalog (FUR-95)", () => {
     expect(draw).toContain("/cards deck draw");
     expect(draw).toContain("/cards deck shuffle");
     expect(draw).toContain("/cards deck recall");
+    expect(draw).toContain("/cards hand view");
+    expect(draw).toContain("/cards hand show");
+    expect(draw).toContain("/cards hand showall");
+    expect(draw).not.toContain("/cards hand reveal");
+    expect(draw).not.toMatch(/\/cards hand show[^\n]*is private/);
 
     const lfg = viewText("lfg");
     expect(lfg).toContain("/lfg");
@@ -138,6 +148,10 @@ describe("help catalog (FUR-95)", () => {
     expect(normalizeTopicId("deck")).toBe("decks");
     expect(normalizeTopicId("addcard")).toBe("decks");
     expect(normalizeTopicId("/DECKS")).toBe("decks");
+    expect(normalizeTopicId("view")).toBe("draw");
+    expect(normalizeTopicId("show")).toBe("draw");
+    expect(normalizeTopicId("showall")).toBe("draw");
+    expect(normalizeTopicId("reveal")).toBe("draw");
     expect(normalizeTopicId("nope")).toBeNull();
 
     const view = resolveHelpView(slashcommands, { topicId: "nope" });
@@ -188,6 +202,19 @@ describe("help catalog (FUR-95)", () => {
     for (const cmd of listHelpCommands(slashcommands)) {
       expect(COMMAND_BLURBS[cmd.help.name]).toBeTruthy();
     }
+  });
+
+  test("stale copy detector flags old private-hand show and removed reveal", () => {
+    expect(helpContainsStaleCopy("/cards hand show to see it (only you)")).toBe(
+      true
+    );
+    expect(helpContainsStaleCopy("`/cards hand show` is private.")).toBe(true);
+    expect(helpContainsStaleCopy("/cards hand reveal")).toBe(true);
+    expect(
+      helpContainsStaleCopy(
+        "`/cards hand view` to see it (only you). `/cards hand show` / `showall` are public."
+      )
+    ).toBe(false);
   });
 }, 15_000);
 
@@ -263,6 +290,8 @@ describe("area /help subcommands reuse the catalog", () => {
         await new Cards(harness.client).execute(harness.interaction);
         const text = collectedReplyText(harness);
         expect(text).toContain("/cards deck addcard");
+        expect(text).toContain("/cards hand view");
+        expect(text).not.toContain("/cards hand reveal");
         expect(text.toLowerCase()).toContain("card");
       }
     );
