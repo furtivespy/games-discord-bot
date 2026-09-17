@@ -66,12 +66,18 @@ class Show {
 
         // Save game data to persist history entry
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
-        
+
+        const cardMedia = await Formatter.oneCardReplyParts(card)
+        const publicReply = {
+            content: "Showing a card:",
+            embeds: [cardMedia.embed]
+        }
+        if (cardMedia.files.length > 0) {
+            publicReply.files = [...cardMedia.files]
+        }
+
         const [, handInfo] = await Promise.all([
-            interaction.editReply({ content: "Showing a card:",
-            embeds: [
-                Formatter.oneCard(card),
-            ]}),
+            interaction.editReply(publicReply),
             Formatter.playerSecretHandAndImages(gameData, player)
         ]);
         if (handInfo.attachments.length >0){

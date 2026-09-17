@@ -3,6 +3,7 @@ const { MessageFlags } = require("discord.js");
 const Cards = require("../slashcommands/genericgame/cards");
 const DeckCatalog = require("../db/deckCatalog.js");
 const { seedDeckCatalog } = require("../db/seedDeckCatalog.js");
+const Formatter = require("../modules/GameFormatter");
 const GameHelper = require("../modules/GlobalGameHelper");
 const {
   collectedReplyText,
@@ -612,6 +613,41 @@ describe("/cards command handlers", () => {
         expect(harness.calls.followUp[0].flags).toBe(MessageFlags.Ephemeral);
       }
     );
+  });
+
+  test("hand show attaches the card image when the card has a url", async () => {
+    const originalFetch = Formatter.fetchCardImageBuffer;
+    Formatter.fetchCardImageBuffer = async (url) => {
+      expect(url).toBe("https://cards.example/ace.jpg");
+      return Buffer.from("fake-jpg");
+    };
+    try {
+      const ace = createCard({
+        id: "ace-1",
+        name: "Ace",
+        origin: "Main",
+        url: "https://cards.example/ace.jpg",
+      });
+      await withHarness(
+        {
+          gameData: gameWithDeck({ draw: [], hand: [ace] }),
+          options: {
+            subcommandGroup: "hand",
+            subcommand: "show",
+            strings: { card: "ace-1" },
+          },
+        },
+        async (harness) => {
+          await runCards(harness);
+          const reply = harness.calls.editReply[0];
+          expect(reply.files).toHaveLength(1);
+          expect(reply.files[0].name).toBe("played-card-ace-1.jpg");
+          expect(reply.embeds[0].data.image.url).toBe("attachment://played-card-ace-1.jpg");
+        }
+      );
+    } finally {
+      Formatter.fetchCardImageBuffer = originalFetch;
+    }
   });
 
   test("hand show autocomplete uses getFocused for the card option", async () => {
