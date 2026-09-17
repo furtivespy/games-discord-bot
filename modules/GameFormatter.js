@@ -299,7 +299,7 @@ class GameFormatter {
       .setTitle(`Drafting Help`)
       .setDescription(
         `You now have draft cards in your hand. \n` +
-          `\`/cards hand show\`- Shows the cards in your hand. (as well as what you can draft) \n` +
+          `\`/cards hand view\`- Shows the cards in your hand. (as well as what you can draft) \n` +
           `\`/cards draft take\` - Take a card from the draft. \n` +
           `\`/cards draft pass\` - Passes all draft cards around the table (for all players)`
       );

@@ -1,7 +1,9 @@
 const { describe, expect, test } = require("bun:test");
+const { MessageFlags } = require("discord.js");
 const Cards = require("../slashcommands/genericgame/cards");
 const DeckCatalog = require("../db/deckCatalog.js");
 const { seedDeckCatalog } = require("../db/seedDeckCatalog.js");
+const Formatter = require("../modules/GameFormatter");
 const GameHelper = require("../modules/GlobalGameHelper");
 const {
   collectedReplyText,
@@ -82,6 +84,33 @@ describe("/cards command handlers", () => {
         expect(collectedReplyText(harness).toLowerCase()).toContain("card");
       }
     );
+  });
+
+  test("help documents view, show, and showall instead of reveal", async () => {
+    await withHarness(
+      { options: { subcommand: "help" } },
+      async (harness) => {
+        await runCards(harness);
+        const helpText = collectedReplyText(harness);
+        expect(helpText).toContain("/cards hand view");
+        expect(helpText).toContain("/cards hand show");
+        expect(helpText).toContain("/cards hand showall");
+        expect(helpText).not.toContain("/cards hand reveal");
+      }
+    );
+  });
+
+  test("hand group exposes view, show, and showall instead of reveal", () => {
+    const command = new Cards({});
+    const json = command.data.toJSON();
+    const hand = json.options.find((option) => option.name === "hand");
+    const names = hand.options.map((option) => option.name);
+    expect(names).toEqual(expect.arrayContaining(["view", "show", "showall"]));
+    expect(names).not.toContain("reveal");
+    const show = hand.options.find((option) => option.name === "show");
+    expect(show.options.some((option) => option.name === "card" && option.required)).toBe(true);
+    expect(hand.options.find((option) => option.name === "view").options || []).toHaveLength(0);
+    expect(hand.options.find((option) => option.name === "showall").options || []).toHaveLength(0);
   });
 
   test("deck new creates a custom CSV deck and shuffles it onto draw", async () => {
@@ -536,6 +565,166 @@ describe("/cards command handlers", () => {
           cards: [],
         });
         expect(harness.lastContent()).toContain("created a new pile: **Market**");
+      }
+    );
+  });
+
+  test("hand view privately displays the caller's hand without changing cards", async () => {
+    const ace = createCard({ id: "ace-1", name: "Ace", origin: "Main" });
+    await withHarness(
+      {
+        gameData: gameWithDeck({ draw: [], hand: [ace] }),
+        options: {
+          subcommandGroup: "hand",
+          subcommand: "view",
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.calls.deferReply[0].flags).toBe(MessageFlags.Ephemeral);
+        expect(harness.persistCalls).toHaveLength(0);
+        expect((await harness.getSavedGame()).players[0].hands.main.map((card) => card.id)).toEqual([
+          "ace-1",
+        ]);
+      }
+    );
+  });
+
+  test("hand show publicly reveals one card without removing it from hand", async () => {
+    const ace = createCard({ id: "ace-1", name: "Ace", origin: "Main" });
+    const king = createCard({ id: "king-1", name: "King", origin: "Main" });
+    await withHarness(
+      {
+        gameData: gameWithDeck({ draw: [], hand: [ace, king] }),
+        options: {
+          subcommandGroup: "hand",
+          subcommand: "show",
+          strings: { card: "ace-1" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        expect(saved.players[0].hands.main.map((card) => card.id)).toEqual(["ace-1", "king-1"]);
+        expect(harness.calls.deferReply[0].flags).toBeUndefined();
+        expect(harness.lastContent()).toContain("Showing a card");
+        expect(saved.history.at(-1).action.type).toBe("reveal");
+        expect(saved.history.at(-1).summary).toContain("Ace");
+        expect(harness.calls.followUp[0].flags).toBe(MessageFlags.Ephemeral);
+      }
+    );
+  });
+
+  test("hand show attaches the card image when the card has a url", async () => {
+    const originalFetch = Formatter.fetchCardImageBuffer;
+    Formatter.fetchCardImageBuffer = async (url) => {
+      expect(url).toBe("https://cards.example/ace.jpg");
+      return Buffer.from("fake-jpg");
+    };
+    try {
+      const ace = createCard({
+        id: "ace-1",
+        name: "Ace",
+        origin: "Main",
+        url: "https://cards.example/ace.jpg",
+      });
+      await withHarness(
+        {
+          gameData: gameWithDeck({ draw: [], hand: [ace] }),
+          options: {
+            subcommandGroup: "hand",
+            subcommand: "show",
+            strings: { card: "ace-1" },
+          },
+        },
+        async (harness) => {
+          await runCards(harness);
+          const reply = harness.calls.editReply[0];
+          expect(reply.files).toHaveLength(1);
+          expect(reply.files[0].name).toBe("played-card-ace-1.jpg");
+          expect(reply.embeds[0].data.image.url).toBe("attachment://played-card-ace-1.jpg");
+        }
+      );
+    } finally {
+      Formatter.fetchCardImageBuffer = originalFetch;
+    }
+  });
+
+  test("hand show autocomplete uses getFocused for the card option", async () => {
+    const ace = createCard({ id: "ace-1", name: "Ace", origin: "Main" });
+    const king = createCard({ id: "king-1", name: "King", origin: "Main" });
+    await withHarness(
+      {
+        isAutocomplete: true,
+        gameData: gameWithDeck({ draw: [], hand: [ace, king] }),
+        options: {
+          subcommandGroup: "hand",
+          subcommand: "show",
+          focused: "ace",
+          focusedName: "card",
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.calls.respond[0]).toEqual([{ name: "Ace", value: "ace-1" }]);
+      }
+    );
+  });
+
+  test("hand showall publicly reveals every card without removing them from hand", async () => {
+    const ace = createCard({ id: "ace-1", name: "Ace", origin: "Main" });
+    const king = createCard({ id: "king-1", name: "King", origin: "Main" });
+    await withHarness(
+      {
+        gameData: gameWithDeck({ draw: [], hand: [ace, king] }),
+        options: {
+          subcommandGroup: "hand",
+          subcommand: "showall",
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        expect(saved.players[0].hands.main.map((card) => card.id)).toEqual(["ace-1", "king-1"]);
+        expect(harness.calls.deferReply[0].flags).toBeUndefined();
+        expect(harness.lastContent()).toContain("Showing all cards in hand");
+        expect(harness.calls.editReply[0].embeds[0].title).toContain("hand");
+        expect(saved.history.at(-1).action.type).toBe("reveal");
+        expect(saved.history.at(-1).summary).toContain("all 2 cards");
+        expect(harness.calls.followUp[0].flags).toBe(MessageFlags.Ephemeral);
+      }
+    );
+  });
+
+  test("hand showall reports an empty hand", async () => {
+    await withHarness(
+      {
+        gameData: gameWithDeck({ draw: [], hand: [] }),
+        options: {
+          subcommandGroup: "hand",
+          subcommand: "showall",
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toBe("You have no cards in your hand to show.");
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+  });
+
+  test("hand reveal is no longer a command", async () => {
+    await withHarness(
+      {
+        gameData: gameWithDeck(),
+        options: {
+          subcommandGroup: "hand",
+          subcommand: "reveal",
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toContain("Command not fully written yet");
       }
     );
   });
