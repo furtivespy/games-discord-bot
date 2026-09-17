@@ -24,10 +24,11 @@ const Play = require(`../../subcommands/cards/play`)
 const PlayMulti = require(`../../subcommands/cards/playmulti`)
 const PlaySimultaneous = require(`../../subcommands/cards/playsimultaneous`)
 const Recall = require(`../../subcommands/cards/recall`)
-const Reveal = require(`../../subcommands/cards/reveal`)
 const Review = require(`../../subcommands/cards/review`)
 const Rturn = require(`../../subcommands/cards/return`)
 const Show = require(`../../subcommands/cards/show`)
+const ShowAll = require(`../../subcommands/cards/showall`)
+const View = require(`../../subcommands/cards/view`)
 const Shuffle = require(`../../subcommands/cards/shuffle`)
 const SimultaneousReveal = require(`../../subcommands/cards/simultaneousreveal`)
 const Steal = require('../../subcommands/cards/steal')
@@ -244,8 +245,19 @@ class Cards extends SlashCommand {
                 )
                 .addSubcommand(subcommand =>
                     subcommand
+                        .setName("view")
+                        .setDescription("View your current hand and play area, including card images.")
+                )
+                .addSubcommand(subcommand =>
+                    subcommand
                         .setName("show")
-                        .setDescription("Shows your current hand and play area, including card images.")
+                        .setDescription("Show a card from your hand to other players. The card stays in your hand.")
+                        .addStringOption(option => option.setName('card').setDescription('Card to show').setAutocomplete(true).setRequired(true))
+                )
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName("showall")
+                        .setDescription("Show all cards from your hand to other players. Cards stay in your hand.")
                 )
                 .addSubcommand(subcommand =>
                     subcommand
@@ -269,12 +281,6 @@ class Cards extends SlashCommand {
                         .setName("simultaneousreveal")
                         .setDescription("Reveal all simultaneous cards")
                 )
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName("reveal")
-                        .setDescription("reveal a card from your hand")
-                        .addStringOption(option => option.setName('card').setDescription('Card to Reveal').setAutocomplete(true).setRequired(true))
-                ) 
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName("return")
@@ -662,8 +668,14 @@ class Cards extends SlashCommand {
                         case "discardall":
                             await DiscardAll.execute(interaction, this.client)
                             break
+                        case "view":
+                            await View.execute(interaction, this.client)
+                            break
                         case "show":
                             await Show.execute(interaction, this.client)
+                            break
+                        case "showall":
+                            await ShowAll.execute(interaction, this.client)
                             break
                         case "play":
                             await Play.execute(interaction, this.client)
@@ -676,9 +688,6 @@ class Cards extends SlashCommand {
                             break
                         case "simultaneousreveal":
                             await SimultaneousReveal.execute(interaction, this.client)
-                            break
-                        case "reveal":
-                            await Reveal.execute(interaction, this.client)
                             break
                         case "return":
                             await Rturn.execute(interaction, this.client)
