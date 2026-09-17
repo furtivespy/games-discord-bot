@@ -100,7 +100,9 @@ The bot uses Discord's slash command system. Here are some common commands:
 ### Card Management
 - `/cards deck new` - Create a new deck
 - `/cards deck draw` - Draw cards
-- `/cards hand show` - View your hand
+- `/cards hand view` - View your hand
+- `/cards hand show` - Show a card from your hand
+- `/cards hand showall` - Show all cards from your hand
 - `/cards hand play` - Play a card
 - `/cards draft deal` - Start a card draft
 

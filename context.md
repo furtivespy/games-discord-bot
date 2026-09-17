@@ -20,7 +20,7 @@ The bot utilizes two main command styles:
         *   Example: `slashcommands/genericgame/game.js` likely defines the `/game` command group.
     *   The actual logic for subcommands is implemented in correspondingly named files within the `subcommands/` directory.
         *   Example: Logic for `/cards hand play` would be found in `subcommands/cards/play.js` (or a related file if `play.js` handles multiple "play" actions).
-        *   Example: Logic for `/cards hand show` would be in `subcommands/cards/show.js`.
+        *   Example: Logic for `/cards hand view` would be in `subcommands/cards/view.js`.
         *   Example: Logic for `/game new` would be in `subcommands/genericgame/newgame.js`.
 
 ## Key Files and Directories for Card/Game Features
@@ -29,7 +29,7 @@ The bot utilizes two main command styles:
     *   `/cards` group: `slashcommands/genericgame/cards.js`
     *   `/game` group: `slashcommands/genericgame/game.js`
 *   **Slash Subcommand Logic:**
-    *   For `/cards ...` subcommands: `subcommands/cards/` (e.g., `play.js`, `show.js`, `discard.js`)
+    *   For `/cards ...` subcommands: `subcommands/cards/` (e.g., `play.js`, `view.js`, `show.js`, `discard.js`)
     *   For `/game ...` subcommands: `subcommands/genericgame/` (e.g., `newgame.js`, `status.js`)
 *   **Data Structures & Helpers:**
     *   Default game/player data: `db/anygame.js` (contains `defaultGameData`, `defaultPlayer`, etc.)

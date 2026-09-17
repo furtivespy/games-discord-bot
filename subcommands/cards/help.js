@@ -4,7 +4,7 @@ class Help {
     async execute(interaction, client) {
 
         const introduction_content = `Quick rundown of the /cards comands:
-• Commands are channel specific e.g. "/cards hand show" will show only the cards you have in that channel's game
+• Commands are channel specific e.g. "/cards hand view" will show only the cards you have in that channel's game
 • Commands that start with "/cards deck" act on a central deck of cards 
 • Commands that start "/cards hand" act on the cards current in your hand.`;
 
@@ -34,8 +34,9 @@ class Help {
 • **/cards hand playsimultaneous** - Select card(s) for simultaneous play. Use **/cards hand simultaneousreveal** to play them.
 • **/cards hand simultaneousreveal** - Reveals all cards selected by players for simultaneous play (to discard or play areas).
 • **/cards hand return** - Returns a card to the top of the draw pile. Not shown to others. *Not Avaialbe Yet*
-• **/cards hand reveal** - Reveals a card in your hand to other players, but card stays in your hand. *Not Avaialbe Yet*
-• **/cards hand show** - Shows your current hand and play area, including card images.
+• **/cards hand view** - Shows your current hand and play area, including card images.
+• **/cards hand show** - Shows a card in your hand to other players, but the card stays in your hand.
+• **/cards hand showall** - Shows all cards in your hand to other players, but cards stay in your hand.
 
 • **/game status** - Current game status, including play area details, card counts, and images.
 • **/game pinnedstatus** - off / on / full. **full** keeps a pinned live status without posting the full table in chat after each action; **/game status** still shows the table.

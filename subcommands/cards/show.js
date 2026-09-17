@@ -1,12 +1,30 @@
-const GameHelper = require('../../modules/GlobalGameHelper')
-const { find } = require('lodash')
+const { MessageFlags } = require("discord.js");
+const GameDB = require('../../db/anygame.js')
+const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
-const { MessageFlags } = require('discord.js')
+const GameHelper = require('../../modules/GlobalGameHelper')
 
 class Show {
     async execute(interaction, client) {
+        if (interaction.isAutocomplete()) {
+            const focusedOption = interaction.options.getFocused(true)
+            let gameData = await GameHelper.getGameData(client, interaction)
+            let currentPlayer = find(gameData.players, {userId: interaction.user.id})
+
+            if (focusedOption.name === 'card') {
+                if (gameData.isdeleted || !currentPlayer || !currentPlayer.hands.main){
+                    await interaction.respond([])
+                    return
+                }
+                await interaction.respond(
+                    GameHelper.getCardsAutocomplete(focusedOption.value, currentPlayer.hands.main)
+                )
+            }
+            return
+        }
+
         const [, gameData] = await Promise.all([
-            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            interaction.deferReply(),
             GameHelper.getGameData(client, interaction)
         ]);
 
@@ -15,27 +33,61 @@ class Show {
             return
         }
 
+        const cardid = interaction.options.getString('card')
         let player = find(gameData.players, {userId: interaction.user.id})
-        if (!player){
-            await interaction.editReply({ content: "I don't think you're playing this game..."})
+        if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
+            await interaction.editReply({ content: "Something is broken!?"})
             return
         }
+        
+        let card = find(player.hands.main, {id: cardid})
+        
+        // Record history
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const cardName = Formatter.cardShortName(card)
+            
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.REVEAL,
+                `${actorDisplayName} revealed ${cardName} from hand`,
+                {
+                    cardId: card.id,
+                    cardName: cardName,
+                    source: "hand",
+                    action: "public reveal"
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record card show in history:', error)
+        }
 
-        var handInfo = await Formatter.playerSecretHandAndImages(gameData, player)
-
-        // The block that added Play Area information directly to the hand embed or created a new one
-        // has been removed. playerSecretHandAndImages now handles returning a distinct embed for the play area.
-
+        // Save game data to persist history entry
+        await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+        
+        const [, handInfo] = await Promise.all([
+            interaction.editReply({ content: "Showing a card:",
+            embeds: [
+                Formatter.oneCard(card),
+            ]}),
+            Formatter.playerSecretHandAndImages(gameData, player)
+        ]);
         if (handInfo.attachments.length >0){
-            await interaction.editReply({ 
-                embeds: handInfo.embeds, // Use potentially modified embeds array
-                files: [...handInfo.attachments]})  
+            await interaction.followUp({ 
+                embeds: [...handInfo.embeds],
+                files: [...handInfo.attachments],
+                flags: MessageFlags.Ephemeral
+            })  
         } else {
-            await interaction.editReply({ 
-                embeds: handInfo.embeds, // Use potentially modified embeds array
-})  
+            await interaction.followUp({ 
+                embeds: [...handInfo.embeds],
+                flags: MessageFlags.Ephemeral
+            })  
         }
     }
 }
+
 
 module.exports = new Show()
