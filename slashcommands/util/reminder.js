@@ -1,8 +1,8 @@
 const SlashCommand = require('../../base/SlashCommand.js');
 const {SlashCommandBuilder, MessageFlags} = require('discord.js');
-const chrono = require('chrono-node');
 const { randomUUID } = require('crypto');
 const moment = require('moment-timezone');
+const { parseReminderTime } = require('../../modules/parseReminderTime');
 
 class Reminder extends SlashCommand {
   constructor(client) {
@@ -35,20 +35,12 @@ class Reminder extends SlashCommand {
       // Get user's timezone preference (default to America/New_York)
       const userPrefs = this.client.userPreferences.get(interaction.user.id) || {};
       const userTimezone = userPrefs.timezone || 'America/New_York';
+      const now = new Date();
 
-      // Get current time in user's timezone and calculate the timezone offset in minutes
-      const nowInUserTz = moment.tz(userTimezone);
-      const referenceDate = nowInUserTz.toDate();
-      const timezoneOffsetMinutes = nowInUserTz.utcOffset(); // Positive = ahead of UTC, negative = behind UTC
-
-      // Use chrono to parse the date with timezone-aware parsing
-      // chrono.parseDate returns a Date object or null
-      // We pass a ParsingReference object with both instant and timezone so chrono
-      // interprets times like "noon" or "5pm" in the user's timezone, not the server's
-      const parsedDate = chrono.parseDate(when, {
-        instant: referenceDate,
-        timezone: timezoneOffsetMinutes
-      }, { forwardDate: true });
+      const parsedDate = parseReminderTime(when, {
+        timezone: userTimezone,
+        now,
+      });
 
       if (!parsedDate || isNaN(parsedDate.getTime())) {
         return interaction.reply({
@@ -57,7 +49,6 @@ class Reminder extends SlashCommand {
         });
       }
 
-      const now = new Date();
       const oneYear = 365 * 24 * 60 * 60 * 1000;
       if (parsedDate.getTime() - now.getTime() > oneYear) {
         return interaction.reply({
@@ -65,7 +56,7 @@ class Reminder extends SlashCommand {
             flags: MessageFlags.Ephemeral
         });
       }
-      if (parsedDate <= referenceDate) {
+      if (parsedDate <= now) {
         const parsedInUserTz = moment(parsedDate).tz(userTimezone).format('LLLL z');
         return interaction.reply({
           content: `That time (${parsedInUserTz}) is in the past! Please choose a future time.`,

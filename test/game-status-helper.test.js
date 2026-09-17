@@ -102,6 +102,75 @@ describe("GameStatusHelper pinned live status", () => {
     expect(harness.gameData.pinnedStatusMessageId).toBeNull();
   });
 
+  test("sendPublicStatusUpdate without resolveDeferredReply leaves a deferred interaction unresolved", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusEnabled: false }),
+    });
+    expect(harness.interaction.deferred).toBe(true);
+    expect(harness.interaction.replied).toBe(false);
+
+    await GameStatusHelper.sendPublicStatusUpdate(harness.interaction, harness.client, harness.gameData, {
+      content: "Forest cleared the Game Board (1 cards moved to discard piles)",
+    });
+
+    expect(harness.sendCalls).toHaveLength(1);
+    expect(harness.chatReplyCalls).toHaveLength(0);
+    expect(harness.interaction.deferred).toBe(true);
+    expect(harness.interaction.replied).toBe(false);
+  });
+
+  test("sendPublicStatusUpdate with resolveDeferredReply edits the deferred reply instead of posting a new channel message", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusEnabled: false }),
+    });
+
+    await GameStatusHelper.sendPublicStatusUpdate(harness.interaction, harness.client, harness.gameData, {
+      content: "Forest cleared the Game Board (1 card moved to discard piles)",
+      resolveDeferredReply: true,
+    });
+
+    expect(harness.chatReplyCalls).toHaveLength(1);
+    expect(harness.chatReplyCalls[0].content).toBe(
+      "Forest cleared the Game Board (1 card moved to discard piles)"
+    );
+    const chatSends = harness.sendCalls.filter(
+      (payload) => payload.content === "Forest cleared the Game Board (1 card moved to discard piles)"
+    );
+    expect(chatSends).toHaveLength(0);
+    expect(harness.interaction.replied).toBe(true);
+  });
+
+  test("persist failure after editReply still leaves the deferred interaction resolved", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusEnabled: false }),
+    });
+    const originalError = console.error;
+    console.error = () => {};
+    harness.client.setGameDataV2 = async () => {
+      throw new Error("db locked");
+    };
+
+    try {
+      await GameStatusHelper.sendPublicStatusUpdate(
+        harness.interaction,
+        harness.client,
+        harness.gameData,
+        {
+          content: "Forest cleared the Game Board (1 card moved to discard piles)",
+          resolveDeferredReply: true,
+        }
+      );
+    } finally {
+      console.error = originalError;
+    }
+
+    expect(harness.interaction.replied).toBe(true);
+    expect(harness.chatReplyCalls).toHaveLength(1);
+    expect(harness.chatReplyCalls[0].content).toBe(
+      "Forest cleared the Game Board (1 card moved to discard piles)"
+    );
+  });
+
   test("persistPinFields merges pin ids into the latest saved game state", async () => {
     const harness = createHarness({
       gameData: createGameData({
@@ -139,6 +208,31 @@ describe("GameStatusHelper pinned live status", () => {
     expect(harness.sendCalls).toHaveLength(0);
     expect(harness.pinCalls).toHaveLength(0);
     expect(harness.persistCalls).toHaveLength(1);
+  });
+
+  test("persistStatusUpdate merges chat status ids into the latest saved game state", async () => {
+    const harness = createHarness({
+      gameData: createGameData({
+        players: [{ userId: "p1", score: 0 }],
+        gameBoard: [],
+      }),
+    });
+
+    harness.storedGame.players = [{ userId: "p1", score: 99 }];
+    harness.storedGame.gameBoard = [{ id: "newer-card" }];
+
+    await GameStatusHelper.persistStatusUpdate(harness.client, harness.interaction, harness.gameData, {
+      lastStatusMessageId: "chat-1",
+      lastStatusMessageTimestamp: 123,
+    });
+
+    expect(harness.persistCalls).toHaveLength(1);
+    const saved = harness.persistCalls[0][3];
+    expect(saved.players[0].score).toBe(99);
+    expect(saved.gameBoard).toEqual([{ id: "newer-card" }]);
+    expect(saved.lastStatusMessageId).toBe("chat-1");
+    expect(saved.lastStatusMessageTimestamp).toBe(123);
+    expect(harness.gameData.lastStatusMessageId).toBe("chat-1");
   });
 
   test("first status with pin enabled creates, pins, and persists a separate pin id", async () => {
