@@ -21,8 +21,11 @@ class Shuffle {
             return
         }
 
-        const inputDeck = interaction.options.getString('deck')
-        const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
+        const deckResult = GameHelper.resolveDeckOption(gameData, interaction.options.getString('deck'))
+        if (await GameHelper.replyIfUnspecifiedDeck(interaction, deckResult)) {
+            return
+        }
+        const deck = deckResult.deck
         if (!deck || deck.piles.draw.cards.length + deck.piles.discard.cards.length < 1){
             await interaction.editReply({ content: `No Deck to shuffle.`})
             return
