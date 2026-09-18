@@ -40,6 +40,17 @@ describe("/visual", () => {
       expect(harness.calls.reply[0].flags).toBe(MessageFlags.Ephemeral);
     });
   });
+
+  test("falls back to the App Launcher when launchActivity throws", async () => {
+    await withHarness({}, async (harness) => {
+      harness.interaction.launchActivity = async () => {
+        throw new Error("Activities are not enabled");
+      };
+      await new Visual(harness.client).execute(harness.interaction);
+      expect(harness.lastContent()).toContain("App Launcher");
+      expect(harness.calls.reply[0].flags).toBe(MessageFlags.Ephemeral);
+    });
+  });
 });
 
 describe("application command payload", () => {
@@ -95,5 +106,31 @@ describe("application command payload", () => {
     expect(bodies[1].some((command) => command.type === 4)).toBe(false);
     expect(bodies[1].map((command) => command.name)).toContain("visual");
     expect(logs.join("\n")).toContain("retrying without it");
+  });
+
+  test("does not wipe the Launch entry point on rate limits", async () => {
+    const slashcommands = new Collection();
+    slashcommands.set(
+      "visual",
+      new Visual({ logger: { log: () => {} }, config: {} })
+    );
+    let puts = 0;
+    const rest = {
+      put: async () => {
+        puts += 1;
+        const error = new Error("You are being rate limited.");
+        error.status = 429;
+        throw error;
+      },
+    };
+    await expect(
+      putApplicationCommands({
+        rest,
+        route: "/commands",
+        slashcommands,
+        logger: { log: () => {}, error: () => {} },
+      })
+    ).rejects.toThrow(/rate limited/);
+    expect(puts).toBe(1);
   });
 });

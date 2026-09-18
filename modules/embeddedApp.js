@@ -42,10 +42,36 @@ function resolveEmbeddedAppConfig(env = process.env, botConfig = {}) {
 
 function displayNameFromDiscordUser(user) {
   if (!user || typeof user !== "object") return null;
-  const name = user.global_name || user.username;
-  if (typeof name !== "string") return null;
-  const trimmed = name.trim();
-  return trimmed || null;
+  for (const value of [user.global_name, user.username]) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function isDiscordProxyHost(host) {
+  const hostname = String(host || "")
+    .split(":")[0]
+    .toLowerCase();
+  return hostname === "discordsays.com" || hostname.endsWith(".discordsays.com");
+}
+
+function sanitizeClientId(value) {
+  const s = String(value || "").trim();
+  return /^[A-Za-z0-9_-]{1,32}$/.test(s) ? s : "";
+}
+
+function sanitizeApiHost(value) {
+  const s = String(value || "").trim();
+  if (!s || isDiscordProxyHost(s)) return "";
+  return /^[A-Za-z0-9][A-Za-z0-9.-]*(:\d{1,5})?$/.test(s) ? s : "";
+}
+
+function resolveInjectedApiHost({ apiHost, publicBaseUrl, requestHost } = {}) {
+  return (
+    sanitizeApiHost(apiHost) ||
+    sanitizeApiHost(hostFromPublicBaseUrl(publicBaseUrl)) ||
+    (isDiscordProxyHost(requestHost) ? "" : sanitizeApiHost(requestHost))
+  );
 }
 
 function isNonEmptyString(value) {
@@ -161,8 +187,8 @@ async function handleTokenExchange({
 
 function injectEmbeddedConfig(html, config) {
   const payload = {
-    clientId: config.clientId || "",
-    apiHost: config.apiHost || "",
+    clientId: sanitizeClientId(config.clientId),
+    apiHost: sanitizeApiHost(config.apiHost),
   };
   const snippet = `window.__GAMEBOT_EMBEDDED_CONFIG__=${JSON.stringify(payload)};`;
   if (html.includes(CONFIG_PLACEHOLDER)) {
@@ -184,7 +210,7 @@ function createEmbeddedApp({
   app.disable("x-powered-by");
   app.use(express.json({ limit: "8kb" }));
 
-  app.post("/api/token", async (req, res) => {
+  async function exchangeToken(req, res) {
     const result = await handleTokenExchange({
       code: req.body?.code,
       clientId,
@@ -193,7 +219,9 @@ function createEmbeddedApp({
       logger,
     });
     res.status(result.status).json(result.body);
-  });
+  }
+
+  app.post(["/api/token", "/.proxy/api/token"], exchangeToken);
 
   const resolvedStaticDir = staticDir
     ? path.resolve(staticDir)
@@ -206,11 +234,19 @@ function createEmbeddedApp({
       return;
     }
     const html = fs.readFileSync(indexPath, "utf8");
-    const host =
-      apiHost || hostFromPublicBaseUrl(publicBaseUrl) || req.get("host") || "";
+    const host = resolveInjectedApiHost({
+      apiHost,
+      publicBaseUrl,
+      requestHost: req.get("host"),
+    });
     res
       .type("html")
-      .send(injectEmbeddedConfig(html, { clientId, apiHost: host }));
+      .send(
+        injectEmbeddedConfig(html, {
+          clientId: sanitizeClientId(clientId),
+          apiHost: host,
+        })
+      );
   }
 
   app.get(["/", "/index.html"], sendIndex);
@@ -276,6 +312,10 @@ module.exports = {
   handleTokenExchange,
   hostFromPublicBaseUrl,
   injectEmbeddedConfig,
+  isDiscordProxyHost,
   resolveEmbeddedAppConfig,
+  resolveInjectedApiHost,
+  sanitizeApiHost,
+  sanitizeClientId,
   startEmbeddedAppServer,
 };

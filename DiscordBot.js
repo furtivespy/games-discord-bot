@@ -781,6 +781,17 @@ client.on("interactionCreate", async (interaction) => {
         await interaction.launchActivity();
       } catch (error) {
         console.error(error);
+        if (!interaction.replied && !interaction.deferred) {
+          try {
+            await interaction.reply({
+              content:
+                "Could not open visual mode. Try Discord's App Launcher for Game Bot.",
+              flags: MessageFlags.Ephemeral,
+            });
+          } catch {
+            // Interaction may already be expired; ignore.
+          }
+        }
       }
       return;
     }

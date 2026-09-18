@@ -1,4 +1,9 @@
 import { DiscordSDK, patchUrlMappings } from "@discord/embedded-app-sdk";
+import {
+  firstNonEmptyName,
+  tokenRequestUrl,
+  urlMappingsForApiHost,
+} from "./handshake";
 import "./style.css";
 
 type EmbeddedConfig = {
@@ -10,10 +15,7 @@ function readConfig(): EmbeddedConfig {
   const injected = window.__GAMEBOT_EMBEDDED_CONFIG__;
   return {
     clientId: injected?.clientId || import.meta.env.VITE_CLIENT_ID || "",
-    apiHost:
-      injected?.apiHost ||
-      import.meta.env.VITE_API_HOST ||
-      window.location.host,
+    apiHost: injected?.apiHost || import.meta.env.VITE_API_HOST || "",
   };
 }
 
@@ -24,29 +26,17 @@ function setGreeting(text: string) {
   }
 }
 
-function tokenUrl(apiHost: string): string {
-  const protocol = window.location.protocol === "http:" ? "http:" : "https:";
-  return `${protocol}//${apiHost}/api/token`;
-}
-
 async function bootstrap() {
   const config = readConfig();
   if (!config.clientId) {
     setGreeting("Missing Discord client id.");
     return;
   }
-  if (!config.apiHost) {
-    setGreeting("Missing public API host.");
-    return;
-  }
 
-  // Discord sandboxes iframe fetch. Rewrite our public API host onto the
-  // /.proxy/api prefix configured in the Developer Portal.
-  patchUrlMappings([
-    { prefix: "/.proxy/api", target: `${config.apiHost}/api` },
-  ]);
-
+  // 1. Construct the SDK before any authorize/token work.
   const discordSdk = new DiscordSDK(config.clientId);
+
+  // 2. Wait for READY from the Discord client.
   await Promise.race([
     discordSdk.ready(),
     new Promise<never>((_, reject) => {
@@ -57,6 +47,7 @@ async function bootstrap() {
     }),
   ]);
 
+  // 3. Authorize with identify only.
   const { code } = await discordSdk.commands.authorize({
     client_id: config.clientId,
     response_type: "code",
@@ -65,11 +56,19 @@ async function bootstrap() {
     scope: ["identify"],
   });
 
-  const response = await fetch(tokenUrl(config.apiHost), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code }),
-  });
+  // 4. POST /api/token through patchUrlMappings (not a raw cross-origin fetch).
+  const mappings = urlMappingsForApiHost(config.apiHost);
+  if (mappings.length) {
+    patchUrlMappings(mappings);
+  }
+  const response = await fetch(
+    tokenRequestUrl(config.apiHost, window.location.protocol),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    }
+  );
   if (!response.ok) {
     setGreeting("Could not sign in to Discord.");
     return;
@@ -85,22 +84,31 @@ async function bootstrap() {
     return;
   }
 
+  // 5. Authenticate, then resolve the display name (SDK user, then server @me).
   const auth = await discordSdk.commands.authenticate({
     access_token: accessToken,
   });
 
-  const displayName =
-    payload.display_name ||
-    auth?.user?.global_name ||
-    auth?.user?.username;
+  const displayName = firstNonEmptyName(
+    auth?.user?.global_name,
+    auth?.user?.username,
+    payload.display_name
+  );
   if (!displayName) {
-    setGreeting("Hello");
+    setGreeting("Could not read your Discord name.");
     return;
   }
   setGreeting(`Hello, ${displayName}`);
 }
 
-bootstrap().catch(() => {
+bootstrap().catch((error) => {
+  const insideDiscord =
+    typeof window !== "undefined" &&
+    /\.discordsays\.com$/i.test(window.location.hostname);
+  if (insideDiscord || error?.message === "discord_sdk_ready_timeout") {
+    setGreeting("Could not sign in to Discord.");
+    return;
+  }
   setGreeting(
     "Open visual mode from Discord (App Launcher → Game Bot, or /visual)."
   );

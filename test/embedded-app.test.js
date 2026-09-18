@@ -12,6 +12,9 @@ const {
   hostFromPublicBaseUrl,
   injectEmbeddedConfig,
   resolveEmbeddedAppConfig,
+  resolveInjectedApiHost,
+  sanitizeApiHost,
+  sanitizeClientId,
 } = require("../modules/embeddedApp");
 
 const SECRET_TOKEN = "SUPER_SECRET_ACCESS_TOKEN";
@@ -104,6 +107,12 @@ describe("displayNameFromDiscordUser", () => {
       "willsullivan"
     );
     expect(displayNameFromDiscordUser({})).toBeNull();
+  });
+
+  test("skips blank global_name instead of dropping username", () => {
+    expect(
+      displayNameFromDiscordUser({ global_name: "   ", username: "willsullivan" })
+    ).toBe("willsullivan");
   });
 });
 
@@ -213,6 +222,14 @@ describe("embedded HTTP origin", () => {
         access_token: SECRET_TOKEN,
         display_name: "Will",
       });
+
+      const proxied = await fetch(`${url}/.proxy/api/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: "oauth-code" }),
+      });
+      expect(proxied.status).toBe(200);
+      expect(await proxied.json()).toMatchObject({ access_token: SECRET_TOKEN });
     } finally {
       server.close();
       fs.rmSync(staticDir, { recursive: true, force: true });
@@ -229,5 +246,26 @@ describe("embedded HTTP origin", () => {
       'window.__GAMEBOT_EMBEDDED_CONFIG__={"clientId":"abc","apiHost":"gamebot.example.com"};'
     );
     expect(injected).not.toContain(CONFIG_PLACEHOLDER);
+  });
+
+  test("does not inject Discord proxy hosts or HTML-breaking values", () => {
+    expect(
+      resolveInjectedApiHost({
+        requestHost: "123456.discordsays.com",
+      })
+    ).toBe("");
+    expect(sanitizeApiHost("</script>.example.com")).toBe("");
+    expect(sanitizeClientId("</script><script>alert(1)")).toBe("");
+    const injected = injectEmbeddedConfig(
+      `<head><script>${CONFIG_PLACEHOLDER}</script></head>`,
+      {
+        clientId: "</script><script>alert(1)",
+        apiHost: "123.discordsays.com",
+      }
+    );
+    expect(injected).toContain(
+      'window.__GAMEBOT_EMBEDDED_CONFIG__={"clientId":"","apiHost":""};'
+    );
+    expect(injected).not.toContain("</script><script>");
   });
 });
