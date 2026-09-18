@@ -72,3 +72,8 @@ data/
 
 # local planning docs
 docs/
+
+# Embedded app client
+embedded-client/dist
+embedded-client/node_modules
+embedded-client/.env
