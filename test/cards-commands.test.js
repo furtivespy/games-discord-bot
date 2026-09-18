@@ -48,6 +48,81 @@ function gameWithDeck({
   });
 }
 
+function gameWithTwoDecks({
+  first = { draw: [createCard({ id: "m1", name: "Ace", origin: "Main" })] },
+  second = { draw: [createCard({ id: "r1", name: "King", origin: "Reserve" })] },
+} = {}) {
+  return createActiveGame({
+    players: [
+      createPlayer({
+        userId: "user-1",
+        name: "Alice",
+        order: 0,
+        hands: {
+          main: [],
+          played: [],
+          passed: [],
+          received: [],
+          simultaneous: [],
+        },
+      }),
+      createPlayer({ userId: "user-2", name: "Bob", order: 1 }),
+    ],
+    decks: [
+      createDeck({ name: "Main", ...first }),
+      createDeck({ name: "Reserve", ...second }),
+    ],
+  });
+}
+
+const MULTI_DECK_OMIT_COMMANDS = [
+  { name: "deck draw", options: { subcommandGroup: "deck", subcommand: "draw" } },
+  {
+    name: "deck drawmultiple",
+    options: { subcommandGroup: "deck", subcommand: "drawmultiple", integers: { count: 2 } },
+  },
+  { name: "deck shuffle", options: { subcommandGroup: "deck", subcommand: "shuffle" } },
+  { name: "deck flipcard", options: { subcommandGroup: "deck", subcommand: "flipcard" } },
+  {
+    name: "deck flipmultiple",
+    options: { subcommandGroup: "deck", subcommand: "flipmultiple", integers: { count: 1 } },
+  },
+  { name: "deck peek", options: { subcommandGroup: "deck", subcommand: "peek" } },
+  {
+    name: "deck deal",
+    options: { subcommandGroup: "deck", subcommand: "deal", integers: { count: 1 } },
+  },
+  { name: "deck recall", options: { subcommandGroup: "deck", subcommand: "recall" } },
+  { name: "deck review", options: { subcommandGroup: "deck", subcommand: "review" } },
+  { name: "deck check", options: { subcommandGroup: "deck", subcommand: "check" } },
+  { name: "deck pick", options: { subcommandGroup: "deck", subcommand: "pick" } },
+  {
+    name: "deck burn",
+    options: { subcommandGroup: "deck", subcommand: "burn", integers: { count: 1 } },
+  },
+  { name: "deck prune", options: { subcommandGroup: "deck", subcommand: "prune" } },
+  {
+    name: "deck addcard",
+    options: { subcommandGroup: "deck", subcommand: "addcard", strings: { name: "Promo" } },
+  },
+  {
+    name: "deck addlist",
+    options: { subcommandGroup: "deck", subcommand: "addlist", strings: { customlist: "A, B" } },
+  },
+  {
+    name: "deck configure",
+    options: {
+      subcommandGroup: "deck",
+      subcommand: "configure",
+      strings: { config: "shufflestyle" },
+    },
+  },
+  {
+    name: "draft deal",
+    options: { subcommandGroup: "draft", subcommand: "deal", integers: { count: 1 } },
+  },
+];
+
 describe("cardset autocomplete", () => {
   test("unfiltered list pins empty near the top and keeps the name starting with empty", () => {
     const choices = GameHelper.getCardLists("");
@@ -469,6 +544,219 @@ describe("/cards command handlers", () => {
       }
     );
   });
+
+  test("deck draw with one deck and no deck option uses that deck", async () => {
+    const top = createCard({ id: "top", name: "Queen", origin: "Main" });
+    await withHarness(
+      {
+        gameData: gameWithDeck({ draw: [top] }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "draw",
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        expect(saved.players[0].hands.main.map((card) => card.id)).toEqual(["top"]);
+        expect(harness.lastContent()).toContain("drew a card from Main");
+      }
+    );
+  });
+
+  test("deck draw with several decks and no deck option asks to specify a deck", async () => {
+    await withHarness(
+      {
+        gameData: gameWithTwoDecks(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "draw",
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toBe(GameHelper.SPECIFY_DECK_MESSAGE);
+        expect(harness.lastContent()).not.toBe("No cards in draw pile");
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+  });
+
+  test("deck draw with several decks still reports an empty named deck", async () => {
+    await withHarness(
+      {
+        gameData: gameWithTwoDecks({
+          first: { draw: [] },
+        }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "draw",
+          strings: { deck: "Main" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toBe("No cards in draw pile");
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+  });
+
+  test("deck draw does not silently use a player-owned deck when several decks exist", async () => {
+    const playerDeck = createDeck({
+      name: "Alice",
+      draw: [createCard({ id: "p1", name: "Copper", origin: "Alice" })],
+    });
+    playerDeck.id = "user-1";
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          players: [createPlayer({ userId: "user-1", name: "Alice", order: 0 })],
+          decks: [
+            playerDeck,
+            createDeck({
+              name: "Supply",
+              draw: [createCard({ id: "s1", name: "Gold", origin: "Supply" })],
+            }),
+          ],
+        }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "draw",
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toBe(GameHelper.SPECIFY_DECK_MESSAGE);
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+  });
+
+  test("deck shuffle with one deck and no deck option shuffles that deck", async () => {
+    const discarded = [createCard({ id: "d1", name: "Two", origin: "Main" })];
+    await withHarness(
+      {
+        gameData: gameWithDeck({
+          draw: [createCard({ id: "keep", name: "Ace", origin: "Main" })],
+          discard: discarded,
+        }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "shuffle",
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        expect(saved.decks[0].piles.discard.cards).toHaveLength(0);
+        expect(saved.decks[0].piles.draw.cards).toHaveLength(2);
+        expect(harness.lastContent()).toContain("Shuffled Main");
+      }
+    );
+  });
+
+  test("deck shuffle with an empty named deck still says there is no deck to shuffle", async () => {
+    await withHarness(
+      {
+        gameData: gameWithTwoDecks({
+          first: { draw: [], discard: [] },
+        }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "shuffle",
+          strings: { deck: "Main" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toBe("No Deck to shuffle.");
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+  });
+
+  test("deck deal with an empty named deck still says there are no cards to deal", async () => {
+    await withHarness(
+      {
+        gameData: gameWithTwoDecks({
+          first: { draw: [], discard: [] },
+        }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "deal",
+          integers: { count: 1 },
+          strings: { deck: "Main" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toBe("No cards to deal.");
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+  });
+
+  test("deck prune with an empty named deck still says there are no cards to prune", async () => {
+    await withHarness(
+      {
+        gameData: gameWithTwoDecks({
+          first: { draw: [] },
+        }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "prune",
+          strings: { deck: "Main" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toBe("This deck has no cards to prune.");
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+  });
+
+  test("deck addcard with one deck and no deck option adds to that deck", async () => {
+    await withHarness(
+      {
+        gameData: gameWithDeck({ draw: [createCard({ id: "ace", name: "Ace", origin: "Main" })] }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "addcard",
+          strings: { name: "Promo" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        expect(saved.decks[0].allCards.map((card) => card.name)).toContain("Promo");
+        expect(harness.lastContent()).toContain("added");
+        expect(harness.lastContent()).toContain("Main");
+      }
+    );
+  });
+
+  for (const command of MULTI_DECK_OMIT_COMMANDS) {
+    test(`${command.name} with several decks and no deck option asks to specify a deck`, async () => {
+      await withHarness(
+        {
+          gameData: gameWithTwoDecks(),
+          options: command.options,
+        },
+        async (harness) => {
+          await runCards(harness);
+          expect(harness.lastContent()).toBe(GameHelper.SPECIFY_DECK_MESSAGE);
+          expect(harness.lastContent()).not.toBe("No cards in draw pile");
+          expect(harness.lastContent()).not.toBe("No cards to deal.");
+          expect(harness.lastContent()).not.toBe("No Deck to shuffle.");
+          expect(harness.lastContent()).not.toBe("This deck has no cards to prune.");
+          expect(harness.lastContent()).not.toBe("No cards to pick up");
+          expect(harness.persistCalls).toHaveLength(0);
+        }
+      );
+    });
+  }
 
   test("deck shuffle moves discard cards back to the draw pile", async () => {
     const discarded = [

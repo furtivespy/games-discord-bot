@@ -16,8 +16,11 @@ module.exports = {
                 ]);
                 const deckName = interaction.options.getString('deck');
                 let depth = interaction.options.getInteger('depth') ?? 1;
-                // Fetch the deck from the DB
-                const deckData = GameHelper.getSpecificDeck(gameData, deckName, interaction.user.id);
+                const deckResult = GameHelper.resolveDeckOption(gameData, deckName);
+                if (await GameHelper.replyIfUnspecifiedDeck(interaction, deckResult)) {
+                    return;
+                }
+                const deckData = deckResult.deck;
                 if (!deckData) {
                     await interaction.editReply({ content: `Deck "${deckName}" is empty or not set up correctly.`});
                     return;

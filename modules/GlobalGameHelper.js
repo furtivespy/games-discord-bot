@@ -95,6 +95,32 @@ class GameHelper {
     }
   }
 
+  // Optional slash-command `deck` option: one deck is a shortcut; several require a name.
+  static SPECIFY_DECK_MESSAGE = "Specify a deck — this game has more than one."
+
+  static resolveDeckOption(gameData, deckName) {
+    const decks = gameData?.decks || []
+    if (decks.length === 1) {
+      return { deck: decks[0], unspecified: false }
+    }
+    const named = deckName != null && String(deckName).length > 0
+    if (decks.length > 1 && !named) {
+      return { deck: null, unspecified: true }
+    }
+    if (!named) {
+      return { deck: null, unspecified: false }
+    }
+    return { deck: find(decks, { name: deckName }) || null, unspecified: false }
+  }
+
+  static async replyIfUnspecifiedDeck(interaction, result, extra = {}) {
+    if (!result?.unspecified) {
+      return false
+    }
+    await interaction.editReply({ ...extra, content: GameHelper.SPECIFY_DECK_MESSAGE })
+    return true
+  }
+
   /**
    * Get global pile by ID or name
    * @param {Object} gameData - The game data object
