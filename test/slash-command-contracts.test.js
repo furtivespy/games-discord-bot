@@ -239,6 +239,15 @@ describe("slash command definition contracts", () => {
     ]);
   });
 
+  test("/visual is a guild-only launch command with no options", () => {
+    const Visual = require("../slashcommands/genericgame/visual");
+    const command = new Visual(stubClient);
+    const json = command.data.toJSON();
+    expect(json.name).toBe("visual");
+    expect(json.dm_permission).toBe(false);
+    expect(json.options || []).toEqual([]);
+  });
+
   test("/lfg keeps BGG autocomplete and adds optional customname", () => {
     const Lfg = require("../slashcommands/info/lfg");
     const json = new Lfg(stubClient).data.toJSON();

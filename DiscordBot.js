@@ -19,6 +19,8 @@ const modalSubmission = require('./events/modalSubmission.js');
 const GatherInterest = require("./modules/GatherInterest.js");
 const ReminderSystem = require("./modules/ReminderSystem.js");
 const GameStatusHelper = require("./modules/GameStatusHelper");
+const { startEmbeddedAppServer } = require("./modules/embeddedApp");
+const { putApplicationCommands } = require("./modules/applicationCommands");
 
 class DiscordBot extends Client {
   constructor(options) {
@@ -505,6 +507,11 @@ const client = new DiscordBot({
   ],
 });
 const init = async () => {
+  client.embeddedApp = startEmbeddedAppServer({
+    config: client.config,
+    logger: client.logger,
+  });
+
   klaw("./commands").on("data", (item) => {
     const cmdFile = path.parse(item.path);
     if (!cmdFile.ext || cmdFile.ext !== ".js") return;
@@ -586,33 +593,25 @@ const init = async () => {
     });
     client.logger.log(`guild members cached`);
 
-    //Register Slash Commands
-    const cmds = client.slashcommands.map((sc) => sc.data.toJSON());
+    // Register slash commands. Include the Activity Launch entry point so the
+    // PUT does not wipe Discord's App Launcher command. If Activities are not
+    // enabled yet, retry without the entry point so existing slash commands
+    // still register.
     const rest = new REST({ version: "10" }).setToken(client.config.token);
-
-    if (client.config.clientId == "548570412959662080") {
-      //Test Server
-      rest
-        .put(
-          Routes.applicationGuildCommands(
+    const route =
+      client.config.clientId == "548570412959662080"
+        ? Routes.applicationGuildCommands(
             client.config.clientId,
             "545109131330191371"
-          ),
-          { body: cmds }
-        )
-        .then(() =>
-          client.logger.log("Successfully registered application commands.")
-        )
-        .catch((error) => client.logger.error(error));
-    } else {
-      //Prod Server
-      rest
-        .put(Routes.applicationCommands(client.config.clientId), { body: cmds })
-        .then(() =>
-          client.logger.log("Successfully registered application commands.")
-        )
-        .catch((error) => client.logger.error(error));
-    }
+          )
+        : Routes.applicationCommands(client.config.clientId);
+
+    putApplicationCommands({
+      rest,
+      route,
+      slashcommands: client.slashcommands,
+      logger: client.logger,
+    }).catch((error) => client.logger.error(error));
   });
 
   client.on("messageCreate", async (message) => {
@@ -774,6 +773,18 @@ client.on("messageReactionRemove", async (reaction, user) => {
 
 client.on("interactionCreate", async (interaction) => {
   if (interaction.isCommand() || interaction.isAutocomplete()) {
+    if (
+      typeof interaction.isPrimaryEntryPointCommand === "function" &&
+      interaction.isPrimaryEntryPointCommand()
+    ) {
+      try {
+        await interaction.launchActivity();
+      } catch (error) {
+        console.error(error);
+      }
+      return;
+    }
+
     const command = client.slashcommands.get(interaction.commandName);
 
     if (!command) return;
@@ -860,6 +871,7 @@ client
 function gracefulShutdown(signal) {
   client.logger.log(`Received ${signal}, shutting down…`, "warn");
   try {
+    client.embeddedApp?.server?.close();
     // Checkpoint WAL and close all SQLite connections so data is fully flushed.
     client.db?.db?.close();
     client.gamedata?.db?.close();
