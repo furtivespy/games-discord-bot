@@ -45,6 +45,7 @@ const DeckRemove = require('../../subcommands/cards/deckremove')
 const DeckPrune = require('../../subcommands/cards/deckprune')
 const DeckAddCard = require('../../subcommands/cards/deckaddcard')
 const DeckAddList = require('../../subcommands/cards/deckaddlist')
+const DeckEditCard = require('../../subcommands/cards/deckeditcard')
 // Global Piles
 const PileCreate = require('../../subcommands/cards/pilecreate')
 const PileDelete = require('../../subcommands/cards/piledelete')
@@ -227,6 +228,22 @@ class Cards extends SlashCommand {
                     .setDescription("Bulk-add name-only cards to an in-game deck recipe (goes to discard, not draw)")
                     .addStringOption(option => option.setName('customlist').setDescription('Comma-separated card names').setRequired(true))
                     .addStringOption(option => option.setName('deck').setDescription('Deck to add to').setAutocomplete(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("editcard")
+                    .setDescription("Edit a card in an in-game deck by id (recipe + same-id copies; no shuffle)")
+                    .addStringOption(option => option.setName('card').setDescription('Card to edit (name · short id)').setRequired(true).setAutocomplete(true))
+                    .addStringOption(option => option.setName('deck').setDescription('Deck to edit').setAutocomplete(true))
+                    .addStringOption(option => option.setName('name').setDescription('New card name'))
+                    .addStringOption(option => option.setName('url').setDescription('Image URL for the card'))
+                    .addStringOption(option => option.setName('type').setDescription('Card type (shown in formats A and B)'))
+                    .addStringOption(option => option.setName('suit').setDescription('Suit — used to sort hands; not shown on the card'))
+                    .addStringOption(option => option.setName('value').setDescription('Value — used to sort hands; shown only with format C'))
+                    .addStringOption(option => option.setName('description').setDescription('Card description'))
+                    .addStringOption(option => option.setName('format').setDescription(GameFormatter.CARD_FORMAT_OPTION_DESCRIPTION).addChoices(
+                        ...GameFormatter.CARD_FORMAT_CHOICES
+                    ))
             );
         });
         this.data.addSubcommandGroup(group =>
@@ -588,6 +605,9 @@ class Cards extends SlashCommand {
                             break
                         case "addlist":
                             await DeckAddList.execute(interaction, this.client)
+                            break
+                        case "editcard":
+                            await DeckEditCard.execute(interaction, this.client)
                             break
                         default:
                             await interaction.reply({ content: "Command not fully written yet :(", flags: MessageFlags.Ephemeral })

@@ -158,10 +158,12 @@ const HOWTO_DECKS = [
   "   • `cardset` — **empty (start from scratch)** for a blank recipe, a catalog set, or **custom-csv** plus `customlist` (comma-separated names)",
   "3. `/cards deck addcard` — required `name`. Optional: image `url`, `type`, `suit`, `value`, `description`, `copies`, `format`.",
   "   • New cards go to **discard**, not draw, and are added to the deck recipe.",
-  "4. `/cards deck shuffle` — mix discard into draw.",
-  "5. `/cards deck draw` — top card into your hand. `/cards hand view` to see it (only you). `/cards hand show` and `/cards hand showall` show card(s) to the table without leaving your hand.",
+  "4. `/cards deck editcard` — required `card` (autocomplete `name · shortId`). Optional: `name`, `url`, `type`, `suit`, `value`, `description`, `format`.",
+  "   • Updates that recipe card and any copies with the **same id**. Same-name cards with other ids are unchanged. Does not shuffle or change pile counts. `copies` stay add-only.",
+  "5. `/cards deck shuffle` — mix discard into draw.",
+  "6. `/cards deck draw` — top card into your hand. `/cards hand view` to see it (only you). `/cards hand show` and `/cards hand showall` show card(s) to the table without leaving your hand.",
   "",
-  "In-game card edit (`/cards deck editcard`) is coming soon. Many names at once: `/help topic:addlist`.",
+  "Many names at once: `/help topic:addlist`.",
 ].join("\n");
 
 const HOWTO_ADDLIST = [
@@ -221,7 +223,7 @@ const TOPICS = {
     label: "How-to: Create a deck",
     emoji: "🃏",
     description: "New deck, then add a card",
-    aliases: ["deck", "addcard"],
+    aliases: ["deck", "addcard", "editcard"],
     kind: "howto",
     howto: HOWTO_DECKS,
     commandNames: ["cards"],

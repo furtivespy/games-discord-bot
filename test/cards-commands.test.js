@@ -794,4 +794,143 @@ describe("/cards command handlers", () => {
       }
     );
   });
+
+  test("deck editcard updates recipe and same-id discard clone without touching other ids or draw length", async () => {
+    const recipeX = createCard({
+      id: "id-x",
+      name: "Promo",
+      url: "https://old.example/x.png",
+    });
+    const recipeY = createCard({
+      id: "id-y",
+      name: "Promo",
+      url: "https://old.example/y.png",
+    });
+    const discardX = createCard({
+      id: "id-x",
+      name: "Promo",
+      url: "https://old.example/x.png",
+    });
+    const drawY = createCard({
+      id: "id-y",
+      name: "Promo",
+      url: "https://old.example/y.png",
+    });
+    const drawKeep = createCard({ id: "draw-keep", name: "Keep" });
+    const deck = createDeck({
+      name: "Main",
+      draw: [drawY, drawKeep],
+      discard: [discardX],
+    });
+    deck.allCards = [recipeX, recipeY];
+
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          players: [
+            createPlayer({ userId: "user-1", name: "Alice", order: 0 }),
+            createPlayer({ userId: "user-2", name: "Bob", order: 1 }),
+          ],
+          decks: [deck],
+        }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "editcard",
+          strings: {
+            card: "id-x",
+            deck: "Main",
+            url: "https://new.example/x.png",
+          },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        const savedDeck = saved.decks[0];
+        expect(savedDeck.allCards.find((card) => card.id === "id-x").url).toBe(
+          "https://new.example/x.png"
+        );
+        expect(savedDeck.piles.discard.cards.find((card) => card.id === "id-x").url).toBe(
+          "https://new.example/x.png"
+        );
+        expect(savedDeck.allCards.find((card) => card.id === "id-y").url).toBe(
+          "https://old.example/y.png"
+        );
+        expect(savedDeck.piles.draw.cards.find((card) => card.id === "id-y").url).toBe(
+          "https://old.example/y.png"
+        );
+        expect(savedDeck.piles.draw.cards).toHaveLength(2);
+        expect(savedDeck.piles.discard.cards).toHaveLength(1);
+        expect(harness.lastContent()).toContain("edited");
+        expect(harness.lastContent()).toContain("Promo");
+        expect(saved.history.at(-1).action.type).toBe("modify");
+      }
+    );
+  });
+
+  test("deck editcard missing card id is a clear error and does not write", async () => {
+    await withHarness(
+      {
+        gameData: gameWithDeck(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "editcard",
+          strings: {
+            card: "missing-id",
+            url: "https://new.example/x.png",
+          },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toBe("No card found with that id in this deck.");
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+  });
+
+  test("deck editcard with no editable fields is a clear error and does not write", async () => {
+    await withHarness(
+      {
+        gameData: gameWithDeck(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "editcard",
+          strings: { card: "ace" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toContain("at least one field to edit");
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+  });
+
+  test("deck editcard autocomplete shows name · shortId for duplicate names", async () => {
+    const promoX = createCard({ id: "id-x", name: "Promo" });
+    const promoY = createCard({ id: "id-y", name: "Promo" });
+    const deck = createDeck({ name: "Main", draw: [], discard: [] });
+    deck.allCards = [promoX, promoY];
+
+    await withHarness(
+      {
+        isAutocomplete: true,
+        gameData: createActiveGame({ decks: [deck] }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "editcard",
+          focused: "Promo",
+          focusedName: "card",
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.calls.respond[0]).toEqual([
+          { name: "Promo · id-x", value: "id-x" },
+          { name: "Promo · id-y", value: "id-y" },
+        ]);
+      }
+    );
+  });
 });
