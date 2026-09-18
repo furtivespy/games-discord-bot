@@ -33,7 +33,7 @@ class Game extends SlashCommand {
             .addSubcommand(subcommand =>
                 subcommand
                     .setName("help")
-                    .setDescription("Show help for the /game commands 🎲")
+                    .setDescription("How to start a table (same as /help topic:table)")
             )
             /*
             .addSubcommand(subcommand =>

@@ -25,7 +25,7 @@ A versatile Discord bot designed to enhance tabletop and card game experiences i
 - Card drafting system with pass directions
 - Deck building functionality
 - Simultaneous card play and reveal
-- Hand management (play, show, reveal, return cards)
+- Hand management (play, view, show, showall, return cards)
 - Card stealing mechanics
 
 ### Board Game Geek Integration
@@ -89,9 +89,10 @@ To add this bot to your Discord server, you'll need to:
 
 ## Usage
 
-The bot uses Discord's slash command system. Here are some common commands:
+The bot uses Discord's slash command system. **Start with `/help`** — it groups commands by area and includes how-tos (create a table, create a deck and add a card, addlist, draw/shuffle, Gather Interest). Deep-link a confused user with `/help topic:decks`.
 
 ### Basic Commands
+- `/help` - Discover commands and how-tos
 - `/game newgame` - Start a new game session
 - `/game next` - Notify the next player
 - `/game status` - Check current game status
@@ -99,6 +100,8 @@ The bot uses Discord's slash command system. Here are some common commands:
 
 ### Card Management
 - `/cards deck new` - Create a new deck
+- `/cards deck addcard` - Add a card to the in-game recipe (goes to discard)
+- `/cards deck addlist` - Bulk-add comma-separated card names
 - `/cards deck draw` - Draw cards
 - `/cards hand view` - View your hand
 - `/cards hand show` - Show a card from your hand
@@ -109,7 +112,7 @@ The bot uses Discord's slash command system. Here are some common commands:
 ### Information
 - `/bgg` - Look up games on Board Game Geek
 - `/lfg` - Gather Interest: look up a game on BGG and post a persistent “Who’s interested?” panel (very / somewhat / flexibly interested). Hosts can **Start game**, pick seated players from the interest list and/or anyone on the server, and open a play thread in the configured games channel.
-- `/config games-channel` - Administrators set the parent channel where `/lfg` Start game creates those threads
+- `/config games-channel` - Administrators set the parent channel where `/lfg` Start game creates those threads. Owner-only: `/catalog`.
 
 ## Contributing
 

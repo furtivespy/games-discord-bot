@@ -155,6 +155,7 @@ function createMessage({
   content = "",
   componentInteraction = null,
 } = {}) {
+  const collectorHandlers = {};
   return {
     id,
     content,
@@ -170,6 +171,18 @@ function createMessage({
       }
       return componentInteraction;
     },
+    createMessageComponentCollector: () => ({
+      on(event, fn) {
+        collectorHandlers[event] = fn;
+        return this;
+      },
+      emit(event, ...args) {
+        return collectorHandlers[event]?.(...args);
+      },
+      stop() {
+        collectorHandlers.end?.();
+      },
+    }),
   };
 }
 
@@ -545,6 +558,14 @@ function createHarness({
     deferReply: async (payload) => {
       calls.deferReply.push(payload ?? {});
       interaction.deferred = true;
+    },
+    fetchReply: async () => {
+      const payload = calls.editReply.at(-1) ?? calls.reply.at(-1) ?? {};
+      return createMessage({
+        id: "reply-1",
+        content: replyContent(payload) || "",
+        componentInteraction: queuedComponent,
+      });
     },
     reply: async (payload) => {
       calls.reply.push(payload);

@@ -961,7 +961,7 @@ class GatherStartGame {
       `Seated: ${seatedLine}`,
       `Host: <@${gather.hostUserId}>`,
       `Interest panel: ${lfgLink}`,
-      "Play in this thread — try `/game help` and `/cards help`.",
+      "Play in this thread — try `/help` or `/help topic:decks`.",
       warnLine,
     ]
       .filter(Boolean)

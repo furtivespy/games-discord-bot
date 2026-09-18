@@ -203,6 +203,16 @@ describe("slash command definition contracts", () => {
     });
   });
 
+  test("/help is a top-level command with an optional autocomplete topic", () => {
+    const Help = require("../slashcommands/info/help");
+    const json = new Help(stubClient).data.toJSON();
+    expect(json.name).toBe("help");
+    expect(json.description.toLowerCase()).toContain("how-to");
+    const topic = json.options.find((option) => option.name === "topic");
+    expect(topic).toMatchObject({ autocomplete: true });
+    expect(topic.required).toBeFalsy();
+  });
+
   test("/config is an admin guild command that sets the LFG games parent channel", () => {
     const { ChannelType } = require("discord.js");
     const Config = require("../slashcommands/util/config");

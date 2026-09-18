@@ -6,7 +6,8 @@ class Settings extends SlashCommand {
     constructor(client){
         super(client, {
             name: "settings",
-            description: "Adjust bot settings",
+            description: "Adjust bot settings (Bot Owner)",
+            permLevel: "Bot Owner",
           })
 		  this.data = new SlashCommandBuilder()
         .setName(this.help.name)
