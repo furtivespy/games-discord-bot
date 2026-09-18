@@ -143,6 +143,27 @@ describe("GatherInterest levels and roster", () => {
     expect(description).toContain(GatherInterest.FLEXIBLE_MEANING);
     expect(description).not.toContain("Give my spot away");
   });
+
+  test("custom gather panel uses the playtest name without BGG art, weight, or link", () => {
+    const gather = sampleGather({
+      game: GatherInterest.snapshotFromCustom("My Prototype v3"),
+    });
+    const description = GatherInterest.buildPanelDescription(gather);
+    expect(description).toContain("My Prototype v3");
+    expect(description).toContain(GatherInterest.CUSTOM_PLAYTEST_LABEL);
+    expect(description).not.toContain("boardgamegeek.com");
+    expect(description).not.toContain("players");
+    expect(description).not.toContain("weight");
+    const embed = GatherInterest.buildPanelEmbed(gather).toJSON();
+    expect(embed.thumbnail).toBeUndefined();
+    expect(embed.url).toBeUndefined();
+    const gameEmbed = GatherInterest.buildCustomGameEmbed("My Prototype v3").toJSON();
+    expect(gameEmbed.title).toBe("My Prototype v3");
+    expect(gameEmbed.description).toBe("Custom / playtest");
+    expect(gameEmbed.url).toBeUndefined();
+    expect(gameEmbed.thumbnail).toBeUndefined();
+    expect(gameEmbed.image).toBeUndefined();
+  });
 });
 
 describe("GatherInterest panel components", () => {
@@ -359,6 +380,25 @@ describe("GatherInterest BGG snapshot", () => {
     });
     expect(snapshot).toEqual(sampleGame());
   });
+
+  test("custom snapshot stores name without BGG scrape fields", () => {
+    const snapshot = GatherInterest.snapshotFromCustom("My Prototype v3");
+    expect(snapshot).toEqual({
+      bggId: null,
+      customName: "My Prototype v3",
+      isCustom: true,
+      name: "My Prototype v3",
+      image: null,
+      minPlayers: null,
+      maxPlayers: null,
+      minPlaytime: null,
+      maxPlaytime: null,
+      weight: null,
+      yearPublished: null,
+      url: null,
+    });
+    expect(GatherInterest.gameSummaryLine(snapshot)).toBe("");
+  });
 });
 
 describe("GatherInterest persistence shape", () => {
@@ -411,6 +451,41 @@ describe("GatherInterest persistence shape", () => {
       expect(loaded.hostUserId).toBe("host-1");
       expect(loaded.interests.a.level).toBe("very");
       expect(loaded.game.bggId).toBe("266192");
+    } finally {
+      try { store2?.db.close(); } catch {}
+      if (previous === undefined) delete process.env.GAMEBOT_DATA_DIR;
+      else process.env.GAMEBOT_DATA_DIR = previous;
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("custom gather identity survives a new GameStore connection", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gather-custom-"));
+    const previous = process.env.GAMEBOT_DATA_DIR;
+    process.env.GAMEBOT_DATA_DIR = tmp;
+    let store1;
+    let store2;
+    try {
+      store1 = new GameStore();
+      const gather = sampleGather({
+        game: GatherInterest.snapshotFromCustom("My Prototype v3"),
+      });
+      GatherInterest.upsertInterest(gather, "a", "very", "Ann");
+      store1.upsertGameData(gather.guildId, GatherInterest.COLLECTION, gather.id, gather);
+      store1.db.close();
+
+      store2 = new GameStore();
+      const loaded = store2.getSpecificGameData(
+        gather.guildId,
+        GatherInterest.COLLECTION,
+        gather.id
+      );
+      expect(loaded.kind).toBe("gather");
+      expect(loaded.game.isCustom).toBe(true);
+      expect(loaded.game.customName).toBe("My Prototype v3");
+      expect(loaded.game.name).toBe("My Prototype v3");
+      expect(loaded.game.bggId).toBeNull();
+      expect(loaded.interests.a.level).toBe("very");
     } finally {
       try { store2?.db.close(); } catch {}
       if (previous === undefined) delete process.env.GAMEBOT_DATA_DIR;
@@ -716,9 +791,18 @@ describe("/lfg command", () => {
     const command = new Lfg({ config: {}, logger: { log: () => {} } });
     const json = command.data.toJSON();
     expect(json.name).toBe("lfg");
-    expect(json.description).toBe("Look up a game on BGG and open a Who's interested? panel.");
+    expect(json.description).toBe(
+      "Open a Who's interested? panel for a BGG title or custom playtest."
+    );
     expect(json.description.length).toBeLessThanOrEqual(100);
+    expect(json.options.find((option) => option.name === "game").required).toBe(false);
+    expect(json.options.find((option) => option.name === "customname")).toMatchObject({
+      required: false,
+      min_length: 1,
+      max_length: 100,
+    });
     expect(json.options[0].description.length).toBeLessThanOrEqual(100);
+    expect(json.options[1].description.length).toBeLessThanOrEqual(100);
   });
 
   test("rejects a raw name that is not a BGG id, matching /bgg", async () => {
@@ -727,10 +811,12 @@ describe("/lfg command", () => {
     await command.execute({
       guildId: "guild-1",
       isAutocomplete: () => false,
-      options: { getString: () => "Wingspan" },
+      options: {
+        getString: (name) => (name === "game" ? "Wingspan" : null),
+      },
       reply: async (payload) => replies.push(payload),
     });
-    expect(replies[0].content).toContain("Please choose from the available options");
+    expect(replies[0].content).toContain("available options");
     expect(replies[0].flags).toBe(MessageFlags.Ephemeral);
   });
 
@@ -747,13 +833,183 @@ describe("/lfg command", () => {
       const responded = [];
       await command.execute({
         isAutocomplete: () => true,
-        options: { getString: () => "wing" },
+        options: {
+          getString: (name) => (name === "game" ? "wing" : null),
+        },
         respond: async (choices) => responded.push(choices),
       });
       expect(calls).toEqual([["wing", "bgg-token"]]);
       expect(responded[0]).toEqual([{ name: "Wingspan (2019)", value: "266192" }]);
     } finally {
       BoardGameGeek.Search = original;
+    }
+  });
+
+  test("customname posts an interest panel without hitting BGG", async () => {
+    const BoardGameGeek = require("../modules/BoardGameGeek");
+    const originalCreate = BoardGameGeek.CreateAndLoad;
+    const originalSearch = BoardGameGeek.Search;
+    BoardGameGeek.CreateAndLoad = async () => {
+      throw new Error("BGG should not be called for custom LFG");
+    };
+    BoardGameGeek.Search = async () => {
+      throw new Error("BGG search should not run on custom LFG");
+    };
+    try {
+      const client = memoryClient();
+      client.config = { BGGToken: "token" };
+      client.logger = { log: () => {} };
+      const command = new Lfg(client);
+      const edits = [];
+      const followUps = [];
+      await command.execute({
+        guildId: "guild-1",
+        channelId: "channel-1",
+        user: { id: "host-1", username: "Hosty" },
+        member: { displayName: "Hosty" },
+        isAutocomplete: () => false,
+        deferred: false,
+        replied: false,
+        options: {
+          getString: (name) => (name === "customname" ? "My Prototype v3" : null),
+        },
+        deferReply: async () => {},
+        reply: async () => {
+          throw new Error("custom LFG should not ephemeral-reply on success");
+        },
+        editReply: async (payload) => {
+          edits.push(payload);
+          return { id: "game-msg" };
+        },
+        followUp: async (payload) => {
+          followUps.push(payload);
+          return { id: "panel-msg" };
+        },
+      });
+
+      const stored = Object.values(client.store).find((row) => row.kind === "gather");
+      expect(stored).toBeTruthy();
+      expect(stored.game.isCustom).toBe(true);
+      expect(stored.game.customName).toBe("My Prototype v3");
+      expect(stored.game.bggId).toBeNull();
+      expect(stored.gameMessageId).toBe("game-msg");
+      expect(stored.interestMessageId).toBe("panel-msg");
+      const embed = edits[0].embeds[0].toJSON();
+      expect(embed.title).toBe("My Prototype v3");
+      expect(embed.description).toBe("Custom / playtest");
+      expect(embed.url).toBeUndefined();
+      expect(followUps[0].embeds[0].data.description).toContain("My Prototype v3");
+      expect(followUps[0].embeds[0].data.description).toContain("Custom / playtest");
+      expect(followUps[0].components[0].components).toHaveLength(3);
+    } finally {
+      BoardGameGeek.CreateAndLoad = originalCreate;
+      BoardGameGeek.Search = originalSearch;
+    }
+  });
+
+  test("BGG + custom together fails clearly without hitting BGG", async () => {
+    const BoardGameGeek = require("../modules/BoardGameGeek");
+    const originalCreate = BoardGameGeek.CreateAndLoad;
+    BoardGameGeek.CreateAndLoad = async () => {
+      throw new Error("BGG should not be called when both options are set");
+    };
+    try {
+      const replies = [];
+      const command = new Lfg({ config: { BGGToken: "token" }, logger: { log: () => {} } });
+      await command.execute({
+        guildId: "guild-1",
+        isAutocomplete: () => false,
+        options: {
+          getString: (name) => {
+            if (name === "game") return "266192";
+            if (name === "customname") return "My Prototype v3";
+            return null;
+          },
+        },
+        reply: async (payload) => replies.push(payload),
+      });
+      expect(replies[0].content).toBe("Pick BGG or custom name, not both");
+      expect(replies[0].flags).toBe(MessageFlags.Ephemeral);
+    } finally {
+      BoardGameGeek.CreateAndLoad = originalCreate;
+    }
+  });
+
+  test("neither BGG game nor custom name fails clearly", async () => {
+    const replies = [];
+    const command = new Lfg({ config: { BGGToken: "token" }, logger: { log: () => {} } });
+    await command.execute({
+      guildId: "guild-1",
+      isAutocomplete: () => false,
+      options: { getString: () => null },
+      reply: async (payload) => replies.push(payload),
+    });
+    expect(replies[0].content).toBe("Provide a BGG game or a custom name.");
+    expect(replies[0].flags).toBe(MessageFlags.Ephemeral);
+  });
+
+  test("existing BGG path still loads BoardGameGeek details", async () => {
+    const BoardGameGeek = require("../modules/BoardGameGeek");
+    const originalCreate = BoardGameGeek.CreateAndLoad;
+    const calls = [];
+    BoardGameGeek.CreateAndLoad = async (id) => {
+      calls.push(id);
+      return {
+        gameId: id,
+        gameName: "Wingspan",
+        gameInfo: {
+          image: "https://example.com/wingspan.png",
+          minplayers: 1,
+          maxplayers: 5,
+          minplaytime: 40,
+          maxplaytime: 70,
+          yearpublished: 2019,
+          statistics: { ratings: { averageweight: "2.45" } },
+        },
+        embeds: [{ title: "Wingspan" }],
+        attachments: [],
+        otherAttachments: [],
+        LoadEmbeds: async () => {},
+      };
+    };
+    try {
+      const client = memoryClient();
+      client.config = { BGGToken: "token" };
+      client.logger = { log: () => {} };
+      const command = new Lfg(client);
+      const edits = [];
+      const followUps = [];
+      await command.execute({
+        guildId: "guild-1",
+        channelId: "channel-1",
+        user: { id: "host-1", username: "Hosty" },
+        member: { displayName: "Hosty" },
+        isAutocomplete: () => false,
+        deferred: false,
+        replied: false,
+        options: {
+          getString: (name) => (name === "game" ? "266192" : null),
+        },
+        deferReply: async () => {},
+        editReply: async (payload) => {
+          edits.push(payload);
+          return { id: "game-msg" };
+        },
+        followUp: async (payload) => {
+          followUps.push(payload);
+          return { id: "panel-msg" };
+        },
+      });
+      expect(calls).toEqual(["266192"]);
+      expect(edits[0].embeds[0].title).toBe("Wingspan");
+      const stored = Object.values(client.store).find((row) => row.kind === "gather");
+      expect(stored.game.bggId).toBe("266192");
+      expect(stored.game.isCustom).toBeUndefined();
+      expect(stored.game.name).toBe("Wingspan");
+      expect(followUps[0].embeds[0].data.description).toContain("Wingspan");
+      expect(followUps[0].embeds[0].data.description).toContain("1–5 players");
+    } finally {
+      BoardGameGeek.CreateAndLoad = originalCreate;
     }
   });
 });

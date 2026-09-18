@@ -1,14 +1,15 @@
 const SlashCommand = require("../../base/SlashCommand.js");
 const { SlashCommandBuilder, MessageFlags } = require("discord.js");
 const BoardGameGeek = require("../../modules/BoardGameGeek");
+const GameIdentity = require("../../modules/GameIdentity");
 const GatherInterest = require("../../modules/GatherInterest");
 
 class Lfg extends SlashCommand {
   constructor(client) {
     super(client, {
       name: "lfg",
-      description: "Look up a game on BGG and open a Who's interested? panel.",
-      usage: "Use /lfg with a game name to post BGG info and an interest panel",
+      description: "Open a Who's interested? panel for a BGG title or custom playtest.",
+      usage: "Use /lfg with a BGG game or customname to post a Who's interested? panel",
       enabled: true,
       permLevel: "User",
     });
@@ -18,9 +19,17 @@ class Lfg extends SlashCommand {
       .addStringOption((option) =>
         option
           .setName("game")
-          .setDescription("The game to propose (autocomplete or BGG id — same lookup as /bgg and /game newgame)")
+          .setDescription("BGG title (autocomplete). Skip this if using customname.")
           .setAutocomplete(true)
-          .setRequired(true)
+          .setRequired(false)
+      )
+      .addStringOption((option) =>
+        option
+          .setName("customname")
+          .setDescription("Playtest name when the game is not on BoardGameGeek")
+          .setRequired(false)
+          .setMinLength(GameIdentity.CUSTOM_NAME_MIN_LENGTH)
+          .setMaxLength(GameIdentity.CUSTOM_NAME_MAX_LENGTH)
       );
   }
 
@@ -46,34 +55,51 @@ class Lfg extends SlashCommand {
         return;
       }
 
-      if (!search || isNaN(search)) {
+      const identity = GameIdentity.resolveGameIdentity({
+        game: search,
+        customname: interaction.options.getString("customname"),
+      });
+      if (identity.error) {
         await interaction.reply({
-          content: "Please choose from the available options",
+          content: identity.error,
           flags: MessageFlags.Ephemeral,
         });
         return;
       }
 
-      const [, bgg] = await Promise.all([
-        interaction.deferReply(),
-        BoardGameGeek.CreateAndLoad(search, this.client, interaction),
-      ]);
-      await bgg.LoadEmbeds(BoardGameGeek.DetailsEnum.ALL);
+      let bgg = null;
+      let gameReply;
+      if (identity.kind === "custom") {
+        await interaction.deferReply();
+        gameReply = {
+          embeds: [GatherInterest.buildCustomGameEmbed(identity.name)],
+        };
+      } else {
+        [, bgg] = await Promise.all([
+          interaction.deferReply(),
+          BoardGameGeek.CreateAndLoad(identity.bggGameId, this.client, interaction),
+        ]);
+        await bgg.LoadEmbeds(BoardGameGeek.DetailsEnum.ALL);
+        gameReply = {
+          embeds: bgg.embeds,
+          files: bgg.attachments,
+        };
+      }
 
       const gather = GatherInterest.createGather({
         guildId: interaction.guildId,
         channelId: interaction.channelId,
         hostUserId: interaction.user.id,
         hostDisplayName: interaction.member?.displayName || interaction.user.username,
-        game: GatherInterest.snapshotFromBgg(bgg),
+        game:
+          identity.kind === "custom"
+            ? GatherInterest.snapshotFromCustom(identity.name)
+            : GatherInterest.snapshotFromBgg(bgg),
       });
       // Persist before buttons are visible so a fast click still finds the gather after a restart-safe write.
       await GatherInterest.saveGather(this.client, gather);
 
-      const gameMessage = await interaction.editReply({
-        embeds: bgg.embeds,
-        files: bgg.attachments,
-      });
+      const gameMessage = await interaction.editReply(gameReply);
       gather.gameMessageId = gameMessage?.id || null;
 
       const panelMessage = await interaction.followUp({
@@ -85,7 +111,7 @@ class Lfg extends SlashCommand {
       // confirmed is not overwritten by this in-memory object (empty interests).
       await GatherInterest.saveGatherAfterPost(this.client, gather);
 
-      if (bgg.otherAttachments.length > 0) {
+      if (bgg?.otherAttachments?.length > 0) {
         await interaction.followUp({
           files: bgg.otherAttachments,
         });
@@ -94,7 +120,7 @@ class Lfg extends SlashCommand {
       this.client.logger.log(e, "error");
       try {
         const reply = {
-          content: "Something went wrong looking up that game. Please try again.",
+          content: "Something went wrong posting that gather. Please try again.",
           flags: MessageFlags.Ephemeral,
         };
         if (interaction.deferred || interaction.replied) await interaction.editReply(reply);

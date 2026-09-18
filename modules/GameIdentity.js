@@ -17,10 +17,11 @@ function normalizeCustomName(value) {
 }
 
 /**
- * Resolve /game newgame identity from slash options.
+ * Resolve BGG xor custom game identity from slash options.
+ * Shared by /game newgame, /lfg, and LFG Start game persistence.
  * Exactly one of BGG `game` (numeric id) or `customname` is allowed.
  */
-function resolveNewGameIdentity({ game, customname } = {}) {
+function resolveGameIdentity({ game, customname } = {}) {
   const hasGame = hasProvidedString(game);
   const hasCustom = hasProvidedString(customname);
 
@@ -43,6 +44,8 @@ function resolveNewGameIdentity({ game, customname } = {}) {
   return { kind: "bgg", bggGameId: String(game) };
 }
 
+const resolveNewGameIdentity = resolveGameIdentity;
+
 function applyCustomGameIdentity(gameData, name) {
   gameData.isCustomGame = true;
   gameData.bggGameId = null;
@@ -52,6 +55,19 @@ function applyCustomGameIdentity(gameData, name) {
 function applyBggGameIdentity(gameData, bggGameId) {
   gameData.isCustomGame = false;
   gameData.bggGameId = String(bggGameId);
+}
+
+/**
+ * Apply FUR-91 session metadata from a gather's stored game snapshot.
+ * Custom gathers set isCustomGame + null bggGameId + the custom name.
+ */
+function applyIdentityFromGather(gameData, gatherGame) {
+  if (gatherGame?.isCustom) {
+    applyCustomGameIdentity(gameData, gatherGame.customName || gatherGame.name);
+    return;
+  }
+  gameData.isCustomGame = false;
+  gameData.bggGameId = gatherGame?.bggId ? String(gatherGame.bggId) : null;
 }
 
 function isCustomGame(gameData) {
@@ -81,9 +97,11 @@ module.exports = {
   MISSING_IDENTITY_ERROR,
   INVALID_BGG_ERROR,
   INVALID_CUSTOM_ERROR,
+  resolveGameIdentity,
   resolveNewGameIdentity,
   applyCustomGameIdentity,
   applyBggGameIdentity,
+  applyIdentityFromGather,
   isCustomGame,
   statusGameLabel,
   buildCustomGameCreateEmbed,

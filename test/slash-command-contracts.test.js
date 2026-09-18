@@ -238,4 +238,22 @@ describe("slash command definition contracts", () => {
       ChannelType.GuildForum,
     ]);
   });
+
+  test("/lfg keeps BGG autocomplete and adds optional customname", () => {
+    const Lfg = require("../slashcommands/info/lfg");
+    const json = new Lfg(stubClient).data.toJSON();
+    expect(json.name).toBe("lfg");
+    expect(json.description.length).toBeLessThanOrEqual(100);
+    const game = json.options.find((option) => option.name === "game");
+    const customname = json.options.find((option) => option.name === "customname");
+    expect(game).toMatchObject({
+      required: false,
+      autocomplete: true,
+    });
+    expect(customname).toMatchObject({
+      required: false,
+      min_length: 1,
+      max_length: 100,
+    });
+  });
 });
