@@ -268,3 +268,126 @@ test("recipe editor flow: add to discard, shuffle into draw, recall includes all
   expect(deck.piles.draw.cards.map(card => card.name)).not.toContain("Promo");
   expect(deck.allCards.map(card => card.name)).toEqual(expect.arrayContaining(["Ace", "King", "Fox", "Bear"]));
 });
+
+function makeGameWithDuplicatePromos() {
+  const recipeX = {
+    id: "id-x",
+    name: "Promo",
+    origin: "Main",
+    format: "A",
+    description: "",
+    type: "",
+    suit: "",
+    value: "",
+    url: "https://old.example/x.png",
+  };
+  const recipeY = {
+    id: "id-y",
+    name: "Promo",
+    origin: "Main",
+    format: "A",
+    description: "",
+    type: "",
+    suit: "",
+    value: "",
+    url: "https://old.example/y.png",
+  };
+  const discardX = cloneDeep(recipeX);
+  const drawY = cloneDeep(recipeY);
+  const drawKeep = {
+    id: "draw-keep",
+    name: "Keep",
+    origin: "Main",
+    format: "A",
+    description: "",
+    type: "",
+    suit: "",
+    value: "",
+    url: null,
+  };
+  const deck = {
+    name: "Main",
+    allCards: [recipeX, recipeY],
+    piles: {
+      draw: { cards: [drawY, drawKeep] },
+      discard: { cards: [discardX] },
+    },
+  };
+  return {
+    deck,
+    recipeX,
+    recipeY,
+    discardX,
+    drawY,
+    drawKeep,
+    gameData: {
+      decks: [deck],
+      players: [
+        {
+          userId: "user-1",
+          hands: { main: [], played: [], passed: [], received: [], simultaneous: [] },
+          playArea: [],
+        },
+      ],
+      gameBoard: [],
+      globalPiles: [],
+    },
+  };
+}
+
+test("edit url on id X updates allCards and discard clone; same-name other ids and draw length untouched", () => {
+  const { gameData, deck, recipeX, recipeY, discardX, drawY } = makeGameWithDuplicatePromos();
+  const drawRef = deck.piles.draw.cards;
+  const drawLengthBefore = deck.piles.draw.cards.length;
+  const discardLengthBefore = deck.piles.discard.cards.length;
+
+  const result = DeckRecipeHelper.editCardById(gameData, deck, "id-x", {
+    url: "https://new.example/x.png",
+  });
+
+  expect(result.ok).toBe(true);
+  expect(recipeX.url).toBe("https://new.example/x.png");
+  expect(discardX.url).toBe("https://new.example/x.png");
+  expect(recipeY.url).toBe("https://old.example/y.png");
+  expect(drawY.url).toBe("https://old.example/y.png");
+  expect(deck.piles.draw.cards).toBe(drawRef);
+  expect(deck.piles.draw.cards).toHaveLength(drawLengthBefore);
+  expect(deck.piles.discard.cards).toHaveLength(discardLengthBefore);
+  expect(deck.allCards.map((card) => card.id)).toEqual(["id-x", "id-y"]);
+});
+
+test("edit by missing card id returns a clear error and does not write", () => {
+  const { gameData, deck } = makeGameWithDuplicatePromos();
+  const before = cloneDeep(gameData);
+
+  const result = DeckRecipeHelper.editCardById(gameData, deck, "missing-id", {
+    url: "https://new.example/x.png",
+  });
+
+  expect(result.ok).toBe(false);
+  expect(result.error).toBe(DeckRecipeHelper.MISSING_CARD_MESSAGE);
+  expect(gameData).toEqual(before);
+});
+
+test("edit with no fields returns a clear error", () => {
+  expect(DeckRecipeHelper.normalizeEditPatch({})).toEqual({
+    error: DeckRecipeHelper.NO_FIELDS_MESSAGE,
+  });
+  expect(DeckRecipeHelper.normalizeEditPatch(null)).toEqual({
+    error: DeckRecipeHelper.NO_FIELDS_MESSAGE,
+  });
+});
+
+test("recipe card autocomplete disambiguates duplicate names via short id", () => {
+  const cards = [
+    { id: "id-y", name: "Promo", format: "A", type: "", description: "" },
+    { id: "id-x", name: "Promo", format: "A", type: "", description: "" },
+  ];
+  expect(DeckRecipeHelper.getRecipeCardAutocomplete("", cards)).toEqual([
+    { name: "Promo · id-x", value: "id-x" },
+    { name: "Promo · id-y", value: "id-y" },
+  ]);
+  expect(DeckRecipeHelper.getRecipeCardAutocomplete("id-x", cards)).toEqual([
+    { name: "id-x — Promo · id-x", value: "id-x" },
+  ]);
+});
