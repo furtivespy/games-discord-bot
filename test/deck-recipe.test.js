@@ -412,5 +412,5 @@ test("recipe card autocomplete disambiguates duplicate names via short id", () =
     DeckRecipeHelper.getRecipeCardAutocomplete("promo", [
       { id: "id-z", name: "Promo", format: "A", type: null, description: "" },
     ])
-  ).toEqual([{ name: "promo — Promo · id-z", value: "id-z" }]);
+  ).toEqual([{ name: "promo · id-z", value: "id-z" }]);
 });
