@@ -23,6 +23,10 @@ async function runCards(harness) {
   await command.execute(harness.interaction);
 }
 
+function nextButtonCustomId(harness) {
+  return harness.calls.reply[0].components[0].components[0].data.custom_id;
+}
+
 function gameWithDeck({
   draw = [createCard({ id: "ace", name: "Ace" })],
   discard = [],
@@ -900,6 +904,7 @@ describe("/cards command handlers", () => {
       }
     );
 
+    let nextCustomId;
     await withHarness(
       {
         gameData,
@@ -915,17 +920,17 @@ describe("/cards command handlers", () => {
       async (harness) => {
         await modalSubmission.execute(harness.interaction);
         expect(harness.persistCalls).toHaveLength(0);
-        expect(harness.lastContent()).toContain("Changed so far: url");
-        expect(harness.calls.reply[0].components[0].components[0].data.custom_id).toBe(
-          "editcard-next"
-        );
+        const changedLine = harness.lastContent().split("\n").find((line) => line.startsWith("Changed so far") || line.startsWith("No changes"));
+        expect(changedLine).toBe("Changed so far: url.");
+        nextCustomId = nextButtonCustomId(harness);
+        expect(nextCustomId).toMatch(/^editcard-next:/);
       }
     );
 
     await withHarness(
       {
         gameData,
-        modalCustomId: "editcard-next",
+        modalCustomId: nextCustomId,
       },
       async (harness) => {
         await DeckEditCardModal.handleButton(harness.interaction, harness.client);
@@ -1081,6 +1086,128 @@ describe("/cards command handlers", () => {
       async (harness) => {
         await modalSubmission.execute(harness.interaction);
         expect(harness.lastContent()).toContain("No fields changed");
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+  });
+
+  test("deck editcard Next note only lists fields changed on that page", async () => {
+    const DeckEditCardModal = require("../modules/DeckEditCardModal");
+    const modalSubmission = require("../events/modalSubmission");
+    DeckEditCardModal.resetPendingEdits();
+
+    const recipe = createCard({
+      id: "id-b",
+      name: "Promo",
+      url: "https://old.example/b.png",
+      type: "Event",
+      value: "10",
+      description: "art",
+      format: "B",
+    });
+    const deck = createDeck({ name: "Main", draw: [], discard: [] });
+    deck.allCards = [recipe];
+    const gameData = createActiveGame({ decks: [deck] });
+
+    await withHarness(
+      {
+        gameData,
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "editcard",
+          strings: { deck: "Main", card: "id-b" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+      }
+    );
+
+    await withHarness(
+      {
+        gameData,
+        isModalSubmit: true,
+        modalCustomId: "editcard-step1",
+        modalFields: {
+          name: "Promo",
+          url: "https://new.example/b.png",
+          type: "Event",
+          suit: "",
+        },
+      },
+      async (harness) => {
+        await modalSubmission.execute(harness.interaction);
+        const changedLine = harness.lastContent().split("\n").find((line) => line.startsWith("Changed so far"));
+        expect(changedLine).toBe("Changed so far: url.");
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+  });
+
+  test("deck editcard ignores a Next button from a previous edit session", async () => {
+    const DeckEditCardModal = require("../modules/DeckEditCardModal");
+    const modalSubmission = require("../events/modalSubmission");
+    DeckEditCardModal.resetPendingEdits();
+
+    const first = createCard({ id: "id-x", name: "Promo", url: "https://old.example/x.png" });
+    const second = createCard({ id: "id-y", name: "Other", url: "https://old.example/y.png" });
+    const deck = createDeck({ name: "Main", draw: [], discard: [] });
+    deck.allCards = [first, second];
+    const gameData = createActiveGame({ decks: [deck] });
+
+    await withHarness(
+      {
+        gameData,
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "editcard",
+          strings: { deck: "Main", card: "id-x" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+      }
+    );
+
+    let staleNextId;
+    await withHarness(
+      {
+        gameData,
+        isModalSubmit: true,
+        modalCustomId: "editcard-step1",
+        modalFields: { name: "Promo", url: "https://old.example/x.png", type: "", suit: "" },
+      },
+      async (harness) => {
+        await modalSubmission.execute(harness.interaction);
+        staleNextId = nextButtonCustomId(harness);
+      }
+    );
+
+    await withHarness(
+      {
+        gameData,
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "editcard",
+          strings: { deck: "Main", card: "id-y" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.calls.showModal[0].data.custom_id).toBe("editcard-step1");
+      }
+    );
+
+    await withHarness(
+      {
+        gameData,
+        modalCustomId: staleNextId,
+      },
+      async (harness) => {
+        const handled = await DeckEditCardModal.handleButton(harness.interaction, harness.client);
+        expect(handled).toBe(true);
+        expect(harness.calls.showModal).toHaveLength(0);
+        expect(harness.lastContent()).toContain("expired");
         expect(harness.persistCalls).toHaveLength(0);
       }
     );

@@ -172,10 +172,14 @@ function snapshotEditableFields(card) {
 }
 
 function diffEditableFields(original, submitted) {
+    if (!submitted || typeof submitted !== 'object') {
+        return {}
+    }
     const before = snapshotEditableFields(original)
     const after = snapshotEditableFields(submitted)
     const raw = {}
     for (const field of EDITABLE_FIELDS) {
+        if (!Object.prototype.hasOwnProperty.call(submitted, field)) continue
         if (before[field] !== after[field]) {
             raw[field] = after[field]
         }

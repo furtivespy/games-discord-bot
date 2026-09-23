@@ -128,6 +128,7 @@ describe("modals and collectors", () => {
       }
     );
 
+    let nextCustomId;
     await withHarness(
       {
         gameData: createActiveGame({ decks: [deck] }),
@@ -138,13 +139,14 @@ describe("modals and collectors", () => {
       async (harness) => {
         await modalSubmission.execute(harness.interaction);
         expect(harness.lastContent()).toContain("No changes yet");
+        nextCustomId = harness.calls.reply[0].components[0].components[0].data.custom_id;
       }
     );
 
     await withHarness(
       {
         gameData: createActiveGame({ decks: [deck] }),
-        modalCustomId: "editcard-next",
+        modalCustomId: nextCustomId,
       },
       async (harness) => {
         const handled = await DeckEditCardModal.handleButton(harness.interaction, harness.client);

@@ -7,6 +7,7 @@ const {
     ButtonStyle,
     MessageFlags,
 } = require('discord.js')
+const { nanoid } = require('nanoid')
 const GameHelper = require('./GlobalGameHelper')
 const GameDB = require('../db/anygame.js')
 const Formatter = require('./GameFormatter')
@@ -15,8 +16,17 @@ const DeckRecipeHelper = require('./DeckRecipeHelper')
 const STEP1_MODAL_ID = 'editcard-step1'
 const STEP2_MODAL_ID = 'editcard-step2'
 const NEXT_BUTTON_ID = 'editcard-next'
+const NEXT_BUTTON_PREFIX = `${NEXT_BUTTON_ID}:`
 const SESSION_TTL_MS = 10 * 60 * 1000
 const SESSION_EXPIRED_MESSAGE = 'This card edit expired. Run /cards deck editcard again.'
+const FIELD_MAX = {
+    name: 100,
+    url: 2048,
+    type: 100,
+    suit: 100,
+    value: 100,
+    description: 1000,
+}
 
 const STEP1_FIELDS = ['name', 'url', 'type', 'suit']
 const STEP2_FIELDS = ['value', 'description', 'format']
@@ -58,6 +68,38 @@ function clip(value, max) {
     return text.length <= max ? text : text.slice(0, max)
 }
 
+function formatLetter(format) {
+    const letter = String(format ?? 'A').trim().toUpperCase()
+    return ['A', 'B', 'C'].includes(letter) ? letter : 'A'
+}
+
+function displayedEditableFields(card) {
+    const snap = DeckRecipeHelper.snapshotEditableFields(card)
+    return {
+        name: clip(snap.name, FIELD_MAX.name),
+        url: clip(snap.url, FIELD_MAX.url),
+        type: clip(snap.type, FIELD_MAX.type),
+        suit: clip(snap.suit, FIELD_MAX.suit),
+        value: clip(snap.value, FIELD_MAX.value),
+        description: clip(snap.description, FIELD_MAX.description),
+        format: formatLetter(snap.format),
+    }
+}
+
+async function replyExpired(interaction) {
+    await interaction.reply({
+        content: SESSION_EXPIRED_MESSAGE,
+        flags: MessageFlags.Ephemeral,
+    })
+}
+
+function parseNextSessionId(customId) {
+    if (typeof customId !== 'string' || !customId.startsWith(NEXT_BUTTON_PREFIX)) {
+        return null
+    }
+    return customId.slice(NEXT_BUTTON_PREFIX.length) || null
+}
+
 function addPrefill(input, value) {
     const text = String(value ?? '')
     if (!text) return input
@@ -92,8 +134,7 @@ function withSubmitLabel(modal, label) {
 }
 
 function formatValue(card) {
-    const format = String(card?.format ?? 'A').trim().toUpperCase()
-    return ['A', 'B', 'C'].includes(format) ? format : 'A'
+    return formatLetter(card?.format)
 }
 
 function buildStep1Modal(card) {
@@ -107,7 +148,7 @@ function buildStep1Modal(card) {
             label: 'Name',
             style: TextInputStyle.Short,
             required: true,
-            maxLength: 100,
+            maxLength: FIELD_MAX.name,
             value: card?.name,
         }),
         buildTextInput({
@@ -115,7 +156,7 @@ function buildStep1Modal(card) {
             label: 'Image URL',
             style: TextInputStyle.Paragraph,
             required: false,
-            maxLength: 2048,
+            maxLength: FIELD_MAX.url,
             value: card?.url,
         }),
         buildTextInput({
@@ -123,7 +164,7 @@ function buildStep1Modal(card) {
             label: 'Type (formats A and B)',
             style: TextInputStyle.Short,
             required: false,
-            maxLength: 100,
+            maxLength: FIELD_MAX.type,
             value: card?.type,
         }),
         buildTextInput({
@@ -131,7 +172,7 @@ function buildStep1Modal(card) {
             label: 'Suit (sort only, not shown)',
             style: TextInputStyle.Short,
             required: false,
-            maxLength: 100,
+            maxLength: FIELD_MAX.suit,
             value: card?.suit,
         }),
     )
@@ -149,7 +190,7 @@ function buildStep2Modal(card) {
             label: 'Value (sort; shown in format C)',
             style: TextInputStyle.Short,
             required: false,
-            maxLength: 100,
+            maxLength: FIELD_MAX.value,
             value: card?.value,
         }),
         buildTextInput({
@@ -157,7 +198,7 @@ function buildStep2Modal(card) {
             label: 'Description',
             style: TextInputStyle.Paragraph,
             required: false,
-            maxLength: 1000,
+            maxLength: FIELD_MAX.description,
             value: card?.description,
         }),
         buildTextInput({
@@ -192,13 +233,14 @@ function changedFieldsNote(original, submitted) {
 
 async function openEditor(interaction, { deck, card }) {
     setSession(interaction, {
+        id: nanoid(),
         deckName: deck.name,
         cardId: String(card.id),
-        original: DeckRecipeHelper.snapshotEditableFields(card),
+        original: displayedEditableFields(card),
         step1: null,
         createdAt: Date.now(),
     })
-    await interaction.showModal(buildStep1Modal(card))
+    await interaction.showModal(buildStep1Modal(displayedEditableFields(card)))
 }
 
 async function persistCardEdit(interaction, client, gameData, deck, result, patch) {
@@ -240,10 +282,7 @@ async function persistCardEdit(interaction, client, gameData, deck, result, patc
 async function handleStep1Submit(interaction) {
     const session = getSession(interaction)
     if (!session) {
-        await interaction.reply({
-            content: SESSION_EXPIRED_MESSAGE,
-            flags: MessageFlags.Ephemeral,
-        })
+        await replyExpired(interaction)
         return
     }
 
@@ -252,7 +291,7 @@ async function handleStep1Submit(interaction) {
     setSession(interaction, session)
 
     const next = new ButtonBuilder()
-        .setCustomId(NEXT_BUTTON_ID)
+        .setCustomId(`${NEXT_BUTTON_PREFIX}${session.id}`)
         .setLabel('Next')
         .setStyle(ButtonStyle.Primary)
 
@@ -269,11 +308,8 @@ async function handleStep1Submit(interaction) {
 
 async function handleStep2Submit(interaction, client) {
     const session = getSession(interaction)
-    if (!session) {
-        await interaction.reply({
-            content: SESSION_EXPIRED_MESSAGE,
-            flags: MessageFlags.Ephemeral,
-        })
+    if (!session || !session.step1) {
+        await replyExpired(interaction)
         return
     }
 
@@ -331,16 +367,14 @@ async function handleModalSubmit(interaction, client) {
 }
 
 async function handleButton(interaction, client) {
-    if (interaction.customId !== NEXT_BUTTON_ID) {
+    const sessionId = parseNextSessionId(interaction.customId)
+    if (sessionId == null) {
         return false
     }
 
     const session = getSession(interaction)
-    if (!session) {
-        await interaction.reply({
-            content: SESSION_EXPIRED_MESSAGE,
-            flags: MessageFlags.Ephemeral,
-        })
+    if (!session || session.id !== sessionId || !session.step1) {
+        await replyExpired(interaction)
         return true
     }
 
@@ -367,7 +401,10 @@ async function handleButton(interaction, client) {
 
     session.createdAt = Date.now()
     setSession(interaction, session)
-    await interaction.showModal(buildStep2Modal(card))
+    await interaction.showModal(buildStep2Modal({
+        name: card.name,
+        ...session.original,
+    }))
     return true
 }
 

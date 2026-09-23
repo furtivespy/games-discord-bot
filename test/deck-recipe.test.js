@@ -394,6 +394,10 @@ test("edit with no fields returns a clear error", () => {
     { name: "Promo", url: "https://old.example/x.png", type: "", suit: "", value: "", description: "", format: "A" },
     { name: "Promo", url: "https://new.example/x.png", type: "", suit: "", value: "", description: "", format: "A" },
   )).toEqual({ url: "https://new.example/x.png" });
+  expect(DeckRecipeHelper.diffEditableFields(
+    { name: "Promo", url: "https://old.example/x.png", type: "Event", suit: "", value: "10", description: "art", format: "B" },
+    { name: "Promo", url: "https://new.example/x.png", type: "Event", suit: "" },
+  )).toEqual({ url: "https://new.example/x.png" });
 });
 
 test("recipe card autocomplete disambiguates duplicate names via short id", () => {
