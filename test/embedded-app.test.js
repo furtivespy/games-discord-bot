@@ -1,4 +1,4 @@
-const { describe, expect, test } = require("bun:test");
+const { afterEach, describe, expect, test } = require("bun:test");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -16,8 +16,13 @@ const {
   sanitizeApiHost,
   sanitizeClientId,
 } = require("../modules/embeddedApp");
+const VisualLaunch = require("../modules/visualLaunch");
 
 const SECRET_TOKEN = "SUPER_SECRET_ACCESS_TOKEN";
+
+afterEach(() => {
+  VisualLaunch.clearOrigins();
+});
 
 function jsonResponse(status, body) {
   return {
@@ -133,6 +138,7 @@ describe("handleTokenExchange", () => {
       access_token: SECRET_TOKEN,
       display_name: "Will",
     });
+    expect(result.body.origin_channel_name).toBeUndefined();
 
     const tokenCall = fetchCalls.find((call) => call.url === DISCORD_TOKEN_URL);
     expect(tokenCall.options.method).toBe("POST");
@@ -169,6 +175,53 @@ describe("handleTokenExchange", () => {
     });
   });
 
+  test("returns a resolvable origin channel name from a button launch", async () => {
+    VisualLaunch.rememberOrigin("snowflake-user", {
+      channelName: "Inis Friday",
+      hostChannelId: "table-1",
+    });
+    const result = await handleTokenExchange({
+      code: "oauth-code",
+      clientId: "client-id",
+      clientSecret: "client-secret",
+      hostChannelId: "table-1",
+      consumeOrigin: VisualLaunch.consumeOrigin,
+      fetchImpl: mockDiscordFetch({
+        meBody: {
+          id: "snowflake-user",
+          username: "willsullivan",
+          global_name: "Will",
+        },
+      }),
+    });
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({
+      access_token: SECRET_TOKEN,
+      display_name: "Will",
+      origin_channel_name: "Inis Friday",
+    });
+    expect(VisualLaunch.peekOrigin("snowflake-user")).toBeNull();
+  });
+
+  test("omits origin when there is no bridge context", async () => {
+    const result = await handleTokenExchange({
+      code: "oauth-code",
+      clientId: "client-id",
+      clientSecret: "client-secret",
+      hostChannelId: "table-1",
+      consumeOrigin: VisualLaunch.consumeOrigin,
+      fetchImpl: mockDiscordFetch({
+        meBody: {
+          id: "snowflake-user",
+          username: "willsullivan",
+          global_name: "Will",
+        },
+      }),
+    });
+    expect(result.body.origin_channel_name).toBeUndefined();
+    expect(result.body.display_name).toBe("Will");
+  });
+
   test("does not return an access token when Discord rejects the code", async () => {
     const result = await handleTokenExchange({
       code: "bad",
@@ -190,7 +243,7 @@ describe("embedded HTTP origin", () => {
     const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-client-"));
     fs.writeFileSync(
       path.join(staticDir, "index.html"),
-      `<!doctype html><html><head><script>${CONFIG_PLACEHOLDER}</script></head><body><p id="greeting">Connecting…</p></body></html>`
+      `<!doctype html><html><head><script>${CONFIG_PLACEHOLDER}</script></head><body><p id="greeting">Connecting…</p><p id="origin" hidden></p></body></html>`
     );
 
     const app = createEmbeddedApp({
@@ -211,6 +264,8 @@ describe("embedded HTTP origin", () => {
       expect(html).toContain('"apiHost":"gamebot.example.com"');
       expect(html).not.toContain("server-secret");
       expect(html).not.toContain(SECRET_TOKEN);
+      expect(html).toContain('id="origin"');
+      expect(html.toLowerCase()).not.toContain("game picker");
 
       const token = await fetch(`${url}/api/token`, {
         method: "POST",
@@ -230,6 +285,40 @@ describe("embedded HTTP origin", () => {
       });
       expect(proxied.status).toBe(200);
       expect(await proxied.json()).toMatchObject({ access_token: SECRET_TOKEN });
+
+      VisualLaunch.rememberOrigin("snowflake-user", {
+        channelName: "Inis Friday",
+        hostChannelId: "table-1",
+      });
+      const bridgedApp = createEmbeddedApp({
+        clientId: "client-123",
+        clientSecret: "server-secret",
+        publicBaseUrl: "https://gamebot.example.com",
+        staticDir,
+        fetchImpl: mockDiscordFetch({
+          meBody: {
+            id: "snowflake-user",
+            username: "willsullivan",
+            global_name: "Will",
+          },
+        }),
+        consumeOrigin: VisualLaunch.consumeOrigin,
+      });
+      const bridged = await listen(bridgedApp);
+      try {
+        const bridgedToken = await fetch(`${bridged.url}/api/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: "oauth-code", channel_id: "table-1" }),
+        });
+        expect(await bridgedToken.json()).toEqual({
+          access_token: SECRET_TOKEN,
+          display_name: "Will",
+          origin_channel_name: "Inis Friday",
+        });
+      } finally {
+        bridged.server.close();
+      }
     } finally {
       server.close();
       fs.rmSync(staticDir, { recursive: true, force: true });
@@ -267,5 +356,15 @@ describe("embedded HTTP origin", () => {
       'window.__GAMEBOT_EMBEDDED_CONFIG__={"clientId":"","apiHost":""};'
     );
     expect(injected).not.toContain("</script><script>");
+  });
+
+  test("source client is a hello page with optional origin, not a game picker", () => {
+    const html = fs.readFileSync(
+      path.join(__dirname, "..", "embedded-client", "index.html"),
+      "utf8"
+    );
+    expect(html).toContain('id="greeting"');
+    expect(html).toContain('id="origin"');
+    expect(html.toLowerCase()).not.toMatch(/game picker|select a game|choose a game/);
   });
 });

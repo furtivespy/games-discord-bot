@@ -1,6 +1,7 @@
-const { describe, expect, test } = require("bun:test");
-const { Collection, MessageFlags } = require("discord.js");
+const { afterEach, describe, expect, test } = require("bun:test");
+const { ChannelType, Collection, MessageFlags } = require("discord.js");
 const Visual = require("../slashcommands/genericgame/visual");
+const VisualLaunch = require("../modules/visualLaunch");
 const {
   DISCORD_LAUNCH_ACTIVITY,
   PRIMARY_ENTRY_POINT_TYPE,
@@ -10,14 +11,20 @@ const {
 } = require("../modules/applicationCommands");
 const { withHarness } = require("./helpers/harness");
 
+afterEach(() => {
+  VisualLaunch.clearOrigins();
+});
+
 describe("/visual", () => {
-  test("is a guild-only chat command with no options", () => {
+  test("is a guild-only chat command with an optional bridge channel", () => {
     const command = new Visual({ logger: { log: () => {} }, config: {} });
     expect(command.conf.permLevel).toBe("User");
     const json = command.data.toJSON();
     expect(json.name).toBe("visual");
     expect(json.dm_permission).toBe(false);
-    expect(json.options || []).toEqual([]);
+    expect(json.options).toHaveLength(1);
+    expect(json.options[0].name).toBe("channel");
+    expect(json.options[0].required).toBe(false);
   });
 
   test("launches the Embedded App and does not send a chat reply", async () => {
@@ -49,6 +56,115 @@ describe("/visual", () => {
       await new Visual(harness.client).execute(harness.interaction);
       expect(harness.lastContent()).toContain("App Launcher");
       expect(harness.calls.reply[0].flags).toBe(MessageFlags.Ephemeral);
+    });
+  });
+
+  test("in-place launch does not remember an origin channel", async () => {
+    await withHarness({}, async (harness) => {
+      VisualLaunch.rememberOrigin(harness.user.id, {
+        channelName: "should-be-cleared",
+        hostChannelId: harness.channel.id,
+      });
+      harness.interaction.launchActivity = async () => {};
+      await new Visual(harness.client).execute(harness.interaction);
+      expect(VisualLaunch.peekOrigin(harness.user.id)).toBeNull();
+    });
+  });
+
+  test("refuses to launch in a forum post and explains the bridge", async () => {
+    await withHarness({ channelName: "Inis Friday" }, async (harness) => {
+      const launches = [];
+      harness.channel.type = ChannelType.PublicThread;
+      harness.channel.parent = {
+        id: "forum-1",
+        type: ChannelType.GuildForum,
+        name: "games",
+      };
+      harness.channel.isThread = () => true;
+      harness.interaction.launchActivity = async () => {
+        launches.push(true);
+      };
+      await new Visual(harness.client).execute(harness.interaction);
+      expect(launches).toEqual([]);
+      expect(harness.lastContent()).toContain("forum");
+      expect(harness.lastContent()).toContain("channel");
+      expect(harness.lastContent()).toContain("not set up yet");
+      expect(harness.calls.reply[0].flags).toBe(MessageFlags.Ephemeral);
+    });
+  });
+
+  test("posts an Open visual button in the chosen text channel with origin context", async () => {
+    await withHarness(
+      { channelName: "Inis Friday", channelId: "forum-thread-1" },
+      async (harness) => {
+        const sent = [];
+        const launches = [];
+        harness.channel.type = ChannelType.PublicThread;
+        harness.channel.parent = {
+          id: "forum-1",
+          type: ChannelType.GuildForum,
+          name: "games",
+        };
+        harness.channel.isThread = () => true;
+        harness.interaction.launchActivity = async () => {
+          launches.push(true);
+        };
+        const target = {
+          id: "table-99",
+          name: "game-table",
+          type: ChannelType.GuildText,
+          send: async (payload) => {
+            sent.push(payload);
+            return { id: "bridge-1" };
+          },
+        };
+        harness.interaction.options.getChannel = (name) =>
+          name === "channel" ? target : null;
+
+        await new Visual(harness.client).execute(harness.interaction);
+
+        expect(launches).toEqual([]);
+        expect(sent).toHaveLength(1);
+        expect(sent[0].content).toContain("Inis Friday");
+        expect(sent[0].components[0].toJSON().components[0].custom_id).toBe(
+          VisualLaunch.openVisualCustomId("forum-thread-1")
+        );
+        expect(harness.lastContent()).toContain("<#table-99>");
+        expect(harness.lastContent()).toContain("Inis Friday");
+        expect(harness.calls.reply[0].flags).toBe(MessageFlags.Ephemeral);
+      }
+    );
+  });
+
+  test("posts a bridge button from one text channel into another without launching here", async () => {
+    await withHarness({ channelName: "channel-a", channelId: "a-1" }, async (harness) => {
+      const sent = [];
+      const launches = [];
+      harness.channel.type = ChannelType.GuildText;
+      harness.interaction.launchActivity = async () => {
+        launches.push(true);
+      };
+      const target = {
+        id: "b-2",
+        name: "channel-b",
+        type: ChannelType.GuildText,
+        send: async (payload) => {
+          sent.push(payload);
+          return { id: "bridge-2" };
+        },
+      };
+      harness.interaction.options.getChannel = (name) =>
+        name === "channel" ? target : null;
+
+      await new Visual(harness.client).execute(harness.interaction);
+
+      expect(launches).toEqual([]);
+      expect(sent[0].content).toContain("channel-a");
+      expect(sent[0].components[0].toJSON().components[0].custom_id).toBe(
+        VisualLaunch.openVisualCustomId("a-1")
+      );
+      expect(harness.lastContent()).toContain("<#b-2>");
+      expect(harness.lastContent()).toContain("channel-a");
     });
   });
 });

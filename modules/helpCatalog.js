@@ -111,7 +111,7 @@ const COMMAND_BLURBS = {
   help: "Discover commands and how-tos",
   game: "Start a table, turns, status, pin, history",
   lfg: "Gather Interest panel; host can Start game into a thread",
-  visual: "Open visual mode in this channel",
+  visual: "Open visual mode, or post a launch button from a forum",
   players: "Add/remove seats, first player, score, color",
   team: "Team names, colors, join, randomize",
   cards: "Decks, hands, piles, play area, draft, board",

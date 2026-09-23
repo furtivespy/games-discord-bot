@@ -475,6 +475,7 @@ function createHarness({
     integers: optionValues.integers || {},
     booleans: optionValues.booleans || {},
     users: optionValues.users || {},
+    channels: optionValues.channels || {},
     focused: Object.prototype.hasOwnProperty.call(optionValues, "focused")
       ? optionValues.focused
       : undefined,
@@ -532,6 +533,10 @@ function createHarness({
           ? optionBag.booleans[name]
           : null,
       getUser: (name) => optionBag.users[name] || null,
+      getChannel: (name) =>
+        Object.prototype.hasOwnProperty.call(optionBag.channels, name)
+          ? optionBag.channels[name]
+          : null,
       getFocused: (whole = false) => {
         if (optionBag.focused === undefined && optionBag.focusedName === undefined) {
           throw missingOptionError("Focused option");

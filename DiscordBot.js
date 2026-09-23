@@ -21,6 +21,7 @@ const ReminderSystem = require("./modules/ReminderSystem.js");
 const GameStatusHelper = require("./modules/GameStatusHelper");
 const { startEmbeddedAppServer } = require("./modules/embeddedApp");
 const { putApplicationCommands } = require("./modules/applicationCommands");
+const VisualLaunch = require("./modules/visualLaunch");
 
 class DiscordBot extends Client {
   constructor(options) {
@@ -778,6 +779,19 @@ client.on("interactionCreate", async (interaction) => {
       interaction.isPrimaryEntryPointCommand()
     ) {
       try {
+        if (
+          await VisualLaunch.channelBlocksActivities(
+            interaction.channel,
+            interaction.client
+          )
+        ) {
+          await interaction.reply({
+            content: VisualLaunch.FORUM_BLOCKED_MESSAGE,
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        VisualLaunch.forgetOrigin(interaction.user?.id);
         await interaction.launchActivity();
       } catch (error) {
         console.error(error);
@@ -841,6 +855,10 @@ client.on("interactionCreate", async (interaction) => {
     });
   } else if (interaction.isButton()) {
     try {
+      if (VisualLaunch.isVisualButton(interaction.customId)) {
+        await VisualLaunch.handleButton(interaction, interaction.client);
+        return;
+      }
       await GatherInterest.handleButton(interaction, interaction.client);
     } catch (error) {
       console.error(error);

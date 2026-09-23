@@ -24,3 +24,14 @@ export function firstNonEmptyName(...values: unknown[]): string | null {
   }
   return null;
 }
+
+export function helloGreeting(displayName: string): string {
+  return `Hello, ${displayName}`;
+}
+
+export function originLine(
+  originChannelName: string | null | undefined
+): string | null {
+  const name = firstNonEmptyName(originChannelName);
+  return name ? `from ${name}` : null;
+}

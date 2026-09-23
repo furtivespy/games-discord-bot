@@ -78,6 +78,11 @@ function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function sanitizeHostChannelId(value) {
+  const s = String(value || "").trim();
+  return /^[A-Za-z0-9_-]{1,32}$/.test(s) ? s : "";
+}
+
 async function exchangeCodeForAccessToken({
   code,
   clientId,
@@ -132,6 +137,8 @@ async function handleTokenExchange({
   clientSecret,
   fetchImpl = fetch,
   logger,
+  consumeOrigin,
+  hostChannelId,
 }) {
   if (!isNonEmptyString(code)) {
     return { status: 400, body: { error: "missing_code" } };
@@ -166,9 +173,18 @@ async function handleTokenExchange({
   }
 
   let displayName = null;
+  let originChannelName = null;
   try {
     const user = await fetchDiscordUser(exchange.accessToken, fetchImpl);
     displayName = displayNameFromDiscordUser(user);
+    if (user?.id && typeof consumeOrigin === "function") {
+      const origin = consumeOrigin(user.id, {
+        hostChannelId: sanitizeHostChannelId(hostChannelId),
+      });
+      if (origin?.channelName) {
+        originChannelName = origin.channelName;
+      }
+    }
   } catch (err) {
     logger?.log(
       `Discord users/@me lookup failed: ${err.message || err}`,
@@ -176,12 +192,16 @@ async function handleTokenExchange({
     );
   }
 
+  const body = {
+    access_token: exchange.accessToken,
+    display_name: displayName,
+  };
+  if (originChannelName) {
+    body.origin_channel_name = originChannelName;
+  }
   return {
     status: 200,
-    body: {
-      access_token: exchange.accessToken,
-      display_name: displayName,
-    },
+    body,
   };
 }
 
@@ -205,6 +225,7 @@ function createEmbeddedApp({
   staticDir,
   logger,
   fetchImpl = fetch,
+  consumeOrigin,
 } = {}) {
   const app = express();
   app.disable("x-powered-by");
@@ -217,6 +238,8 @@ function createEmbeddedApp({
       clientSecret,
       fetchImpl,
       logger,
+      consumeOrigin,
+      hostChannelId: req.body?.channel_id,
     });
     res.status(result.status).json(result.body);
   }
@@ -275,11 +298,15 @@ function startEmbeddedAppServer({
   logger,
   env = process.env,
   listen = true,
+  consumeOrigin,
 } = {}) {
   const resolved = resolveEmbeddedAppConfig(env, config);
+  const originLookup =
+    consumeOrigin || require("./visualLaunch").consumeOrigin;
   const app = createEmbeddedApp({
     ...resolved,
     logger,
+    consumeOrigin: originLookup,
   });
   if (!listen) {
     return { app, config: resolved, server: null };
@@ -317,5 +344,6 @@ module.exports = {
   resolveInjectedApiHost,
   sanitizeApiHost,
   sanitizeClientId,
+  sanitizeHostChannelId,
   startEmbeddedAppServer,
 };

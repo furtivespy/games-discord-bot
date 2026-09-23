@@ -1,6 +1,8 @@
 import { DiscordSDK, patchUrlMappings } from "@discord/embedded-app-sdk";
 import {
   firstNonEmptyName,
+  helloGreeting,
+  originLine,
   tokenRequestUrl,
   urlMappingsForApiHost,
 } from "./handshake";
@@ -24,6 +26,18 @@ function setGreeting(text: string) {
   if (el) {
     el.textContent = text;
   }
+}
+
+function setOrigin(text: string | null) {
+  const el = document.getElementById("origin");
+  if (!el) return;
+  if (text) {
+    el.textContent = text;
+    el.hidden = false;
+    return;
+  }
+  el.textContent = "";
+  el.hidden = true;
 }
 
 async function bootstrap() {
@@ -66,7 +80,10 @@ async function bootstrap() {
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({
+        code,
+        channel_id: discordSdk.channelId || undefined,
+      }),
     }
   );
   if (!response.ok) {
@@ -77,6 +94,7 @@ async function bootstrap() {
   const payload = (await response.json()) as {
     access_token?: string;
     display_name?: string | null;
+    origin_channel_name?: string | null;
   };
   const accessToken = payload.access_token;
   if (!accessToken) {
@@ -98,7 +116,8 @@ async function bootstrap() {
     setGreeting("Could not read your Discord name.");
     return;
   }
-  setGreeting(`Hello, ${displayName}`);
+  setGreeting(helloGreeting(displayName));
+  setOrigin(originLine(payload.origin_channel_name));
 }
 
 bootstrap().catch((error) => {

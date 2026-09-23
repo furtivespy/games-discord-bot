@@ -1,7 +1,9 @@
 const { describe, expect, test } = require("bun:test");
 const {
   firstNonEmptyName,
+  helloGreeting,
   isDiscordProxyHost,
+  originLine,
   tokenRequestUrl,
   urlMappingsForApiHost,
 } = require("../embedded-client/src/handshake.ts");
@@ -26,5 +28,12 @@ describe("embedded client handshake URLs", () => {
   test("skips blank global_name when greeting", () => {
     expect(firstNonEmptyName("   ", "Will")).toBe("Will");
     expect(firstNonEmptyName(null, undefined, "")).toBeNull();
+  });
+
+  test("in-place hello has no origin line; bridge hello includes the channel name", () => {
+    expect(helloGreeting("Will")).toBe("Hello, Will");
+    expect(originLine(null)).toBeNull();
+    expect(originLine("   ")).toBeNull();
+    expect(originLine("Inis Friday")).toBe("from Inis Friday");
   });
 });
