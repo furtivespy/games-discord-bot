@@ -1,0 +1,36 @@
+:root {
+  color-scheme: dark;
+  font-family: "gg sans", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  background: #313338;
+  color: #f2f3f5;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+main {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+#greeting {
+  margin: 0;
+  font-size: clamp(2rem, 6vw, 4rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+#origin {
+  margin: 0.75rem 0 0;
+  font-size: clamp(1rem, 2.5vw, 1.5rem);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-align: center;
+  opacity: 0.8;
+}
