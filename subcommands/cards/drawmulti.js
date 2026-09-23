@@ -23,10 +23,13 @@ class DrawMulti {
             return
         }
 
-        const inputDeck = interaction.options.getString('deck')
         const cardCount = interaction.options.getInteger('count')
         let dealCount = 0
-        const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
+        const deckResult = GameHelper.resolveDeckOption(gameData, interaction.options.getString('deck'))
+        if (await GameHelper.replyIfUnspecifiedDeck(interaction, deckResult)) {
+            return
+        }
+        const deck = deckResult.deck
 
         if (!deck || deck.piles.draw.cards.length < 1){
             await interaction.editReply({ content: "No cards in draw pile"})
