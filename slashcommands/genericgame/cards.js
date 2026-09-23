@@ -45,6 +45,7 @@ const DeckRemove = require('../../subcommands/cards/deckremove')
 const DeckPrune = require('../../subcommands/cards/deckprune')
 const DeckAddCard = require('../../subcommands/cards/deckaddcard')
 const DeckAddList = require('../../subcommands/cards/deckaddlist')
+const DeckEditCard = require('../../subcommands/cards/deckeditcard')
 // Global Piles
 const PileCreate = require('../../subcommands/cards/pilecreate')
 const PileDelete = require('../../subcommands/cards/piledelete')
@@ -227,6 +228,13 @@ class Cards extends SlashCommand {
                     .setDescription("Bulk-add name-only cards to an in-game deck recipe (goes to discard, not draw)")
                     .addStringOption(option => option.setName('customlist').setDescription('Comma-separated card names').setRequired(true))
                     .addStringOption(option => option.setName('deck').setDescription('Deck to add to').setAutocomplete(true))
+            )
+            .addSubcommand(subcommand =>
+                subcommand
+                    .setName("editcard")
+                    .setDescription("Edit a card: pick deck, then card, then a pop-up with current fields")
+                    .addStringOption(option => option.setName('deck').setDescription('Deck that contains the card').setAutocomplete(true))
+                    .addStringOption(option => option.setName('card').setDescription('Card to edit (name · short id) — pick a deck first').setRequired(true).setAutocomplete(true))
             );
         });
         this.data.addSubcommandGroup(group =>
@@ -588,6 +596,9 @@ class Cards extends SlashCommand {
                             break
                         case "addlist":
                             await DeckAddList.execute(interaction, this.client)
+                            break
+                        case "editcard":
+                            await DeckEditCard.execute(interaction, this.client)
                             break
                         default:
                             await interaction.reply({ content: "Command not fully written yet :(", flags: MessageFlags.Ephemeral })

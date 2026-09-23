@@ -105,6 +105,58 @@ describe("modals and collectors", () => {
     );
   });
 
+  test("deck editcard continue button opens the save modal", async () => {
+    const DeckEditCardModal = require("../modules/DeckEditCardModal");
+    DeckEditCardModal.resetPendingEdits();
+    const card = createCard({ id: "id-x", name: "Promo", url: "https://old.example/x.png" });
+    const deck = createDeck({ name: "Main", draw: [], discard: [] });
+    deck.allCards = [card];
+
+    await withHarness(
+      {
+        gameData: createActiveGame({ decks: [deck] }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "editcard",
+          strings: { deck: "Main", card: "id-x" },
+        },
+      },
+      async (harness) => {
+        const command = new Cards(harness.client);
+        await command.execute(harness.interaction);
+        expect(harness.calls.showModal[0].data.custom_id).toBe("editcard-step1");
+      }
+    );
+
+    let nextCustomId;
+    await withHarness(
+      {
+        gameData: createActiveGame({ decks: [deck] }),
+        isModalSubmit: true,
+        modalCustomId: "editcard-step1",
+        modalFields: { name: "Promo", url: "https://old.example/x.png", type: "", suit: "" },
+      },
+      async (harness) => {
+        await modalSubmission.execute(harness.interaction);
+        expect(harness.lastContent()).toContain("No changes yet");
+        nextCustomId = harness.calls.reply[0].components[0].components[0].data.custom_id;
+      }
+    );
+
+    await withHarness(
+      {
+        gameData: createActiveGame({ decks: [deck] }),
+        modalCustomId: nextCustomId,
+      },
+      async (harness) => {
+        const handled = await DeckEditCardModal.handleButton(harness.interaction, harness.client);
+        expect(handled).toBe(true);
+        expect(harness.calls.showModal[0].data.custom_id).toBe("editcard-step2");
+        expect(harness.calls.showModal[0].data.submit_label).toBe("Save");
+      }
+    );
+  });
+
   test("modal field lookup throws when a custom id is missing", async () => {
     await withHarness(
       {

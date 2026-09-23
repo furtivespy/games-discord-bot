@@ -1,6 +1,7 @@
 const GameHelper = require('../modules/GlobalGameHelper');
 const GameDB = require('../db/anygame.js');
 const GameStatusHelper = require('../modules/GameStatusHelper');
+const DeckEditCardModal = require('../modules/DeckEditCardModal');
 const { cloneDeep } = require('lodash');
 const { nanoid } = require('nanoid');
 
@@ -9,6 +10,10 @@ module.exports = {
         if (!interaction.isModalSubmit()) return;
 
         const client = interaction.client;
+
+        if (await DeckEditCardModal.handleModalSubmit(interaction, client)) {
+            return;
+        }
 
         if (interaction.customId === 'colorall-modal') {
             const [, gameData] = await Promise.all([
