@@ -188,36 +188,27 @@ describe("slash command definition contracts", () => {
     expect(cardset.description.length).toBeLessThanOrEqual(GameFormatter.DISCORD_OPTION_DESCRIPTION_MAX);
   });
 
-  test("/cards deck editcard edits by card id and has no copies option", () => {
+  test("/cards deck editcard picks deck then card and has no field or copies options", () => {
     const Cards = require("../slashcommands/genericgame/cards");
-    const GameFormatter = require("../modules/GameFormatter");
     const json = new Cards(stubClient).data.toJSON();
     const editcard = json.options
       .find((option) => option.name === "deck")
       .options.find((option) => option.name === "editcard");
     expect(editcard).toBeDefined();
+    expect(editcard.description.toLowerCase()).toContain("deck");
+    expect(editcard.description.toLowerCase()).toContain("card");
+    expect(editcard.description.toLowerCase()).toMatch(/pop-up|modal/);
 
     const optionNames = editcard.options.map((option) => option.name);
-    expect(optionNames).toEqual([
-      "card",
-      "deck",
-      "name",
-      "url",
-      "type",
-      "suit",
-      "value",
-      "description",
-      "format",
-    ]);
+    expect(optionNames).toEqual(["deck", "card"]);
     expect(optionNames).not.toContain("copies");
+    expect(optionNames).not.toContain("url");
+    expect(optionNames).not.toContain("name");
 
     const card = editcard.options.find((option) => option.name === "card");
     expect(card).toMatchObject({ required: true, autocomplete: true });
     const deck = editcard.options.find((option) => option.name === "deck");
     expect(deck).toMatchObject({ required: false, autocomplete: true });
-    const format = editcard.options.find((option) => option.name === "format");
-    expect(format.choices).toEqual(GameFormatter.CARD_FORMAT_CHOICES);
-    expect(format.required).toBeFalsy();
   });
 
   test("required and autocomplete flags stay set on high-traffic options", () => {

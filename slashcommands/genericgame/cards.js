@@ -232,18 +232,9 @@ class Cards extends SlashCommand {
             .addSubcommand(subcommand =>
                 subcommand
                     .setName("editcard")
-                    .setDescription("Edit a card in an in-game deck by id (recipe + same-id copies; no shuffle)")
-                    .addStringOption(option => option.setName('card').setDescription('Card to edit (name · short id)').setRequired(true).setAutocomplete(true))
-                    .addStringOption(option => option.setName('deck').setDescription('Deck to edit').setAutocomplete(true))
-                    .addStringOption(option => option.setName('name').setDescription('New card name'))
-                    .addStringOption(option => option.setName('url').setDescription('Image URL for the card'))
-                    .addStringOption(option => option.setName('type').setDescription('Card type (shown in formats A and B)'))
-                    .addStringOption(option => option.setName('suit').setDescription('Suit — used to sort hands; not shown on the card'))
-                    .addStringOption(option => option.setName('value').setDescription('Value — used to sort hands; shown only with format C'))
-                    .addStringOption(option => option.setName('description').setDescription('Card description'))
-                    .addStringOption(option => option.setName('format').setDescription(GameFormatter.CARD_FORMAT_OPTION_DESCRIPTION).addChoices(
-                        ...GameFormatter.CARD_FORMAT_CHOICES
-                    ))
+                    .setDescription("Edit a card: pick deck, then card, then a pop-up with current fields")
+                    .addStringOption(option => option.setName('deck').setDescription('Deck that contains the card').setAutocomplete(true))
+                    .addStringOption(option => option.setName('card').setDescription('Card to edit (name · short id) — pick a deck first').setRequired(true).setAutocomplete(true))
             );
         });
         this.data.addSubcommandGroup(group =>

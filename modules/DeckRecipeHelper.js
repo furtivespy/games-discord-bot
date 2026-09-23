@@ -8,7 +8,7 @@ const DISCORD_CONTENT_MAX = 2000
 const INVALID_IMAGE_URL_MESSAGE = 'Card image URL must be a valid http or https URL.'
 const EDITABLE_FIELDS = ['name', 'url', 'type', 'suit', 'value', 'description', 'format']
 const MISSING_CARD_MESSAGE = 'No card found with that id in this deck.'
-const NO_FIELDS_MESSAGE = 'Provide at least one field to edit: name, url, type, suit, value, description, or format.'
+const NO_FIELDS_MESSAGE = 'No fields changed.'
 const EMPTY_NAME_MESSAGE = 'Card name cannot be empty.'
 const INVALID_FORMAT_MESSAGE = 'Format must be A, B, or C.'
 
@@ -159,15 +159,34 @@ async function editReplyAfterSave(interaction, payload) {
     }
 }
 
-function collectEditPatch(interaction) {
+function snapshotEditableFields(card) {
+    return {
+        name: String(card?.name ?? ''),
+        url: card?.url ? String(card.url) : '',
+        type: String(card?.type ?? ''),
+        suit: String(card?.suit ?? ''),
+        value: String(card?.value ?? ''),
+        description: String(card?.description ?? ''),
+        format: String(card?.format ?? 'A').toUpperCase(),
+    }
+}
+
+function diffEditableFields(original, submitted) {
+    const before = snapshotEditableFields(original)
+    const after = snapshotEditableFields(submitted)
     const raw = {}
     for (const field of EDITABLE_FIELDS) {
-        const value = interaction.options.getString(field)
-        if (value !== null && value !== undefined) {
-            raw[field] = value
+        if (before[field] !== after[field]) {
+            raw[field] = after[field]
         }
     }
     return raw
+}
+
+function findRecipeCard(deck, cardId) {
+    const id = String(cardId || '')
+    if (!id) return null
+    return (deck?.allCards || []).find((card) => card?.id === id) || null
 }
 
 function normalizeEditPatch(rawPatch) {
@@ -220,12 +239,23 @@ function applyCardPatch(card, patch) {
     }
 }
 
-function visitCardLists(gameData, visit) {
+function isSelectedDeck(deck, selected) {
+    if (!selected) return true
+    if (deck === selected) return true
+    return Boolean(selected.name) && deck?.name === selected.name
+}
+
+function visitCardLists(gameData, visit, options = {}) {
     const visitList = (list) => {
-        if (Array.isArray(list)) visit(list)
+        if (Array.isArray(list)) {
+            visit(list)
+        } else if (list && Array.isArray(list.cards)) {
+            visit(list.cards)
+        }
     }
 
     for (const deck of gameData?.decks || []) {
+        if (!isSelectedDeck(deck, options.deck)) continue
         visitList(deck.allCards)
         if (deck.piles) {
             for (const pile of Object.values(deck.piles)) {
@@ -252,7 +282,7 @@ function visitCardLists(gameData, visit) {
 
 function editCardById(gameData, deck, cardId, patch) {
     const id = String(cardId || '')
-    const recipe = (deck?.allCards || []).find((card) => card?.id === id)
+    const recipe = findRecipeCard(deck, id)
     if (!recipe) {
         return { ok: false, error: MISSING_CARD_MESSAGE }
     }
@@ -265,7 +295,7 @@ function editCardById(gameData, deck, cardId, patch) {
                 updatedCount++
             }
         }
-    })
+    }, { deck })
 
     return {
         ok: true,
@@ -289,7 +319,12 @@ function getRecipeCardAutocomplete(searchTerm, cardList) {
         if (!term) return true
         const name = String(crd?.name || '').toLowerCase()
         const id = String(crd?.id || '').toLowerCase()
-        const shortName = Formatter.cardShortName(crd).toLowerCase()
+        let shortName = ''
+        try {
+            shortName = Formatter.cardShortName(crd).toLowerCase()
+        } catch {
+            shortName = ''
+        }
         return name.includes(term) || id.includes(term) || shortName.includes(term)
     })
     matches.sort((a, b) => {
@@ -335,7 +370,9 @@ module.exports = {
     formatEditCardContent,
     buildAddCardEmbeds,
     editReplyAfterSave,
-    collectEditPatch,
+    snapshotEditableFields,
+    diffEditableFields,
+    findRecipeCard,
     normalizeEditPatch,
     editCardById,
     recipeCardChoiceLabel,

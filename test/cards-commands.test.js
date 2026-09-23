@@ -795,7 +795,50 @@ describe("/cards command handlers", () => {
     );
   });
 
-  test("deck editcard updates recipe and same-id discard clone without touching other ids or draw length", async () => {
+  test("deck editcard opens a prefilled modal and does not write yet", async () => {
+    const recipeX = createCard({
+      id: "id-x",
+      name: "Promo",
+      url: "https://old.example/x.png",
+      type: "Event",
+    });
+    const deck = createDeck({ name: "Main", draw: [], discard: [] });
+    deck.allCards = [recipeX];
+
+    await withHarness(
+      {
+        gameData: createActiveGame({ decks: [deck] }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "editcard",
+          strings: { deck: "Main", card: "id-x" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.calls.showModal).toHaveLength(1);
+        const modal = harness.calls.showModal[0];
+        expect(modal.data.custom_id).toBe("editcard-step1");
+        expect(modal.data.submit_label).toBe("Next");
+        const fields = Object.fromEntries(
+          modal.components.map((row) => {
+            const input = row.components[0];
+            return [input.data.custom_id, input.data.value ?? ""];
+          })
+        );
+        expect(fields.name).toBe("Promo");
+        expect(fields.url).toBe("https://old.example/x.png");
+        expect(fields.type).toBe("Event");
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+  });
+
+  test("deck editcard modal save updates recipe and same-id copies without touching other ids or draw length", async () => {
+    const DeckEditCardModal = require("../modules/DeckEditCardModal");
+    const modalSubmission = require("../events/modalSubmission");
+    DeckEditCardModal.resetPendingEdits();
+
     const recipeX = createCard({
       id: "id-x",
       name: "Promo",
@@ -817,40 +860,103 @@ describe("/cards command handlers", () => {
       url: "https://old.example/y.png",
     });
     const drawKeep = createCard({ id: "draw-keep", name: "Keep" });
+    const handX = createCard({
+      id: "id-x",
+      name: "Promo",
+      url: "https://old.example/x.png",
+    });
     const deck = createDeck({
       name: "Main",
       draw: [drawY, drawKeep],
       discard: [discardX],
     });
     deck.allCards = [recipeX, recipeY];
+    const gameData = createActiveGame({
+      players: [
+        createPlayer({
+          userId: "user-1",
+          name: "Alice",
+          order: 0,
+          hands: { main: [handX], played: [], passed: [], received: [], simultaneous: [] },
+        }),
+        createPlayer({ userId: "user-2", name: "Bob", order: 1 }),
+      ],
+      decks: [deck],
+    });
 
     await withHarness(
       {
-        gameData: createActiveGame({
-          players: [
-            createPlayer({ userId: "user-1", name: "Alice", order: 0 }),
-            createPlayer({ userId: "user-2", name: "Bob", order: 1 }),
-          ],
-          decks: [deck],
-        }),
+        gameData,
         options: {
           subcommandGroup: "deck",
           subcommand: "editcard",
-          strings: {
-            card: "id-x",
-            deck: "Main",
-            url: "https://new.example/x.png",
-          },
+          strings: { deck: "Main", card: "id-x" },
         },
       },
       async (harness) => {
         await runCards(harness);
+        expect(harness.calls.showModal[0].data.custom_id).toBe("editcard-step1");
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+
+    await withHarness(
+      {
+        gameData,
+        isModalSubmit: true,
+        modalCustomId: "editcard-step1",
+        modalFields: {
+          name: "Promo",
+          url: "https://new.example/x.png",
+          type: "",
+          suit: "",
+        },
+      },
+      async (harness) => {
+        await modalSubmission.execute(harness.interaction);
+        expect(harness.persistCalls).toHaveLength(0);
+        expect(harness.lastContent()).toContain("Changed so far: url");
+        expect(harness.calls.reply[0].components[0].components[0].data.custom_id).toBe(
+          "editcard-next"
+        );
+      }
+    );
+
+    await withHarness(
+      {
+        gameData,
+        modalCustomId: "editcard-next",
+      },
+      async (harness) => {
+        await DeckEditCardModal.handleButton(harness.interaction, harness.client);
+        expect(harness.calls.showModal[0].data.custom_id).toBe("editcard-step2");
+        expect(harness.calls.showModal[0].data.submit_label).toBe("Save");
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+
+    await withHarness(
+      {
+        gameData,
+        isModalSubmit: true,
+        modalCustomId: "editcard-step2",
+        modalFields: {
+          value: "",
+          description: "",
+          format: "A",
+        },
+      },
+      async (harness) => {
+        await modalSubmission.execute(harness.interaction);
         const saved = await harness.getSavedGame();
         const savedDeck = saved.decks[0];
         expect(savedDeck.allCards.find((card) => card.id === "id-x").url).toBe(
           "https://new.example/x.png"
         );
         expect(savedDeck.piles.discard.cards.find((card) => card.id === "id-x").url).toBe(
+          "https://new.example/x.png"
+        );
+        expect(saved.players[0].hands.main.find((card) => card.id === "id-x").url).toBe(
           "https://new.example/x.png"
         );
         expect(savedDeck.allCards.find((card) => card.id === "id-y").url).toBe(
@@ -868,6 +974,45 @@ describe("/cards command handlers", () => {
     );
   });
 
+  test("deck editcard with no game or no deck is a clear error and does not write", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame({ isdeleted: true, decks: [] }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "editcard",
+          strings: { card: "id-x" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toContain("no game");
+        expect(harness.calls.showModal).toHaveLength(0);
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+
+    const main = createDeck({ name: "Main", draw: [], discard: [] });
+    main.allCards = [createCard({ id: "id-x", name: "Promo" })];
+    const supply = createDeck({ name: "Supply", draw: [], discard: [] });
+    await withHarness(
+      {
+        gameData: createActiveGame({ decks: [main, supply] }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "editcard",
+          strings: { card: "id-x" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toBe("No Deck Found");
+        expect(harness.calls.showModal).toHaveLength(0);
+        expect(harness.persistCalls).toHaveLength(0);
+      }
+    );
+  });
+
   test("deck editcard missing card id is a clear error and does not write", async () => {
     await withHarness(
       {
@@ -877,22 +1022,30 @@ describe("/cards command handlers", () => {
           subcommand: "editcard",
           strings: {
             card: "missing-id",
-            url: "https://new.example/x.png",
           },
         },
       },
       async (harness) => {
         await runCards(harness);
         expect(harness.lastContent()).toBe("No card found with that id in this deck.");
+        expect(harness.calls.showModal).toHaveLength(0);
         expect(harness.persistCalls).toHaveLength(0);
       }
     );
   });
 
-  test("deck editcard with no editable fields is a clear error and does not write", async () => {
+  test("deck editcard save with no fields changed is a clear error and does not write", async () => {
+    const DeckEditCardModal = require("../modules/DeckEditCardModal");
+    const modalSubmission = require("../events/modalSubmission");
+    DeckEditCardModal.resetPendingEdits();
+
+    const ace = createCard({ id: "ace", name: "Ace", url: null });
+    const deck = createDeck({ name: "Main", draw: [ace], discard: [] });
+    const gameData = createActiveGame({ decks: [deck] });
+
     await withHarness(
       {
-        gameData: gameWithDeck(),
+        gameData,
         options: {
           subcommandGroup: "deck",
           subcommand: "editcard",
@@ -901,22 +1054,72 @@ describe("/cards command handlers", () => {
       },
       async (harness) => {
         await runCards(harness);
-        expect(harness.lastContent()).toContain("at least one field to edit");
+        expect(harness.calls.showModal).toHaveLength(1);
+      }
+    );
+
+    await withHarness(
+      {
+        gameData,
+        isModalSubmit: true,
+        modalCustomId: "editcard-step1",
+        modalFields: { name: "Ace", url: "", type: "", suit: "" },
+      },
+      async (harness) => {
+        await modalSubmission.execute(harness.interaction);
+        expect(harness.lastContent()).toContain("No changes yet");
+      }
+    );
+
+    await withHarness(
+      {
+        gameData,
+        isModalSubmit: true,
+        modalCustomId: "editcard-step2",
+        modalFields: { value: "", description: "", format: "A" },
+      },
+      async (harness) => {
+        await modalSubmission.execute(harness.interaction);
+        expect(harness.lastContent()).toContain("No fields changed");
         expect(harness.persistCalls).toHaveLength(0);
       }
     );
   });
 
-  test("deck editcard autocomplete shows name · shortId for duplicate names", async () => {
+  test("deck editcard autocomplete shows name · shortId for the selected deck only", async () => {
     const promoX = createCard({ id: "id-x", name: "Promo" });
     const promoY = createCard({ id: "id-y", name: "Promo" });
-    const deck = createDeck({ name: "Main", draw: [], discard: [] });
-    deck.allCards = [promoX, promoY];
+    const other = createCard({ id: "id-z", name: "Promo" });
+    const main = createDeck({ name: "Main", draw: [], discard: [] });
+    main.allCards = [promoX, promoY];
+    const supply = createDeck({ name: "Supply", draw: [], discard: [] });
+    supply.allCards = [other];
 
     await withHarness(
       {
         isAutocomplete: true,
-        gameData: createActiveGame({ decks: [deck] }),
+        gameData: createActiveGame({ decks: [main, supply] }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "editcard",
+          focused: "Promo",
+          focusedName: "card",
+          strings: { deck: "Main" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.calls.respond[0]).toEqual([
+          { name: "Promo · id-x", value: "id-x" },
+          { name: "Promo · id-y", value: "id-y" },
+        ]);
+      }
+    );
+
+    await withHarness(
+      {
+        isAutocomplete: true,
+        gameData: createActiveGame({ decks: [main, supply] }),
         options: {
           subcommandGroup: "deck",
           subcommand: "editcard",
@@ -926,10 +1129,7 @@ describe("/cards command handlers", () => {
       },
       async (harness) => {
         await runCards(harness);
-        expect(harness.calls.respond[0]).toEqual([
-          { name: "Promo · id-x", value: "id-x" },
-          { name: "Promo · id-y", value: "id-y" },
-        ]);
+        expect(harness.calls.respond[0]).toEqual([]);
       }
     );
   });

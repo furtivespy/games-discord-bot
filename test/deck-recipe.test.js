@@ -335,8 +335,16 @@ function makeGameWithDuplicatePromos() {
   };
 }
 
-test("edit url on id X updates allCards and discard clone; same-name other ids and draw length untouched", () => {
+test("edit url on id X updates allCards, discard, and hand clones; same-name other ids and draw length untouched", () => {
   const { gameData, deck, recipeX, recipeY, discardX, drawY } = makeGameWithDuplicatePromos();
+  const handX = cloneDeep(recipeX);
+  gameData.players[0].hands.main.push(handX);
+  const otherDeck = {
+    name: "Other",
+    allCards: [cloneDeep(recipeX)],
+    piles: { draw: { cards: [] }, discard: { cards: [] } },
+  };
+  gameData.decks.push(otherDeck);
   const drawRef = deck.piles.draw.cards;
   const drawLengthBefore = deck.piles.draw.cards.length;
   const discardLengthBefore = deck.piles.discard.cards.length;
@@ -348,8 +356,10 @@ test("edit url on id X updates allCards and discard clone; same-name other ids a
   expect(result.ok).toBe(true);
   expect(recipeX.url).toBe("https://new.example/x.png");
   expect(discardX.url).toBe("https://new.example/x.png");
+  expect(handX.url).toBe("https://new.example/x.png");
   expect(recipeY.url).toBe("https://old.example/y.png");
   expect(drawY.url).toBe("https://old.example/y.png");
+  expect(otherDeck.allCards[0].url).toBe("https://old.example/x.png");
   expect(deck.piles.draw.cards).toBe(drawRef);
   expect(deck.piles.draw.cards).toHaveLength(drawLengthBefore);
   expect(deck.piles.discard.cards).toHaveLength(discardLengthBefore);
@@ -376,6 +386,14 @@ test("edit with no fields returns a clear error", () => {
   expect(DeckRecipeHelper.normalizeEditPatch(null)).toEqual({
     error: DeckRecipeHelper.NO_FIELDS_MESSAGE,
   });
+  expect(DeckRecipeHelper.diffEditableFields(
+    { name: "Promo", url: "https://old.example/x.png", type: "", suit: "", value: "", description: "", format: "A" },
+    { name: "Promo", url: "https://old.example/x.png", type: "", suit: "", value: "", description: "", format: "A" },
+  )).toEqual({});
+  expect(DeckRecipeHelper.diffEditableFields(
+    { name: "Promo", url: "https://old.example/x.png", type: "", suit: "", value: "", description: "", format: "A" },
+    { name: "Promo", url: "https://new.example/x.png", type: "", suit: "", value: "", description: "", format: "A" },
+  )).toEqual({ url: "https://new.example/x.png" });
 });
 
 test("recipe card autocomplete disambiguates duplicate names via short id", () => {
@@ -390,4 +408,9 @@ test("recipe card autocomplete disambiguates duplicate names via short id", () =
   expect(DeckRecipeHelper.getRecipeCardAutocomplete("id-x", cards)).toEqual([
     { name: "id-x — Promo · id-x", value: "id-x" },
   ]);
+  expect(
+    DeckRecipeHelper.getRecipeCardAutocomplete("promo", [
+      { id: "id-z", name: "Promo", format: "A", type: null, description: "" },
+    ])
+  ).toEqual([{ name: "promo — Promo · id-z", value: "id-z" }]);
 });
