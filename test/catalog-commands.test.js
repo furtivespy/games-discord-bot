@@ -118,7 +118,7 @@ describe("/catalog command handlers", () => {
     );
   });
 
-  test("asks for /migrate when the catalog db is missing", async () => {
+  test("asks to restore a seeded catalog when the catalog db is missing", async () => {
     await withHarness(
       { user: OWNER, options: { subcommand: "list" } },
       async (harness) => {
@@ -126,7 +126,9 @@ describe("/catalog command handlers", () => {
           fs.existsSync(path.join(harness.dataDir, "deck_catalog.sqlite"))
         ).toBe(false);
         await runCatalog(harness);
-        expect(harness.lastContent()).toContain("job `deck-catalog`");
+        expect(harness.lastContent()).toMatch(/restore a seeded/i);
+        expect(harness.lastContent()).toMatch(/will not recreate/i);
+        expect(harness.lastContent()).not.toContain("job `deck-catalog`");
       }
     );
   });
@@ -590,7 +592,8 @@ describe("/catalog command handlers", () => {
         await runCatalog(harness);
         expect(harness.lastContent()).toMatch(/reserved/i);
         expect(harness.lastContent()).toContain("standard");
-        expect(harness.lastContent()).toContain("deck-catalog");
+        expect(harness.lastContent()).toMatch(/will not recreate/i);
+        expect(harness.lastContent()).not.toContain("job `deck-catalog`");
 
         const after = new DeckCatalog({ dataDir: harness.dataDir });
         try {

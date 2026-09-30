@@ -97,7 +97,8 @@ describe("catalog publish payload builder", () => {
     expect(validateCatalogId("customempty").code).toBe("reserved_id");
     expect(validateCatalogId("empty").code).toBe("reserved_id");
     expect(validateCatalogId("standard").code).toBe("reserved_id");
-    expect(validateCatalogId("standard").error).toMatch(/official catalog seed/i);
+    expect(validateCatalogId("standard").error).toMatch(/official catalog/i);
+    expect(validateCatalogId("standard").error).toMatch(/will not recreate/i);
     expect(OFFICIAL_SEED_IDS.has("standard")).toBe(true);
     expect(OFFICIAL_SEED_IDS.has("uno-classic")).toBe(true);
     expect(OFFICIAL_SEED_IDS.has("custom-csv")).toBe(false);
@@ -319,7 +320,7 @@ describe("catalog publish payload builder", () => {
       });
       expect(beforeSeed.ok).toBe(false);
       expect(beforeSeed.code).toBe("reserved_id");
-      expect(beforeSeed.error).toMatch(/deck-catalog/);
+      expect(beforeSeed.error).toMatch(/will not recreate/i);
       expect(catalog.hasId("standard")).toBe(false);
       expect(catalog.count()).toBe(0);
 

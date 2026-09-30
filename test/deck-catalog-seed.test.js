@@ -193,11 +193,17 @@ describe("/migrate", () => {
     try {
       await command.execute(interaction);
 
+      expect(replies[0].content).toContain("Deck catalog check complete.");
+      expect(replies[0].content).toContain(
+        "This command does not insert card sets from code."
+      );
       expect(replies[0].content).toContain("Templates inserted: 0");
       expect(replies[0].content).toContain(
         "Templates skipped (already present): 0"
       );
       expect(replies[0].content).toContain("Total rows: 0");
+      expect(replies[0].content).toMatch(/restore a seeded catalog/i);
+      expect(replies[0].content).not.toContain("Deck catalog seed complete.");
       expect(fs.existsSync(path.join(dataDir, "game_documents.sqlite"))).toBe(
         false
       );
@@ -216,11 +222,13 @@ describe("/migrate", () => {
 
       replies.length = 0;
       await command.execute(interaction);
+      expect(replies[0].content).toContain("Deck catalog check complete.");
       expect(replies[0].content).toContain("Templates inserted: 0");
       expect(replies[0].content).toMatch(
         /Templates skipped \(already present\): \d+/
       );
       expect(replies[0].content).not.toContain("Templates skipped (already present): 0");
+      expect(replies[0].content).not.toMatch(/restore a seeded catalog/i);
 
       const after = new DeckCatalog({ dataDir });
       try {

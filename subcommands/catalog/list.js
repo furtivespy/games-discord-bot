@@ -28,7 +28,7 @@ class CatalogList {
       if (templates.length === 0) {
         await replyEphemeral(
           interaction,
-          "No catalog templates found. Run `/migrate` with job `deck-catalog` first."
+          "No catalog templates found. Restore a seeded `deck_catalog.sqlite` (or a production backup), or publish a set with `/catalog`. `/migrate` will not recreate built-in sets."
         );
         return;
       }
