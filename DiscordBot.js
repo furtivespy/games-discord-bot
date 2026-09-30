@@ -17,6 +17,7 @@ const GoogleSearch = require("./modules/GoogleSearch.js");
 const _ = require("lodash");
 const modalSubmission = require('./events/modalSubmission.js');
 const GatherInterest = require("./modules/GatherInterest.js");
+const DeckEditCardModal = require("./modules/DeckEditCardModal");
 const ReminderSystem = require("./modules/ReminderSystem.js");
 const GameStatusHelper = require("./modules/GameStatusHelper");
 
@@ -819,6 +820,9 @@ client.on("interactionCreate", async (interaction) => {
     });
   } else if (interaction.isButton()) {
     try {
+      if (await DeckEditCardModal.handleButton(interaction, interaction.client)) {
+        return;
+      }
       await GatherInterest.handleButton(interaction, interaction.client);
     } catch (error) {
       console.error(error);
