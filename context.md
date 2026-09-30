@@ -33,7 +33,7 @@ The bot utilizes two main command styles:
     *   For `/game ...` subcommands: `subcommands/genericgame/` (e.g., `newgame.js`, `status.js`)
 *   **Data Structures & Helpers:**
     *   Default game/player data: `db/anygame.js` (contains `defaultGameData`, `defaultPlayer`, etc.)
-    *   Card definitions (examples): `db/cards.js` (Inis specific), `db/carddecks.js` (generic decks).
+    *   Card definitions: `db/cards.js` (Inis specific). Generic card sets live in `deck_catalog.sqlite` (sqlite); `/cards deck new` materializes from that catalog. Publish a new set with `/catalog`.
     *   Generic game logic: `modules/GlobalGameHelper.js` (e.g., `getGameData`, `setGameDataV2`).
     *   Card interaction UI (e.g., choosing cards via reactions): `modules/CardsAssistant.js`.
     *   Game display and formatting: `modules/GameFormatter.js` (e.g., `GameStatusV2`, `playerSecretHandAndImages`).

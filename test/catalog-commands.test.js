@@ -4,7 +4,7 @@ const path = require("path");
 const Catalog = require("../slashcommands/genericgame/catalog");
 const Cards = require("../slashcommands/genericgame/cards");
 const DeckCatalog = require("../db/deckCatalog.js");
-const { seedDeckCatalog } = require("../db/seedDeckCatalog.js");
+const { insertSeededCatalogFixtures } = require("./helpers/catalogFixtures");
 const {
   collectedReplyText,
   createActiveGame,
@@ -202,7 +202,7 @@ describe("/catalog command handlers", () => {
     await withHarness(
       { user: OWNER, options: { subcommand: "list" } },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         const catalog = new DeckCatalog({ dataDir: harness.dataDir });
         catalog.db
           .query(`UPDATE deck_templates SET cards = ? WHERE id = ?`)
@@ -225,7 +225,7 @@ describe("/catalog command handlers", () => {
         options: { subcommand: "show", strings: { id: "standard" } },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         const catalog = new DeckCatalog({ dataDir: harness.dataDir });
         catalog.db
           .query(`UPDATE deck_templates SET cards = ? WHERE id = ?`)
@@ -243,7 +243,7 @@ describe("/catalog command handlers", () => {
     await withHarness(
       { user: OWNER, options: { subcommand: "list" } },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         await runCatalog(harness);
         const text = collectedReplyText(harness);
         expect(text).toContain("Standard 52 Card Poker Deck (standard): 52 cards, Layout A");
@@ -266,7 +266,7 @@ describe("/catalog command handlers", () => {
     await withHarness(
       { user: OWNER, options: { subcommand: "list" } },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         const catalog = new DeckCatalog({ dataDir: harness.dataDir });
         catalog.setEnabled("standard", 0);
         catalog.close();
@@ -299,7 +299,7 @@ describe("/catalog command handlers", () => {
         options: { subcommand: "show", strings: { id: "standard" } },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         await runCatalog(harness);
         const text = collectedReplyText(harness);
         expect(text).toContain("Standard 52 Card Poker Deck");
@@ -322,7 +322,7 @@ describe("/catalog command handlers", () => {
         options: { subcommand: "disable", strings: { id: "standard" } },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         let before;
         {
           const snapshot = new DeckCatalog({ dataDir: harness.dataDir });
@@ -373,7 +373,7 @@ describe("/catalog command handlers", () => {
         options: { subcommand: "disable", strings: { id: "standard" } },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         const catalog = new DeckCatalog({ dataDir: harness.dataDir });
         catalog.setEnabled("standard", 0);
         catalog.close();
@@ -415,7 +415,7 @@ describe("/catalog command handlers", () => {
         },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         let seedCount;
         {
           const snapshot = new DeckCatalog({ dataDir: harness.dataDir });
@@ -458,7 +458,7 @@ describe("/catalog command handlers", () => {
         },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         await runCatalog(harness);
         expect(harness.lastContent().toLowerCase()).toContain("no game");
       }
@@ -474,7 +474,7 @@ describe("/catalog command handlers", () => {
         },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         await runCatalog(harness);
         expect(harness.lastContent()).toContain("No deck named");
       }
@@ -490,7 +490,7 @@ describe("/catalog command handlers", () => {
         },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         await runCatalog(harness);
         expect(harness.lastContent()).toContain("reserved");
       }
@@ -510,7 +510,7 @@ describe("/catalog command handlers", () => {
         },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         await runCatalog(harness);
         expect(harness.lastContent()).toContain("allCards");
       }
@@ -550,7 +550,7 @@ describe("/catalog command handlers", () => {
         },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         await runCatalog(harness);
         expect(harness.lastContent()).toContain("Published `live-set`");
         expect(harness.lastContent()).toContain("3 cards");
@@ -616,7 +616,7 @@ describe("/catalog command handlers", () => {
         },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         const catalog = new DeckCatalog({ dataDir: harness.dataDir });
         catalog.setEnabled("standard", 0);
         catalog.close();
@@ -638,7 +638,7 @@ describe("/catalog command handlers", () => {
         },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         const catalog = new DeckCatalog({ dataDir: harness.dataDir });
         catalog.setEnabled("standard", 0);
         catalog.close();
@@ -661,7 +661,7 @@ describe("/catalog command handlers", () => {
         },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         const catalog = new DeckCatalog({ dataDir: harness.dataDir });
         catalog.setEnabled("standard", 0);
         catalog.close();
@@ -788,7 +788,7 @@ describe("/catalog command handlers", () => {
     await withHarness(
       { user: OWNER, options: { subcommand: "list" } },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         const catalog = new DeckCatalog({ dataDir: harness.dataDir });
         catalog.db
           .query(`UPDATE deck_templates SET enabled = 2 WHERE id = ?`)
@@ -816,7 +816,7 @@ describe("/catalog command handlers", () => {
         },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         const catalog = new DeckCatalog({ dataDir: harness.dataDir });
         catalog.db
           .query(`UPDATE deck_templates SET enabled = 2 WHERE id = ?`)
@@ -841,7 +841,7 @@ describe("/catalog command handlers", () => {
         },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         const catalog = new DeckCatalog({ dataDir: harness.dataDir });
         catalog.db
           .query(`UPDATE deck_templates SET enabled = 2 WHERE id = ?`)
@@ -866,7 +866,7 @@ describe("/catalog command handlers", () => {
         },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         const catalog = new DeckCatalog({ dataDir: harness.dataDir });
         catalog.setEnabled("standard", 0);
         catalog.insertTemplate({

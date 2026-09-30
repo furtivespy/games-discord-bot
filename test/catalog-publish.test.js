@@ -15,6 +15,7 @@ const {
   sqliteUniqueField,
 } = DeckCatalog;
 const { seedDeckCatalog, OFFICIAL_SEED_IDS } = require("../db/seedDeckCatalog.js");
+const { insertSeededCatalogFixtures } = require("./helpers/catalogFixtures");
 const {
   EMPTY_CARDS_ERROR,
   buildPublishPayload,
@@ -322,10 +323,15 @@ describe("catalog publish payload builder", () => {
       expect(catalog.hasId("standard")).toBe(false);
       expect(catalog.count()).toBe(0);
 
-      seedDeckCatalog({ catalog });
+      insertSeededCatalogFixtures({ catalog });
       const seededStandard = catalog.getTemplate("standard");
       expect(seededStandard).not.toBeNull();
       const seedCount = catalog.count();
+
+      const seedResult = seedDeckCatalog({ catalog });
+      expect(seedResult.inserted).toBe(0);
+      expect(seedResult.skipped).toBe(seedCount);
+      expect(catalog.getTemplate("standard")).toEqual(seededStandard);
 
       const overwriteSeed = publishToCatalog(catalog, {
         id: "standard",

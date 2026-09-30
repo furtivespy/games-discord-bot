@@ -2,13 +2,10 @@ const { describe, expect, test } = require("bun:test");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const GameDB = require("../db/anygame.js");
 const DeckCatalog = require("../db/deckCatalog.js");
-const { seedDeckCatalog, INSTANCE_ONLY_IDS } = require("../db/seedDeckCatalog.js");
-const pairCards = require("../db/decks/pairCards.js");
+const { seedDeckCatalog } = require("../db/seedDeckCatalog.js");
+const { insertSeededCatalogFixtures } = require("./helpers/catalogFixtures");
 const Migrate = require("../slashcommands/util/migrate.js");
-
-const RANDOM_SET_IDS = new Set(["shaolia-ws2", "shaolia-tw2", "shaolia-hf2"]);
 
 function withTempDataDir(run) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "deck-catalog-"));
@@ -28,45 +25,28 @@ function withTempDataDir(run) {
   }
 }
 
-function expectedSeedIds() {
-  return GameDB.CurrentCardList.filter(([, id]) => !INSTANCE_ONLY_IDS.has(id)).map(
-    ([, id]) => id
-  );
-}
-
 describe("seedDeckCatalog", () => {
-  test("fresh db inserts every CurrentCardList id except instance-only sets", () => {
+  test("anygame and seed do not read a JS card list", () => {
+    const anygame = fs.readFileSync(path.join(__dirname, "../db/anygame.js"), "utf8");
+    const seed = fs.readFileSync(
+      path.join(__dirname, "../db/seedDeckCatalog.js"),
+      "utf8"
+    );
+    expect(anygame).not.toMatch(/CurrentCardList|MakeSpecificDeck|db\/decks/);
+    expect(seed).not.toMatch(/CurrentCardList|MakeSpecificDeck/);
+    expect(fs.existsSync(path.join(__dirname, "../db/decks"))).toBe(false);
+  });
+
+  test("fresh empty db inserts nothing from JS", () => {
     withTempDataDir(({ catalog, dataDir }) => {
       const result = seedDeckCatalog({ catalog });
-      const expectedIds = expectedSeedIds();
 
-      expect(result.inserted).toBe(expectedIds.length);
+      expect(result.inserted).toBe(0);
       expect(result.skipped).toBe(0);
-      expect(result.total).toBe(expectedIds.length);
-
-      for (const id of expectedIds) {
-        const template = catalog.getTemplate(id);
-        expect(template).not.toBeNull();
-        expect(template.enabled).toBe(1);
-        expect(template.created_by).toBe("seed");
-        expect(template.cards.length).toBeGreaterThan(0);
-        for (const card of template.cards) {
-          expect(card).not.toHaveProperty("id");
-          expect(card).not.toHaveProperty("origin");
-          expect(Object.keys(card).sort()).toEqual([
-            "description",
-            "format",
-            "name",
-            "suit",
-            "type",
-            "url",
-            "value",
-          ]);
-        }
-      }
-
+      expect(result.total).toBe(0);
+      expect(catalog.count()).toBe(0);
+      expect(catalog.getTemplate("standard")).toBeNull();
       expect(catalog.getTemplate("custom-csv")).toBeNull();
-      expect(catalog.getTemplate("customempty")).toBeNull();
       expect(catalog.getTemplate("empty")).toBeNull();
       expect(fs.existsSync(path.join(dataDir, "game_documents.sqlite"))).toBe(
         false
@@ -74,51 +54,12 @@ describe("seedDeckCatalog", () => {
     });
   });
 
-  test("non-random sets match a second MakeSpecificDeck call by count and names", () => {
+  test("seed on a db that already has rows skips and does not clobber mutated rows", () => {
     withTempDataDir(({ catalog }) => {
-      seedDeckCatalog({ catalog });
-
-      for (const [, id] of GameDB.CurrentCardList) {
-        if (INSTANCE_ONLY_IDS.has(id) || RANDOM_SET_IDS.has(id)) continue;
-        const stored = catalog.getTemplate(id);
-        const generated = GameDB.MakeSpecificDeck("_compare_", id);
-        expect(stored.cards.map((card) => card.name)).toEqual(
-          generated.map((card) => card.name)
-        );
-      }
-    });
-  });
-
-  test("shaolia random sets freeze one roll and match count only", () => {
-    withTempDataDir(({ catalog }) => {
-      seedDeckCatalog({ catalog });
-
-      for (const id of RANDOM_SET_IDS) {
-        const stored = catalog.getTemplate(id);
-        const generated = GameDB.MakeSpecificDeck("_compare_", id);
-        expect(stored.cards.length).toBe(generated.length);
-        expect(stored.cards.length).toBeGreaterThan(0);
-      }
-
-      const firstJson = catalog.getTemplate("shaolia-ws2").cards;
-      seedDeckCatalog({ catalog });
-      expect(catalog.getTemplate("shaolia-ws2").cards).toEqual(firstJson);
-    });
-  });
-
-  test("pear expands to the pair triangle after the arity fix", () => {
-    withTempDataDir(({ catalog }) => {
-      seedDeckCatalog({ catalog });
-      const pear = catalog.getTemplate("pear");
-      expect(pear.cards).toHaveLength(pairCards.length);
-      expect(pear.cards.map((card) => card.name)).toEqual(pairCards);
-    });
-  });
-
-  test("second seed inserts nothing and does not clobber mutated rows", () => {
-    withTempDataDir(({ catalog }) => {
-      const first = seedDeckCatalog({ catalog });
+      insertSeededCatalogFixtures({ catalog });
       const originalStandard = catalog.getTemplate("standard");
+      expect(originalStandard).not.toBeNull();
+      const existingCount = catalog.count();
 
       catalog.db
         .query(`UPDATE deck_templates SET cards = ? WHERE id = ?`)
@@ -127,8 +68,8 @@ describe("seedDeckCatalog", () => {
       const second = seedDeckCatalog({ catalog });
 
       expect(second.inserted).toBe(0);
-      expect(second.skipped).toBe(first.inserted);
-      expect(second.total).toBe(first.total);
+      expect(second.skipped).toBe(existingCount);
+      expect(second.total).toBe(existingCount);
       expect(catalog.getTemplate("standard").cards).toEqual([]);
       expect(catalog.getTemplate("standard").cards).not.toEqual(
         originalStandard.cards
@@ -195,10 +136,12 @@ describe("seedDeckCatalog", () => {
 
       const result = seedDeckCatalog({ catalog });
       expect(result.nameIndex.status).toBe("skipped");
-      expect(result.inserted).toBe(expectedSeedIds().length);
+      expect(result.inserted).toBe(0);
+      expect(result.skipped).toBe(2);
+      expect(result.total).toBe(2);
       expect(catalog.getTemplate("foo-upper").name).toBe("Foo");
       expect(catalog.getTemplate("foo-lower").name).toBe("foo");
-      expect(catalog.getTemplate("standard")).not.toBeNull();
+      expect(catalog.getTemplate("standard")).toBeNull();
       expect(
         catalog.db
           .query(
@@ -210,6 +153,7 @@ describe("seedDeckCatalog", () => {
       const again = seedDeckCatalog({ catalog });
       expect(again.nameIndex.status).toBe("skipped");
       expect(again.inserted).toBe(0);
+      expect(again.skipped).toBe(2);
       expect(catalog.getTemplate("foo-upper").name).toBe("Foo");
       expect(catalog.getTemplate("foo-lower").name).toBe("foo");
     });
@@ -229,7 +173,7 @@ describe("seedDeckCatalog", () => {
 });
 
 describe("/migrate", () => {
-  test("reports inserted, skipped, and total rows", async () => {
+  test("reports inserted, skipped, and total rows without recreating sets from code", async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "deck-catalog-migrate-"));
     const previousDataDir = process.env.GAMEBOT_DATA_DIR;
     process.env.GAMEBOT_DATA_DIR = dataDir;
@@ -249,22 +193,41 @@ describe("/migrate", () => {
     try {
       await command.execute(interaction);
 
-      const expectedCount = expectedSeedIds().length;
-      expect(replies[0].content).toContain(`Templates inserted: ${expectedCount}`);
+      expect(replies[0].content).toContain("Templates inserted: 0");
       expect(replies[0].content).toContain(
         "Templates skipped (already present): 0"
       );
-      expect(replies[0].content).toContain(`Total rows: ${expectedCount}`);
+      expect(replies[0].content).toContain("Total rows: 0");
       expect(fs.existsSync(path.join(dataDir, "game_documents.sqlite"))).toBe(
         false
       );
 
+      const catalog = new DeckCatalog({ dataDir });
+      try {
+        insertSeededCatalogFixtures({ catalog });
+        const existingCount = catalog.count();
+        expect(existingCount).toBeGreaterThan(0);
+        catalog.db
+          .query(`UPDATE deck_templates SET cards = ? WHERE id = ?`)
+          .run("[]", "standard");
+      } finally {
+        catalog.close();
+      }
+
       replies.length = 0;
       await command.execute(interaction);
       expect(replies[0].content).toContain("Templates inserted: 0");
-      expect(replies[0].content).toContain(
-        `Templates skipped (already present): ${expectedCount}`
+      expect(replies[0].content).toMatch(
+        /Templates skipped \(already present\): \d+/
       );
+      expect(replies[0].content).not.toContain("Templates skipped (already present): 0");
+
+      const after = new DeckCatalog({ dataDir });
+      try {
+        expect(after.getTemplate("standard").cards).toEqual([]);
+      } finally {
+        after.close();
+      }
     } finally {
       if (previousDataDir === undefined) {
         delete process.env.GAMEBOT_DATA_DIR;
@@ -326,12 +289,13 @@ describe("/migrate", () => {
       await command.execute(interaction);
       expect(replies[0].content).toMatch(/all rows kept/i);
       expect(replies[0].content).toMatch(/Foo|foo/);
+      expect(replies[0].content).toContain("Templates inserted: 0");
 
       const after = new DeckCatalog({ dataDir });
       try {
         expect(after.getTemplate("foo-upper").name).toBe("Foo");
         expect(after.getTemplate("foo-lower").name).toBe("foo");
-        expect(after.getTemplate("standard")).not.toBeNull();
+        expect(after.getTemplate("standard")).toBeNull();
         expect(
           after.db
             .query(
