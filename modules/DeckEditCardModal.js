@@ -1,5 +1,6 @@
 const {
     ModalBuilder,
+    TextDisplayBuilder,
     TextInputBuilder,
     TextInputStyle,
     ActionRowBuilder,
@@ -137,6 +138,10 @@ function formatValue(card) {
     return formatLetter(card?.format)
 }
 
+function formatOptionsText() {
+    return Formatter.CARD_FORMAT_CHOICES.map((choice) => choice.name).join('\n')
+}
+
 function buildStep1Modal(card) {
     const modal = new ModalBuilder()
         .setCustomId(STEP1_MODAL_ID)
@@ -201,6 +206,7 @@ function buildStep2Modal(card) {
             maxLength: FIELD_MAX.description,
             value: card?.description,
         }),
+        new TextDisplayBuilder().setContent(formatOptionsText()),
         buildTextInput({
             id: 'format',
             label: 'Format (A, B, or C)',

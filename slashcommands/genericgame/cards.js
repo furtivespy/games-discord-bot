@@ -233,7 +233,7 @@ class Cards extends SlashCommand {
                 subcommand
                     .setName("editcard")
                     .setDescription("Edit a card: pick deck, then card, then a pop-up with current fields")
-                    .addStringOption(option => option.setName('deck').setDescription('Deck that contains the card').setAutocomplete(true))
+                    .addStringOption(option => option.setName('deck').setDescription('Deck that contains the card').setRequired(true).setAutocomplete(true))
                     .addStringOption(option => option.setName('card').setDescription('Card to edit (name · short id) — pick a deck first').setRequired(true).setAutocomplete(true))
             );
         });

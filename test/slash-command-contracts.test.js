@@ -29,6 +29,21 @@ function collectOptionNames(options = []) {
   return names;
 }
 
+function findRequiredAfterOptional(options = [], trail = "") {
+  const hits = [];
+  let seenOptional = false;
+  for (const option of options) {
+    if (!option.required) seenOptional = true;
+    else if (seenOptional) hits.push(`${trail}${option.name}`);
+    if (option.options) {
+      hits.push(
+        ...findRequiredAfterOptional(option.options, `${trail}${option.name}.`)
+      );
+    }
+  }
+  return hits;
+}
+
 describe("slash command definition contracts", () => {
   const files = listSlashCommandFiles();
   const stubClient = { logger: { log: () => {} }, config: {} };
@@ -50,6 +65,16 @@ describe("slash command definition contracts", () => {
     }
 
     expect(new Set(names).size).toBe(names.length);
+
+    const ordering = [];
+    for (const file of files) {
+      const Command = require(file);
+      const json = new Command(stubClient).data.toJSON();
+      for (const hit of findRequiredAfterOptional(json.options, `${json.name}.`)) {
+        ordering.push(hit);
+      }
+    }
+    expect(ordering).toEqual([]);
   }, 15_000);
 
   test("/game registers the core table-management subcommands", () => {
@@ -208,7 +233,7 @@ describe("slash command definition contracts", () => {
     const card = editcard.options.find((option) => option.name === "card");
     expect(card).toMatchObject({ required: true, autocomplete: true });
     const deck = editcard.options.find((option) => option.name === "deck");
-    expect(deck).toMatchObject({ required: false, autocomplete: true });
+    expect(deck).toMatchObject({ required: true, autocomplete: true });
   });
 
   test("required and autocomplete flags stay set on high-traffic options", () => {

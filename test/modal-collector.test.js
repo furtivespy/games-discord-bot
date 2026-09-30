@@ -153,6 +153,13 @@ describe("modals and collectors", () => {
         expect(handled).toBe(true);
         expect(harness.calls.showModal[0].data.custom_id).toBe("editcard-step2");
         expect(harness.calls.showModal[0].data.submit_label).toBe("Save");
+        const legend = harness.calls.showModal[0].components
+          .map((component) => component.data?.content)
+          .find(Boolean);
+        const GameFormatter = require("../modules/GameFormatter");
+        expect(legend).toBe(
+          GameFormatter.CARD_FORMAT_CHOICES.map((choice) => choice.name).join("\n")
+        );
       }
     );
   });
