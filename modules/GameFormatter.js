@@ -667,11 +667,25 @@ class GameFormatter {
     }
   }
 
-  static async GameWinner(gameData, guild) {
+  static escapeGameNameLinkText(name) {
+    // Keep masked-link text from breaking Discord markdown: [text](<url>).
+    return String(name ?? "").replace(/([\\`*_~|[\]<>])/g, "\\$1");
+  }
+
+  static async GameWinner(gameData, guild, channelId) {
     const newEmbed = new EmbedBuilder()
       .setColor(0xfff200)
-      .setTitle(`👑 Congratulations ${this.winnerName(gameData, guild)} 👑`)
-      .setDescription(`For winning ${gameData.name}`);
+      .setTitle(`👑 Congratulations ${this.winnerName(gameData, guild)} 👑`);
+
+    if (channelId && guild?.id) {
+      const linkText = this.escapeGameNameLinkText(gameData.name);
+      const jumpUrl = `https://discord.com/channels/${guild.id}/${channelId}`;
+      newEmbed.setDescription(
+        `For winning [${linkText}](<${jumpUrl}>) in <#${channelId}>`
+      );
+    } else {
+      newEmbed.setDescription(`For winning ${gameData.name}`);
+    }
 
     return newEmbed;
   }

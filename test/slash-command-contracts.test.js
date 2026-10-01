@@ -287,6 +287,24 @@ describe("slash command definition contracts", () => {
     ]);
   });
 
+  test("/winshare gamechannel accepts text channels, threads, and forum posts", () => {
+    const { ChannelType } = require("discord.js");
+    const WinShare = require("../slashcommands/genericgame/winshare");
+    const json = new WinShare(stubClient).data.toJSON();
+    expect(json.name).toBe("winshare");
+    const gamechannel = json.options.find((option) => option.name === "gamechannel");
+    expect(gamechannel.required).toBe(true);
+    expect(gamechannel.channel_types).toEqual([
+      ChannelType.GuildText,
+      ChannelType.GuildAnnouncement,
+      ChannelType.PublicThread,
+      ChannelType.PrivateThread,
+      ChannelType.AnnouncementThread,
+    ]);
+    expect(gamechannel.channel_types).toContain(ChannelType.PublicThread);
+    expect(gamechannel.channel_types).not.toContain(ChannelType.GuildForum);
+  });
+
   test("/lfg keeps BGG autocomplete and adds optional customname", () => {
     const Lfg = require("../slashcommands/info/lfg");
     const json = new Lfg(stubClient).data.toJSON();
