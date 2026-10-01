@@ -95,6 +95,19 @@ function captureErrors(run) {
 }
 
 describe("catalog deck cutover", () => {
+  test("list helper does not import CurrentCardList", () => {
+    const listHelper = fs.readFileSync(
+      path.join(__dirname, "../db/catalogDecks.js"),
+      "utf8"
+    );
+    const cardsHelper = fs.readFileSync(
+      path.join(__dirname, "../modules/GlobalGameHelper.js"),
+      "utf8"
+    );
+    expect(listHelper).not.toMatch(/CurrentCardList|MakeSpecificDeck/);
+    expect(cardsHelper).not.toMatch(/CurrentCardList|MakeSpecificDeck/);
+  });
+
   test("autocomplete source is enabled templates plus custom-csv; disabled id is absent", () => {
     withTempDataDir(({ dataDir }) => {
       seedCutoverCatalog(dataDir);

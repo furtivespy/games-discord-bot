@@ -123,7 +123,7 @@ const COMMAND_BLURBS = {
   secret: "Hidden info, reveal, super-secret mode",
   winshare: "Who won a game in another channel",
   config: "Set the games channel for /lfg Start game",
-  migrate: "Seed built-in deck catalog templates",
+  migrate: "Check the deck catalog (does not insert sets from code)",
   diagnostic: "Data persistence diagnostics",
   settings: "Adjust bot settings",
   dice: "Create and manage custom dice",
