@@ -1,6 +1,5 @@
-const { MessageFlags } = require("discord.js");
+const { MessageFlags, ChannelType, SlashCommandBuilder } = require("discord.js");
 const SlashCommand = require('../../base/SlashCommand.js')
-const { SlashCommandBuilder } = require('@discordjs/builders');
 const { cloneDeep } = require('lodash')
 const GameDB = require('../../db/anygame.js')
 const Formatter = require('../../modules/GameFormatter')
@@ -17,7 +16,19 @@ class WinShare extends SlashCommand {
 		  this.data = new SlashCommandBuilder()
             .setName(this.help.name)
             .setDescription(this.help.description)
-            .addChannelOption(option => option.setName('gamechannel').setDescription(`What channel was the /game in?`).setRequired(true))
+            .addChannelOption(option =>
+              option
+                .setName('gamechannel')
+                .setDescription(`What channel was the /game in?`)
+                .setRequired(true)
+                .addChannelTypes(
+                  ChannelType.GuildText,
+                  ChannelType.GuildAnnouncement,
+                  ChannelType.PublicThread,
+                  ChannelType.PrivateThread,
+                  ChannelType.AnnouncementThread
+                )
+            )
     }
 
     async execute(interaction) {
@@ -32,7 +43,7 @@ class WinShare extends SlashCommand {
 
             if (gameData.winner && gameData.winner != null){
 
-                const winEmbed = await Formatter.GameWinner(gameData, interaction.guild)
+                const winEmbed = await Formatter.GameWinner(gameData, interaction.guild, theChan.id)
 
                 await interaction.reply({ 
                     embeds: [winEmbed]

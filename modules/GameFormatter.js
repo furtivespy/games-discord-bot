@@ -667,11 +667,26 @@ class GameFormatter {
     }
   }
 
-  static async GameWinner(gameData, guild) {
+  static escapeGameNameLinkText(name) {
+    // Keep masked-link text from breaking Discord markdown: [text](url).
+    return String(name ?? "").replace(/([\\`*_~|[\]<>])/g, "\\$1");
+  }
+
+  static async GameWinner(gameData, guild, channelId) {
     const newEmbed = new EmbedBuilder()
       .setColor(0xfff200)
-      .setTitle(`👑 Congratulations ${this.winnerName(gameData, guild)} 👑`)
-      .setDescription(`For winning ${gameData.name}`);
+      .setTitle(`👑 Congratulations ${this.winnerName(gameData, guild)} 👑`);
+
+    if (channelId && guild?.id) {
+      const linkText = this.escapeGameNameLinkText(gameData.name);
+      // Embed descriptions hyperlink with [text](url), not [text](<url>).
+      // Angle brackets are for suppressing previews in message content.
+      const bggUrl = GameIdentity.bggBoardGameUrl(gameData.bggGameId);
+      const gameName = bggUrl ? `[${linkText}](${bggUrl})` : linkText;
+      newEmbed.setDescription(`For winning ${gameName} in <#${channelId}>`);
+    } else {
+      newEmbed.setDescription(`For winning ${gameData.name}`);
+    }
 
     return newEmbed;
   }

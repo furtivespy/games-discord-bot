@@ -206,6 +206,9 @@ describe("/game command handlers", () => {
         const saved = await harness.getSavedGame();
         expect(saved.winner).toEqual(["user-1"]);
         expect(harness.calls.reply[0].embeds[0].data.title).toContain("Alice");
+        expect(harness.calls.reply[0].embeds[0].data.description).toBe(
+          "For winning Final Table"
+        );
       }
     );
   });
