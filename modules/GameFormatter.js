@@ -668,7 +668,7 @@ class GameFormatter {
   }
 
   static escapeGameNameLinkText(name) {
-    // Keep masked-link text from breaking Discord markdown: [text](<url>).
+    // Keep masked-link text from breaking Discord markdown: [text](url).
     return String(name ?? "").replace(/([\\`*_~|[\]<>])/g, "\\$1");
   }
 
@@ -679,10 +679,11 @@ class GameFormatter {
 
     if (channelId && guild?.id) {
       const linkText = this.escapeGameNameLinkText(gameData.name);
-      const jumpUrl = `https://discord.com/channels/${guild.id}/${channelId}`;
-      newEmbed.setDescription(
-        `For winning [${linkText}](<${jumpUrl}>) in <#${channelId}>`
-      );
+      // Embed descriptions hyperlink with [text](url), not [text](<url>).
+      // Angle brackets are for suppressing previews in message content.
+      const bggUrl = GameIdentity.bggBoardGameUrl(gameData.bggGameId);
+      const gameName = bggUrl ? `[${linkText}](${bggUrl})` : linkText;
+      newEmbed.setDescription(`For winning ${gameName} in <#${channelId}>`);
     } else {
       newEmbed.setDescription(`For winning ${gameData.name}`);
     }

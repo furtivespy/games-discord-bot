@@ -27,27 +27,62 @@ describe("GameFormatter.GameWinner", () => {
     expect(embed.data.description).toBe("For winning Ankh");
   });
 
-  test("with a channel id links the game name and mentions the channel", async () => {
+  test("with a BGG id links the game name to BoardGameGeek and mentions the channel", async () => {
     const embed = await GameFormatter.GameWinner(
-      { name: "Ankh", winner: "user-1" },
+      { name: "Ankh", winner: "user-1", bggGameId: "285774" },
       guildStub(),
       "thread-99"
     );
 
     expect(embed.data.description).toBe(
-      "For winning [Ankh](<https://discord.com/channels/guild-1/thread-99>) in <#thread-99>"
+      "For winning [Ankh](https://boardgamegeek.com/boardgame/285774) in <#thread-99>"
     );
   });
 
-  test("escapes markdown in the linked game name so the jump URL still parses", async () => {
+  test("without a BGG id uses a plain escaped name and still mentions the channel", async () => {
     const embed = await GameFormatter.GameWinner(
-      { name: "Star*[Wars]", winner: "user-1" },
+      { name: "Ankh", winner: "user-1", bggGameId: null },
+      guildStub(),
+      "thread-99"
+    );
+
+    expect(embed.data.description).toBe("For winning Ankh in <#thread-99>");
+    expect(embed.data.description).not.toContain("boardgamegeek.com");
+    expect(embed.data.description).not.toContain("discord.com/channels");
+  });
+
+  test("does not invent a BGG url from a blank or non-numeric id", async () => {
+    for (const bggGameId of ["", "  ", "not-an-id", "13abc"]) {
+      const embed = await GameFormatter.GameWinner(
+        { name: "Ankh", winner: "user-1", bggGameId },
+        guildStub(),
+        "thread-99"
+      );
+      expect(embed.data.description).toBe("For winning Ankh in <#thread-99>");
+    }
+  });
+
+  test("escapes markdown in the BGG-linked game name so the url still parses", async () => {
+    const embed = await GameFormatter.GameWinner(
+      { name: "Star*[Wars]", winner: "user-1", bggGameId: "13" },
       guildStub(),
       "channel-2"
     );
 
     expect(embed.data.description).toBe(
-      "For winning [Star\\*\\[Wars\\]](<https://discord.com/channels/guild-1/channel-2>) in <#channel-2>"
+      "For winning [Star\\*\\[Wars\\]](https://boardgamegeek.com/boardgame/13) in <#channel-2>"
+    );
+  });
+
+  test("escapes markdown in an unlinked custom game name", async () => {
+    const embed = await GameFormatter.GameWinner(
+      { name: "Star*[Wars]", winner: "user-1", bggGameId: null },
+      guildStub(),
+      "channel-2"
+    );
+
+    expect(embed.data.description).toBe(
+      "For winning Star\\*\\[Wars\\] in <#channel-2>"
     );
   });
 });
