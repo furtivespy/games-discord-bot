@@ -298,16 +298,17 @@ describe("/game winner portrait flow", () => {
         harness.client.config.geminiKey = "test-key";
         const run = runGame(harness);
         await run;
-        expect(harness.calls.reply).toHaveLength(1);
-        expect(harness.calls.reply[0].embeds[0].data.title).toContain("Alice");
-        expect(harness.calls.editReply).toHaveLength(0);
+        expect(harness.calls.deferReply).toHaveLength(1);
+        expect(harness.calls.reply).toHaveLength(0);
+        expect(harness.calls.editReply).toHaveLength(1);
+        expect(harness.calls.editReply[0].embeds[0].data.title).toContain("Alice");
         expect(harness.calls.followUp).toHaveLength(0);
 
         release(PNG_BYTES);
         await harness.client.lastWinnerPortraitWork;
-        expect(harness.calls.editReply).toHaveLength(1);
-        expect(harness.calls.editReply[0].files).toHaveLength(1);
-        expect(harness.calls.editReply[0].embeds[0].data.image.url).toBe(
+        expect(harness.calls.editReply).toHaveLength(2);
+        expect(harness.calls.editReply[1].files).toHaveLength(1);
+        expect(harness.calls.editReply[1].embeds[0].data.image.url).toBe(
           "attachment://winner-portrait.png"
         );
       }
@@ -331,10 +332,12 @@ describe("/game winner portrait flow", () => {
         await runGame(harness);
         await harness.client.lastWinnerPortraitWork;
 
-        expect(harness.calls.reply[0].embeds[0].data.title).toContain("Alice");
-        expect(harness.calls.reply[0].flags).not.toBe(MessageFlags.Ephemeral);
+        expect(harness.calls.deferReply[0].flags).toBeUndefined();
+        expect(harness.calls.reply).toHaveLength(0);
+        expect(harness.calls.editReply).toHaveLength(1);
+        expect(harness.calls.editReply[0].embeds[0].data.title).toContain("Alice");
+        expect(harness.calls.editReply[0].flags).not.toBe(MessageFlags.Ephemeral);
         expect(harness.calls.followUp).toHaveLength(0);
-        expect(harness.calls.editReply).toHaveLength(0);
         expect(collectedReplyText(harness).toLowerCase()).not.toContain("error");
         expect((await harness.getSavedGame()).winner).toEqual(["user-1"]);
         expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
@@ -365,8 +368,8 @@ describe("/game winner portrait flow", () => {
         await runGame(harness);
         await harness.client.lastWinnerPortraitWork;
         expect(generated).toBe(0);
-        expect(harness.calls.editReply).toHaveLength(0);
-        expect(harness.calls.reply[0].embeds[0].data.title).toContain("Alice");
+        expect(harness.calls.editReply).toHaveLength(1);
+        expect(harness.calls.editReply[0].embeds[0].data.title).toContain("Alice");
       }
     );
   });
@@ -400,7 +403,8 @@ describe("/game winner portrait flow", () => {
         await runGame(harness);
         await harness.client.lastWinnerPortraitWork;
         expect(generated).toBe(0);
-        expect(harness.calls.editReply[0].files).toHaveLength(1);
+        expect(harness.calls.editReply[0].files).toBeUndefined();
+        expect(harness.calls.editReply.at(-1).files).toHaveLength(1);
         const saved = await harness.getSavedGame();
         expect(saved.winnerPortrait.winnerUserIds).toEqual(["user-1"]);
         expect(saved.winnerPortrait.messageId).toBe("chat-1");
@@ -497,7 +501,7 @@ describe("/game winner portrait flow", () => {
           "user-5",
         ]);
         expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
-        expect(harness.calls.reply[0].embeds).toHaveLength(1);
+        expect(harness.calls.editReply[0].embeds).toHaveLength(1);
       }
     );
   });
@@ -586,7 +590,7 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
         const saved = await harness.getSavedGame();
         expect(saved.winner).toEqual(["user-1"]);
         expect(saved.winnerPortrait == null).toBe(true);
-        expect(harness.calls.reply[0].embeds[0].data.title).toContain("Alice");
+        expect(harness.calls.editReply[0].embeds[0].data.title).toContain("Alice");
         expect(harness.calls.followUp).toHaveLength(0);
         expect(collectedReplyText(harness).toLowerCase()).not.toContain("error");
         expect(
@@ -600,10 +604,10 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
         } finally {
           harness.interaction.options.getChannel = origGetChannel;
         }
-        const share = harness.calls.reply.at(-1);
+        const share = harness.calls.editReply.at(-1);
         expect(share.embeds[0].data.image).toBeUndefined();
         expect(share.files).toBeUndefined();
-        expect(harness.calls.editReply).toHaveLength(0);
+        expect(harness.calls.reply).toHaveLength(0);
       }
     );
   });
@@ -677,7 +681,7 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
         const saved = await harness.getSavedGame();
         expect(saved.winnerPortrait.winnerUserIds).toEqual(["user-1"]);
         expect(saved.winnerPortrait.messageId).toBe("chat-1");
-        expect(harness.calls.editReply[0].files).toHaveLength(1);
+        expect(harness.calls.editReply.at(-1).files).toHaveLength(1);
       }
     );
   });
@@ -895,8 +899,8 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
         await runGame(harness);
         await harness.client.lastWinnerPortraitWork;
 
-        expect(harness.calls.reply[0].embeds[0].data.title).toContain("Alice");
-        expect(harness.calls.editReply).toHaveLength(0);
+        expect(harness.calls.editReply).toHaveLength(1);
+        expect(harness.calls.editReply[0].embeds[0].data.title).toContain("Alice");
         expect(harness.calls.followUp).toHaveLength(0);
         expect(collectedReplyText(harness).toLowerCase()).not.toContain("error");
         expect(collectedReplyText(harness).toLowerCase()).not.toContain("timed out");

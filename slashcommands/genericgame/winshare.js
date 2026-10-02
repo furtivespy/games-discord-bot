@@ -36,17 +36,22 @@ class WinShare extends SlashCommand {
         try {
             const theChan = interaction.options.getChannel('gamechannel')
 
+            const [, loaded] = await Promise.all([
+                interaction.deferReply(),
+                this.client.getGameDataV2(interaction.guildId, 'game', theChan.id)
+            ])
+
             let gameData = Object.assign(
                 {},
-                cloneDeep(GameDB.defaultGameData), 
-                await this.client.getGameDataV2(interaction.guildId, 'game', theChan.id)
+                cloneDeep(GameDB.defaultGameData),
+                loaded
             )
 
             if (gameData.winner && gameData.winner != null){
 
                 const winEmbed = await Formatter.GameWinner(gameData, interaction.guild, theChan.id)
 
-                await interaction.reply({ embeds: [winEmbed] })
+                await interaction.editReply({ embeds: [winEmbed] })
 
                 try {
                     if (
@@ -74,7 +79,7 @@ class WinShare extends SlashCommand {
                 }
 
             } else {
-                await interaction.reply({ content: `${theChan.name} doesn't seem to have a winner specified...`, flags: MessageFlags.Ephemeral })
+                await interaction.editReply({ content: `${theChan.name} doesn't seem to have a winner specified...` })
             }
 
         } catch (e) {
