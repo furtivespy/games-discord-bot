@@ -391,6 +391,9 @@ class DiscordBot extends Client {
     if (gameData.winner === undefined) {
       gameData.winner = null;
     }
+    if (gameData.winnerPortrait === undefined) {
+      gameData.winnerPortrait = null;
+    }
     
     // Ensure lastStatusMessage fields exist
     if (gameData.lastStatusMessageId === undefined) {

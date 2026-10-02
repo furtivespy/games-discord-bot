@@ -3,6 +3,7 @@ const SlashCommand = require('../../base/SlashCommand.js')
 const { cloneDeep } = require('lodash')
 const GameDB = require('../../db/anygame.js')
 const Formatter = require('../../modules/GameFormatter')
+const WinnerPortrait = require('../../modules/WinnerPortrait')
 
 class WinShare extends SlashCommand {
     constructor(client){
@@ -44,10 +45,24 @@ class WinShare extends SlashCommand {
             if (gameData.winner && gameData.winner != null){
 
                 const winEmbed = await Formatter.GameWinner(gameData, interaction.guild, theChan.id)
+                const payload = { embeds: [winEmbed] }
 
-                await interaction.reply({ 
-                    embeds: [winEmbed]
-                })
+                try {
+                    const portraitFile = await WinnerPortrait.fileFromStoredPortrait({
+                        client: this.client,
+                        guild: interaction.guild,
+                        gameChannel: theChan,
+                        portrait: gameData.winnerPortrait,
+                    })
+                    if (portraitFile) {
+                        winEmbed.setImage(`attachment://${WinnerPortrait.PORTRAIT_FILENAME}`)
+                        payload.files = [portraitFile]
+                    }
+                } catch (error) {
+                    WinnerPortrait.logPortraitSkip(this.client, error)
+                }
+
+                await interaction.reply(payload)
 
             } else {
                 await interaction.reply({ content: `${theChan.name} doesn't seem to have a winner specified...`, flags: MessageFlags.Ephemeral })

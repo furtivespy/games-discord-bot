@@ -90,4 +90,49 @@ describe("/winshare", () => {
       }
     );
   });
+
+  test("attaches a stored winner portrait as the embed image without regenerating", async () => {
+    const WinnerPortrait = require("../modules/WinnerPortrait");
+    const originalFetch = WinnerPortrait.fetchStoredPortraitBuffer;
+    const originalGenerate = WinnerPortrait.generatePortraitImage;
+    WinnerPortrait.fetchStoredPortraitBuffer = async () => Buffer.from("portrait-bytes");
+    WinnerPortrait.generatePortraitImage = async () => {
+      throw new Error("winshare must not regenerate");
+    };
+
+    try {
+      const gameChannel = { id: "thread-99", name: "ankh" };
+      await withHarness(
+        {
+          options: { channels: { gamechannel: gameChannel } },
+        },
+        async (harness) => {
+          harness.seedCollection(
+            "game",
+            createActiveGame({
+              name: "Ankh",
+              winner: ["user-1"],
+              winnerPortrait: {
+                winnerUserIds: ["user-1"],
+                channelId: "thread-99",
+                messageId: "portrait-msg",
+              },
+            }),
+            { channel: gameChannel.id }
+          );
+
+          await new WinShare(harness.client).execute(harness.interaction);
+
+          const payload = harness.calls.reply[0];
+          expect(payload.embeds[0].data.image.url).toBe(
+            "attachment://winner-portrait.png"
+          );
+          expect(payload.files).toHaveLength(1);
+        }
+      );
+    } finally {
+      WinnerPortrait.fetchStoredPortraitBuffer = originalFetch;
+      WinnerPortrait.generatePortraitImage = originalGenerate;
+    }
+  });
 });

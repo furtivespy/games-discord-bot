@@ -110,6 +110,14 @@ describe("slash command definition contracts", () => {
       min_length: 1,
       max_length: 100,
     });
+
+    const winner = json.options.find((option) => option.name === "winner");
+    expect(winner.options.find((option) => option.name === "player1").required).toBe(
+      true
+    );
+    const portrait = winner.options.find((option) => option.name === "portrait");
+    expect(portrait).toMatchObject({ required: false });
+    expect(portrait.type).toBe(5);
   });
 
   test("/cards registers deck, hand, and pile groups", () => {
@@ -275,7 +283,11 @@ describe("slash command definition contracts", () => {
     const subcommands = Object.fromEntries(
       json.options.map((option) => [option.name, option])
     );
-    expect(Object.keys(subcommands)).toEqual(["games-channel", "show"]);
+    expect(Object.keys(subcommands)).toEqual([
+      "games-channel",
+      "winner-portraits",
+      "show",
+    ]);
     const channel = subcommands["games-channel"].options.find(
       (option) => option.name === "channel"
     );

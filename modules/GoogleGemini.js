@@ -10,6 +10,93 @@ Try to fully answer the question, not just telling the user where to look. \
 If the question is not related to the rules, let the user know that rules are you specialty and answer \ 
 helpfully, but keep non-rules answers short and concise.`;
 
+const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";
+const DEFAULT_IMAGE_TIMEOUT_MS = 45_000;
+const BLOCKED_FINISH_REASONS = new Set([
+  "SAFETY",
+  "IMAGE_SAFETY",
+  "BLOCKLIST",
+  "PROHIBITED_CONTENT",
+  "RECITATION",
+  "SPII",
+]);
+
+function resolveImageModel(client) {
+  const configured = client?.config?.geminiImageModel;
+  if (typeof configured === "string" && configured.trim()) {
+    return configured.trim();
+  }
+  return DEFAULT_GEMINI_IMAGE_MODEL;
+}
+
+function resolveImageTimeoutMs(client) {
+  const raw = Number(client?.config?.geminiImageTimeoutMs);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_IMAGE_TIMEOUT_MS;
+}
+
+function withTimeout(promise, ms, message = "Gemini image generation timed out") {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([Promise.resolve(promise), timeout]).finally(() => {
+    clearTimeout(timer);
+  });
+}
+
+function firstCandidate(result) {
+  if (result?.response?.candidates?.length) return result.response.candidates[0];
+  if (result?.candidates?.length) return result.candidates[0];
+  return null;
+}
+
+function extractInlineImage(result, logger) {
+  const promptFeedback =
+    result?.promptFeedback || result?.response?.promptFeedback;
+  if (promptFeedback?.blockReason) {
+    logger?.warn?.(
+      `GeminiAI: image prompt blocked (${promptFeedback.blockReason}).`
+    );
+    return null;
+  }
+
+  const candidate = firstCandidate(result);
+  if (!candidate) {
+    logger?.warn?.("GeminiAI: no image candidate in API response.");
+    return null;
+  }
+
+  const finish = String(candidate.finishReason || "").toUpperCase();
+  if (BLOCKED_FINISH_REASONS.has(finish)) {
+    logger?.warn?.(`GeminiAI: image generation blocked (${finish}).`);
+    return null;
+  }
+
+  const parts = candidate.content?.parts || [];
+  for (const part of parts) {
+    const inline = part?.inlineData || part?.inline_data;
+    if (inline?.data) {
+      const buffer = Buffer.from(inline.data, "base64");
+      if (buffer.length) {
+        return {
+          buffer,
+          mimeType: inline.mimeType || inline.mime_type || "image/png",
+        };
+      }
+    }
+  }
+
+  if (typeof result?.data === "string" && result.data.trim()) {
+    const buffer = Buffer.from(result.data, "base64");
+    if (buffer.length) {
+      return { buffer, mimeType: "image/png" };
+    }
+  }
+
+  logger?.warn?.("GeminiAI: no image data in API response.");
+  return null;
+}
+
 const createGeminiAI = (client) => {
     return new GeminiAI(client)
 }
@@ -156,6 +243,42 @@ class GeminiAI {
     return combinedChunks
   }
 
+  imageModelName() {
+    return resolveImageModel(this.client);
+  }
+
+  async generateImage({ prompt, images = [], model, timeoutMs } = {}) {
+    const resolvedModel = model || this.imageModelName();
+    const parts = [{ text: prompt }];
+    for (const image of images) {
+      if (!image?.data) continue;
+      parts.push({
+        inlineData: {
+          mimeType: image.mimeType || "image/png",
+          data: image.data,
+        },
+      });
+    }
+
+    const response = await withTimeout(
+      this.AI2.models.generateContent({
+        model: resolvedModel,
+        contents: parts,
+      }),
+      timeoutMs || resolveImageTimeoutMs(this.client)
+    );
+
+    return extractInlineImage(response, this.client?.logger);
+  }
+
 }
 
-module.exports = { createGeminiAI }
+module.exports = {
+  createGeminiAI,
+  extractInlineImage,
+  resolveImageModel,
+  resolveImageTimeoutMs,
+  withTimeout,
+  DEFAULT_GEMINI_IMAGE_MODEL,
+  DEFAULT_IMAGE_TIMEOUT_MS,
+}

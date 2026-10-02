@@ -3,6 +3,7 @@ const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
+const WinnerPortrait = require('../../modules/WinnerPortrait')
 
 class NewGame {
     async execute(interaction, client) {
@@ -63,6 +64,15 @@ class NewGame {
 
                 await interaction.reply({ 
                     embeds: [winEmbed]
+                })
+
+                WinnerPortrait.scheduleAfterWinnerPosted({
+                    client,
+                    interaction,
+                    gameData,
+                    winEmbed,
+                    winnerIds: players,
+                    portraitOption: interaction.options.getBoolean('portrait'),
                 })
             } else {
                 await interaction.reply({ content: `I can't seem to find any of those players in this game...`, flags: MessageFlags.Ephemeral })
