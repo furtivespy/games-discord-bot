@@ -169,6 +169,7 @@ class GeminiAI {
   }
 
   async processResponse(result) {
+    let responseText = "Error: Could not extract AI response text.";
     let candidate = firstCandidate(result);
 
     // --- Start: Modified text extraction to concatenate ALL text parts ---

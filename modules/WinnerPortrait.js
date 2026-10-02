@@ -298,28 +298,50 @@ function jobStillOwnsGame(latest, winnerIds) {
   return sameWinnerIds(latest.winner, winnerIds);
 }
 
-async function persistPortraitRef(client, interaction, gameData, winnerIds, edited) {
-  const latest = await loadLatestGame(client, interaction, gameData);
-  const ids = normalizeWinnerIds(winnerIds);
-  if (!jobStillOwnsGame(latest, ids)) {
-    logPortraitSkip(client, "portrait persist aborted; winners changed");
-    return;
+function shouldClearJobPortrait(latest, winnerIds, { onlyIfStale = false } = {}) {
+  if (!jobStillOwnsGame(latest, winnerIds)) return false;
+  if (latest.winnerPortrait == null) return false;
+  if (
+    onlyIfStale &&
+    sameWinnerIds(latest.winnerPortrait.winnerUserIds, winnerIds)
+  ) {
+    return false;
   }
+  return true;
+}
+
+async function persistPortraitRef(client, interaction, gameData, winnerIds, edited) {
+  const ids = normalizeWinnerIds(winnerIds);
   const messageId = String(edited?.id || "");
   const channelId = String(edited?.channelId || interaction.channelId || "");
   if (!messageId || !channelId) {
     throw new Error("missing portrait message id");
   }
-  latest.winnerPortrait = {
+  const winnerPortrait = {
     winnerUserIds: ids,
     channelId,
     messageId,
   };
+
+  const latest = await loadLatestGame(client, interaction, gameData);
+  if (!jobStillOwnsGame(latest, ids)) {
+    logPortraitSkip(client, "portrait persist aborted; winners changed");
+    return;
+  }
+
+  // Re-read immediately before write so a concurrent winner/delete is not
+  // overwritten by this job's stale whole-row snapshot.
+  const fresh = await loadLatestGame(client, interaction, latest);
+  if (!jobStillOwnsGame(fresh, ids)) {
+    logPortraitSkip(client, "portrait persist aborted; winners changed");
+    return;
+  }
+  fresh.winnerPortrait = winnerPortrait;
   await client.setGameDataV2(
     interaction.guildId,
     "game",
     interaction.channelId,
-    latest
+    fresh
   );
 }
 
@@ -330,22 +352,18 @@ async function clearJobWinnerPortrait(
   fallback,
   { onlyIfStale = false } = {}
 ) {
-  const latest = await loadLatestGame(client, interaction, fallback);
   const ids = normalizeWinnerIds(winnerIds);
-  if (!jobStillOwnsGame(latest, ids)) return;
-  if (latest.winnerPortrait == null) return;
-  if (
-    onlyIfStale &&
-    sameWinnerIds(latest.winnerPortrait.winnerUserIds, ids)
-  ) {
-    return;
-  }
-  latest.winnerPortrait = null;
+  const latest = await loadLatestGame(client, interaction, fallback);
+  if (!shouldClearJobPortrait(latest, ids, { onlyIfStale })) return;
+
+  const fresh = await loadLatestGame(client, interaction, latest);
+  if (!shouldClearJobPortrait(fresh, ids, { onlyIfStale })) return;
+  fresh.winnerPortrait = null;
   await client.setGameDataV2(
     interaction.guildId,
     "game",
     interaction.channelId,
-    latest
+    fresh
   );
 }
 
@@ -420,7 +438,7 @@ async function afterWinnerPosted(ctx) {
         winnerUsers,
       });
       if (!buffer) {
-        logPortraitSkip(client, "no image from Gemini");
+        logPortraitSkip(client, "no portrait image produced");
         await clearStale();
         return;
       }

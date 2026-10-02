@@ -228,6 +228,47 @@ describe("Gemini image extraction (mocked)", () => {
     ).toBeNull();
     expect(extractInlineImage({ candidates: [] })).toBeNull();
   });
+
+  test("processResponse returns the extract-error string for a missing or empty candidate and does not throw", async () => {
+    const gemini = createGeminiAI({
+      config: { geminiKey: "test-key" },
+      logger: { warn() {}, error() {} },
+    });
+    const missing = await gemini.processResponse({});
+    expect(missing).toEqual(["Error: Could not extract AI response text."]);
+
+    const emptyCandidates = await gemini.processResponse({ candidates: [] });
+    expect(emptyCandidates).toEqual([
+      "Error: Could not extract AI response text.",
+    ]);
+
+    const emptyParts = await gemini.processResponse({
+      candidates: [{ content: { parts: [] } }],
+    });
+    expect(emptyParts).toEqual(["Error: Could not extract AI response text."]);
+
+    const noTextParts = await gemini.processResponse({
+      response: { candidates: [{ content: { parts: [{ inlineData: {} }] } }] },
+    });
+    expect(noTextParts).toEqual(["Error: Could not extract AI response text."]);
+  });
+
+  test("processResponse still extracts /rules text from a valid candidate", async () => {
+    const gemini = createGeminiAI({
+      config: { geminiKey: "test-key" },
+      logger: { warn() {}, error() {} },
+    });
+    const chunks = await gemini.processResponse({
+      candidates: [
+        {
+          content: {
+            parts: [{ text: "Draw two cards. " }, { text: "Then discard one." }],
+          },
+        },
+      ],
+    });
+    expect(chunks).toEqual(["Draw two cards. Then discard one."]);
+  });
 });
 
 describe("/game winner portrait flow", () => {
@@ -669,6 +710,169 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
 
         const saved = await harness.getSavedGame();
         expect(saved.winner).toEqual(["user-2"]);
+        expect(saved.winnerPortrait == null).toBe(true);
+      }
+    );
+  });
+
+  test("persistPortraitRef aborts when a second winner write lands between load and persist", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          name: "Ankh",
+          winner: ["user-1"],
+        }),
+      },
+      async (harness) => {
+        const originalGet = harness.client.getGameDataV2.bind(harness.client);
+        let loads = 0;
+        harness.client.getGameDataV2 = async (...args) => {
+          const data = await originalGet(...args);
+          loads += 1;
+          if (loads === 1) {
+            const concurrent = await originalGet(...args);
+            concurrent.winner = ["user-2"];
+            concurrent.name = "Bob-session";
+            concurrent.winnerPortrait = {
+              winnerUserIds: ["user-2"],
+              channelId: "channel-1",
+              messageId: "bob-msg",
+            };
+            await harness.client.setGameDataV2(
+              harness.interaction.guildId,
+              "game",
+              harness.interaction.channelId,
+              concurrent
+            );
+          }
+          return data;
+        };
+
+        await WinnerPortrait.persistPortraitRef(
+          harness.client,
+          harness.interaction,
+          await originalGet(
+            harness.interaction.guildId,
+            "game",
+            harness.interaction.channelId
+          ),
+          ["user-1"],
+          { id: "alice-msg", channelId: "channel-1" }
+        );
+
+        harness.client.getGameDataV2 = originalGet;
+        const saved = await harness.getSavedGame();
+        expect(saved.winner).toEqual(["user-2"]);
+        expect(saved.name).toBe("Bob-session");
+        expect(saved.winnerPortrait).toEqual({
+          winnerUserIds: ["user-2"],
+          channelId: "channel-1",
+          messageId: "bob-msg",
+        });
+      }
+    );
+  });
+
+  test("clearJobWinnerPortrait does not write a stale snapshot after a concurrent winner change", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          name: "Ankh",
+          winner: ["user-1"],
+          winnerPortrait: {
+            winnerUserIds: ["user-1"],
+            channelId: "channel-1",
+            messageId: "alice-old",
+          },
+        }),
+      },
+      async (harness) => {
+        const originalGet = harness.client.getGameDataV2.bind(harness.client);
+        let loads = 0;
+        harness.client.getGameDataV2 = async (...args) => {
+          const data = await originalGet(...args);
+          loads += 1;
+          if (loads === 1) {
+            const concurrent = await originalGet(...args);
+            concurrent.winner = ["user-2"];
+            concurrent.isdeleted = false;
+            concurrent.winnerPortrait = {
+              winnerUserIds: ["user-2"],
+              channelId: "channel-1",
+              messageId: "bob-msg",
+            };
+            await harness.client.setGameDataV2(
+              harness.interaction.guildId,
+              "game",
+              harness.interaction.channelId,
+              concurrent
+            );
+          }
+          return data;
+        };
+
+        await WinnerPortrait.clearJobWinnerPortrait(
+          harness.client,
+          harness.interaction,
+          ["user-1"],
+          await originalGet(
+            harness.interaction.guildId,
+            "game",
+            harness.interaction.channelId
+          )
+        );
+
+        harness.client.getGameDataV2 = originalGet;
+        const saved = await harness.getSavedGame();
+        expect(saved.winner).toEqual(["user-2"]);
+        expect(saved.winnerPortrait.messageId).toBe("bob-msg");
+      }
+    );
+  });
+
+  test("persistPortraitRef aborts when isdeleted flips between load and persist", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          name: "Ankh",
+          winner: ["user-1"],
+        }),
+      },
+      async (harness) => {
+        const originalGet = harness.client.getGameDataV2.bind(harness.client);
+        let loads = 0;
+        harness.client.getGameDataV2 = async (...args) => {
+          const data = await originalGet(...args);
+          loads += 1;
+          if (loads === 1) {
+            const concurrent = await originalGet(...args);
+            concurrent.isdeleted = true;
+            concurrent.winner = ["user-1"];
+            await harness.client.setGameDataV2(
+              harness.interaction.guildId,
+              "game",
+              harness.interaction.channelId,
+              concurrent
+            );
+          }
+          return data;
+        };
+
+        await WinnerPortrait.persistPortraitRef(
+          harness.client,
+          harness.interaction,
+          await originalGet(
+            harness.interaction.guildId,
+            "game",
+            harness.interaction.channelId
+          ),
+          ["user-1"],
+          { id: "alice-msg", channelId: "channel-1" }
+        );
+
+        harness.client.getGameDataV2 = originalGet;
+        const saved = await harness.getSavedGame();
+        expect(saved.isdeleted).toBe(true);
         expect(saved.winnerPortrait == null).toBe(true);
       }
     );
