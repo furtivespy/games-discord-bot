@@ -73,6 +73,14 @@ describe("help catalog (FUR-95)", () => {
     expect(overview).not.toContain("newgameplus");
   });
 
+  test("table how-to mentions winner portraits, Google, and the opt-out", () => {
+    const table = viewText("table");
+    expect(table).toContain("portrait:false");
+    expect(table.toLowerCase()).toContain("google");
+    expect(table).toContain("/config winner-portraits");
+    expect(table).toContain("/winshare");
+  });
+
   test("unmapped live commands still surface under More instead of vanishing", () => {
     const known = new Set(Object.keys(COMMAND_AREA));
     const extras = listHelpCommands(slashcommands).filter(
