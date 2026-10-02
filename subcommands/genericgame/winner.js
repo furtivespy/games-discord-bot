@@ -18,11 +18,14 @@ class NewGame {
             await interaction.reply({ content: `No active game in this channel`, flags: MessageFlags.Ephemeral })
         } else {
             let players = [];
+            const winnerUsers = {};
 
             for(let i=0; i<gameData.players.length; i++){
                 let variable = `player${i+1}`
-                if (interaction.options.getUser(variable) && find(gameData.players, {'userId': interaction.options.getUser(variable).id})){
-                    players.push(interaction.options.getUser(variable).id);
+                const user = interaction.options.getUser(variable)
+                if (user && find(gameData.players, {'userId': user.id})){
+                    players.push(user.id);
+                    winnerUsers[user.id] = user;
                 }
             }            
             console.log(players)
@@ -72,6 +75,7 @@ class NewGame {
                     gameData,
                     winEmbed,
                     winnerIds: players,
+                    winnerUsers,
                     portraitOption: interaction.options.getBoolean('portrait'),
                 })
             } else {

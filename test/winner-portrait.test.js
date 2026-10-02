@@ -3,10 +3,12 @@ const { MessageFlags } = require("discord.js");
 const Game = require("../slashcommands/genericgame/game");
 const GameFormatter = require("../modules/GameFormatter");
 const WinnerPortrait = require("../modules/WinnerPortrait");
+const WinShare = require("../slashcommands/genericgame/winshare");
 const {
   createGeminiAI,
   extractInlineImage,
   resolveImageModel,
+  withTimeout,
   DEFAULT_GEMINI_IMAGE_MODEL,
 } = require("../modules/GoogleGemini");
 const {
@@ -110,6 +112,21 @@ describe("winner portrait prompt and decisions", () => {
       hasGeminiKey: true,
     });
     expect(decision.action).toBe("generate");
+  });
+
+  test("reuses a stored portrait even when portrait:false, because that only skips generation", () => {
+    const decision = WinnerPortrait.decidePortraitAction({
+      winnerIds: ["user-1"],
+      existingPortrait: {
+        winnerUserIds: ["user-1"],
+        channelId: "channel-1",
+        messageId: "msg-1",
+      },
+      portraitOption: false,
+      guildEnabled: false,
+      hasGeminiKey: true,
+    });
+    expect(decision.action).toBe("reuse");
   });
 
   test("portrait:false and a disabled guild skip generation", () => {
@@ -397,6 +414,11 @@ describe("/game winner portrait flow", () => {
       {
         gameData: createActiveGame({
           name: "Ankh",
+          winnerPortrait: {
+            winnerUserIds: ["user-1"],
+            channelId: "channel-1",
+            messageId: "old-portrait",
+          },
           players: [
             { userId: "user-1", name: "Alice", order: 0 },
             { userId: "user-2", name: "P2", order: 1 },
@@ -433,6 +455,7 @@ describe("/game winner portrait flow", () => {
           "user-4",
           "user-5",
         ]);
+        expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
         expect(harness.calls.reply[0].embeds).toHaveLength(1);
       }
     );
@@ -468,6 +491,14 @@ describe("stored portrait refetch", () => {
     expect(Buffer.from(buffer).equals(PNG_BYTES)).toBe(true);
   });
 
+  test("findPortraitAttachment ignores unnamed attachments", () => {
+    expect(
+      WinnerPortrait.findPortraitAttachment({
+        attachments: [{ name: "other.png", url: "https://cdn.example/other.png" }],
+      })
+    ).toBeNull();
+  });
+
   test("GameWinner embed is unchanged when no portrait is applied", async () => {
     const embed = await GameFormatter.GameWinner(
       { name: "Ankh", winner: "user-1" },
@@ -478,5 +509,279 @@ describe("stored portrait refetch", () => {
     );
     expect(embed.data.image).toBeUndefined();
     expect(embed.data.description).toBe("For winning Ankh");
+  });
+});
+
+describe("winner portrait races, fallbacks, and silent failures", () => {
+  const restores = [];
+  afterEach(() => {
+    while (restores.length) restores.pop()();
+  });
+
+  test("winner change plus generate failure does not leak the old portrait", async () => {
+    restores.push(
+      stubPortrait("generatePortraitImage", async () => {
+        throw new Error("SAFETY: image blocked");
+      })
+    );
+
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          name: "Ankh",
+          winnerPortrait: {
+            winnerUserIds: ["user-2"],
+            channelId: "channel-1",
+            messageId: "alice-portrait",
+          },
+        }),
+        options: { subcommand: "winner", users: { player1: createUser() } },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        await runGame(harness);
+        await harness.client.lastWinnerPortraitWork;
+
+        const saved = await harness.getSavedGame();
+        expect(saved.winner).toEqual(["user-1"]);
+        expect(saved.winnerPortrait == null).toBe(true);
+        expect(harness.calls.reply[0].embeds[0].data.title).toContain("Alice");
+        expect(harness.calls.followUp).toHaveLength(0);
+        expect(collectedReplyText(harness).toLowerCase()).not.toContain("error");
+        expect(
+          WinnerPortrait.canReusePortrait(saved.winnerPortrait, saved.winner)
+        ).toBe(false);
+
+        const origGetChannel = harness.interaction.options.getChannel;
+        harness.interaction.options.getChannel = () => harness.channel;
+        try {
+          await new WinShare(harness.client).execute(harness.interaction);
+        } finally {
+          harness.interaction.options.getChannel = origGetChannel;
+        }
+        const share = harness.calls.reply.at(-1);
+        expect(share.embeds[0].data.image).toBeUndefined();
+        expect(share.files).toBeUndefined();
+        expect(harness.calls.editReply).toHaveLength(0);
+      }
+    );
+  });
+
+  test("portrait:false after a winner change clears the previous pointer", async () => {
+    let generated = 0;
+    restores.push(
+      stubPortrait("generatePortraitImage", async () => {
+        generated += 1;
+        return PNG_BYTES;
+      })
+    );
+
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          name: "Ankh",
+          winnerPortrait: {
+            winnerUserIds: ["user-2"],
+            channelId: "channel-1",
+            messageId: "old-portrait",
+          },
+        }),
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: false },
+        },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        await runGame(harness);
+        await harness.client.lastWinnerPortraitWork;
+        expect(generated).toBe(0);
+        expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
+      }
+    );
+  });
+
+  test("missing stored portrait message clears the dangling pointer and regenerates", async () => {
+    let generated = 0;
+    restores.push(
+      stubPortrait("fetchStoredPortraitBuffer", async () => {
+        throw new Error("Unknown Message");
+      })
+    );
+    restores.push(
+      stubPortrait("generatePortraitImage", async () => {
+        generated += 1;
+        return PNG_BYTES;
+      })
+    );
+
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          name: "Ankh",
+          winnerPortrait: {
+            winnerUserIds: ["user-1"],
+            channelId: "channel-1",
+            messageId: "deleted-msg",
+          },
+        }),
+        options: { subcommand: "winner", users: { player1: createUser() } },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        await runGame(harness);
+        await harness.client.lastWinnerPortraitWork;
+        expect(generated).toBe(1);
+        const saved = await harness.getSavedGame();
+        expect(saved.winnerPortrait.winnerUserIds).toEqual(["user-1"]);
+        expect(saved.winnerPortrait.messageId).toBe("chat-1");
+        expect(harness.calls.editReply[0].files).toHaveLength(1);
+      }
+    );
+  });
+
+  test("persistPortraitRef no-ops when latest.winner no longer matches this job", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          name: "Ankh",
+          winner: ["user-1"],
+        }),
+      },
+      async (harness) => {
+        const latest = await harness.getSavedGame();
+        latest.winner = ["user-2"];
+        await harness.client.setGameDataV2(
+          harness.interaction.guildId,
+          "game",
+          harness.interaction.channelId,
+          latest
+        );
+
+        await WinnerPortrait.persistPortraitRef(
+          harness.client,
+          harness.interaction,
+          latest,
+          ["user-1"],
+          { id: "alice-msg", channelId: "channel-1" }
+        );
+
+        const saved = await harness.getSavedGame();
+        expect(saved.winner).toEqual(["user-2"]);
+        expect(saved.winnerPortrait == null).toBe(true);
+      }
+    );
+  });
+
+  test("timeout path stays silent and does not persist a portrait", async () => {
+    restores.push(
+      stubPortrait("generatePortraitImage", async () => {
+        throw new Error("Gemini image generation timed out");
+      })
+    );
+
+    await withHarness(
+      {
+        gameData: createActiveGame({ name: "Ankh" }),
+        options: { subcommand: "winner", users: { player1: createUser() } },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        await runGame(harness);
+        await harness.client.lastWinnerPortraitWork;
+
+        expect(harness.calls.reply[0].embeds[0].data.title).toContain("Alice");
+        expect(harness.calls.editReply).toHaveLength(0);
+        expect(harness.calls.followUp).toHaveLength(0);
+        expect(collectedReplyText(harness).toLowerCase()).not.toContain("error");
+        expect(collectedReplyText(harness).toLowerCase()).not.toContain("timed out");
+        expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
+      }
+    );
+  });
+
+  test("withTimeout swallows a late generateContent rejection", async () => {
+    const lateErrors = [];
+    const onUnhandled = (reason) => {
+      lateErrors.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      let rejectLate;
+      const hung = new Promise((_, reject) => {
+        rejectLate = reject;
+      });
+      await expect(withTimeout(hung, 20, "timed out")).rejects.toThrow("timed out");
+      rejectLate(new Error("late generateContent failure"));
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      expect(lateErrors).toHaveLength(0);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  test("uses slash User avatar when members.fetch fails", async () => {
+    const user = createUser({ id: "user-9", username: "Riley" });
+    const fetchedUrls = [];
+    const images = await WinnerPortrait.collectWinnerAvatars({
+      client: { logger: { warn() {} } },
+      guild: {
+        members: {
+          cache: { get: () => null },
+          fetch: async () => {
+            throw new Error("Unknown Member");
+          },
+        },
+      },
+      winnerIds: ["user-9"],
+      usersById: { "user-9": user },
+      fetchImpl: async (url) => {
+        fetchedUrls.push(url);
+        return {
+          ok: true,
+          headers: { get: () => "image/png" },
+          arrayBuffer: async () => PNG_BYTES,
+        };
+      },
+    });
+
+    expect(fetchedUrls).toEqual([
+      "https://cdn.discordapp.com/avatars/user-9/avatar.png?size=512",
+    ]);
+    expect(images).toHaveLength(1);
+    expect(images[0].mimeType).toBe("image/png");
+  });
+
+  test("skips generation when fewer avatars load than winners", async () => {
+    const user = createUser({ id: "user-1" });
+    const result = await WinnerPortrait.generatePortraitImage({
+      client: {
+        config: { geminiKey: "test-key" },
+        logger: { warn() {}, error() {} },
+      },
+      gameName: "Ankh",
+      winnerIds: ["user-1", "user-2"],
+      winnerUsers: { "user-1": user },
+      guild: {
+        members: {
+          cache: { get: () => null },
+          fetch: async () => {
+            throw new Error("Unknown Member");
+          },
+        },
+      },
+      fetchImpl: async (url) => {
+        if (String(url).includes("user-1")) {
+          return {
+            ok: true,
+            headers: { get: () => "image/png" },
+            arrayBuffer: async () => PNG_BYTES,
+          };
+        }
+        throw new Error("avatar gone");
+      },
+    });
+    expect(result).toBeNull();
   });
 });

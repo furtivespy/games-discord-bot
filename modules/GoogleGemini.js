@@ -36,10 +36,14 @@ function resolveImageTimeoutMs(client) {
 
 function withTimeout(promise, ms, message = "Gemini image generation timed out") {
   let timer;
+  const work = Promise.resolve(promise);
+  // Keep a handler on the original work so a late generateContent rejection
+  // after the timeout wins Promise.race is never unhandled.
+  work.catch(() => {});
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => reject(new Error(message)), ms);
   });
-  return Promise.race([Promise.resolve(promise), timeout]).finally(() => {
+  return Promise.race([work, timeout]).finally(() => {
     clearTimeout(timer);
   });
 }
@@ -165,16 +169,7 @@ class GeminiAI {
   }
 
   async processResponse(result) {
-    let responseText = "Error: Could not extract AI response text.";
-    let candidate = null;
-
-    // --- Start: Flexible path to candidate object ---
-    if (result && result.response && result.response.candidates && result.response.candidates.length > 0) {
-      candidate = result.response.candidates[0];
-    } else if (result && result.candidates && result.candidates.length > 0) {
-      candidate = result.candidates[0];
-    }
-    // --- End: Flexible path to candidate object ---
+    let candidate = firstCandidate(result);
 
     // --- Start: Modified text extraction to concatenate ALL text parts ---
     if (candidate) {

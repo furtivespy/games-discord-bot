@@ -56,12 +56,6 @@ function decidePortraitAction({
   hasGeminiKey,
 } = {}) {
   const ids = normalizeWinnerIds(winnerIds);
-  if (portraitOption === false) {
-    return { action: "skip", reason: "opt-out" };
-  }
-  if (guildEnabled === false) {
-    return { action: "skip", reason: "guild-disabled" };
-  }
   if (ids.length < 1) {
     return { action: "skip", reason: "no-winners" };
   }
@@ -70,6 +64,12 @@ function decidePortraitAction({
   }
   if (canReusePortrait(existingPortrait, ids)) {
     return { action: "reuse", winnerIds: ids };
+  }
+  if (portraitOption === false) {
+    return { action: "skip", reason: "opt-out" };
+  }
+  if (guildEnabled === false) {
+    return { action: "skip", reason: "guild-disabled" };
   }
   if (!hasGeminiKey) {
     return { action: "skip", reason: "missing-gemini-key", log: true };
@@ -98,6 +98,14 @@ function winnerAvatarUrl(member, user) {
   return null;
 }
 
+function lookupProvidedUser(usersById, userId) {
+  if (!usersById) return null;
+  if (typeof usersById.get === "function") {
+    return usersById.get(userId) || null;
+  }
+  return usersById[userId] || null;
+}
+
 async function resolveMember(guild, userId) {
   const cached = guild?.members?.cache?.get?.(userId);
   if (cached) return cached;
@@ -107,35 +115,58 @@ async function resolveMember(guild, userId) {
   return null;
 }
 
-async function fetchInlineImage(url, fetchImpl) {
+async function downloadImageBuffer(url, fetchImpl) {
   const res = await fetchImpl(url);
   if (!res?.ok) {
-    throw new Error(`avatar fetch failed (${res?.status || "no response"})`);
+    throw new Error(`image fetch failed (${res?.status || "no response"})`);
   }
   const buffer = Buffer.from(await res.arrayBuffer());
   if (!buffer.length) {
-    throw new Error("empty avatar image");
+    throw new Error("empty image");
   }
   let mimeType = "image/png";
   const header = res.headers?.get?.("content-type");
   if (typeof header === "string" && header.startsWith("image/")) {
     mimeType = header.split(";")[0].trim();
   }
+  return { buffer, mimeType };
+}
+
+async function fetchInlineImage(url, fetchImpl) {
+  const { buffer, mimeType } = await downloadImageBuffer(url, fetchImpl);
   return { mimeType, data: buffer.toString("base64") };
 }
 
-async function collectWinnerAvatars(guild, winnerIds, fetchImpl) {
+async function collectWinnerAvatars({
+  guild,
+  winnerIds,
+  fetchImpl,
+  usersById,
+  client,
+} = {}) {
   const images = [];
   for (const id of winnerIds) {
     try {
-      const member = await resolveMember(guild, id);
-      const url = winnerAvatarUrl(member, member?.user);
-      if (!url) continue;
+      let member = null;
+      try {
+        member = await resolveMember(guild, id);
+      } catch (error) {
+        logPortraitSkip(
+          client,
+          `could not fetch member for ${id}: ${error?.message || error}`
+        );
+      }
+      const user = member?.user || lookupProvidedUser(usersById, id);
+      const url = winnerAvatarUrl(member, user);
+      if (!url) {
+        logPortraitSkip(client, `no avatar URL for ${id}`);
+        continue;
+      }
       images.push(await fetchInlineImage(url, fetchImpl));
     } catch (error) {
-      console.warn(
-        `Winner portrait: could not load avatar for ${id}:`,
-        error?.message || error
+      logPortraitSkip(
+        client,
+        `could not load avatar for ${id}: ${error?.message || error}`
       );
     }
   }
@@ -165,7 +196,7 @@ function attachmentList(message) {
 
 function findPortraitAttachment(message) {
   const list = attachmentList(message);
-  return list.find((item) => item?.name === PORTRAIT_FILENAME) || list[0] || null;
+  return list.find((item) => item?.name === PORTRAIT_FILENAME) || null;
 }
 
 async function resolvePortraitChannel({ client, guild, gameChannel, channelId }) {
@@ -209,12 +240,8 @@ async function fetchStoredPortraitBuffer({
     message?.embeds?.[0]?.image?.url ||
     message?.embeds?.[0]?.data?.image?.url;
   if (!url) return null;
-  const res = await (fetchImpl || fetch)(url);
-  if (!res?.ok) {
-    throw new Error(`portrait refetch failed (${res?.status || "no response"})`);
-  }
-  const buffer = Buffer.from(await res.arrayBuffer());
-  return buffer.length ? buffer : null;
+  const { buffer } = await downloadImageBuffer(url, fetchImpl || fetch);
+  return buffer;
 }
 
 async function fileFromStoredPortrait(ctx) {
@@ -229,12 +256,23 @@ async function generatePortraitImage({
   winnerIds,
   guild,
   fetchImpl,
+  winnerUsers,
 } = {}) {
-  const images = await collectWinnerAvatars(
+  const ids = normalizeWinnerIds(winnerIds);
+  const images = await collectWinnerAvatars({
     guild,
-    normalizeWinnerIds(winnerIds),
-    fetchImpl || fetch
-  );
+    winnerIds: ids,
+    fetchImpl: fetchImpl || fetch,
+    usersById: winnerUsers,
+    client,
+  });
+  if (images.length < ids.length) {
+    logPortraitSkip(
+      client,
+      `loaded ${images.length}/${ids.length} winner avatars`
+    );
+    return null;
+  }
   if (!images.length) return null;
   const gemini = createGeminiAI(client);
   const generated = await gemini.generateImage({
@@ -245,23 +283,64 @@ async function generatePortraitImage({
   return generated?.buffer || null;
 }
 
-async function persistPortraitRef(client, interaction, gameData, winnerIds, edited) {
-  const latest =
+async function loadLatestGame(client, interaction, fallback) {
+  return (
     (await client.getGameDataV2(
       interaction.guildId,
       "game",
       interaction.channelId
-    )) || gameData;
+    )) || fallback
+  );
+}
+
+function jobStillOwnsGame(latest, winnerIds) {
+  if (!latest || latest.isdeleted) return false;
+  return sameWinnerIds(latest.winner, winnerIds);
+}
+
+async function persistPortraitRef(client, interaction, gameData, winnerIds, edited) {
+  const latest = await loadLatestGame(client, interaction, gameData);
+  const ids = normalizeWinnerIds(winnerIds);
+  if (!jobStillOwnsGame(latest, ids)) {
+    logPortraitSkip(client, "portrait persist aborted; winners changed");
+    return;
+  }
   const messageId = String(edited?.id || "");
   const channelId = String(edited?.channelId || interaction.channelId || "");
   if (!messageId || !channelId) {
     throw new Error("missing portrait message id");
   }
   latest.winnerPortrait = {
-    winnerUserIds: normalizeWinnerIds(winnerIds),
+    winnerUserIds: ids,
     channelId,
     messageId,
   };
+  await client.setGameDataV2(
+    interaction.guildId,
+    "game",
+    interaction.channelId,
+    latest
+  );
+}
+
+async function clearJobWinnerPortrait(
+  client,
+  interaction,
+  winnerIds,
+  fallback,
+  { onlyIfStale = false } = {}
+) {
+  const latest = await loadLatestGame(client, interaction, fallback);
+  const ids = normalizeWinnerIds(winnerIds);
+  if (!jobStillOwnsGame(latest, ids)) return;
+  if (latest.winnerPortrait == null) return;
+  if (
+    onlyIfStale &&
+    sameWinnerIds(latest.winnerPortrait.winnerUserIds, ids)
+  ) {
+    return;
+  }
+  latest.winnerPortrait = null;
   await client.setGameDataV2(
     interaction.guildId,
     "game",
@@ -278,11 +357,18 @@ async function afterWinnerPosted(ctx) {
     winEmbed,
     winnerIds,
     portraitOption,
+    winnerUsers,
   } = ctx;
+  const ids = normalizeWinnerIds(winnerIds);
+
+  const clearStale = () =>
+    clearJobWinnerPortrait(client, interaction, ids, gameData, {
+      onlyIfStale: true,
+    });
 
   try {
     const decision = decidePortraitAction({
-      winnerIds,
+      winnerIds: ids,
       existingPortrait: gameData?.winnerPortrait,
       portraitOption,
       guildEnabled: GuildConfig.isWinnerPortraitsEnabled(
@@ -294,32 +380,55 @@ async function afterWinnerPosted(ctx) {
 
     if (decision.action === "skip") {
       if (decision.log) logPortraitSkip(client, decision.reason);
+      await clearStale();
       return;
     }
 
     let buffer = null;
+    let shouldGenerate = decision.action === "generate";
+
     if (decision.action === "reuse") {
-      buffer = await WinnerPortrait.fetchStoredPortraitBuffer({
-        client,
-        guild: interaction.guild,
-        gameChannel: interaction.channel,
-        portrait: gameData.winnerPortrait,
-      });
-      if (!buffer) {
-        logPortraitSkip(client, "stored portrait missing");
-        return;
+      try {
+        buffer = await WinnerPortrait.fetchStoredPortraitBuffer({
+          client,
+          guild: interaction.guild,
+          gameChannel: interaction.channel,
+          portrait: gameData.winnerPortrait,
+        });
+      } catch (error) {
+        logPortraitSkip(client, error);
       }
-    } else {
+      if (!buffer) {
+        logPortraitSkip(client, "stored portrait missing; regenerating");
+        await clearJobWinnerPortrait(client, interaction, ids, gameData);
+        shouldGenerate =
+          portraitOption !== false &&
+          GuildConfig.isWinnerPortraitsEnabled(client, interaction.guild) &&
+          Boolean(client?.config?.geminiKey);
+        if (!shouldGenerate) {
+          return;
+        }
+      }
+    }
+
+    if (!buffer && shouldGenerate) {
       buffer = await WinnerPortrait.generatePortraitImage({
         client,
         gameName: gameData.name,
-        winnerIds: decision.winnerIds || winnerIds,
+        winnerIds: decision.winnerIds || ids,
         guild: interaction.guild,
+        winnerUsers,
       });
       if (!buffer) {
         logPortraitSkip(client, "no image from Gemini");
+        await clearStale();
         return;
       }
+    }
+
+    if (!buffer) {
+      await clearStale();
+      return;
     }
 
     const file = applyPortraitToEmbed(winEmbed, buffer);
@@ -332,11 +441,16 @@ async function afterWinnerPosted(ctx) {
       client,
       interaction,
       gameData,
-      decision.winnerIds || winnerIds,
+      decision.winnerIds || ids,
       reply
     );
   } catch (error) {
     logPortraitSkip(client, error);
+    try {
+      await clearStale();
+    } catch (clearError) {
+      logPortraitSkip(client, clearError);
+    }
   }
 }
 
@@ -361,10 +475,14 @@ const WinnerPortrait = {
   buildPrompt,
   decidePortraitAction,
   winnerAvatarUrl,
+  collectWinnerAvatars,
   applyPortraitToEmbed,
+  findPortraitAttachment,
   fetchStoredPortraitBuffer,
   fileFromStoredPortrait,
   generatePortraitImage,
+  persistPortraitRef,
+  clearJobWinnerPortrait,
   afterWinnerPosted,
   scheduleAfterWinnerPosted,
 };

@@ -123,7 +123,9 @@ describe("/winshare", () => {
 
           await new WinShare(harness.client).execute(harness.interaction);
 
-          const payload = harness.calls.reply[0];
+          expect(harness.calls.reply).toHaveLength(1);
+          expect(harness.calls.reply[0].files).toBeUndefined();
+          const payload = harness.calls.editReply[0];
           expect(payload.embeds[0].data.image.url).toBe(
             "attachment://winner-portrait.png"
           );
@@ -133,6 +135,46 @@ describe("/winshare", () => {
     } finally {
       WinnerPortrait.fetchStoredPortraitBuffer = originalFetch;
       WinnerPortrait.generatePortraitImage = originalGenerate;
+    }
+  });
+
+  test("does not attach a stored portrait when winnerUserIds do not match current winners", async () => {
+    const WinnerPortrait = require("../modules/WinnerPortrait");
+    const originalFetch = WinnerPortrait.fetchStoredPortraitBuffer;
+    WinnerPortrait.fetchStoredPortraitBuffer = async () => {
+      throw new Error("winshare must not refetch a mismatched portrait");
+    };
+
+    try {
+      const gameChannel = { id: "thread-99", name: "ankh" };
+      await withHarness(
+        {
+          options: { channels: { gamechannel: gameChannel } },
+        },
+        async (harness) => {
+          harness.seedCollection(
+            "game",
+            createActiveGame({
+              name: "Ankh",
+              winner: ["user-1"],
+              winnerPortrait: {
+                winnerUserIds: ["user-2"],
+                channelId: "thread-99",
+                messageId: "alice-portrait",
+              },
+            }),
+            { channel: gameChannel.id }
+          );
+
+          await new WinShare(harness.client).execute(harness.interaction);
+
+          expect(harness.calls.reply[0].embeds[0].data.image).toBeUndefined();
+          expect(harness.calls.reply[0].files).toBeUndefined();
+          expect(harness.calls.editReply).toHaveLength(0);
+        }
+      );
+    } finally {
+      WinnerPortrait.fetchStoredPortraitBuffer = originalFetch;
     }
   });
 });
