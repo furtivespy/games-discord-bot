@@ -425,13 +425,21 @@ async function afterWinnerPosted(ctx) {
         logPortraitSkip(client, error);
       }
       if (!buffer) {
-        logPortraitSkip(client, "stored portrait missing; regenerating");
+        logPortraitSkip(client, "stored portrait missing");
         await clearJobWinnerPortrait(client, interaction, ids, gameData);
-        shouldGenerate =
-          portraitOption === true &&
-          GuildConfig.isWinnerPortraitsEnabled(client, interaction.guild) &&
-          Boolean(client?.config?.geminiKey);
+        const retry = decidePortraitAction({
+          winnerIds: ids,
+          existingPortrait: null,
+          portraitOption,
+          guildEnabled: GuildConfig.isWinnerPortraitsEnabled(
+            client,
+            interaction.guild
+          ),
+          hasGeminiKey: Boolean(client?.config?.geminiKey),
+        });
+        shouldGenerate = retry.action === "generate";
         if (!shouldGenerate) {
+          if (retry.log) logPortraitSkip(client, retry.reason);
           return;
         }
       }

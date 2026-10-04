@@ -123,23 +123,19 @@ describe("winner portrait prompt and decisions", () => {
     expect(decision.action).toBe("generate");
   });
 
-  test("missing-settings fallback (guildEnabled true) still requires portrait:true", () => {
-    expect(
-      WinnerPortrait.decidePortraitAction({
-        winnerIds: ["user-1"],
-        portraitOption: null,
-        guildEnabled: true,
-        hasGeminiKey: true,
-      }).action
-    ).toBe("skip");
-    expect(
-      WinnerPortrait.decidePortraitAction({
-        winnerIds: ["user-1"],
-        portraitOption: true,
-        guildEnabled: true,
-        hasGeminiKey: true,
-      }).action
-    ).toBe("generate");
+  test("omitted portrait plus a stored portrait for different winners skips and does not reuse", () => {
+    const decision = WinnerPortrait.decidePortraitAction({
+      winnerIds: ["user-1"],
+      existingPortrait: {
+        winnerUserIds: ["user-2"],
+        channelId: "channel-1",
+        messageId: "msg-1",
+      },
+      portraitOption: null,
+      guildEnabled: true,
+      hasGeminiKey: true,
+    });
+    expect(decision).toEqual({ action: "skip", reason: "not-requested" });
   });
 
   test("reuses a stored portrait when portrait is omitted so a valid pointer is not cleared", () => {
@@ -699,6 +695,8 @@ describe("/game winner portrait flow", () => {
             player4: extra[2],
             player5: extra[3],
           },
+          // portrait:true so this asserts the >4 skip, not the new default-off.
+          booleans: { portrait: true },
         },
       },
       async (harness) => {
@@ -825,6 +823,40 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
         expect(share.embeds[0].data.image).toBeUndefined();
         expect(share.files).toBeUndefined();
         expect(harness.calls.reply).toHaveLength(0);
+      }
+    );
+  });
+
+  test("omitted portrait after a winner change skips Gemini and clears the previous pointer", async () => {
+    let generated = 0;
+    restores.push(
+      stubPortrait("generatePortraitImage", async () => {
+        generated += 1;
+        return PNG_BYTES;
+      })
+    );
+
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          name: "Ankh",
+          winnerPortrait: {
+            winnerUserIds: ["user-2"],
+            channelId: "channel-1",
+            messageId: "old-portrait",
+          },
+        }),
+        options: { subcommand: "winner", users: { player1: createUser() } },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        await runGame(harness);
+        await harness.client.lastWinnerPortraitWork;
+        expect(generated).toBe(0);
+        expect(harness.calls.editReply).toHaveLength(1);
+        expect(harness.calls.editReply[0].files).toBeUndefined();
+        expect((await harness.getSavedGame()).winner).toEqual(["user-1"]);
+        expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
       }
     );
   });

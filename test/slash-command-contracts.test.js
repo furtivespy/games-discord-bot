@@ -118,6 +118,8 @@ describe("slash command definition contracts", () => {
     const portrait = winner.options.find((option) => option.name === "portrait");
     expect(portrait).toMatchObject({ required: false });
     expect(portrait.type).toBe(5);
+    expect(portrait.description.toLowerCase()).toContain("opt-in");
+    expect(portrait.description.toLowerCase()).toContain("true");
     expect(portrait.description.toLowerCase()).toContain("default off");
     expect(portrait.description.toLowerCase()).toContain("google");
   });
