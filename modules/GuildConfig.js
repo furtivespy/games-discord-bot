@@ -63,7 +63,7 @@ class GuildConfig {
 
   static winnerPortraitsStatusLine(enabled) {
     return enabled
-      ? "Winner portraits: on (`/game winner` generates a crowned Gemini portrait)"
+      ? "Winner portraits: on (`/game winner portrait:true` generates a crowned Gemini portrait)"
       : "Winner portraits: off";
   }
 }

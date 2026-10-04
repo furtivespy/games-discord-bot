@@ -115,7 +115,7 @@ class Game extends SlashCommand {
                     .addBooleanOption(option =>
                       option
                         .setName("portrait")
-                        .setDescription("Crowned portrait of the winner(s). Default yes. Avatars are sent to Google.")
+                        .setDescription("Crowned portrait of the winner(s). Default off. Avatars are sent to Google.")
                         .setRequired(false)
                     )
                 )
