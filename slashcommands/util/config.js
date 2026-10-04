@@ -48,7 +48,7 @@ class Config extends SlashCommand {
           .addBooleanOption((option) =>
             option
               .setName("enabled")
-              .setDescription("Generate portraits on /game winner (default on)")
+              .setDescription("Allow /game winner portrait:true (default on)")
               .setRequired(true)
           )
       )
@@ -106,7 +106,7 @@ class Config extends SlashCommand {
         );
         await interaction.reply({
           content: enabled
-            ? "Winner portraits are on. `/game winner` will generate a crowned portrait in the background (winner avatars are sent to Google)."
+            ? "Winner portraits are on. `/game winner portrait:true` will generate a crowned portrait in the background (winner avatars are sent to Google)."
             : "Winner portraits are off for this server. `/game winner` will not generate portraits.",
           flags: MessageFlags.Ephemeral,
         });

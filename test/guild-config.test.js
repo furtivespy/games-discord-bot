@@ -172,5 +172,6 @@ describe("/config command", () => {
       reply: async (payload) => replies.push(payload),
     });
     expect(replies[0].content).toContain("Winner portraits: on");
+    expect(replies[0].content).toContain("portrait:true");
   });
 });

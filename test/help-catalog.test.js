@@ -73,9 +73,9 @@ describe("help catalog (FUR-95)", () => {
     expect(overview).not.toContain("newgameplus");
   });
 
-  test("table how-to mentions winner portraits, Google, and the opt-out", () => {
+  test("table how-to mentions winner portraits, Google, and the opt-in", () => {
     const table = viewText("table");
-    expect(table).toContain("portrait:false");
+    expect(table).toContain("portrait:true");
     expect(table.toLowerCase()).toContain("google");
     expect(table).toContain("/config winner-portraits");
     expect(table).toContain("/winshare");

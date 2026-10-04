@@ -143,7 +143,7 @@ const HOWTO_SESSION = [
   "3. Change seats with `/players add` / `remove`. Set the start player with `/players first`.",
   "4. `/game next` pings the next player; `/game reverse` flips turn order.",
   "5. `/game status` shows the table. `/game winner` then `/game delete` (type `delete`) when you are done.",
-  "   `/game winner` can add a crowned portrait from winner avatars (those images are sent to Google). Skip with `portrait:false`, or an admin can turn portraits off with `/config winner-portraits`. `/winshare` reuses the same portrait and does not generate a new one.",
+  "   `/game winner` can add a crowned portrait from winner avatars (those images are sent to Google). Pass `portrait:true` to generate one. An admin can turn portraits off with `/config winner-portraits`. `/winshare` reuses a stored portrait and does not generate a new one.",
   "",
   "To start from a public interest panel instead, see `/help topic:lfg`.",
 ].join("\n");

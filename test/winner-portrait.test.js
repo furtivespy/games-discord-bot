@@ -100,6 +100,59 @@ describe("winner portrait prompt and decisions", () => {
     expect(decision.action).toBe("generate");
   });
 
+  test("omitted portrait option skips generation even when the guild setting defaults on", () => {
+    for (const portraitOption of [undefined, null]) {
+      expect(
+        WinnerPortrait.decidePortraitAction({
+          winnerIds: ["user-1"],
+          portraitOption,
+          guildEnabled: true,
+          hasGeminiKey: true,
+        })
+      ).toEqual({ action: "skip", reason: "not-requested" });
+    }
+  });
+
+  test("explicit portrait:true generates when the server kill switch is on", () => {
+    const decision = WinnerPortrait.decidePortraitAction({
+      winnerIds: ["user-1"],
+      portraitOption: true,
+      guildEnabled: true,
+      hasGeminiKey: true,
+    });
+    expect(decision.action).toBe("generate");
+  });
+
+  test("omitted portrait plus a stored portrait for different winners skips and does not reuse", () => {
+    const decision = WinnerPortrait.decidePortraitAction({
+      winnerIds: ["user-1"],
+      existingPortrait: {
+        winnerUserIds: ["user-2"],
+        channelId: "channel-1",
+        messageId: "msg-1",
+      },
+      portraitOption: null,
+      guildEnabled: true,
+      hasGeminiKey: true,
+    });
+    expect(decision).toEqual({ action: "skip", reason: "not-requested" });
+  });
+
+  test("reuses a stored portrait when portrait is omitted so a valid pointer is not cleared", () => {
+    const decision = WinnerPortrait.decidePortraitAction({
+      winnerIds: ["user-1"],
+      existingPortrait: {
+        winnerUserIds: ["user-1"],
+        channelId: "channel-1",
+        messageId: "msg-1",
+      },
+      portraitOption: null,
+      guildEnabled: true,
+      hasGeminiKey: true,
+    });
+    expect(decision.action).toBe("reuse");
+  });
+
   test("does not reuse a stored URL-less record that is missing channel or message id", () => {
     const decision = WinnerPortrait.decidePortraitAction({
       winnerIds: ["user-1"],
@@ -292,7 +345,11 @@ describe("/game winner portrait flow", () => {
     await withHarness(
       {
         gameData: createActiveGame({ name: "Ankh" }),
-        options: { subcommand: "winner", users: { player1: createUser() } },
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: true },
+        },
       },
       async (harness) => {
         harness.client.config.geminiKey = "test-key";
@@ -325,7 +382,11 @@ describe("/game winner portrait flow", () => {
     await withHarness(
       {
         gameData: createActiveGame({ name: "Ankh" }),
-        options: { subcommand: "winner", users: { player1: createUser() } },
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: true },
+        },
       },
       async (harness) => {
         harness.client.config.geminiKey = "test-key";
@@ -341,6 +402,150 @@ describe("/game winner portrait flow", () => {
         expect(collectedReplyText(harness).toLowerCase()).not.toContain("error");
         expect((await harness.getSavedGame()).winner).toEqual(["user-1"]);
         expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
+      }
+    );
+  });
+
+  test("omitted portrait option posts the embed and does not call Gemini", async () => {
+    let generated = 0;
+    restores.push(
+      stubPortrait("generatePortraitImage", async () => {
+        generated += 1;
+        return PNG_BYTES;
+      })
+    );
+
+    await withHarness(
+      {
+        gameData: createActiveGame({ name: "Ankh" }),
+        options: { subcommand: "winner", users: { player1: createUser() } },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        expect(harness.client.getSettings).toBeUndefined();
+        await runGame(harness);
+        await harness.client.lastWinnerPortraitWork;
+        expect(generated).toBe(0);
+        expect(harness.calls.editReply).toHaveLength(1);
+        expect(harness.calls.editReply[0].embeds[0].data.title).toContain("Alice");
+        expect(harness.calls.followUp).toHaveLength(0);
+        expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
+      }
+    );
+  });
+
+  test("portrait:true generates a portrait", async () => {
+    let generated = 0;
+    restores.push(
+      stubPortrait("generatePortraitImage", async () => {
+        generated += 1;
+        return PNG_BYTES;
+      })
+    );
+
+    await withHarness(
+      {
+        gameData: createActiveGame({ name: "Ankh" }),
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: true },
+        },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        await runGame(harness);
+        await harness.client.lastWinnerPortraitWork;
+        expect(generated).toBe(1);
+        expect(harness.calls.editReply.at(-1).files).toHaveLength(1);
+        expect((await harness.getSavedGame()).winnerPortrait.winnerUserIds).toEqual([
+          "user-1",
+        ]);
+      }
+    );
+  });
+
+  test("portrait:true with the server kill switch off skips Gemini quietly", async () => {
+    let generated = 0;
+    restores.push(
+      stubPortrait("generatePortraitImage", async () => {
+        generated += 1;
+        return PNG_BYTES;
+      })
+    );
+
+    await withHarness(
+      {
+        gameData: createActiveGame({ name: "Ankh" }),
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: true },
+        },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        harness.client.getSettings = () => ({ winner_portraits_enabled: "false" });
+        await runGame(harness);
+        await harness.client.lastWinnerPortraitWork;
+        expect(generated).toBe(0);
+        expect(harness.calls.editReply).toHaveLength(1);
+        expect(harness.calls.followUp).toHaveLength(0);
+        expect(collectedReplyText(harness).toLowerCase()).not.toContain("error");
+        expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
+      }
+    );
+  });
+
+  test("missing guild settings plus omitted portrait does not generate", async () => {
+    let generated = 0;
+    restores.push(
+      stubPortrait("generatePortraitImage", async () => {
+        generated += 1;
+        return PNG_BYTES;
+      })
+    );
+
+    await withHarness(
+      {
+        gameData: createActiveGame({ name: "Ankh" }),
+        options: { subcommand: "winner", users: { player1: createUser() } },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        harness.client.getSettings = () => ({});
+        await runGame(harness);
+        await harness.client.lastWinnerPortraitWork;
+        expect(generated).toBe(0);
+        expect(harness.calls.editReply).toHaveLength(1);
+      }
+    );
+  });
+
+  test("missing guild settings plus portrait:true still generates (server default on)", async () => {
+    let generated = 0;
+    restores.push(
+      stubPortrait("generatePortraitImage", async () => {
+        generated += 1;
+        return PNG_BYTES;
+      })
+    );
+
+    await withHarness(
+      {
+        gameData: createActiveGame({ name: "Ankh" }),
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: true },
+        },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        harness.client.getSettings = () => ({});
+        await runGame(harness);
+        await harness.client.lastWinnerPortraitWork;
+        expect(generated).toBe(1);
       }
     );
   });
@@ -374,7 +579,7 @@ describe("/game winner portrait flow", () => {
     );
   });
 
-  test("reuses the stored portrait instead of calling Gemini for the same winners", async () => {
+  test("re-run without portrait reuses a stored portrait and does not clear it", async () => {
     let generated = 0;
     restores.push(
       stubPortrait("generatePortraitImage", async () => {
@@ -432,7 +637,11 @@ describe("/game winner portrait flow", () => {
             messageId: "old-portrait",
           },
         }),
-        options: { subcommand: "winner", users: { player1: createUser() } },
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: true },
+        },
       },
       async (harness) => {
         harness.client.config.geminiKey = "test-key";
@@ -486,6 +695,8 @@ describe("/game winner portrait flow", () => {
             player4: extra[2],
             player5: extra[3],
           },
+          // portrait:true so this asserts the >4 skip, not the new default-off.
+          booleans: { portrait: true },
         },
       },
       async (harness) => {
@@ -580,7 +791,11 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
             messageId: "alice-portrait",
           },
         }),
-        options: { subcommand: "winner", users: { player1: createUser() } },
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: true },
+        },
       },
       async (harness) => {
         harness.client.config.geminiKey = "test-key";
@@ -608,6 +823,40 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
         expect(share.embeds[0].data.image).toBeUndefined();
         expect(share.files).toBeUndefined();
         expect(harness.calls.reply).toHaveLength(0);
+      }
+    );
+  });
+
+  test("omitted portrait after a winner change skips Gemini and clears the previous pointer", async () => {
+    let generated = 0;
+    restores.push(
+      stubPortrait("generatePortraitImage", async () => {
+        generated += 1;
+        return PNG_BYTES;
+      })
+    );
+
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          name: "Ankh",
+          winnerPortrait: {
+            winnerUserIds: ["user-2"],
+            channelId: "channel-1",
+            messageId: "old-portrait",
+          },
+        }),
+        options: { subcommand: "winner", users: { player1: createUser() } },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        await runGame(harness);
+        await harness.client.lastWinnerPortraitWork;
+        expect(generated).toBe(0);
+        expect(harness.calls.editReply).toHaveLength(1);
+        expect(harness.calls.editReply[0].files).toBeUndefined();
+        expect((await harness.getSavedGame()).winner).toEqual(["user-1"]);
+        expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
       }
     );
   });
@@ -671,7 +920,11 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
             messageId: "deleted-msg",
           },
         }),
-        options: { subcommand: "winner", users: { player1: createUser() } },
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: true },
+        },
       },
       async (harness) => {
         harness.client.config.geminiKey = "test-key";
@@ -682,6 +935,43 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
         expect(saved.winnerPortrait.winnerUserIds).toEqual(["user-1"]);
         expect(saved.winnerPortrait.messageId).toBe("chat-1");
         expect(harness.calls.editReply.at(-1).files).toHaveLength(1);
+      }
+    );
+  });
+
+  test("missing stored portrait without portrait:true clears the dangling pointer and does not regenerate", async () => {
+    let generated = 0;
+    restores.push(
+      stubPortrait("fetchStoredPortraitBuffer", async () => {
+        throw new Error("Unknown Message");
+      })
+    );
+    restores.push(
+      stubPortrait("generatePortraitImage", async () => {
+        generated += 1;
+        return PNG_BYTES;
+      })
+    );
+
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          name: "Ankh",
+          winnerPortrait: {
+            winnerUserIds: ["user-1"],
+            channelId: "channel-1",
+            messageId: "deleted-msg",
+          },
+        }),
+        options: { subcommand: "winner", users: { player1: createUser() } },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        await runGame(harness);
+        await harness.client.lastWinnerPortraitWork;
+        expect(generated).toBe(0);
+        expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
+        expect(harness.calls.editReply).toHaveLength(1);
       }
     );
   });
@@ -892,7 +1182,11 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
     await withHarness(
       {
         gameData: createActiveGame({ name: "Ankh" }),
-        options: { subcommand: "winner", users: { player1: createUser() } },
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: true },
+        },
       },
       async (harness) => {
         harness.client.config.geminiKey = "test-key";

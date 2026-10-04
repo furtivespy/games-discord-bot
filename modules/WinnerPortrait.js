@@ -62,11 +62,19 @@ function decidePortraitAction({
   if (ids.length > MAX_WINNERS) {
     return { action: "skip", reason: "too-many-winners" };
   }
+  // Reuse never calls Gemini and never clears a valid stored pointer, even
+  // when `portrait` is omitted. A re-run without portrait:true re-attaches
+  // the existing image instead of wiping it.
   if (canReusePortrait(existingPortrait, ids)) {
     return { action: "reuse", winnerIds: ids };
   }
-  if (portraitOption === false) {
-    return { action: "skip", reason: "opt-out" };
+  // Generation is opt-in. Omitted (null/undefined) and explicit false both skip
+  // Gemini; a missing guild/settings row must not generate on its own.
+  if (portraitOption !== true) {
+    return {
+      action: "skip",
+      reason: portraitOption === false ? "opt-out" : "not-requested",
+    };
   }
   if (guildEnabled === false) {
     return { action: "skip", reason: "guild-disabled" };
@@ -417,13 +425,21 @@ async function afterWinnerPosted(ctx) {
         logPortraitSkip(client, error);
       }
       if (!buffer) {
-        logPortraitSkip(client, "stored portrait missing; regenerating");
+        logPortraitSkip(client, "stored portrait missing");
         await clearJobWinnerPortrait(client, interaction, ids, gameData);
-        shouldGenerate =
-          portraitOption !== false &&
-          GuildConfig.isWinnerPortraitsEnabled(client, interaction.guild) &&
-          Boolean(client?.config?.geminiKey);
+        const retry = decidePortraitAction({
+          winnerIds: ids,
+          existingPortrait: null,
+          portraitOption,
+          guildEnabled: GuildConfig.isWinnerPortraitsEnabled(
+            client,
+            interaction.guild
+          ),
+          hasGeminiKey: Boolean(client?.config?.geminiKey),
+        });
+        shouldGenerate = retry.action === "generate";
         if (!shouldGenerate) {
+          if (retry.log) logPortraitSkip(client, retry.reason);
           return;
         }
       }
