@@ -73,6 +73,14 @@ describe("help catalog (FUR-95)", () => {
     expect(overview).not.toContain("newgameplus");
   });
 
+  test("table how-to mentions winner portraits, Google, and the opt-in", () => {
+    const table = viewText("table");
+    expect(table).toContain("portrait:true");
+    expect(table.toLowerCase()).toContain("google");
+    expect(table).toContain("/config winner-portraits");
+    expect(table).toContain("/winshare");
+  });
+
   test("unmapped live commands still surface under More instead of vanishing", () => {
     const known = new Set(Object.keys(COMMAND_AREA));
     const extras = listHelpCommands(slashcommands).filter(
@@ -87,6 +95,7 @@ describe("help catalog (FUR-95)", () => {
     expect(decks).toContain("/cards deck new");
     expect(decks).toContain("empty");
     expect(decks).toContain("/cards deck addcard");
+    expect(decks).toContain("/cards deck editcard");
     expect(decks).toContain("discard");
     expect(decks).toContain("/cards deck shuffle");
     expect(decks).toContain("/cards deck draw");
@@ -147,6 +156,7 @@ describe("help catalog (FUR-95)", () => {
     expect(normalizeTopicId("decks")).toBe("decks");
     expect(normalizeTopicId("deck")).toBe("decks");
     expect(normalizeTopicId("addcard")).toBe("decks");
+    expect(normalizeTopicId("editcard")).toBe("decks");
     expect(normalizeTopicId("/DECKS")).toBe("decks");
     expect(normalizeTopicId("view")).toBe("draw");
     expect(normalizeTopicId("show")).toBe("draw");
@@ -190,12 +200,14 @@ describe("help catalog (FUR-95)", () => {
     }
   });
 
-  test("live /cards deck addcard and addlist appear on the decks topic", () => {
+  test("live /cards deck addcard, addlist, and editcard appear on the decks topic", () => {
     const decks = viewText("decks");
     expect(decks).toContain("/cards deck addcard");
     expect(decks).toContain("/cards deck addlist");
+    expect(decks).toContain("/cards deck editcard");
     expect(decks).toContain("/cards deck new");
     expect(decks).not.toContain("Not Avaialbe Yet");
+    expect(decks.toLowerCase()).not.toMatch(/editcard[^\n]*coming soon/);
   });
 
   test("COMMAND_BLURBS covers every loaded slash command", () => {

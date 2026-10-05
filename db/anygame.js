@@ -53,6 +53,7 @@ class GameDatabase {
         name: "",
         isdeleted: true,
         winner: null,
+        winnerPortrait: null,
         bggGameId: null,
         isCustomGame: false, // true when started with customname (not on BGG)
         reverseOrder: false,

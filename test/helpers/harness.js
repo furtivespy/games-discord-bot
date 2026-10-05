@@ -28,6 +28,9 @@ function createUser({ id = "user-1", username = "Alice" } = {}) {
     toString() {
       return `<@${id}>`;
     },
+    displayAvatarURL({ extension = "png", size = 512 } = {}) {
+      return `https://cdn.discordapp.com/avatars/${id}/avatar.${extension}?size=${size}`;
+    },
   };
 }
 
@@ -36,10 +39,14 @@ function createMember({
   username = "Alice",
   displayName = username,
 } = {}) {
+  const user = createUser({ id, username });
   return {
     id,
     displayName,
-    user: createUser({ id, username }),
+    user,
+    displayAvatarURL(opts) {
+      return user.displayAvatarURL(opts);
+    },
   };
 }
 
@@ -403,7 +410,7 @@ function createHarness({
   const client = {
     user: { id: "bot-1" },
     config: { BGGToken: "test-token", botOwnerId: "owner-1" },
-    logger: { log: () => {}, error: () => {} },
+    logger: { log: () => {}, error: () => {}, warn: () => {} },
     googleClient: {
       getRandomGoogleImg: async () => ({ link: "https://example.test/img.png" }),
     },
@@ -475,6 +482,7 @@ function createHarness({
     integers: optionValues.integers || {},
     booleans: optionValues.booleans || {},
     users: optionValues.users || {},
+    channels: optionValues.channels || {},
     focused: Object.prototype.hasOwnProperty.call(optionValues, "focused")
       ? optionValues.focused
       : undefined,
@@ -532,6 +540,7 @@ function createHarness({
           ? optionBag.booleans[name]
           : null,
       getUser: (name) => optionBag.users[name] || null,
+      getChannel: (name) => optionBag.channels[name] || null,
       getFocused: (whole = false) => {
         if (optionBag.focused === undefined && optionBag.focusedName === undefined) {
           throw missingOptionError("Focused option");

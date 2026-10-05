@@ -194,6 +194,36 @@ describe("/game command handlers", () => {
     );
   });
 
+  test("winner defers before the game load finishes", async () => {
+    const alice = createUser({ id: "user-1", username: "Alice" });
+    await withHarness(
+      {
+        gameData: createActiveGame({ name: "Final Table" }),
+        options: { subcommand: "winner", users: { player1: alice } },
+      },
+      async (harness) => {
+        let releaseLoad;
+        const gate = new Promise((resolve) => {
+          releaseLoad = resolve;
+        });
+        const orig = harness.client.getGameDataV2.bind(harness.client);
+        harness.client.getGameDataV2 = async (...args) => {
+          await gate;
+          return orig(...args);
+        };
+
+        const run = runGame(harness);
+        expect(harness.interaction.deferred).toBe(true);
+        expect(harness.calls.editReply).toHaveLength(0);
+        expect(harness.calls.reply).toHaveLength(0);
+
+        releaseLoad();
+        await run;
+        expect(harness.calls.editReply[0].embeds[0].data.title).toContain("Alice");
+      }
+    );
+  });
+
   test("winner records matching players and replies with an embed", async () => {
     const alice = createUser({ id: "user-1", username: "Alice" });
     await withHarness(
@@ -205,7 +235,12 @@ describe("/game command handlers", () => {
         await runGame(harness);
         const saved = await harness.getSavedGame();
         expect(saved.winner).toEqual(["user-1"]);
-        expect(harness.calls.reply[0].embeds[0].data.title).toContain("Alice");
+        expect(harness.calls.deferReply).toHaveLength(1);
+        expect(harness.calls.reply).toHaveLength(0);
+        expect(harness.calls.editReply[0].embeds[0].data.title).toContain("Alice");
+        expect(harness.calls.editReply[0].embeds[0].data.description).toBe(
+          "For winning Final Table"
+        );
       }
     );
   });

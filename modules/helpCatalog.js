@@ -122,8 +122,8 @@ const COMMAND_BLURBS = {
   money: "Deal, pay, spend, and check money",
   secret: "Hidden info, reveal, super-secret mode",
   winshare: "Who won a game in another channel",
-  config: "Set the games channel for /lfg Start game",
-  migrate: "Check the deck catalog (does not insert sets from code)",
+  config: "Guild settings: games channel and winner portraits",
+  migrate: "Seed built-in deck catalog templates",
   diagnostic: "Data persistence diagnostics",
   settings: "Adjust bot settings",
   dice: "Create and manage custom dice",
@@ -143,6 +143,7 @@ const HOWTO_SESSION = [
   "3. Change seats with `/players add` / `remove`. Set the start player with `/players first`.",
   "4. `/game next` pings the next player; `/game reverse` flips turn order.",
   "5. `/game status` shows the table. `/game winner` then `/game delete` (type `delete`) when you are done.",
+  "   `/game winner` can add a crowned portrait from winner avatars (those images are sent to Google). Pass `portrait:true` to generate one. An admin can turn portraits off with `/config winner-portraits`. `/winshare` reuses a stored portrait and does not generate a new one.",
   "",
   "To start from a public interest panel instead, see `/help topic:lfg`.",
 ].join("\n");
@@ -158,10 +159,12 @@ const HOWTO_DECKS = [
   "   • `cardset` — **empty (start from scratch)** for a blank recipe, a catalog set, or **custom-csv** plus `customlist` (comma-separated names)",
   "3. `/cards deck addcard` — required `name`. Optional: image `url`, `type`, `suit`, `value`, `description`, `copies`, `format`.",
   "   • New cards go to **discard**, not draw, and are added to the deck recipe.",
-  "4. `/cards deck shuffle` — mix discard into draw.",
-  "5. `/cards deck draw` — top card into your hand. `/cards hand view` to see it (only you). `/cards hand show` and `/cards hand showall` show card(s) to the table without leaving your hand.",
+  "4. `/cards deck editcard` — pick a `deck`, then a `card` (autocomplete `name · shortId`). A pop-up opens with the card's current fields (Next, then more fields, then Save).",
+  "   • Updates that recipe card and any copies with the **same id**. Same-name cards with other ids are unchanged. Does not shuffle or change pile counts. `copies` stay add-only.",
+  "5. `/cards deck shuffle` — mix discard into draw.",
+  "6. `/cards deck draw` — top card into your hand. `/cards hand view` to see it (only you). `/cards hand show` and `/cards hand showall` show card(s) to the table without leaving your hand.",
   "",
-  "In-game card edit (`/cards deck editcard`) is coming soon. Many names at once: `/help topic:addlist`.",
+  "Many names at once: `/help topic:addlist`.",
 ].join("\n");
 
 const HOWTO_ADDLIST = [
@@ -221,7 +224,7 @@ const TOPICS = {
     label: "How-to: Create a deck",
     emoji: "🃏",
     description: "New deck, then add a card",
-    aliases: ["deck", "addcard"],
+    aliases: ["deck", "addcard", "editcard"],
     kind: "howto",
     howto: HOWTO_DECKS,
     commandNames: ["cards"],

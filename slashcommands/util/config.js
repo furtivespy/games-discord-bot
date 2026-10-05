@@ -43,6 +43,17 @@ class Config extends SlashCommand {
       )
       .addSubcommand((subcommand) =>
         subcommand
+          .setName("winner-portraits")
+          .setDescription("Turn crowned winner portraits on or off for this server")
+          .addBooleanOption((option) =>
+            option
+              .setName("enabled")
+              .setDescription("Allow /game winner portrait:true (default on)")
+              .setRequired(true)
+          )
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
           .setName("show")
           .setDescription("Show current Game Bot guild settings")
       );
@@ -75,8 +86,28 @@ class Config extends SlashCommand {
         const gamesLine = channelId
           ? `Games parent channel: <#${channelId}> (\`${channelId}\`)`
           : `Games parent channel: not set\n${GuildConfig.unsetStartMessage()}`;
+        const portraitsOn = GuildConfig.isWinnerPortraitsEnabled(
+          this.client,
+          interaction.guild
+        );
         await interaction.reply({
-          content: `**Game Bot guild settings**\n${gamesLine}`,
+          content: `**Game Bot guild settings**\n${gamesLine}\n${GuildConfig.winnerPortraitsStatusLine(portraitsOn)}`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      if (subcommand === "winner-portraits") {
+        const enabled = interaction.options.getBoolean("enabled");
+        GuildConfig.setWinnerPortraitsEnabled(
+          this.client,
+          interaction.guildId,
+          enabled
+        );
+        await interaction.reply({
+          content: enabled
+            ? "Winner portraits are on. `/game winner portrait:true` will generate a crowned portrait in the background (winner avatars are sent to Google)."
+            : "Winner portraits are off for this server. `/game winner` will not generate portraits.",
           flags: MessageFlags.Ephemeral,
         });
         return;

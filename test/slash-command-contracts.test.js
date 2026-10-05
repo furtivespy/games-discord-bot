@@ -29,6 +29,21 @@ function collectOptionNames(options = []) {
   return names;
 }
 
+function findRequiredAfterOptional(options = [], trail = "") {
+  const hits = [];
+  let seenOptional = false;
+  for (const option of options) {
+    if (!option.required) seenOptional = true;
+    else if (seenOptional) hits.push(`${trail}${option.name}`);
+    if (option.options) {
+      hits.push(
+        ...findRequiredAfterOptional(option.options, `${trail}${option.name}.`)
+      );
+    }
+  }
+  return hits;
+}
+
 describe("slash command definition contracts", () => {
   const files = listSlashCommandFiles();
   const stubClient = { logger: { log: () => {} }, config: {} };
@@ -50,6 +65,16 @@ describe("slash command definition contracts", () => {
     }
 
     expect(new Set(names).size).toBe(names.length);
+
+    const ordering = [];
+    for (const file of files) {
+      const Command = require(file);
+      const json = new Command(stubClient).data.toJSON();
+      for (const hit of findRequiredAfterOptional(json.options, `${json.name}.`)) {
+        ordering.push(hit);
+      }
+    }
+    expect(ordering).toEqual([]);
   }, 15_000);
 
   test("/game registers the core table-management subcommands", () => {
@@ -85,6 +110,18 @@ describe("slash command definition contracts", () => {
       min_length: 1,
       max_length: 100,
     });
+
+    const winner = json.options.find((option) => option.name === "winner");
+    expect(winner.options.find((option) => option.name === "player1").required).toBe(
+      true
+    );
+    const portrait = winner.options.find((option) => option.name === "portrait");
+    expect(portrait).toMatchObject({ required: false });
+    expect(portrait.type).toBe(5);
+    expect(portrait.description.toLowerCase()).toContain("opt-in");
+    expect(portrait.description.toLowerCase()).toContain("true");
+    expect(portrait.description.toLowerCase()).toContain("default off");
+    expect(portrait.description.toLowerCase()).toContain("google");
   });
 
   test("/cards registers deck, hand, and pile groups", () => {
@@ -94,7 +131,7 @@ describe("slash command definition contracts", () => {
 
     expect(groups.help).toBeDefined();
     expect(groups.deck.options.map((option) => option.name)).toEqual(
-      expect.arrayContaining(["new", "draw", "shuffle", "pick"])
+      expect.arrayContaining(["new", "draw", "shuffle", "pick", "addcard", "editcard"])
     );
     expect(groups.hand.options.map((option) => option.name)).toEqual(
       expect.arrayContaining(["play", "discard", "show"])
@@ -188,6 +225,29 @@ describe("slash command definition contracts", () => {
     expect(cardset.description.length).toBeLessThanOrEqual(GameFormatter.DISCORD_OPTION_DESCRIPTION_MAX);
   });
 
+  test("/cards deck editcard picks deck then card and has no field or copies options", () => {
+    const Cards = require("../slashcommands/genericgame/cards");
+    const json = new Cards(stubClient).data.toJSON();
+    const editcard = json.options
+      .find((option) => option.name === "deck")
+      .options.find((option) => option.name === "editcard");
+    expect(editcard).toBeDefined();
+    expect(editcard.description.toLowerCase()).toContain("deck");
+    expect(editcard.description.toLowerCase()).toContain("card");
+    expect(editcard.description.toLowerCase()).toMatch(/pop-up|modal/);
+
+    const optionNames = editcard.options.map((option) => option.name);
+    expect(optionNames).toEqual(["deck", "card"]);
+    expect(optionNames).not.toContain("copies");
+    expect(optionNames).not.toContain("url");
+    expect(optionNames).not.toContain("name");
+
+    const card = editcard.options.find((option) => option.name === "card");
+    expect(card).toMatchObject({ required: true, autocomplete: true });
+    const deck = editcard.options.find((option) => option.name === "deck");
+    expect(deck).toMatchObject({ required: true, autocomplete: true });
+  });
+
   test("required and autocomplete flags stay set on high-traffic options", () => {
     const Cards = require("../slashcommands/genericgame/cards");
     const json = new Cards(stubClient).data.toJSON();
@@ -227,7 +287,16 @@ describe("slash command definition contracts", () => {
     const subcommands = Object.fromEntries(
       json.options.map((option) => [option.name, option])
     );
-    expect(Object.keys(subcommands)).toEqual(["games-channel", "show"]);
+    expect(Object.keys(subcommands)).toEqual([
+      "games-channel",
+      "winner-portraits",
+      "show",
+    ]);
+    const portraitsEnabled = subcommands["winner-portraits"].options.find(
+      (option) => option.name === "enabled"
+    );
+    expect(portraitsEnabled.description.toLowerCase()).toContain("portrait:true");
+    expect(portraitsEnabled.description.toLowerCase()).toContain("default on");
     const channel = subcommands["games-channel"].options.find(
       (option) => option.name === "channel"
     );
@@ -237,6 +306,24 @@ describe("slash command definition contracts", () => {
       ChannelType.GuildAnnouncement,
       ChannelType.GuildForum,
     ]);
+  });
+
+  test("/winshare gamechannel accepts text channels, threads, and forum posts", () => {
+    const { ChannelType } = require("discord.js");
+    const WinShare = require("../slashcommands/genericgame/winshare");
+    const json = new WinShare(stubClient).data.toJSON();
+    expect(json.name).toBe("winshare");
+    const gamechannel = json.options.find((option) => option.name === "gamechannel");
+    expect(gamechannel.required).toBe(true);
+    expect(gamechannel.channel_types).toEqual([
+      ChannelType.GuildText,
+      ChannelType.GuildAnnouncement,
+      ChannelType.PublicThread,
+      ChannelType.PrivateThread,
+      ChannelType.AnnouncementThread,
+    ]);
+    expect(gamechannel.channel_types).toContain(ChannelType.PublicThread);
+    expect(gamechannel.channel_types).not.toContain(ChannelType.GuildForum);
   });
 
   test("/lfg keeps BGG autocomplete and adds optional customname", () => {
