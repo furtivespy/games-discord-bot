@@ -2,7 +2,7 @@ const { describe, expect, test } = require("bun:test");
 const { MessageFlags } = require("discord.js");
 const Cards = require("../slashcommands/genericgame/cards");
 const DeckCatalog = require("../db/deckCatalog.js");
-const { seedDeckCatalog } = require("../db/seedDeckCatalog.js");
+const { insertSeededCatalogFixtures } = require("./helpers/catalogFixtures");
 const Formatter = require("../modules/GameFormatter");
 const GameHelper = require("../modules/GlobalGameHelper");
 const {
@@ -468,7 +468,7 @@ describe("/cards command handlers", () => {
         },
       },
       async (harness) => {
-        seedDeckCatalog();
+        insertSeededCatalogFixtures();
         await runCards(harness);
         const saved = await harness.getSavedGame();
         expect(saved.decks[0].allCards).toHaveLength(52);

@@ -12,7 +12,7 @@ class Migrate extends SlashCommand {
     super(client, {
       name: "migrate",
       description:
-        "Seed built-in deck templates into deck_catalog.sqlite (idempotent, insert-if-absent)",
+        "Check deck_catalog.sqlite (idempotent; does not insert card sets from code)",
       permLevel: "Bot Owner",
     });
     this.data = new SlashCommandBuilder()
@@ -42,11 +42,17 @@ class Migrate extends SlashCommand {
     try {
       const result = seedDeckCatalog();
       const lines = [
-        "Deck catalog seed complete.",
+        "Deck catalog check complete.",
+        "This command does not insert card sets from code.",
         `Templates inserted: ${result.inserted}`,
         `Templates skipped (already present): ${result.skipped}`,
         `Total rows: ${result.total}`,
       ];
+      if (result.total === 0) {
+        lines.push(
+          "If this database should have built-in sets, restore a seeded catalog file or a production backup."
+        );
+      }
       if (result.nameIndex?.status === "skipped") {
         lines.push(formatNameNocaseIndexSkip(result.nameIndex.collisions));
       }

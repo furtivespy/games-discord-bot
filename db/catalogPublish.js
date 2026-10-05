@@ -33,7 +33,7 @@ function validateCatalogId(id) {
     return {
       ok: false,
       code: "reserved_id",
-      error: `Cannot publish as "${id}"; that id is reserved for the official catalog seed. Run \`/migrate\` with job \`deck-catalog\` if it is missing.`,
+      error: `Cannot publish as "${id}"; that id is reserved for the official catalog. Restore a seeded catalog file if it is missing; \`/migrate\` will not recreate it.`,
     };
   }
   return { ok: true, id };
