@@ -8,6 +8,7 @@ const {
   buildApplicationCommandPayload,
   primaryEntryPointCommand,
   putApplicationCommands,
+  registerApplicationCommands,
 } = require("../modules/applicationCommands");
 const { withHarness } = require("./helpers/harness");
 
@@ -248,5 +249,94 @@ describe("application command payload", () => {
       })
     ).rejects.toThrow(/rate limited/);
     expect(puts).toBe(1);
+  });
+});
+
+describe("application command registration", () => {
+  const DEV_CLIENT_ID = "548570412959662080";
+  const DEV_GUILD_ID = "545109131330191371";
+
+  function visualCommands() {
+    const slashcommands = new Collection();
+    slashcommands.set(
+      "visual",
+      new Visual({ logger: { log: () => {} }, config: {} })
+    );
+    return slashcommands;
+  }
+
+  function recordingRest() {
+    const calls = [];
+    const rest = {
+      put: async (route, { body }) => {
+        if (
+          String(route).includes("/guilds/") &&
+          body.some((command) => command.type === 4)
+        ) {
+          const error = new Error(
+            "PRIMARY_ENTRY_POINT app commands must be registered as global commands."
+          );
+          error.code = 50222;
+          error.status = 400;
+          throw error;
+        }
+        calls.push({ route, body });
+        return [];
+      },
+    };
+    return { calls, rest };
+  }
+
+  test("dev mode puts slash commands on the guild and Launch on the global route", async () => {
+    const { calls, rest } = recordingRest();
+    const result = await registerApplicationCommands({
+      rest,
+      clientId: DEV_CLIENT_ID,
+      slashcommands: visualCommands(),
+      logger: { log: () => {}, error: () => {} },
+    });
+
+    expect(result.usedLaunchEntryPoint).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(calls[0].route).toBe(
+      `/applications/${DEV_CLIENT_ID}/guilds/${DEV_GUILD_ID}/commands`
+    );
+    expect(calls[0].body.map((command) => command.name)).toContain("visual");
+    expect(calls[0].body.some((command) => command.type === 4)).toBe(false);
+    expect(calls[1].route).toBe(`/applications/${DEV_CLIENT_ID}/commands`);
+    expect(calls[1].body).toEqual([
+      {
+        name: "launch",
+        type: 4,
+        handler: 2,
+      },
+    ]);
+  });
+
+  test("non-dev mode puts slash commands and Launch in one global request", async () => {
+    const { calls, rest } = recordingRest();
+    const clientId = "999000111222333444";
+    const result = await registerApplicationCommands({
+      rest,
+      clientId,
+      slashcommands: visualCommands(),
+      logger: { log: () => {}, error: () => {} },
+    });
+
+    expect(result.usedLaunchEntryPoint).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].route).toBe(`/applications/${clientId}/commands`);
+    expect(calls[0].body.map((command) => command.name)).toEqual(
+      expect.arrayContaining(["visual", "launch"])
+    );
+    expect(calls[0].body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "launch",
+          type: PRIMARY_ENTRY_POINT_TYPE,
+          handler: DISCORD_LAUNCH_ACTIVITY,
+        }),
+      ])
+    );
   });
 });

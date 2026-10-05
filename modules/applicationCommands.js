@@ -1,7 +1,9 @@
-const { ApplicationCommandType, Collection } = require("discord.js");
+const { ApplicationCommandType, Collection, Routes } = require("discord.js");
 
 const PRIMARY_ENTRY_POINT_TYPE = ApplicationCommandType.PrimaryEntryPoint ?? 4;
 const DISCORD_LAUNCH_ACTIVITY = 2;
+const DEV_CLIENT_ID = "548570412959662080";
+const DEV_GUILD_ID = "545109131330191371";
 
 function slashCommandJson(slashcommands) {
   const list =
@@ -72,12 +74,44 @@ async function putApplicationCommands({ rest, route, slashcommands, logger }) {
   return { usedLaunchEntryPoint: false };
 }
 
+function isDevClient(clientId) {
+  return String(clientId) === DEV_CLIENT_ID;
+}
+
+async function registerApplicationCommands({
+  rest,
+  clientId,
+  slashcommands,
+  logger,
+}) {
+  if (isDevClient(clientId)) {
+    await rest.put(Routes.applicationGuildCommands(clientId, DEV_GUILD_ID), {
+      body: slashCommandJson(slashcommands),
+    });
+    await rest.put(Routes.applicationCommands(clientId), {
+      body: [primaryEntryPointCommand()],
+    });
+    logger?.log("Successfully registered application commands.");
+    return { usedLaunchEntryPoint: true };
+  }
+
+  return putApplicationCommands({
+    rest,
+    route: Routes.applicationCommands(clientId),
+    slashcommands,
+    logger,
+  });
+}
+
 module.exports = {
+  DEV_CLIENT_ID,
+  DEV_GUILD_ID,
   DISCORD_LAUNCH_ACTIVITY,
   PRIMARY_ENTRY_POINT_TYPE,
   buildApplicationCommandPayload,
   isEntryPointRejected,
   primaryEntryPointCommand,
   putApplicationCommands,
+  registerApplicationCommands,
   slashCommandJson,
 };

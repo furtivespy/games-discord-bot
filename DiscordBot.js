@@ -7,7 +7,7 @@ const {Client,
   GatewayIntentBits,
   PermissionsBitField,
   REST,
-  Routes, MessageFlags} = require("discord.js");
+  MessageFlags} = require("discord.js");
 const Enmap = require("./modules/BunEnmap.js");
 const klaw = require("klaw");
 const path = require("path");
@@ -20,7 +20,7 @@ const GatherInterest = require("./modules/GatherInterest.js");
 const ReminderSystem = require("./modules/ReminderSystem.js");
 const GameStatusHelper = require("./modules/GameStatusHelper");
 const { startEmbeddedAppServer } = require("./modules/embeddedApp");
-const { putApplicationCommands } = require("./modules/applicationCommands");
+const { registerApplicationCommands } = require("./modules/applicationCommands");
 const VisualLaunch = require("./modules/visualLaunch");
 
 class DiscordBot extends Client {
@@ -594,22 +594,15 @@ const init = async () => {
     });
     client.logger.log(`guild members cached`);
 
-    // Register slash commands. Include the Activity Launch entry point so the
-    // PUT does not wipe Discord's App Launcher command. If Activities are not
-    // enabled yet, retry without the entry point so existing slash commands
-    // still register.
+    // Dev client: ordinary slash commands stay on the guild route, and the
+    // Activity Launch primary entry point is registered globally. Discord
+    // rejects that entry point on a guild route. Other clients register slash
+    // commands and Launch together on the global route. If Activities are not
+    // enabled yet, that global registration retries without the entry point.
     const rest = new REST({ version: "10" }).setToken(client.config.token);
-    const route =
-      client.config.clientId == "548570412959662080"
-        ? Routes.applicationGuildCommands(
-            client.config.clientId,
-            "545109131330191371"
-          )
-        : Routes.applicationCommands(client.config.clientId);
-
-    putApplicationCommands({
+    registerApplicationCommands({
       rest,
-      route,
+      clientId: client.config.clientId,
       slashcommands: client.slashcommands,
       logger: client.logger,
     }).catch((error) => client.logger.error(error));
