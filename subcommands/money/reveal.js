@@ -1,6 +1,7 @@
 const GameDB = require("../../db/anygame.js");
 const { cloneDeep, find } = require("lodash");
 const Formatter = require("../../modules/GameFormatter");
+const { logMoneyGameMiss } = require("../../modules/gameLookupDebug.js");
 
 class Reveal {
   async execute(interaction, client) {
@@ -14,6 +15,7 @@ class Reveal {
       let gameData = Object.assign({}, cloneDeep(GameDB.defaultGameData), rawGameData);
 
       if (gameData.isdeleted) {
+        logMoneyGameMiss(client, interaction, rawGameData);
         await interaction.editReply({
           content: `There is no game in this channel.`});
         return;
