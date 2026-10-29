@@ -62,6 +62,29 @@ function buildGameLookupWarning({ source, guildId, channelId, result, err, inspe
   return `[game-lookup] source=${source} guild=${guildId} channel=${channelId} returned=${returned} loadError=${err?.message || ""} ${formatGameLookup(inspection)}`;
 }
 
+function logCommandGameFailure(client, interaction, err) {
+  let subcommand = "?";
+  try {
+    subcommand = interaction.options?.getSubcommand?.(false) ?? "?";
+  } catch {
+    subcommand = "?";
+  }
+
+  let inspectionText = "inspect=failed";
+  try {
+    inspectionText = formatGameLookup(
+      client.db.inspectGameLookup(interaction.guildId, "game", interaction.channelId)
+    );
+  } catch (inspectErr) {
+    inspectionText = `inspect=failed:${inspectErr.message}`;
+  }
+
+  client.logger?.log?.(
+    `[game-lookup] source=command-error command=/${interaction.commandName ?? "?"} ${subcommand} code=${err?.code ?? ""} deferred=${Boolean(interaction.deferred)} replied=${Boolean(interaction.replied)} message=${err?.message ?? err} guild=${interaction.guildId} channel=${interaction.channelId} ${inspectionText}`,
+    "error"
+  );
+}
+
 function logMoneyGameMiss(client, interaction, rawGameData) {
   const guildId = interaction.guildId;
   const channelId = interaction.channelId;
@@ -90,6 +113,7 @@ module.exports = {
   buildGameLookupWarning,
   formatGameLookup,
   gameLookupFailed,
+  logCommandGameFailure,
   logMoneyGameMiss,
   summarizeRawGame,
 };

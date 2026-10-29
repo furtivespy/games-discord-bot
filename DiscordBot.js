@@ -280,8 +280,9 @@ class DiscordBot extends Client {
     try {
       inspection = this.db.inspectGameLookup(serverId, gameName, channelId);
     } catch (inspectErr) {
-      this.logger?.warn?.(
-        `[game-lookup] source=${source} pid=${process.pid} guild=${serverId} channel=${channelId} inspect-failed ${inspectErr.message} loadError=${err?.message || ""}`
+      this.logger?.log?.(
+        `[game-lookup] source=${source} pid=${process.pid} guild=${serverId} channel=${channelId} inspect-failed ${inspectErr.message} loadError=${err?.message || ""}`,
+        "error"
       );
       return;
     }
@@ -294,7 +295,7 @@ class DiscordBot extends Client {
       err,
       inspection,
     });
-    if (line) this.logger?.warn?.(line);
+    if (line) this.logger?.log?.(line, "error");
   }
 
   async getGameDataV2(serverId, gameName, channelId) {

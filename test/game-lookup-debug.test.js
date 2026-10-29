@@ -3,7 +3,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const GameStore = require("../db/gameStore.js");
-const { buildGameLookupWarning, formatGameLookup, logMoneyGameMiss } = require("../modules/gameLookupDebug.js");
+const { buildGameLookupWarning, formatGameLookup, logCommandGameFailure, logMoneyGameMiss } = require("../modules/gameLookupDebug.js");
 
 function withStore(run) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "game-lookup-"));
@@ -173,6 +173,42 @@ describe("buildGameLookupWarning", () => {
       err: null,
       inspection: {},
     })).toBeNull();
+  });
+});
+
+describe("logCommandGameFailure", () => {
+  test("logs the Discord error and the stored row when a command throws", () => {
+    withStore((store) => {
+      store.upsertGameData("guild-a", "game", "channel-1", {
+        name: "Myraclia",
+        isdeleted: false,
+        players: [{ userId: "p1" }],
+      });
+      const errors = [];
+      const client = {
+        db: store,
+        logger: { log: (line) => errors.push(line) },
+      };
+      const interaction = {
+        commandName: "game",
+        guildId: "guild-a",
+        channelId: "channel-1",
+        deferred: false,
+        replied: false,
+        options: { getSubcommand: () => "status" },
+      };
+      const err = new Error("Unknown interaction");
+      err.code = 10062;
+
+      logCommandGameFailure(client, interaction, err);
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain("[game-lookup] source=command-error");
+      expect(errors[0]).toContain("command=/game status");
+      expect(errors[0]).toContain("code=10062");
+      expect(errors[0]).toContain("name=\"Myraclia\"");
+      expect(errors[0]).toContain("isdeleted=false");
+    });
   });
 });
 

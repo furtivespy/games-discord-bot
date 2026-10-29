@@ -1,4 +1,5 @@
 const { MessageFlags } = require("discord.js");
+const { logCommandGameFailure } = require("../../modules/gameLookupDebug.js");
 const SlashCommand = require('../../base/SlashCommand.js')
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const AddLink = require(`../../subcommands/genericgame/addlink`)
@@ -276,6 +277,7 @@ class Game extends SlashCommand {
             
         } catch (e) {
             this.client.logger.log(e,'error')
+            logCommandGameFailure(this.client, interaction, e)
             try {
                 const reply = { content: "Something went wrong — please try again.", flags: MessageFlags.Ephemeral };
                 if (interaction.deferred || interaction.replied) await interaction.editReply(reply);
