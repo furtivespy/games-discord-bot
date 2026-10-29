@@ -186,19 +186,14 @@ class GameStore {
       .get(String(guildId), collection, String(channelId));
   }
 
-  // Used when a command is about to say there is no game. Reads the exact
-  // document plus any other rows for that channel so a guild mismatch, a
-  // deleted flag, or an empty database is visible in the log.
+  // Used when a game load looks missing. Records this connection's view and
+  // a newly opened connection's view, plus the main file and WAL sizes, so a
+  // later miss can be compared with what was actually on disk.
   inspectGameLookup(guildId, collection, channelId) {
     const guild = String(guildId ?? "");
     const channel = String(channelId ?? "");
     const exact = this.db
-      .query(
-        `SELECT guild_id, collection, channel_id, bgg_game_id, updated_at,
-                length(data) AS data_length, data
-         FROM game_documents
-         WHERE guild_id = ? AND collection = ? AND channel_id = ?`
-      )
+      .query(GAME_LOOKUP_ROW_SQL)
       .get(guild, collection, channel);
     const channelRows = this.db
       .query(
@@ -217,10 +212,27 @@ class GameStore {
         )
         .get(guild, collection)?.n ?? 0;
 
+    let journalMode = "unknown";
+    let liveDataVersion = null;
+    try {
+      journalMode = this.db.query("PRAGMA journal_mode").get()?.journal_mode ?? "unknown";
+      liveDataVersion = this.db.query("PRAGMA data_version").get()?.data_version ?? null;
+    } catch (err) {
+      journalMode = `error:${err.message}`;
+    }
+
     return {
       dbPath: this.dbPath,
+      journalMode,
+      liveDataVersion,
+      files: {
+        main: describeDatabaseFile(this.dbPath),
+        wal: describeDatabaseFile(`${this.dbPath}-wal`),
+        shm: describeDatabaseFile(`${this.dbPath}-shm`),
+      },
       guildGameCount,
       exact: summarizeStoredGameRow(exact),
+      fresh: readGameRowOnFreshConnection(this.dbPath, guild, collection, channel),
       channelRows: channelRows.map(summarizeStoredGameRow),
     };
   }
@@ -283,6 +295,35 @@ class GameStore {
     }
     fs.copyFileSync(backupPath, this.dbPath);
     this.db = openGameDocumentsDatabase(this.dbPath);
+  }
+}
+
+const GAME_LOOKUP_ROW_SQL = `SELECT guild_id, collection, channel_id, bgg_game_id, updated_at,
+                length(data) AS data_length, data
+         FROM game_documents
+         WHERE guild_id = ? AND collection = ? AND channel_id = ?`;
+
+function describeDatabaseFile(filePath) {
+  try {
+    const stat = fs.statSync(filePath);
+    return { bytes: stat.size, mtime: stat.mtime.toISOString() };
+  } catch (err) {
+    return { bytes: null, mtime: null, error: err.code || err.message };
+  }
+}
+
+function readGameRowOnFreshConnection(dbPath, guildId, collection, channelId) {
+  let probe;
+  try {
+    probe = new Database(dbPath, { readonly: true });
+    probe.exec("PRAGMA busy_timeout = 500");
+    const dataVersion = probe.query("PRAGMA data_version").get()?.data_version ?? null;
+    const row = probe.query(GAME_LOOKUP_ROW_SQL).get(guildId, collection, channelId);
+    return { dataVersion, exact: summarizeStoredGameRow(row), error: null };
+  } catch (err) {
+    return { dataVersion: null, exact: null, error: err.message };
+  } finally {
+    try { probe?.close(); } catch {}
   }
 }
 

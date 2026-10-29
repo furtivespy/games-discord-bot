@@ -20,7 +20,7 @@ const GatherInterest = require("./modules/GatherInterest.js");
 const DeckEditCardModal = require("./modules/DeckEditCardModal");
 const ReminderSystem = require("./modules/ReminderSystem.js");
 const GameStatusHelper = require("./modules/GameStatusHelper");
-const { formatGameLookup } = require("./modules/gameLookupDebug.js");
+const { buildGameLookupWarning, gameLookupFailed } = require("./modules/gameLookupDebug.js");
 
 class DiscordBot extends Client {
   constructor(options) {
@@ -274,37 +274,27 @@ class DiscordBot extends Client {
   }
   _warnIfGameLookupLooksWrong(serverId, gameName, channelId, source, result, err) {
     if (gameName !== "game" || typeof this.db?.inspectGameLookup !== "function") return;
-    const failed =
-      !!err ||
-      result == null ||
-      result.isdeleted === true ||
-      (result.isdeleted == null && result.name == null && result.players == null);
-    if (!failed) return;
+    if (!gameLookupFailed(result, err)) return;
 
     let inspection;
     try {
       inspection = this.db.inspectGameLookup(serverId, gameName, channelId);
     } catch (inspectErr) {
       this.logger?.warn?.(
-        `[game-lookup] source=${source} guild=${serverId} channel=${channelId} inspect-failed ${inspectErr.message} loadError=${err?.message || ""}`
+        `[game-lookup] source=${source} pid=${process.pid} guild=${serverId} channel=${channelId} inspect-failed ${inspectErr.message} loadError=${err?.message || ""}`
       );
       return;
     }
 
-    const exact = inspection.exact;
-    const otherGameGuild = (inspection.channelRows || []).some(
-      (row) => row.collection === gameName && String(row.guildId) !== String(serverId)
-    );
-    const storedActive = exact && !exact.parseError && exact.isdeleted === false;
-    const emptyDb = inspection.guildGameCount === 0;
-    if (!(storedActive || otherGameGuild || emptyDb || err || exact?.parseError)) return;
-
-    const returned = result
-      ? `isdeleted=${result.isdeleted} name=${JSON.stringify(result.name ?? null)}`
-      : "null";
-    this.logger?.warn?.(
-      `[game-lookup] source=${source} guild=${serverId} channel=${channelId} returned=${returned} loadError=${err?.message || ""} ${formatGameLookup(inspection)}`
-    );
+    const line = buildGameLookupWarning({
+      source,
+      guildId: serverId,
+      channelId,
+      result,
+      err,
+      inspection,
+    });
+    if (line) this.logger?.warn?.(line);
   }
 
   async getGameDataV2(serverId, gameName, channelId) {
