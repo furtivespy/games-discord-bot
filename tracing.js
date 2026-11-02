@@ -4,7 +4,7 @@ const {
   ConsoleSpanExporter,
   SimpleSpanProcessor,
   BatchSpanProcessor,
-} = require("@opentelemetry/sdk-trace-base");
+} = require("@opentelemetry/sdk-trace");
 const { getNodeAutoInstrumentations } = require("@opentelemetry/auto-instrumentations-node");
 const { trace, context, SpanStatusCode } = require("@opentelemetry/api");
 
@@ -22,10 +22,12 @@ if (!apiKey) {
     headers: { "x-honeycomb-team": apiKey },
   });
 
-  const spanProcessors = [new BatchSpanProcessor(otlpExporter)];
+  const spanProcessors = [new BatchSpanProcessor({ exporter: otlpExporter })];
 
   if (debugSpans) {
-    spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
+    spanProcessors.push(
+      new SimpleSpanProcessor({ exporter: new ConsoleSpanExporter() })
+    );
     console.log("[tracing] OTEL_DEBUG_SPANS=true — spans will print to console");
   }
 
