@@ -10,6 +10,7 @@ const {
   resolveImageModel,
   withTimeout,
   DEFAULT_GEMINI_IMAGE_MODEL,
+  DEFAULT_GEMINI_RULES_MODEL,
 } = require("../modules/GoogleGemini");
 const {
   collectedReplyText,
@@ -217,11 +218,60 @@ describe("winner portrait prompt and decisions", () => {
 });
 
 describe("Gemini image extraction (mocked)", () => {
+  test("defaults off gemini-2.5-flash and gemini-2.5-flash-image", () => {
+    expect(DEFAULT_GEMINI_IMAGE_MODEL).toBe("gemini-3.1-flash-lite-image");
+    expect(DEFAULT_GEMINI_RULES_MODEL).toBe("gemini-3.8-flash");
+    expect(DEFAULT_GEMINI_IMAGE_MODEL).not.toContain("2.5");
+    expect(DEFAULT_GEMINI_RULES_MODEL).not.toContain("2.5");
+  });
+
   test("uses the configured image model name instead of a hardcoded one", () => {
     expect(
       resolveImageModel({ config: { geminiImageModel: "my-custom-image-model" } })
     ).toBe("my-custom-image-model");
     expect(resolveImageModel({ config: {} })).toBe(DEFAULT_GEMINI_IMAGE_MODEL);
+  });
+
+  test("answerRulesQuestion uses gemini-3.8-flash with googleSearch and urlContext", async () => {
+    const gemini = createGeminiAI({
+      config: { geminiKey: "test-key" },
+      logger: { warn() {}, error() {} },
+    });
+    let captured = null;
+    gemini.AI2 = {
+      models: {
+        generateContent: async (params) => {
+          captured = params;
+          return {
+            candidates: [
+              {
+                content: { parts: [{ text: "You draw two cards." }] },
+                groundingMetadata: {
+                  groundingChunks: [
+                    {
+                      web: {
+                        title: "BGG",
+                        uri: "https://boardgamegeek.com/thread/1",
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          };
+        },
+      },
+    };
+
+    const chunks = await gemini.answerRulesQuestion("How many cards?");
+
+    expect(captured.model).toBe(DEFAULT_GEMINI_RULES_MODEL);
+    expect(captured.config.tools).toEqual([
+      { urlContext: {} },
+      { googleSearch: {} },
+    ]);
+    expect(chunks.join("\n")).toContain("You draw two cards.");
+    expect(chunks.join("\n")).toContain("BGG");
   });
 
   test("generateImage sends avatars as inline data to the configured model", async () => {
