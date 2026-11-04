@@ -1,6 +1,5 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
-const { cloneDeep, find } = require('lodash')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
 const Shuffle = require(`./shuffle`)
 
@@ -26,11 +25,14 @@ class Deal {
             return
         }
 
-        const inputDeck = interaction.options.getString('deck')
         const cardCount = interaction.options.getInteger('count')
         let dealCount = 0
 
-        const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
+        const deckResult = GameHelper.resolveDeckOption(gameData, interaction.options.getString('deck'))
+        if (await GameHelper.replyIfUnspecifiedDeck(interaction, deckResult)) {
+            return
+        }
+        const deck = deckResult.deck
         if (!deck || deck.piles.draw.cards.length + deck.piles.discard.cards.length < 1){
             await interaction.editReply({ content: `No cards to deal.`})
             return

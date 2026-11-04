@@ -1,8 +1,6 @@
 const GameDB = require('../../db/anygame.js')
-const { cloneDeep, find } = require('lodash')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
 const GameHelper = require('../../modules/GlobalGameHelper')
-const Shuffle = require(`./shuffle`)
 const { ActionRowBuilder, SelectMenuBuilder } = require('discord.js');
 
 class Configure {
@@ -21,10 +19,13 @@ class Configure {
                 return
             }
 
-            const inputDeck = interaction.options.getString('deck')
             const configType = interaction.options.getString('config')
             
-            const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
+            const deckResult = GameHelper.resolveDeckOption(gameData, interaction.options.getString('deck'))
+            if (await GameHelper.replyIfUnspecifiedDeck(interaction, deckResult)) {
+                return
+            }
+            const deck = deckResult.deck
             if (!deck){
                 await interaction.editReply({ content: `No deck found.`})
                 return

@@ -1,13 +1,74 @@
-const GameDB = require("./anygame.js");
 const DeckCatalog = require("./deckCatalog.js");
 
 const INSTANCE_ONLY_IDS = new Set(["custom-csv", "customempty", "empty"]);
 
-const OFFICIAL_SEED_IDS = new Set(
-  GameDB.CurrentCardList.filter(([, id]) => !INSTANCE_ONLY_IDS.has(id)).map(
-    ([, id]) => id
-  )
-);
+// Reserved ids from the former JS catalog. Kept so /catalog publish cannot
+// claim them. Card contents live only in sqlite; this set is not a seed source.
+const OFFICIAL_SEED_IDS = new Set([
+  "standard",
+  "pear",
+  "imperium",
+  "dune-ix",
+  "dune-immortality",
+  "dune-ix-immortality",
+  "dune-uprising",
+  "dune-uprising-choam",
+  "brian-boru",
+  "cunning",
+  "king-player",
+  "not-alone-hunt",
+  "not-alone-survival",
+  "brass-two",
+  "brass-three",
+  "brass-four",
+  "brass-wild-location",
+  "brass-wild-industry",
+  "blue-moon-city",
+  "gome-explorer",
+  "qe-industry",
+  "qe-company-3",
+  "qe-company-5",
+  "tigris",
+  "blood-rage-1",
+  "blood-rage-2",
+  "blood-rage-3",
+  "money-1",
+  "money-5",
+  "money-10",
+  "money-20",
+  "heat-starting",
+  "heat-upgrades",
+  "heat-all",
+  "empire-disaster",
+  "el-grande",
+  "riverboat-cultivation",
+  "taj-mahal",
+  "uno-classic",
+  "penguin-party",
+  "archipelago-short",
+  "archipelago-medium",
+  "archipelago-long",
+  "love-letter",
+  "love-letter-5plus",
+  "spectral-glyphs",
+  "spectral-letters",
+  "rebirth",
+  "candyland",
+  "botswana",
+  "molly-vice",
+  "molly-loyalty",
+  "molly-minor",
+  "molly-major",
+  "molly-item",
+  "arcs-2-3",
+  "arcs-4",
+  "shaolia-level1",
+  "shaolia-ws2",
+  "shaolia-tw2",
+  "shaolia-hf2",
+  "shaolia-tcw2",
+  "shaolia-tyrant2",
+]);
 
 function catalogCardFromGenerated(card) {
   const src = card != null && typeof card === "object" ? card : {};
@@ -26,38 +87,15 @@ function seedDeckCatalog(options = {}) {
   const owned = !options.catalog;
   const catalog = options.catalog ?? new DeckCatalog(options);
   try {
-    let inserted = 0;
-    let skipped = 0;
-
-    for (const [name, id] of GameDB.CurrentCardList) {
-      if (INSTANCE_ONLY_IDS.has(id)) continue;
-
-      if (catalog.hasId(id)) {
-        skipped += 1;
-        continue;
-      }
-
-      const generated = GameDB.MakeSpecificDeck("_seed_", id);
-      if (!Array.isArray(generated) || generated.length === 0) continue;
-
-      catalog.insertTemplate({
-        id,
-        name,
-        cards: generated.map(catalogCardFromGenerated),
-        createdBy: "seed",
-        enabled: 1,
-      });
-      inserted += 1;
-    }
-
-    // After inserts: skip the unique index when BINARY-unique names already
-    // collide under NOCASE, so migrate does not throw or drop rows.
+    // JS catalog is gone. Never insert templates from code. Existing rows
+    // are left untouched (idempotent skip). A fresh empty db stays empty.
+    const total = catalog.count();
     const nameIndex = catalog.ensureNameNocaseUniqueIndex();
 
     return {
-      inserted,
-      skipped,
-      total: catalog.count(),
+      inserted: 0,
+      skipped: total,
+      total,
       nameIndex,
     };
   } finally {

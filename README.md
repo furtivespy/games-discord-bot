@@ -46,7 +46,7 @@ A versatile Discord bot designed to enhance tabletop and card game experiences i
 
 ### Core Technologies
 - Built with discord.js for Discord integration
-- MongoDB for persistent game state storage
+- SQLite for persistent game state (`game_documents.sqlite`) and the card-set catalog (`deck_catalog.sqlite`)
 - Node.js backend
 
 ### Architecture
@@ -62,10 +62,10 @@ A versatile Discord bot designed to enhance tabletop and card game experiences i
 - Google Search integration for additional game resources
 
 ### Database Structure
-- Server-based collections for game persistence
+- Server-based sqlite files for game persistence
 - Separate game state tracking per channel
 - Support for multiple concurrent games
-- Custom card deck management system
+- Card sets defined in `deck_catalog.sqlite` (not hardcoded JS). New sets are added by publishing from `/catalog`. Fresh installs need a copy of a seeded catalog file (or a production backup); running `/migrate` on an empty catalog will not recreate the built-in sets.
 
 ### Development Features
 - Comprehensive logging system
@@ -83,7 +83,7 @@ To add this bot to your Discord server, you'll need to:
 
 ### Prerequisites
 - Node.js
-- MongoDB instance
+- Writable data directory for sqlite files (`game_documents.sqlite`, `deck_catalog.sqlite`)
 - Discord Bot Token
 - (Optional) Bugsnag API key for error tracking
 

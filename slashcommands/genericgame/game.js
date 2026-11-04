@@ -112,6 +112,12 @@ class Game extends SlashCommand {
                     .addUserOption(option => option.setName("player6").setDescription("Another Winner"))
                     .addUserOption(option => option.setName("player7").setDescription("Another Winner"))
                     .addUserOption(option => option.setName("player8").setDescription("Another Winner"))
+                    .addBooleanOption(option =>
+                      option
+                        .setName("portrait")
+                        .setDescription("Crowned portrait. Opt-in (true; default off). Avatars are sent to Google.")
+                        .setRequired(false)
+                    )
                 )
             .addSubcommand(subcommand =>
                 subcommand

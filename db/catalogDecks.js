@@ -8,7 +8,7 @@ const UNKNOWN_OR_DISABLED_CARD_SET = "unknown or disabled card set";
 
 function logCatalogUnavailable(info, reason) {
   console.error(
-    `Deck catalog ${reason} at ${info.dbPath}; /cards deck new will only offer custom-csv and empty. Run /migrate with job deck-catalog first.`
+    `Deck catalog ${reason} at ${info.dbPath}; /cards deck new will only offer custom-csv and empty. Restore a seeded catalog file (or a production backup); /migrate will not recreate built-in sets.`
   );
 }
 

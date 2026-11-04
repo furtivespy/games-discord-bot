@@ -162,8 +162,11 @@ class DeckPrune {
             return
         }
 
-        const inputDeck = interaction.options.getString('deck')
-        const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
+        const deckResult = GameHelper.resolveDeckOption(gameData, interaction.options.getString('deck'))
+        if (await GameHelper.replyIfUnspecifiedDeck(interaction, deckResult)) {
+            return
+        }
+        const deck = deckResult.deck
         
         if (!deck){
             await interaction.editReply({ content: `No Deck Found`})

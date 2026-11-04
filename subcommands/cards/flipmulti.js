@@ -27,11 +27,14 @@ class FlipMulti {
             return
         }
 
-        const inputDeck = interaction.options.getString('deck')
         const count = interaction.options.getInteger('count')
         const destination = interaction.options.getString('destination') || 'discard'
 
-        const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
+        const deckResult = GameHelper.resolveDeckOption(gameData, interaction.options.getString('deck'))
+        if (await GameHelper.replyIfUnspecifiedDeck(interaction, deckResult, { flags: MessageFlags.Ephemeral })) {
+            return
+        }
+        const deck = deckResult.deck
 
         if (!deck || deck.piles.draw.cards.length < 1) {
             await interaction.editReply({ content: "No cards in draw pile", flags: MessageFlags.Ephemeral })

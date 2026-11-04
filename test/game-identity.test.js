@@ -105,4 +105,19 @@ describe("GameIdentity for /game newgame", () => {
       isCustomGame: false,
     });
   });
+
+  test("bggBoardGameUrl builds a boardgame page from the stored numeric id", () => {
+    expect(GameIdentity.bggBoardGameUrl("266192")).toBe(
+      "https://boardgamegeek.com/boardgame/266192"
+    );
+    expect(GameIdentity.bggBoardGameUrl(13)).toBe(
+      "https://boardgamegeek.com/boardgame/13"
+    );
+  });
+
+  test("bggBoardGameUrl returns null when no usable BGG id is stored", () => {
+    expect(GameIdentity.bggBoardGameUrl(null)).toBeNull();
+    expect(GameIdentity.bggBoardGameUrl("")).toBeNull();
+    expect(GameIdentity.bggBoardGameUrl("not-an-id")).toBeNull();
+  });
 });

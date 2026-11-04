@@ -20,8 +20,11 @@ class Check {
                 return
             }
 
-            const inputDeck = interaction.options.getString('deck')
-            const deck = GameHelper.getSpecificDeck(gameData, inputDeck, interaction.user.id)
+            const deckResult = GameHelper.resolveDeckOption(gameData, interaction.options.getString('deck'))
+            if (await GameHelper.replyIfUnspecifiedDeck(interaction, deckResult)) {
+                return
+            }
+            const deck = deckResult.deck
             if (!deck){
                 await interaction.editReply({ content: `No deck found.`})
                 return

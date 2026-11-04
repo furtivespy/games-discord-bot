@@ -11,8 +11,8 @@ const GameHelper = require("../../modules/GlobalGameHelper");
 const NOT_OWNER =
   "You do not have permission to use this command. (Bot Owner Only)";
 
-const MIGRATE_HINT =
-  "Deck catalog is missing or has an empty schema. Run `/migrate` with job `deck-catalog` first.";
+const RESTORE_CATALOG_HINT =
+  "Deck catalog is missing or has an empty schema. Restore a seeded `deck_catalog.sqlite` (or a production backup). `/migrate` will not recreate built-in sets.";
 
 const SNOWFLAKE_RE = /^\d{17,20}$/;
 
@@ -36,7 +36,7 @@ function notOwnerReply() {
 }
 
 function migrateHintReply() {
-  return ephemeralEmbedPayload(catalogEmbed({ description: MIGRATE_HINT }));
+  return ephemeralEmbedPayload(catalogEmbed({ description: RESTORE_CATALOG_HINT }));
 }
 
 function catalogInspectErrorMessage(info) {

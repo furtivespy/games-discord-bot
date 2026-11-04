@@ -58,6 +58,18 @@ function applyBggGameIdentity(gameData, bggGameId) {
 }
 
 /**
+ * Channel game documents persist `bggGameId` (numeric BGG object id) or null.
+ * No BGG URL or slug is stored; this is the same URL shape used by BGG embeds
+ * and LFG snapshots: https://boardgamegeek.com/boardgame/{id}
+ */
+function bggBoardGameUrl(bggGameId) {
+  if (bggGameId == null) return null;
+  const id = String(bggGameId).trim();
+  if (!/^\d+$/.test(id)) return null;
+  return `https://boardgamegeek.com/boardgame/${id}`;
+}
+
+/**
  * Apply FUR-91 session metadata from a gather's stored game snapshot.
  * Custom gathers set isCustomGame + null bggGameId + the custom name.
  */
@@ -102,6 +114,7 @@ module.exports = {
   applyCustomGameIdentity,
   applyBggGameIdentity,
   applyIdentityFromGather,
+  bggBoardGameUrl,
   isCustomGame,
   statusGameLabel,
   buildCustomGameCreateEmbed,

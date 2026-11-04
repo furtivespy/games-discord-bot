@@ -1,6 +1,6 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameDB = require('../../db/anygame.js')
-const { find, remove, cloneDeep, shuffle } = require('lodash')
+const { remove, cloneDeep, shuffle } = require('lodash')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
 
 class Recall {
@@ -25,8 +25,11 @@ class Recall {
             return
         }
 
-        const inputDeck = interaction.options.getString('deck')
-        const deck = gameData.decks.length == 1 ? gameData.decks[0] : find(gameData.decks, {name: inputDeck})
+        const deckResult = GameHelper.resolveDeckOption(gameData, interaction.options.getString('deck'))
+        if (await GameHelper.replyIfUnspecifiedDeck(interaction, deckResult)) {
+            return
+        }
+        const deck = deckResult.deck
         if (!deck){
             await interaction.editReply({ content: `No Deck`})
             return

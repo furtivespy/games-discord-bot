@@ -137,4 +137,41 @@ describe("/config command", () => {
     expect(replies[0].content).toContain("administrators");
     expect(client.store.guild.lfg_game_parent_channel_id).toBeUndefined();
   });
+
+  test("winner-portraits writes the guild setting and defaults to on", async () => {
+    const client = settingsClient();
+    expect(GuildConfig.isWinnerPortraitsEnabled(client, { id: "g1" })).toBe(true);
+
+    const command = new Config(client);
+    const replies = [];
+    await command.execute({
+      guildId: "guild-1",
+      guild: { id: "guild-1" },
+      memberPermissions: { has: () => true },
+      options: {
+        getSubcommand: () => "winner-portraits",
+        getBoolean: () => false,
+      },
+      reply: async (payload) => replies.push(payload),
+    });
+    expect(client.store.guild.winner_portraits_enabled).toBe("false");
+    expect(GuildConfig.isWinnerPortraitsEnabled(client, { id: "g1" })).toBe(false);
+    expect(replies[0].content).toContain("off");
+    expect(replies[0].flags).toBe(MessageFlags.Ephemeral);
+  });
+
+  test("show reports winner portraits as on by default", async () => {
+    const client = settingsClient();
+    const command = new Config(client);
+    const replies = [];
+    await command.execute({
+      guildId: "guild-1",
+      guild: { id: "guild-1" },
+      memberPermissions: { has: () => true },
+      options: { getSubcommand: () => "show" },
+      reply: async (payload) => replies.push(payload),
+    });
+    expect(replies[0].content).toContain("Winner portraits: on");
+    expect(replies[0].content).toContain("portrait:true");
+  });
 });

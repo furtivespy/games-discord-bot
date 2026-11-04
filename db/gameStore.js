@@ -186,6 +186,45 @@ class GameStore {
       .get(String(guildId), collection, String(channelId));
   }
 
+  // Used when a command is about to say there is no game. Reads the exact
+  // document plus any other rows for that channel so a guild mismatch, a
+  // deleted flag, or an empty database is visible in the log.
+  inspectGameLookup(guildId, collection, channelId) {
+    const guild = String(guildId ?? "");
+    const channel = String(channelId ?? "");
+    const exact = this.db
+      .query(
+        `SELECT guild_id, collection, channel_id, bgg_game_id, updated_at,
+                length(data) AS data_length, data
+         FROM game_documents
+         WHERE guild_id = ? AND collection = ? AND channel_id = ?`
+      )
+      .get(guild, collection, channel);
+    const channelRows = this.db
+      .query(
+        `SELECT guild_id, collection, channel_id, bgg_game_id, updated_at,
+                length(data) AS data_length, data
+         FROM game_documents
+         WHERE channel_id = ?`
+      )
+      .all(channel);
+    const guildGameCount =
+      this.db
+        .query(
+          `SELECT COUNT(*) AS n
+           FROM game_documents
+           WHERE guild_id = ? AND collection = ?`
+        )
+        .get(guild, collection)?.n ?? 0;
+
+    return {
+      dbPath: this.dbPath,
+      guildGameCount,
+      exact: summarizeStoredGameRow(exact),
+      channelRows: channelRows.map(summarizeStoredGameRow),
+    };
+  }
+
   runDiagnostic() {
     const result = {};
 
@@ -245,6 +284,30 @@ class GameStore {
     fs.copyFileSync(backupPath, this.dbPath);
     this.db = openGameDocumentsDatabase(this.dbPath);
   }
+}
+
+function summarizeStoredGameRow(row) {
+  if (!row) return null;
+  let parsed = null;
+  let parseError = null;
+  try {
+    parsed = JSON.parse(row.data);
+  } catch (err) {
+    parseError = err.message;
+  }
+  return {
+    guildId: row.guild_id,
+    collection: row.collection,
+    channelId: row.channel_id,
+    bggGameId: row.bgg_game_id,
+    updatedAt: row.updated_at,
+    dataLength: row.data_length,
+    name: parsed && typeof parsed === "object" ? parsed.name ?? null : null,
+    isdeleted: parsed && typeof parsed === "object" ? parsed.isdeleted ?? null : null,
+    playerCount:
+      parsed && Array.isArray(parsed.players) ? parsed.players.length : null,
+    parseError,
+  };
 }
 
 function openGameDocumentsDatabase(dbPath) {

@@ -17,11 +17,13 @@ const GoogleSearch = require("./modules/GoogleSearch.js");
 const _ = require("lodash");
 const modalSubmission = require('./events/modalSubmission.js');
 const GatherInterest = require("./modules/GatherInterest.js");
+const DeckEditCardModal = require("./modules/DeckEditCardModal");
 const ReminderSystem = require("./modules/ReminderSystem.js");
 const GameStatusHelper = require("./modules/GameStatusHelper");
 const { startEmbeddedAppServer } = require("./modules/embeddedApp");
 const { registerApplicationCommands } = require("./modules/applicationCommands");
 const VisualLaunch = require("./modules/visualLaunch");
+const { formatGameLookup } = require("./modules/gameLookupDebug.js");
 
 class DiscordBot extends Client {
   constructor(options) {
@@ -273,6 +275,41 @@ class DiscordBot extends Client {
       }
     }
   }
+  _warnIfGameLookupLooksWrong(serverId, gameName, channelId, source, result, err) {
+    if (gameName !== "game" || typeof this.db?.inspectGameLookup !== "function") return;
+    const failed =
+      !!err ||
+      result == null ||
+      result.isdeleted === true ||
+      (result.isdeleted == null && result.name == null && result.players == null);
+    if (!failed) return;
+
+    let inspection;
+    try {
+      inspection = this.db.inspectGameLookup(serverId, gameName, channelId);
+    } catch (inspectErr) {
+      this.logger?.warn?.(
+        `[game-lookup] source=${source} guild=${serverId} channel=${channelId} inspect-failed ${inspectErr.message} loadError=${err?.message || ""}`
+      );
+      return;
+    }
+
+    const exact = inspection.exact;
+    const otherGameGuild = (inspection.channelRows || []).some(
+      (row) => row.collection === gameName && String(row.guildId) !== String(serverId)
+    );
+    const storedActive = exact && !exact.parseError && exact.isdeleted === false;
+    const emptyDb = inspection.guildGameCount === 0;
+    if (!(storedActive || otherGameGuild || emptyDb || err || exact?.parseError)) return;
+
+    const returned = result
+      ? `isdeleted=${result.isdeleted} name=${JSON.stringify(result.name ?? null)}`
+      : "null";
+    this.logger?.warn?.(
+      `[game-lookup] source=${source} guild=${serverId} channel=${channelId} returned=${returned} loadError=${err?.message || ""} ${formatGameLookup(inspection)}`
+    );
+  }
+
   async getGameDataV2(serverId, gameName, channelId) {
     const tracer = trace.getTracer("discord-bot");
     return tracer.startActiveSpan("game.load", (span) => {
@@ -285,6 +322,7 @@ class DiscordBot extends Client {
             "game.found": true,
             "game.player_count": result?.players?.length ?? 0,
           });
+          this._warnIfGameLookupLooksWrong(serverId, gameName, channelId, "sqlite", result, null);
           return result;
         }
         guildData = this.getGameData(`${gameName}-${channelId}`);
@@ -293,10 +331,12 @@ class DiscordBot extends Client {
           "game.found": !_.isEmpty(guildData),
           "game.player_count": result?.players?.length ?? 0,
         });
+        this._warnIfGameLookupLooksWrong(serverId, gameName, channelId, "legacy", result, null);
         return result;
       } catch (err) {
         span.recordException(err);
         span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+        this._warnIfGameLookupLooksWrong(serverId, gameName, channelId, "error", null, err);
         throw err;
       } finally {
         span.end();
@@ -392,6 +432,9 @@ class DiscordBot extends Client {
     // Ensure winner exists
     if (gameData.winner === undefined) {
       gameData.winner = null;
+    }
+    if (gameData.winnerPortrait === undefined) {
+      gameData.winnerPortrait = null;
     }
     
     // Ensure lastStatusMessage fields exist
@@ -850,6 +893,9 @@ client.on("interactionCreate", async (interaction) => {
     try {
       if (VisualLaunch.isVisualButton(interaction.customId)) {
         await VisualLaunch.handleButton(interaction, interaction.client);
+        return;
+      }
+      if (await DeckEditCardModal.handleButton(interaction, interaction.client)) {
         return;
       }
       await GatherInterest.handleButton(interaction, interaction.client);
