@@ -40,3 +40,9 @@ jobs:
           # No Discord token. Each test also mkdtemps GAMEBOT_DATA_DIR; this
           # only keeps any accidental store open out of the repo checkout.
           GAMEBOT_DATA_DIR: ${{ runner.temp }}/gamebot-ci
+
+      - name: Build embedded client
+        working-directory: embedded-client
+        run: |
+          bun install --frozen-lockfile
+          bun run build

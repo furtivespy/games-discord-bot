@@ -32,6 +32,7 @@
     "chalk": "^2.4.2",
     "chrono-node": "^2.10.3",
     "discord.js": "^14.28.0",
+    "express": "^5.2.1",
     "fast-xml-parser": "^4.5.7",
     "fuse.js": "^6.4.3",
     "haikunator": "^2.1.2",

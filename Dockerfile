@@ -26,6 +26,13 @@ RUN git config --global url."https://github.com/".insteadOf "ssh://git@github.co
 # Copy application code
 COPY --link . .
 
+# Build the Discord Embedded App client (visual mode). Separate package so
+# the CommonJS bot stays as-is; vite is not a production bot dependency.
+WORKDIR /app/embedded-client
+# Base image sets NODE_ENV=production; Vite is a client build-time dep.
+RUN NODE_ENV=development bun install --frozen-lockfile && bun run build && rm -rf node_modules
+WORKDIR /app
+
 # Final stage for app image
 FROM base
 
