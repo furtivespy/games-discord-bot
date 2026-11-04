@@ -10,7 +10,8 @@ Try to fully answer the question, not just telling the user where to look. \
 If the question is not related to the rules, let the user know that rules are you specialty and answer \ 
 helpfully, but keep non-rules answers short and concise.`;
 
-const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";
+const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-lite-image";
+const DEFAULT_GEMINI_RULES_MODEL = "gemini-3.8-flash";
 const DEFAULT_IMAGE_TIMEOUT_MS = 45_000;
 const BLOCKED_FINISH_REASONS = new Set([
   "SAFETY",
@@ -113,7 +114,7 @@ class GeminiAI {
 
   async answerRulesQuestion(question, gameData = null) {
     const response = await this.AI2.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: DEFAULT_GEMINI_RULES_MODEL,
         contents: await this.addGameToPrompt(question, gameData),
         config: {
           tools: [
@@ -276,5 +277,6 @@ module.exports = {
   resolveImageTimeoutMs,
   withTimeout,
   DEFAULT_GEMINI_IMAGE_MODEL,
+  DEFAULT_GEMINI_RULES_MODEL,
   DEFAULT_IMAGE_TIMEOUT_MS,
 }
