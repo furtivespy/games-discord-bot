@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<items total="3" termsofuse="https://boardgamegeek.com/xmlapi/termsofuse">
+  <item type="boardgame" id="13">
+    <name type="primary" value="Catan"/>
+    <yearpublished value="1995"/>
+  </item>
+  <item type="boardgame" id="266192">
+    <name type="primary" value="It&amp;rsquo;s a Wonderful World"/>
+    <yearpublished value="2019"/>
+  </item>
+  <item type="boardgame" id="9209">
+    <name type="primary" value="Ticket to Ride"/>
+    <yearpublished value="2004"/>
+  </item>
+</items>
