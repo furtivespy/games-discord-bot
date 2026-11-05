@@ -1,4 +1,3 @@
-const qs = require( 'querystring' )
 const fetch = require('node-fetch')
 
 class Event {
@@ -24,16 +23,15 @@ class Event {
     }
 
     async getGoogleImg(searchTerm, isGif, start=1, safeSearch = true){
-      var params = {
-        q:  searchTerm,
-        safe: (safeSearch) ? 'high' : 'off',
-        cx: this.client.config.google_cxid,
-        key: this.client.config.google_key,
-        searchType: 'image',
-        start: start
-      }
-      if (isGif) params.fileType = 'gif';
-      var url = 'https://www.googleapis.com/customsearch/v1/?' + qs.stringify( params );
+      let query = new URLSearchParams();
+      query.set("q", searchTerm);
+      query.set("safe", (safeSearch) ? 'high' : 'off');
+      query.set("cx", this.client.config.google_cxid);
+      query.set("key", this.client.config.google_key);
+      query.set("searchType", 'image');
+      query.set("start", start);
+      if (isGif) query.set("fileType", 'gif');
+      var url = 'https://www.googleapis.com/customsearch/v1/?' + query.toString();
       return await fetch(url).then(res => res.json()).then(json => {
         return json.items
       })
