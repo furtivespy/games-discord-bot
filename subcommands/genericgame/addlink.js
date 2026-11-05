@@ -1,7 +1,6 @@
 const { MessageFlags } = require("discord.js");
 const GameDB = require('../../db/anygame.js')
 const { cloneDeep } = require('lodash')
-const fetch = require("node-fetch");
 const { nanoid } = require('nanoid')
 
 class AddLink {

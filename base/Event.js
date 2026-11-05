@@ -1,5 +1,4 @@
 const qs = require( 'querystring' )
-const fetch = require('node-fetch')
 
 class Event {
     constructor(client, {
