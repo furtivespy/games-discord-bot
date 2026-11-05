@@ -1,4 +1,3 @@
-const fetch = require('node-fetch');
 const qs = require( 'querystring' );
 const _ = require('lodash');
 const BASE_URL = 'https://api.urbandictionary.com/v0';
