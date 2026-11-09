@@ -1,4 +1,4 @@
-const { GoogleGenAI, HarmCategory, HarmBlockThreshold } = require("@google/genai");
+const { GoogleGenAI, HarmCategory, HarmBlockThreshold, Modality } = require("@google/genai");
 const { AttachmentBuilder } = require("discord.js");
 
 const formattingInstructions = `The response needs to be broken into chunks of 2000 characters or less.\
@@ -109,7 +109,14 @@ const createGeminiAI = (client) => {
 class GeminiAI {
   constructor(client) {
       this.client = client
-      this.AI2 = new GoogleGenAI({apiKey: this.client.config.geminiKey})
+      // 3.0.0 defaults Developer API to v1, but generateContentConfigToMldev
+      // still serializes camelCase systemInstruction (plus tools / safetySettings).
+      // js-genai#1746: v1 400s Unknown name "systemInstruction". Pin v1beta;
+      // we cannot live-test /rules without a key.
+      this.AI2 = new GoogleGenAI({
+        apiKey: this.client.config.geminiKey,
+        apiVersion: "v1beta",
+      })
   }
 
   async answerRulesQuestion(question, gameData = null) {
@@ -205,6 +212,7 @@ class GeminiAI {
       }
       if (!responseText.startsWith("Error:")) {
           candidate.groundingMetadata.groundingChunks.forEach(chunk => {
+            if (!chunk?.web) return;
             responseText += `[${chunk.web.title}](<${chunk.web.uri}>) `;
           });
       }
@@ -261,6 +269,9 @@ class GeminiAI {
       this.AI2.models.generateContent({
         model: resolvedModel,
         contents: parts,
+        config: {
+          responseModalities: [Modality.TEXT, Modality.IMAGE],
+        },
       }),
       timeoutMs || resolveImageTimeoutMs(this.client)
     );
