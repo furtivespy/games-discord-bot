@@ -1549,3 +1549,159 @@ describe("/cards command handlers", () => {
     );
   });
 });
+
+function discordPayloadIsEmpty(payload) {
+  if (payload == null) return true;
+  if (typeof payload === "string") return payload.length === 0;
+  const hasContent = typeof payload.content === "string" && payload.content.length > 0;
+  const hasEmbeds = Array.isArray(payload.embeds) && payload.embeds.length > 0;
+  const hasFiles = Array.isArray(payload.files) && payload.files.length > 0;
+  const hasComponents = Array.isArray(payload.components) && payload.components.length > 0;
+  return !hasContent && !hasEmbeds && !hasFiles && !hasComponents;
+}
+
+function assertNoEmptyDiscordSends(harness) {
+  const payloads = [
+    ...harness.calls.reply,
+    ...harness.calls.editReply,
+    ...harness.calls.followUp,
+    ...harness.sendCalls,
+  ];
+  expect(payloads.length).toBeGreaterThan(0);
+  for (const payload of payloads) {
+    expect(discordPayloadIsEmpty(payload)).toBe(false);
+  }
+}
+
+describe("empty card piles do not send Discord 50006 payloads", () => {
+  test("deck check on an empty discard pile replies with a friendly message and no follow-up", async () => {
+    await withHarness(
+      {
+        gameData: gameWithDeck({
+          draw: [createCard({ id: "ace", name: "Ace", origin: "Main" })],
+          discard: [],
+        }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "check",
+          strings: { deck: "Main" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toBe("The Main discard pile is empty.");
+        expect(harness.lastContent()).not.toContain("Something went wrong");
+        expect(harness.calls.followUp).toHaveLength(0);
+        expect(harness.persistCalls).toHaveLength(0);
+        assertNoEmptyDiscordSends(harness);
+      }
+    );
+  });
+
+  test("deck check with discard cards posts the looking-at message and an ephemeral card follow-up", async () => {
+    const discarded = createCard({ id: "beta", name: "Beta", origin: "Main" });
+    await withHarness(
+      {
+        gameData: gameWithDeck({
+          draw: [createCard({ id: "ace", name: "Ace", origin: "Main" })],
+          discard: [discarded],
+        }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "check",
+          strings: { deck: "Main" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toContain("looking at the Main discard pile");
+        expect(harness.calls.followUp).toHaveLength(1);
+        expect(harness.calls.followUp[0].flags).toBe(MessageFlags.Ephemeral);
+        expect(harness.calls.followUp[0].embeds.length).toBeGreaterThan(0);
+        expect(harness.persistCalls).toHaveLength(0);
+        assertNoEmptyDiscordSends(harness);
+      }
+    );
+  });
+
+  test("deck review on an empty deck replies with a friendly message and no follow-up", async () => {
+    await withHarness(
+      {
+        gameData: gameWithDeck({ draw: [], discard: [] }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "review",
+          strings: { deck: "Main" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toBe("The Main deck has no cards.");
+        expect(harness.lastContent()).not.toContain("Something went wrong");
+        expect(harness.calls.followUp).toHaveLength(0);
+        expect(harness.persistCalls).toHaveLength(0);
+        assertNoEmptyDiscordSends(harness);
+      }
+    );
+  });
+
+  test("pile peek on an empty pile replies that it is empty and does not follow up", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          globalPiles: [{ id: "pile-1", name: "Market", cards: [], isSecret: false }],
+        }),
+        options: {
+          subcommandGroup: "pile",
+          subcommand: "peek",
+          strings: { pile: "pile-1" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toBe("Market is empty.");
+        expect(harness.calls.followUp).toHaveLength(0);
+        assertNoEmptyDiscordSends(harness);
+      }
+    );
+  });
+
+  test("pile view on an empty pile replies that it is empty and does not follow up", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          globalPiles: [{ id: "pile-1", name: "Market", cards: [], isSecret: false }],
+        }),
+        options: {
+          subcommandGroup: "pile",
+          subcommand: "view",
+          strings: { pile: "pile-1" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toBe("Market is empty.");
+        expect(harness.calls.followUp).toHaveLength(0);
+        assertNoEmptyDiscordSends(harness);
+      }
+    );
+  });
+
+  test("gameboard view on an empty board replies that it is empty and does not follow up", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame({ gameBoard: [] }),
+        options: {
+          subcommandGroup: "gameboard",
+          subcommand: "view",
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toBe("The Game Board is empty.");
+        expect(harness.calls.followUp).toHaveLength(0);
+        assertNoEmptyDiscordSends(harness);
+      }
+    );
+  });
+});

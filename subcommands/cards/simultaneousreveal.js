@@ -40,10 +40,10 @@ class SimultaneousReveal {
           p.hands.simultaneous,
           `Simultaneous Play - ${name}`
         );
-        await interaction.channel.send({
-          embeds: [...followup[0]],
-          files: [...followup[1]],
-        });
+        const cardDisplay = Formatter.cardDisplayMessage(followup);
+        if (cardDisplay) {
+          await interaction.channel.send(cardDisplay);
+        }
 
         // Move the played cards
         // const playedToPlayArea = gameData.playToPlayArea; // No longer define here

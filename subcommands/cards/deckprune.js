@@ -263,10 +263,8 @@ class DeckPrune {
         ])
 
         // Send ephemeral follow-up showing which cards were removed
-        await interaction.followUp({ 
-            embeds: [...followup[0]], 
-            files: [...followup[1]],
-            flags: MessageFlags.Ephemeral 
+        await Formatter.followUpCardDisplay(interaction, followup, {
+            flags: MessageFlags.Ephemeral
         })
     }
 }

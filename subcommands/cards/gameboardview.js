@@ -25,10 +25,8 @@ class GameBoardView {
             Formatter.multiCard(gameData.gameBoard, `All Cards on Game Board`)
         ]);
 
-        await interaction.followUp({ 
-            embeds: [...followup[0]], 
-            files: [...followup[1]], 
-            flags: MessageFlags.Ephemeral 
+        await Formatter.followUpCardDisplay(interaction, followup, {
+            flags: MessageFlags.Ephemeral
         })
     }
 }

@@ -84,10 +84,8 @@ class PileDrawMultiple {
                 content: `You drew ${count} cards from ${pile.name}`})
         ]);
 
-        await interaction.followUp({ 
-            embeds: [...followup[0]], 
-            files: [...followup[1]], 
-            flags: MessageFlags.Ephemeral 
+        await Formatter.followUpCardDisplay(interaction, followup, {
+            flags: MessageFlags.Ephemeral
         })
     }
 }

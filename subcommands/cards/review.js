@@ -28,15 +28,23 @@ class Review {
         if (!deck){
             await interaction.editReply({ content: `No deck found.`})
             return
-        } 
+        }
+
+        const allCards = deck.allCards
+        if (!Array.isArray(allCards) || allCards.length === 0) {
+            await interaction.editReply({
+                content: `The ${deck.name} deck has no cards.`
+            })
+            return
+        }
         
         const [, followup] = await Promise.all([
             interaction.editReply({ 
                 content: `${interaction.member.displayName} is reviewing the total makeup of ${deck.name}`}),
-            Formatter.multiCard(deck.allCards, `All cards in ${deck.name}`)
+            Formatter.multiCard(allCards, `All cards in ${deck.name}`)
         ]);
         
-        await interaction.followUp({ embeds: [...followup[0]], files: [...followup[1]], flags: MessageFlags.Ephemeral })
+        await Formatter.followUpCardDisplay(interaction, followup, { flags: MessageFlags.Ephemeral })
     }
 }
 

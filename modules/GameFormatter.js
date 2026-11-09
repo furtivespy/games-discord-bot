@@ -1039,6 +1039,28 @@ class GameFormatter {
     return [embeds, attachments];
   }
 
+  /**
+   * Discord rejects a follow-up with no content, embeds, or files (50006).
+   * multiCard([]) returns [[], []], so callers must skip or supply content.
+   */
+  static cardDisplayMessage(cardDisplay) {
+    const embeds = Array.isArray(cardDisplay?.[0]) ? [...cardDisplay[0]] : [];
+    const files = Array.isArray(cardDisplay?.[1]) ? [...cardDisplay[1]] : [];
+    if (embeds.length === 0 && files.length === 0) {
+      return null;
+    }
+    return { embeds, files };
+  }
+
+  static async followUpCardDisplay(interaction, cardDisplay, extra = {}) {
+    const display = this.cardDisplayMessage(cardDisplay);
+    if (!display) {
+      return false;
+    }
+    await interaction.followUp({ ...display, ...extra });
+    return true;
+  }
+
   static handEmbed(playerData, guildName, channelName) {
     const cardsEmbed = new EmbedBuilder()
       .setColor(13928716)

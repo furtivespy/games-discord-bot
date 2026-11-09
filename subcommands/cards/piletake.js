@@ -117,7 +117,7 @@ class PileTake {
             interaction.editReply({ content: 'Cards Taken!', components: [] }),
             Formatter.multiCard(takenCardObjects, `Cards Taken by ${interaction.member.displayName}`)
         ])
-        await interaction.followUp({ embeds: [...followup[0]], files: [...followup[1]] })
+        await Formatter.followUpCardDisplay(interaction, followup)
     }
 }
 
