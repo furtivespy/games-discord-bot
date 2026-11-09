@@ -1,6 +1,5 @@
 const GameDB = require('../../db/anygame.js')
 const {cloneDeep, find, findIndex } = require('lodash')
-const fetch = require("node-fetch");
 const { StringSelectMenuBuilder, ActionRowBuilder, MessageFlags} = require('discord.js')
 
 class RemoveImage {

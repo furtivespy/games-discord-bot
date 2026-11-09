@@ -1,5 +1,3 @@
-const fetch = require('node-fetch')
-
 class Event {
     constructor(client, {
       name = null,
