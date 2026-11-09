@@ -109,6 +109,10 @@ const createGeminiAI = (client) => {
 class GeminiAI {
   constructor(client) {
       this.client = client
+      // @google/genai 3.0.0 defaults the Gemini Developer API to v1 (was v1beta).
+      // Leave apiVersion unset so that default applies. If /rules grounding or
+      // winner portraits fail on v1, pass apiVersion: "v1beta" here or set
+      // GOOGLE_GENAI_API_VERSION=v1beta.
       this.AI2 = new GoogleGenAI({apiKey: this.client.config.geminiKey})
   }
 

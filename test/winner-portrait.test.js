@@ -217,6 +217,46 @@ describe("winner portrait prompt and decisions", () => {
   });
 });
 
+describe("@google/genai 3.0.0", () => {
+  test("package.json, bun.lock, and the installed package are 3.0.0", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")
+    );
+    expect(pkg.dependencies["@google/genai"]).toBe("3.0.0");
+    expect(require("@google/genai/package.json").version).toBe("3.0.0");
+
+    const lock = fs.readFileSync(path.join(__dirname, "..", "bun.lock"), "utf8");
+    expect(lock).toContain('"@google/genai": "3.0.0"');
+    expect(lock).toContain('"@google/genai": ["@google/genai@3.0.0"');
+  });
+
+  test("still exports GoogleGenAI and the harm enums /rules uses", () => {
+    const { GoogleGenAI, HarmCategory, HarmBlockThreshold } = require("@google/genai");
+    expect(typeof GoogleGenAI).toBe("function");
+    expect(HarmCategory.HARM_CATEGORY_HARASSMENT).toBe("HARM_CATEGORY_HARASSMENT");
+    expect(HarmCategory.HARM_CATEGORY_HATE_SPEECH).toBe("HARM_CATEGORY_HATE_SPEECH");
+    expect(HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT).toBe(
+      "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+    );
+    expect(HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT).toBe(
+      "HARM_CATEGORY_DANGEROUS_CONTENT"
+    );
+    expect(HarmBlockThreshold.BLOCK_ONLY_HIGH).toBe("BLOCK_ONLY_HIGH");
+  });
+
+  test("GeminiAI constructs GoogleGenAI with apiKey only so SDK default v1 applies", () => {
+    const gemini = createGeminiAI({
+      config: { geminiKey: "test-key" },
+      logger: { warn() {}, error() {} },
+    });
+    expect(gemini.AI2.apiVersion).toBeUndefined();
+    expect(gemini.AI2.apiClient.clientOptions.httpOptions.apiVersion).toBe("v1");
+    expect(typeof gemini.AI2.models.generateContent).toBe("function");
+  });
+});
+
 describe("Gemini image extraction (mocked)", () => {
   test("defaults off gemini-2.5-flash and gemini-2.5-flash-image", () => {
     expect(DEFAULT_GEMINI_IMAGE_MODEL).toBe("gemini-3.1-flash-lite-image");
