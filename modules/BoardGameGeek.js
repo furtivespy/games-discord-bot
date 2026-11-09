@@ -1,12 +1,12 @@
 const { EmbedBuilder, AttachmentBuilder } = require("discord.js");
-const { parse } = require("fast-xml-parser");
+const { XMLParser } = require("fast-xml-parser");
 const { find, cloneDeep, take } = require("lodash");
 const { createCanvas, Image, loadImage } = require("canvas");
+// he 2 is ESM-only; Bun's require(esm) returns the module namespace (`he.decode`).
 const he = require("he");
 const TurndownService = require("turndown");
 const Formatter = require('./GameFormatter')
 const GameDB = require('../db/anygame.js')
-const { XMLParser } = require("fast-xml-parser");
 const { trace, SpanStatusCode } = require("@opentelemetry/api");
 
 const tracer = trace.getTracer("discord-bot:bgg");
@@ -43,7 +43,7 @@ class BoardGameGeek {
     const parser = new XMLParser({
       attributeNamePrefix: "",
       ignoreAttributes: false,
-      ignoreNameSpace: true,
+      removeNSPrefix: true,
       allowBooleanAttributes: true,
     });
     const parsed = parser.parse(text);
@@ -109,7 +109,7 @@ class BoardGameGeek {
           attributeNamePrefix: "",
           textNodeName: "text",
           ignoreAttributes: false,
-          ignoreNameSpace: true,
+          removeNSPrefix: true,
           allowBooleanAttributes: true,
         });
         this.gameInfo = parser.parse(text).boardgames.boardgame;
