@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<boardgames termsofuse="https://boardgamegeek.com/xmlapi/termsofuse">
+  <boardgame objectid="102794">
+    <yearpublished>2013</yearpublished>
+    <minplayers>1</minplayers>
+    <maxplayers>7</maxplayers>
+    <playingtime>210</playingtime>
+    <minplaytime>30</minplaytime>
+    <maxplaytime>210</maxplaytime>
+    <age>12</age>
+    <name primary="true">Sid Meier&amp;apos;s Caverna</name>
+    <name>Die Höhlenbauern</name>
+    <description>Farmers start with 2 dwarves &amp;amp; a cave.&amp;#10;&amp;#10;It&amp;rsquo;s a sequel to Agricola, with &amp;lt;em&amp;gt;rooms&amp;lt;/em&amp;gt; and mines.</description>
+    <boardgamedesigner objectid="398">Uwe Rosenberg</boardgamedesigner>
+    <boardgamepublisher objectid="39">Lookout Games</boardgamepublisher>
+    <boardgamemechanic objectid="2001">Action Point Allowance System</boardgamemechanic>
+    <boardgameexpansion objectid="163602">Caverna: The Forgotten Folk</boardgameexpansion>
+    <boardgamehonor objectid="12345">2013 Golden Geek Best Strategy Game Nominee</boardgamehonor>
+    <boardgamehonor objectid="12346">Players&amp;apos; Choice Award</boardgamehonor>
+    <poll name="suggested_numplayers" title="User Suggested Number of Players" totalvotes="100">
+      <results numplayers="1">
+        <result value="Best" numvotes="10"/>
+        <result value="Recommended" numvotes="40"/>
+        <result value="Not Recommended" numvotes="5"/>
+      </results>
+      <results numplayers="4">
+        <result value="Best" numvotes="80"/>
+        <result value="Recommended" numvotes="15"/>
+        <result value="Not Recommended" numvotes="2"/>
+      </results>
+    </poll>
+    <statistics page="1">
+      <ratings>
+        <usersrated>30000</usersrated>
+        <average>8.12345</average>
+        <bayesaverage>7.9</bayesaverage>
+        <ranks>
+          <rank type="subtype" id="1" name="boardgame" friendlyname="Board Game Rank" value="25" bayesaverage="7.9"/>
+          <rank type="family" id="5497" name="strategygames" friendlyname="It&amp;rsquo;s Strategy Rank" value="20" bayesaverage="8.0"/>
+        </ranks>
+        <averageweight>3.8</averageweight>
+      </ratings>
+    </statistics>
+  </boardgame>
+</boardgames>
