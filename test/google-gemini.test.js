@@ -4,6 +4,9 @@ const {
   createGeminiAI,
   extractInlineImage,
   resolveImageModel,
+  splitDiscordContent,
+  combineDiscordChunks,
+  DISCORD_CONTENT_MAX,
   DEFAULT_GEMINI_IMAGE_MODEL,
   DEFAULT_GEMINI_RULES_MODEL,
 } = require("../modules/GoogleGemini");
@@ -217,6 +220,132 @@ describe("Gemini models and extraction", () => {
     expect(text).toContain("[BGG](<https://boardgamegeek.com/thread/1>)");
     expect(text).not.toContain("forum");
     expect(text).not.toContain("undefined");
+  });
+
+  test("processResponse splits Sources that exceed Discord's 2000-char limit at link boundaries", async () => {
+    const gemini = createGeminiAI(fakeClient());
+    const groundingChunks = Array.from({ length: 8 }, (_, i) => ({
+      web: {
+        title: `Catan Distance Rule ${i + 1}`,
+        uri: vertexGroundingUri(i),
+      },
+    }));
+    const chunks = await gemini.processResponse({
+      candidates: [
+        {
+          content: { parts: [{ text: "The robber must be at least two roads away." }] },
+          groundingMetadata: { groundingChunks },
+        },
+      ],
+    });
+
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(DISCORD_CONTENT_MAX);
+    }
+    expect(chunks[0]).toContain("The robber must be at least two roads away.");
+    expect(chunks[0]).not.toContain("I encountered an error");
+    const allText = chunks.join("\n");
+    expect(allText).toContain("Sources:");
+    for (let i = 0; i < 8; i++) {
+      expect(allText).toContain(`Catan Distance Rule ${i + 1}`);
+      expect(allText).toContain(vertexGroundingUri(i));
+      expect(allText).toContain(
+        `[Catan Distance Rule ${i + 1}](<${vertexGroundingUri(i)}>)`
+      );
+    }
+  });
+
+  test("processResponse keeps a short Sources list in one Discord message", async () => {
+    const gemini = createGeminiAI(fakeClient());
+    const chunks = await gemini.processResponse({
+      candidates: [
+        {
+          content: { parts: [{ text: "Draw two cards." }] },
+          groundingMetadata: {
+            groundingChunks: [
+              { web: { title: "BGG", uri: "https://boardgamegeek.com/thread/1" } },
+            ],
+          },
+        },
+      ],
+    });
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].length).toBeLessThanOrEqual(DISCORD_CONTENT_MAX);
+    expect(chunks[0]).toContain("Draw two cards.");
+    expect(chunks[0]).toContain("[BGG](<https://boardgamegeek.com/thread/1>)");
+  });
+
+  test("processResponse splits an oversized answer chunk that Gemini did not separate", async () => {
+    const gemini = createGeminiAI(fakeClient());
+    const answer = `${"Paragraph one of the rules. ".repeat(40)}\n\n${"Paragraph two continues. ".repeat(50)}`;
+    expect(answer.length).toBeGreaterThan(DISCORD_CONTENT_MAX);
+    const chunks = await gemini.processResponse({
+      candidates: [{ content: { parts: [{ text: answer }] } }],
+    });
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(DISCORD_CONTENT_MAX);
+    }
+    expect(chunks.join(" ")).toContain("Paragraph one of the rules.");
+    expect(chunks.join(" ")).toContain("Paragraph two continues.");
+  });
+});
+
+function vertexGroundingUri(index) {
+  const prefix = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/";
+  return `${prefix}${"A".repeat(237 - prefix.length)}${index}`;
+}
+
+describe("Discord content splitting", () => {
+  test("splitDiscordContent is a no-op under the Discord limit", () => {
+    expect(splitDiscordContent("Sources: [BGG](<https://example.test>)")).toEqual([
+      "Sources: [BGG](<https://example.test>)",
+    ]);
+  });
+
+  test("splitDiscordContent keeps each [title](<uri>) link intact across Sources pages", () => {
+    const links = Array.from({ length: 12 }, (_, i) => {
+      const uri = vertexGroundingUri(i);
+      return `[Catan Distance Rule ${i + 1}](<${uri}>)`;
+    });
+    const sources = `Sources: ${links.join(" ")}`;
+    expect(sources.length).toBeGreaterThan(DISCORD_CONTENT_MAX);
+
+    const pages = splitDiscordContent(sources);
+    expect(pages.length).toBeGreaterThan(1);
+    for (const page of pages) {
+      expect(page.length).toBeLessThanOrEqual(DISCORD_CONTENT_MAX);
+      expect(page.startsWith("Sources:")).toBe(true);
+    }
+    const joined = pages.join(" ");
+    for (const link of links) {
+      expect(joined).toContain(link);
+    }
+  });
+
+  test("splitDiscordContent truncates a single oversized token to the Discord limit", () => {
+    const uri = `https://example.test/${"u".repeat(DISCORD_CONTENT_MAX)}`;
+    const link = `[Huge](<${uri}>)`;
+    const pages = splitDiscordContent(`Sources: ${link}`);
+    expect(pages).toHaveLength(1);
+    expect(pages[0].length).toBeLessThanOrEqual(DISCORD_CONTENT_MAX);
+    expect(pages[0].endsWith("...")).toBe(true);
+  });
+
+  test("combineDiscordChunks never returns a chunk over the Discord limit", () => {
+    const sources = `Sources: ${Array.from({ length: 10 }, (_, i) => {
+      return `[Source ${i + 1}](<${vertexGroundingUri(i)}>)`;
+    }).join(" ")}`;
+    const combined = combineDiscordChunks([
+      "The robber must be placed at least two roads away from any settlement.",
+      sources,
+    ]);
+    expect(combined.length).toBeGreaterThan(1);
+    for (const chunk of combined) {
+      expect(chunk.length).toBeLessThanOrEqual(DISCORD_CONTENT_MAX);
+    }
+    expect(combined[0]).toContain("two roads away");
   });
 });
 
