@@ -1,5 +1,3 @@
-const fetch = require("node-fetch");
-
 const baseUrl = 'https://www.googleapis.com/customsearch/v1/?'
 
 class GoogleSearch {

@@ -1,5 +1,4 @@
 const Command = require('../../base/Command.js')
-const fetch = require('node-fetch')
 const he = require('he')
 const _ = require('lodash')
 

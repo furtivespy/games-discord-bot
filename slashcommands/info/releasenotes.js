@@ -1,6 +1,5 @@
 const SlashCommand = require("../../base/SlashCommand.js");
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const fetch = require("node-fetch");
 
 class ReleaseNotes extends SlashCommand {
   constructor(client) {
