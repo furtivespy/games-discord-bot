@@ -2,10 +2,13 @@ const SlashCommand = require("../../base/SlashCommand.js");
 const {
   ChannelType,
   MessageFlags,
-  PermissionsBitField,
   SlashCommandBuilder,
 } = require("discord.js");
 const GuildConfig = require("../../modules/GuildConfig");
+const {
+  applyAdminDefaultMemberPermissions,
+  memberHasAdministrator,
+} = require("../../modules/qaUnlock");
 
 class Config extends SlashCommand {
   constructor(client) {
@@ -16,47 +19,48 @@ class Config extends SlashCommand {
       enabled: true,
       permLevel: "Administrator",
     });
-    this.data = new SlashCommandBuilder()
-      .setName(this.help.name)
-      .setDescription(this.help.description)
-      .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
-      .setDMPermission(false)
-      .addSubcommand((subcommand) =>
-        subcommand
-          .setName("games-channel")
-          .setDescription(
-            "Set the text or forum channel where /lfg Start game opens play threads"
-          )
-          .addChannelOption((option) =>
-            option
-              .setName("channel")
-              .setDescription(
-                "Text or forum channel for game threads (not the LFG channel)"
-              )
-              .addChannelTypes(
-                ChannelType.GuildText,
-                ChannelType.GuildAnnouncement,
-                ChannelType.GuildForum
-              )
-              .setRequired(true)
-          )
-      )
-      .addSubcommand((subcommand) =>
-        subcommand
-          .setName("winner-portraits")
-          .setDescription("Turn crowned winner portraits on or off for this server")
-          .addBooleanOption((option) =>
-            option
-              .setName("enabled")
-              .setDescription("Allow /game winner portrait:true (default on)")
-              .setRequired(true)
-          )
-      )
-      .addSubcommand((subcommand) =>
-        subcommand
-          .setName("show")
-          .setDescription("Show current Game Bot guild settings")
-      );
+    this.data = applyAdminDefaultMemberPermissions(
+      new SlashCommandBuilder()
+        .setName(this.help.name)
+        .setDescription(this.help.description)
+        .setDMPermission(false)
+        .addSubcommand((subcommand) =>
+          subcommand
+            .setName("games-channel")
+            .setDescription(
+              "Set the text or forum channel where /lfg Start game opens play threads"
+            )
+            .addChannelOption((option) =>
+              option
+                .setName("channel")
+                .setDescription(
+                  "Text or forum channel for game threads (not the LFG channel)"
+                )
+                .addChannelTypes(
+                  ChannelType.GuildText,
+                  ChannelType.GuildAnnouncement,
+                  ChannelType.GuildForum
+                )
+                .setRequired(true)
+            )
+        )
+        .addSubcommand((subcommand) =>
+          subcommand
+            .setName("winner-portraits")
+            .setDescription("Turn crowned winner portraits on or off for this server")
+            .addBooleanOption((option) =>
+              option
+                .setName("enabled")
+                .setDescription("Allow /game winner portrait:true (default on)")
+                .setRequired(true)
+            )
+        )
+        .addSubcommand((subcommand) =>
+          subcommand
+            .setName("show")
+            .setDescription("Show current Game Bot guild settings")
+        )
+    );
   }
 
   async execute(interaction) {
@@ -69,7 +73,7 @@ class Config extends SlashCommand {
         return;
       }
 
-      if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
+      if (!memberHasAdministrator(interaction)) {
         await interaction.reply({
           content: "Only server administrators can change Game Bot config.",
           flags: MessageFlags.Ephemeral,

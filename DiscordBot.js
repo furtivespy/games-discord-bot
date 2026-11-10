@@ -21,6 +21,10 @@ const DeckEditCardModal = require("./modules/DeckEditCardModal");
 const ReminderSystem = require("./modules/ReminderSystem.js");
 const GameStatusHelper = require("./modules/GameStatusHelper");
 const { formatGameLookup } = require("./modules/gameLookupDebug.js");
+const {
+  isQaUnlockAdminCommands,
+  slashCommandJsonForRegistration,
+} = require("./modules/qaUnlock.js");
 
 class DiscordBot extends Client {
   constructor(options) {
@@ -630,7 +634,15 @@ const init = async () => {
     client.logger.log(`guild members cached`);
 
     //Register Slash Commands
-    const cmds = client.slashcommands.map((sc) => sc.data.toJSON());
+    const cmds = client.slashcommands.map((sc) =>
+      slashCommandJsonForRegistration(sc)
+    );
+    if (isQaUnlockAdminCommands()) {
+      client.logger.log(
+        "QA_UNLOCK_ADMIN_COMMANDS is set — admin slash commands are registered without Administrator (QA/dev only, not for production)",
+        "warn"
+      );
+    }
     const rest = new REST({ version: "10" }).setToken(client.config.token);
 
     if (client.config.clientId == "548570412959662080") {

@@ -1,6 +1,7 @@
 const SlashCommand = require('../../base/SlashCommand.js')
 const {SlashCommandBuilder } = require('@discordjs/builders');
-const { PermissionsBitField, MessageFlags} = require('discord.js');
+const { MessageFlags} = require('discord.js');
+const { applyAdminDefaultMemberPermissions } = require('../../modules/qaUnlock');
 
 class Settings extends SlashCommand {
     constructor(client){
@@ -9,12 +10,13 @@ class Settings extends SlashCommand {
             description: "Adjust bot settings (Bot Owner)",
             permLevel: "Bot Owner",
           })
-		  this.data = new SlashCommandBuilder()
-        .setName(this.help.name)
-        .setDescription(this.help.description)
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
-        .addStringOption(option => option.setName('setting').setDescription('The setting to adjust').setRequired(true))
-        .addStringOption(option => option.setName('value').setDescription('The value to set the setting to').setRequired(false))
+		  this.data = applyAdminDefaultMemberPermissions(
+        new SlashCommandBuilder()
+          .setName(this.help.name)
+          .setDescription(this.help.description)
+          .addStringOption(option => option.setName('setting').setDescription('The setting to adjust').setRequired(true))
+          .addStringOption(option => option.setName('value').setDescription('The value to set the setting to').setRequired(false))
+      )
     }
 
     async execute(interaction) {
