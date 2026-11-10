@@ -10,6 +10,8 @@ Try to fully answer the question, not just telling the user where to look. \
 If the question is not related to the rules, let the user know that rules are you specialty and answer \ 
 helpfully, but keep non-rules answers short and concise.`;
 
+const DISCORD_CONTENT_MAX = 2000;
+const SOURCE_LINK_RE = /\[[^\]]*\]\(<[^>]*>\)/g;
 const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-lite-image";
 const DEFAULT_GEMINI_RULES_MODEL = "gemini-3.8-flash";
 const DEFAULT_IMAGE_TIMEOUT_MS = 45_000;
@@ -53,6 +55,128 @@ function firstCandidate(result) {
   if (result?.response?.candidates?.length) return result.response.candidates[0];
   if (result?.candidates?.length) return result.candidates[0];
   return null;
+}
+
+function truncateToDiscordLimit(text, limit = DISCORD_CONTENT_MAX) {
+  if (text.length <= limit) return text;
+  if (limit <= 3) return text.slice(0, limit);
+  return `${text.slice(0, limit - 3)}...`;
+}
+
+function splitByBreaks(text, limit = DISCORD_CONTENT_MAX) {
+  if (text.length <= limit) return [text];
+  const parts = [];
+  let remaining = text;
+  while (remaining.length > limit) {
+    let cut = remaining.lastIndexOf("\n", limit);
+    if (cut < 1) cut = remaining.lastIndexOf(" ", limit);
+    let piece;
+    if (cut < 1) {
+      piece = remaining.slice(0, limit);
+      remaining = remaining.slice(limit).trimStart();
+    } else {
+      piece = remaining.slice(0, cut).trimEnd();
+      if (!piece) {
+        piece = remaining.slice(0, limit);
+        remaining = remaining.slice(limit).trimStart();
+      } else {
+        remaining = remaining.slice(cut).trimStart();
+      }
+    }
+    parts.push(piece);
+  }
+  if (remaining) parts.push(remaining);
+  return parts;
+}
+
+function sourceLinkTokens(text) {
+  const tokens = [];
+  const re = new RegExp(SOURCE_LINK_RE.source, "g");
+  let lastIndex = 0;
+  let match;
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      const gap = text.slice(lastIndex, match.index).trim();
+      if (gap) tokens.push(...splitByBreaks(gap, DISCORD_CONTENT_MAX));
+    }
+    tokens.push(match[0]);
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    const tail = text.slice(lastIndex).trim();
+    if (tail) tokens.push(...splitByBreaks(tail, DISCORD_CONTENT_MAX));
+  }
+  return tokens;
+}
+
+function packTokens(tokens, { limit = DISCORD_CONTENT_MAX, prefix = "" } = {}) {
+  const chunks = [];
+  let current = "";
+
+  const begin = (token) => {
+    if (!prefix) return token;
+    const prefixed = `${prefix}${token}`;
+    return prefixed.length <= limit ? prefixed : token;
+  };
+
+  for (const rawToken of tokens) {
+    const token =
+      rawToken.length <= limit
+        ? rawToken
+        : truncateToDiscordLimit(rawToken, limit);
+    if (!current) {
+      current = begin(token);
+      continue;
+    }
+    const candidate = `${current} ${token}`;
+    if (candidate.length <= limit) {
+      current = candidate;
+    } else {
+      chunks.push(current);
+      current = begin(token);
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function splitDiscordContent(text, limit = DISCORD_CONTENT_MAX) {
+  if (text == null) return [""];
+  if (text.length <= limit) return [text];
+
+  const trimmed = String(text).trim();
+  if (/^Sources:/i.test(trimmed)) {
+    const body = trimmed.replace(/^Sources:\s*/i, "");
+    const tokens = sourceLinkTokens(body);
+    if (tokens.length) {
+      const packed = packTokens(tokens, { limit, prefix: "Sources: " });
+      if (packed.length) return packed;
+    }
+  }
+
+  return splitByBreaks(String(text), limit).map((part) =>
+    part.length <= limit ? part : truncateToDiscordLimit(part, limit)
+  );
+}
+
+function combineDiscordChunks(chunks, limit = DISCORD_CONTENT_MAX) {
+  const combined = [];
+  let current = "";
+  for (const chunk of chunks) {
+    for (const piece of splitDiscordContent(chunk, limit)) {
+      const potential = current ? `${current}\n\n${piece}` : piece;
+      if (potential.length <= limit) {
+        current = potential;
+      } else {
+        if (current) combined.push(current);
+        current = piece;
+      }
+    }
+  }
+  if (current) combined.push(current);
+  return combined.map((chunk) =>
+    chunk.length <= limit ? chunk : truncateToDiscordLimit(chunk, limit)
+  );
 }
 
 function extractInlineImage(result, logger) {
@@ -220,32 +344,7 @@ class GeminiAI {
 
     const responseChunks = responseText.split('||SEPARATE||').map(chunk => chunk.trim())
 
-    // Combine chunks that would fit within Discord's 2000 char limit
-    const combinedChunks = [];
-    let currentChunk = '';
-
-    for (const chunk of responseChunks) {
-      // Test combining with 2 newlines
-      const potentialCombined = currentChunk ? `${currentChunk}\n\n${chunk}` : chunk;
-      
-      if (potentialCombined.length <= 2000) {
-        // Can combine
-        currentChunk = potentialCombined;
-      } else {
-        // Would exceed limit, save current and start new
-        if (currentChunk) {
-          combinedChunks.push(currentChunk);
-        }
-        currentChunk = chunk;
-      }
-    }
-
-    // Add final chunk
-    if (currentChunk) {
-      combinedChunks.push(currentChunk);
-    }
-
-    return combinedChunks
+    return combineDiscordChunks(responseChunks)
   }
 
   imageModelName() {
@@ -287,6 +386,9 @@ module.exports = {
   resolveImageModel,
   resolveImageTimeoutMs,
   withTimeout,
+  splitDiscordContent,
+  combineDiscordChunks,
+  DISCORD_CONTENT_MAX,
   DEFAULT_GEMINI_IMAGE_MODEL,
   DEFAULT_GEMINI_RULES_MODEL,
   DEFAULT_IMAGE_TIMEOUT_MS,

@@ -57,3 +57,35 @@ describe("GameFormatter.oneCardReplyParts", () => {
     expect(embed.data.image.url).toBe("https://cards.example/double.jpg");
   });
 });
+
+describe("GameFormatter.multiCard empty displays", () => {
+  test("an empty card list returns no embeds and no files", async () => {
+    expect(await GameFormatter.multiCard([], "All Discards in QA")).toEqual([[], []]);
+  });
+
+  test("cardDisplayMessage returns null for empty multiCard output", () => {
+    expect(GameFormatter.cardDisplayMessage([[], []])).toBeNull();
+    expect(GameFormatter.cardDisplayMessage(null)).toBeNull();
+  });
+
+  test("followUpCardDisplay skips Discord 50006 empty follow-ups", async () => {
+    const followUp = async () => {
+      throw new Error("should not send an empty follow-up");
+    };
+    expect(await GameFormatter.followUpCardDisplay({ followUp }, [[], []])).toBe(false);
+  });
+
+  test("followUpCardDisplay sends embeds and extra flags when cards exist", async () => {
+    const sent = [];
+    const followUp = async (payload) => {
+      sent.push(payload);
+    };
+    const sentOk = await GameFormatter.followUpCardDisplay(
+      { followUp },
+      [[{ title: "All Discards in QA" }], []],
+      { flags: 64 }
+    );
+    expect(sentOk).toBe(true);
+    expect(sent).toEqual([{ embeds: [{ title: "All Discards in QA" }], files: [], flags: 64 }]);
+  });
+});

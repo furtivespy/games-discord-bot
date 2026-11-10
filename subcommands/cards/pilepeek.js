@@ -40,10 +40,8 @@ class PilePeek {
             Formatter.multiCard(pile.cards, `All Cards in ${pile.name}`)
         ]);
 
-        await interaction.followUp({ 
-            embeds: [...followup[0]], 
-            files: [...followup[1]], 
-            flags: MessageFlags.Ephemeral 
+        await Formatter.followUpCardDisplay(interaction, followup, {
+            flags: MessageFlags.Ephemeral
         })
     }
 }

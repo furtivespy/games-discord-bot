@@ -136,7 +136,10 @@ function stubGameFormatter() {
   Formatter.playerSecretHandAndImages = async () => ({ embeds: [], attachments: [] });
   Formatter.playerSecretTokens = async () => null;
   Formatter.genericCardZoneDisplay = async () => null;
-  Formatter.multiCard = async (_cards, title) => [[{ title: title || "Cards" }], []];
+  Formatter.multiCard = async (cards, title) => {
+    if (!Array.isArray(cards) || cards.length === 0) return [[], []];
+    return [[{ title: title || "Cards" }], []];
+  };
   Formatter.GameStatusV2 = async () => ({ attachment: null, embed: { title: "Game Status" } });
 }
 

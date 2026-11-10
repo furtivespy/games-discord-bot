@@ -28,16 +28,24 @@ class Check {
             if (!deck){
                 await interaction.editReply({ content: `No deck found.`})
                 return
-            } 
+            }
+
+            const discardCards = deck.piles?.discard?.cards
+            if (!Array.isArray(discardCards) || discardCards.length === 0) {
+                await interaction.editReply({
+                    content: `The ${deck.name} discard pile is empty.`
+                })
+                return
+            }
 
             const [, followup] = await Promise.all([
                 interaction.editReply({ 
                     content: `${interaction.member.displayName} is looking at the ${deck.name} discard pile`
                 }),
-                Formatter.multiCard(deck.piles.discard.cards, `All Discards in ${deck.name}`)
+                Formatter.multiCard(discardCards, `All Discards in ${deck.name}`)
             ]);
 
-            await interaction.followUp({ embeds: [...followup[0]], files: [...followup[1]], flags: MessageFlags.Ephemeral })
+            await Formatter.followUpCardDisplay(interaction, followup, { flags: MessageFlags.Ephemeral })
         }
     }
 }

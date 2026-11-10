@@ -24,6 +24,7 @@ const { startEmbeddedAppServer } = require("./modules/embeddedApp");
 const { registerApplicationCommands } = require("./modules/applicationCommands");
 const VisualLaunch = require("./modules/visualLaunch");
 const { formatGameLookup } = require("./modules/gameLookupDebug.js");
+const { isQaUnlockAdminCommands } = require("./modules/qaUnlock.js");
 
 class DiscordBot extends Client {
   constructor(options) {
@@ -642,6 +643,13 @@ const init = async () => {
     // rejects that entry point on a guild route. Other clients register slash
     // commands and Launch together on the global route. If Activities are not
     // enabled yet, that global registration retries without the entry point.
+    //Register Slash Commands
+    if (isQaUnlockAdminCommands()) {
+      client.logger.log(
+        "QA_UNLOCK_ADMIN_COMMANDS is set — admin slash commands are registered without Administrator (QA/dev only, not for production)",
+        "warn"
+      );
+    }
     const rest = new REST({ version: "10" }).setToken(client.config.token);
     registerApplicationCommands({
       rest,

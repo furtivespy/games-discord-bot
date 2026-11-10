@@ -1,6 +1,6 @@
 const SlashCommand = require("../../base/SlashCommand.js");
 const {SlashCommandBuilder, MessageFlags} = require("discord.js");
-const { createGeminiAI } = require("../../modules/GoogleGemini.js");
+const GoogleGemini = require("../../modules/GoogleGemini.js");
 const GameHelper = require("../../modules/GlobalGameHelper.js");
 const BoardGameGeek = require('../../modules/BoardGameGeek')
 
@@ -25,6 +25,7 @@ class Rules extends SlashCommand {
   }
 
   async execute(interaction) {
+    let postedAnswer = false;
     try {
       const question = interaction.options.getString("question");
 
@@ -52,12 +53,13 @@ class Rules extends SlashCommand {
       }
 
       // Initialize Gemini AI and get response
-      const geminiAI = createGeminiAI(this.client);
+      const geminiAI = GoogleGemini.createGeminiAI(this.client);
       const responseChunks = await geminiAI.answerRulesQuestion(question, bggData);
 
       // Send the first chunk as edit to deferred reply
       if (responseChunks.length > 0) {
         await interaction.editReply({ content: responseChunks[0] });
+        postedAnswer = true;
 
         // Send any additional chunks as follow-ups
         for (let i = 1; i < responseChunks.length; i++) {
@@ -71,7 +73,13 @@ class Rules extends SlashCommand {
 
     } catch (e) {
       this.client.logger.error(e, "Rules command error");
-      
+
+      // A later follow-up (e.g. an oversized Sources message) must not
+      // overwrite the answer that already posted successfully.
+      if (postedAnswer) {
+        return;
+      }
+
       // Handle error response
       const errorMessage = "I encountered an error while processing your question. Please try again later.";
       

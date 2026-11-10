@@ -1,4 +1,5 @@
 const { ApplicationCommandType, Collection, Routes } = require("discord.js");
+const { slashCommandJsonForRegistration } = require("./qaUnlock.js");
 
 const PRIMARY_ENTRY_POINT_TYPE = ApplicationCommandType.PrimaryEntryPoint ?? 4;
 const DISCORD_LAUNCH_ACTIVITY = 2;
@@ -12,7 +13,7 @@ function slashCommandJson(slashcommands) {
       : Array.isArray(slashcommands)
         ? slashcommands
         : [];
-  return list.map((command) => command.data.toJSON());
+  return list.map((command) => slashCommandJsonForRegistration(command));
 }
 
 function primaryEntryPointCommand() {

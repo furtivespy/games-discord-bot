@@ -87,6 +87,10 @@ To add this bot to your Discord server, you'll need to:
 - Discord Bot Token
 - (Optional) Bugsnag API key for error tracking
 
+### QA / local overrides
+
+`QA_UNLOCK_ADMIN_COMMANDS` is a **QA/dev-only** override (not for production). When set to a truthy value such as `1` at startup, admin-only slash commands (including `/config` and its winner-portraits toggle) register without Discord's Administrator `defaultMemberPermissions` gate, and runtime administrator checks are skipped so a non-admin test account can see and run them. Leave it unset in production so those commands stay hidden from non-admins.
+
 ## Usage
 
 The bot uses Discord's slash command system. **Start with `/help`** — it groups commands by area and includes how-tos (create a table, create a deck and add a card, addlist, draw/shuffle, Gather Interest). Deep-link a confused user with `/help topic:decks`.
