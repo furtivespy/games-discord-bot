@@ -4,7 +4,14 @@ const { ensureDataDir } = require("../db/dataDir.js");
 
 function cloneValue(value) {
   if (value === undefined) return value;
-  if (typeof structuredClone === "function") return structuredClone(value);
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(value);
+    } catch {
+      // Proxies (e.g. on-change config.defaultSettings) cannot be structuredClone'd.
+      // Persist is JSON, so a JSON round-trip matches what sqlite stores.
+    }
+  }
   return JSON.parse(JSON.stringify(value));
 }
 
@@ -118,8 +125,9 @@ class BunEnmap {
       return this;
     }
 
-    this.cache.set(stringKey, value);
-    this._persist(stringKey, value);
+    const stored = this._cloneIfNeeded(value);
+    this.cache.set(stringKey, stored);
+    this._persist(stringKey, stored);
     return this;
   }
 
