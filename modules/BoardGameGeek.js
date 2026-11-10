@@ -321,10 +321,14 @@ class BoardGameGeek {
 
   GetGameAwardsEmbed() {
     //Embed 4 - awards and honors
-    if (this.gameInfo.boardgamehonor && Array.isArray(this.gameInfo.boardgamehonor)) {
+    // BGG XML with one honor parses as an object, not an array.
+    if (this.gameInfo.boardgamehonor) {
+      const honorsList = Array.isArray(this.gameInfo.boardgamehonor)
+        ? this.gameInfo.boardgamehonor
+        : [this.gameInfo.boardgamehonor];
       const MAX_DESC = 1024;
       let honors = "";
-      for (const honor of this.gameInfo.boardgamehonor) {
+      for (const honor of honorsList) {
         const line = `${he.decode(honor.text)}\n`;
         if (honors.length + line.length > MAX_DESC - 3) {
           honors += "...";
