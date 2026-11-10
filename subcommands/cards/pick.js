@@ -107,7 +107,7 @@ class Pick {
       interaction.editReply({ content: 'Cards Picked Back Up!', components: [] }),
       Formatter.multiCard(pickedCardsObjects, `Cards Picked Back Up by ${interaction.member.displayName}`)
     ])
-    await interaction.followUp({ embeds: [...followup[0]], files: [...followup[1]] })    
+    await Formatter.followUpCardDisplay(interaction, followup)    
   }
 }
 

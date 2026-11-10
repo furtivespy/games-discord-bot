@@ -46,10 +46,7 @@ class PileView {
             Formatter.multiCard(pile.cards, `All Cards in ${pile.name}`)
         ]);
 
-        await interaction.followUp({ 
-            embeds: [...followup[0]], 
-            files: [...followup[1]]
-        })
+        await Formatter.followUpCardDisplay(interaction, followup)
     }
 }
 
