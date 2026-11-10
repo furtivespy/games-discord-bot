@@ -240,6 +240,14 @@ class BoardGameGeek {
       if (!value || value.trim().length === 0) return fallback;
       return value.length > 1024 ? value.substring(0, 1021) + "..." : value;
     };
+    // BGG link nodes (designer, publisher, mechanic, expansion, …) keep HTML
+    // entities after XML parse, e.g. Tzolk&#039;in. Names/descriptions already decode.
+    const decodeItemText = (item) => he.decode(String(item?.text ?? ""));
+    const joinDecodedTexts = (items) => {
+      if (!items) return null;
+      const list = Array.isArray(items) ? items : [items];
+      return list.map(decodeItemText).join("\n");
+    };
     
     const detailEmbed = new EmbedBuilder().setTitle(`Details`).addFields(
       {
@@ -259,46 +267,32 @@ class BoardGameGeek {
       },
       {
         name: `Designer(s)`,
-        value: sanitizeFieldValue(
-          this.gameInfo.boardgamedesigner 
-            ? Array.isArray(this.gameInfo.boardgamedesigner) 
-              ? this.gameInfo.boardgamedesigner.map(d => d.text).join("\n") 
-              : this.gameInfo.boardgamedesigner.text 
-            : null
-        ),
+        value: sanitizeFieldValue(joinDecodedTexts(this.gameInfo.boardgamedesigner)),
         inline: true
       },
       {
         name: `Publisher(s)`,
-        value: sanitizeFieldValue(
-          this.gameInfo.boardgamepublisher 
-            ? Array.isArray(this.gameInfo.boardgamepublisher) 
-              ? this.gameInfo.boardgamepublisher.map(d => d.text).join("\n") 
-              : this.gameInfo.boardgamepublisher.text 
-            : null
-        ),
+        value: sanitizeFieldValue(joinDecodedTexts(this.gameInfo.boardgamepublisher)),
         inline: true
       }
     );
     if (this.gameInfo.boardgamemechanic) {
-      const mechanicsValue = sanitizeFieldValue(
-        Array.isArray(this.gameInfo.boardgamemechanic) 
-          ? this.gameInfo.boardgamemechanic.map(d => d.text).join("\n") 
-          : this.gameInfo.boardgamemechanic.text
-      );
       detailEmbed.addFields(
         {
           name: `Mechanics`,
-          value: mechanicsValue,
+          value: sanitizeFieldValue(joinDecodedTexts(this.gameInfo.boardgamemechanic)),
           inline: true
         }
       );
     }
     if (this.gameInfo.boardgameexpansion) {
+      const expansions = Array.isArray(this.gameInfo.boardgameexpansion)
+        ? take(this.gameInfo.boardgameexpansion, 10)
+        : [this.gameInfo.boardgameexpansion];
       const expansionsValue = sanitizeFieldValue(
-        Array.isArray(this.gameInfo.boardgameexpansion) 
-          ? take(this.gameInfo.boardgameexpansion, 10).map(d => `[${d.text}](https://boardgamegeek.com/boardgame/${d.objectid})`).join("\n") 
-          : `[${this.gameInfo.boardgameexpansion.text}](https://boardgamegeek.com/boardgame/${this.gameInfo.boardgameexpansion.objectid})`
+        expansions
+          .map((d) => `[${decodeItemText(d)}](https://boardgamegeek.com/boardgame/${d.objectid})`)
+          .join("\n")
       );
       detailEmbed.addFields(
         {

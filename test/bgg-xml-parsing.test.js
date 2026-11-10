@@ -121,6 +121,73 @@ describe("BGG XML parsing and HTML-entity decoding", () => {
     expect(ranksField.value).not.toContain("&rsquo;");
   });
 
+  test("details embed decodes HTML entities in link-type fields", async () => {
+    stubBggFetch();
+    const bgg = await BoardGameGeek.CreateAndLoad("102794", fakeClient(), {});
+    bgg.GetGameDetailsEmbed();
+    const fields = Object.fromEntries(
+      bgg.embeds.at(-1).data.fields.map((field) => [field.name, field.value])
+    );
+
+    expect(fields["Designer(s)"]).toContain("Uwe Rosenberg");
+    expect(fields["Designer(s)"]).toContain("Dungeons & Dragons Studio");
+    expect(fields["Designer(s)"]).not.toContain("&amp;");
+
+    expect(fields["Publisher(s)"]).toContain("Lookout Games");
+    expect(fields["Publisher(s)"]).toContain("Rio Grande & Co.");
+    expect(fields["Publisher(s)"]).not.toContain("&amp;");
+
+    expect(fields.Mechanics).toContain("Action Point Allowance System");
+    expect(fields.Mechanics).toContain("Worker Placement & Drafting");
+    expect(fields.Mechanics).not.toContain("&amp;");
+
+    expect(fields.Expansions).toContain(
+      "[Tzolk'in: The Mayan Calendar – Mini Expansion 1](https://boardgamegeek.com/boardgame/126164)"
+    );
+    expect(fields.Expansions).toContain(
+      "[Caverna: The Forgotten Folk](https://boardgamegeek.com/boardgame/163602)"
+    );
+    expect(fields.Expansions).not.toContain("&#039;");
+    expect(fields.Expansions).not.toContain("&amp;");
+  });
+
+  test("details embed decodes a single expansion that is not an array", async () => {
+    const singleExpansionXml = `<?xml version="1.0" encoding="utf-8"?>
+<boardgames>
+  <boardgame objectid="126163">
+    <name primary="true">Tzolk&amp;#039;in: The Mayan Calendar</name>
+    <description>A worker-placement game.</description>
+    <boardgamedesigner objectid="1">Simone Luciani &amp;amp; Daniele Tascini</boardgamedesigner>
+    <boardgamepublisher objectid="2">Czech Games Edition</boardgamepublisher>
+    <boardgamemechanic objectid="3">Worker Placement</boardgamemechanic>
+    <boardgameexpansion objectid="126164">Tzolk&amp;#039;in: The Mayan Calendar – Mini Expansion 1</boardgameexpansion>
+    <statistics>
+      <ratings>
+        <average>7.9</average>
+        <averageweight>3.6</averageweight>
+        <ranks>
+          <rank type="subtype" id="1" name="boardgame" friendlyname="Board Game Rank" value="50"/>
+        </ranks>
+      </ratings>
+    </statistics>
+  </boardgame>
+</boardgames>`;
+    stubBggFetch({ gameXml: singleExpansionXml });
+    const bgg = await BoardGameGeek.CreateAndLoad("126163", fakeClient(), {});
+    expect(bgg.gameName).toBe("Tzolk'in: The Mayan Calendar");
+    bgg.GetGameDetailsEmbed();
+    const fields = Object.fromEntries(
+      bgg.embeds.at(-1).data.fields.map((field) => [field.name, field.value])
+    );
+    expect(fields["Designer(s)"]).toBe("Simone Luciani & Daniele Tascini");
+    expect(fields["Publisher(s)"]).toBe("Czech Games Edition");
+    expect(fields.Mechanics).toBe("Worker Placement");
+    expect(fields.Expansions).toBe(
+      "[Tzolk'in: The Mayan Calendar – Mini Expansion 1](https://boardgamegeek.com/boardgame/126164)"
+    );
+    expect(fields.Expansions).not.toContain("&#039;");
+  });
+
   test("Search parses search XML and decodes entities in result names", async () => {
     stubBggFetch();
     const results = await BoardGameGeek.Search("wonderful", "test-bgg-token");
