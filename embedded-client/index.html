@@ -12,6 +12,21 @@
     <main>
       <p id="greeting">Connecting…</p>
       <p id="origin" hidden></p>
+      <p id="snapshot-status" hidden></p>
+      <div id="table" hidden>
+        <section class="zone" data-zone="hand">
+          <h2>Hand</h2>
+          <div class="cards" id="hand-cards"></div>
+        </section>
+        <section class="zone" data-zone="play-area">
+          <h2>My play area</h2>
+          <div class="cards" id="play-area-cards"></div>
+        </section>
+        <section class="zone" data-zone="board">
+          <h2>Game board</h2>
+          <div class="cards" id="board-cards"></div>
+        </section>
+      </div>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

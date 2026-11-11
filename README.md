@@ -91,6 +91,8 @@ To add this bot to your Discord server, you'll need to:
 
 `QA_UNLOCK_ADMIN_COMMANDS` is a **QA/dev-only** override (not for production). When set to a truthy value such as `1` at startup, admin-only slash commands (including `/config` and its winner-portraits toggle) register without Discord's Administrator `defaultMemberPermissions` gate, and runtime administrator checks are skipped so a non-admin test account can see and run them. Leave it unset in production so those commands stay hidden from non-admins.
 
+`EMBEDDED_APP_MOCK=1` is a **QA/dev-only** override (not for production) that serves the visual-mode embedded app with a Discord SDK shim and fixture game snapshots so QA and agents can screenshot the UI outside Discord. The production Docker image sets `NODE_ENV=production`, which ignores this flag. See [embedded-client/README.md](embedded-client/README.md).
+
 ## Usage
 
 The bot uses Discord's slash command system. **Start with `/help`** — it groups commands by area and includes how-tos (create a table, create a deck and add a card, addlist, draw/shuffle, Gather Interest). Deep-link a confused user with `/help topic:decks`.

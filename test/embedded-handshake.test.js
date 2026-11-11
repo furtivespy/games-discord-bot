@@ -4,9 +4,16 @@ const {
   helloGreeting,
   isDiscordProxyHost,
   originLine,
+  OUTSIDE_DISCORD_FALLBACK,
+  snapshotRequestUrl,
   tokenRequestUrl,
   urlMappingsForApiHost,
 } = require("../embedded-client/src/handshake.ts");
+const { MockDiscordSDK } = require("../embedded-client/src/mockSdk.ts");
+const {
+  MOCK_OAUTH_CODE,
+  MOCK_USER,
+} = require("../embedded-client/src/mockFixtures.ts");
 
 describe("embedded client handshake URLs", () => {
   test("maps the public API host onto /api so fetch is not raw cross-origin", () => {
@@ -35,5 +42,56 @@ describe("embedded client handshake URLs", () => {
     expect(originLine(null)).toBeNull();
     expect(originLine("   ")).toBeNull();
     expect(originLine("Inis Friday")).toBe("from Inis Friday");
+  });
+
+  test("outside-Discord fallback still tells you to open visual mode from Discord", () => {
+    expect(OUTSIDE_DISCORD_FALLBACK).toBe(
+      "Open visual mode from Discord (App Launcher → Game Bot, or /visual)."
+    );
+    const main = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "embedded-client", "src", "main.ts"),
+      "utf8"
+    );
+    expect(main).toContain("OUTSIDE_DISCORD_FALLBACK");
+    expect(main).toContain("config.mock");
+  });
+
+  test("snapshot URL is same-origin inside Discord and carries fixture query params", () => {
+    expect(snapshotRequestUrl("", "https:")).toBe("/api/game/snapshot");
+    expect(
+      snapshotRequestUrl("123.discordsays.com", "https:", {
+        fixture: "no-game",
+      })
+    ).toBe("/api/game/snapshot?fixture=no-game");
+    expect(
+      snapshotRequestUrl("gamebot.example.com", "https:", {
+        fixture: "populated",
+        channelId: "ch-1",
+        guildId: "g-1",
+      })
+    ).toBe(
+      "https://gamebot.example.com/api/game/snapshot?fixture=populated&channelId=ch-1&guildId=g-1"
+    );
+  });
+});
+
+describe("mock Discord SDK shim", () => {
+  test("ready/authorize/authenticate and configurable channel/guild ids", async () => {
+    const sdk = new MockDiscordSDK("mock-client-id", {
+      channelId: "seeded-channel",
+      guildId: "seeded-guild",
+    });
+    await sdk.ready();
+    expect(sdk.channelId).toBe("seeded-channel");
+    expect(sdk.guildId).toBe("seeded-guild");
+    expect(await sdk.commands.authorize({})).toEqual({ code: MOCK_OAUTH_CODE });
+    const auth = await sdk.commands.authenticate({
+      access_token: "mock-access-token",
+    });
+    expect(auth.user).toEqual({
+      id: MOCK_USER.id,
+      username: MOCK_USER.username,
+      global_name: MOCK_USER.global_name,
+    });
   });
 });

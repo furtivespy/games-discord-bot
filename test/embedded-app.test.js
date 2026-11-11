@@ -365,6 +365,15 @@ describe("embedded HTTP origin", () => {
     );
     expect(html).toContain('id="greeting"');
     expect(html).toContain('id="origin"');
+    expect(html).toContain('id="table"');
+    expect(html).toContain("Hand");
+    expect(html).toContain("My play area");
+    expect(html).toContain("Game board");
     expect(html.toLowerCase()).not.toMatch(/game picker|select a game|choose a game/);
+    const css = fs.readFileSync(
+      path.join(__dirname, "..", "embedded-client", "src", "style.css"),
+      "utf8"
+    );
+    expect(css).toContain("#table[hidden]");
   });
 });
