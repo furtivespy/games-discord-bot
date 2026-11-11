@@ -34,12 +34,23 @@ class BoardGameGeek {
     return bgg;
   }
 
+  // Discord autocomplete can only return choices, not a follow-up message.
+  // A non-numeric value is rejected by command execute paths with the existing
+  // "choose from the available options" reply if the user selects it.
+  static SEARCH_UNAVAILABLE_CHOICE = Object.freeze({
+    name: "BoardGameGeek search is unavailable. Try again.",
+    value: "bgg-unavailable",
+  });
+
   static async Search(query, bggToken) {
     const resp = await fetch(
       `https://api.geekdo.com/xmlapi2/search.cgi?type=boardgame&query=${encodeURIComponent(query)}`,
       { headers: { 'Authorization': `Bearer ${bggToken}` } }
     );
     const text = await resp.text();
+    if (!resp.ok) {
+      throw new Error(`BGG search failed with HTTP ${resp.status}`);
+    }
     const parser = new XMLParser({
       attributeNamePrefix: "",
       ignoreAttributes: false,
@@ -66,6 +77,25 @@ class BoardGameGeek {
         value: String(item.id),
       };
     });
+  }
+
+  /**
+   * Shared BGG title autocomplete for /bgg, /lfg, /game newgame, addimage,
+   * addlink, removeimage, and removelink. Uses the XML API with a token
+   * instead of the HTML boardgamegeek.com/search path (Cloudflare 403).
+   */
+  static async respondAutocomplete(interaction, bggToken) {
+    const search = interaction.options.getString("game");
+    if (!search) {
+      await interaction.respond([]);
+      return;
+    }
+    try {
+      await interaction.respond(await this.Search(search, bggToken));
+    } catch (err) {
+      interaction.client?.logger?.log?.(err, "error");
+      await interaction.respond([this.SEARCH_UNAVAILABLE_CHOICE]);
+    }
   }
 
   static DetailsEnum = {

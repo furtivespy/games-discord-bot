@@ -10,13 +10,7 @@ class NewGame {
   async execute(interaction, client) {
     const search = interaction.options.getString("game");
     if (interaction.isAutocomplete()) {
-      if (!search) {
-        await interaction.respond([]);
-        return;
-      }
-      await interaction.respond(
-        await BoardGameGeek.Search(search, client.config.BGGToken)
-      );
+      await BoardGameGeek.respondAutocomplete(interaction, client.config.BGGToken);
       return;
     }
 
