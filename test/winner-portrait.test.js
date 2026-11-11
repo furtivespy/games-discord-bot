@@ -354,6 +354,7 @@ describe("/game winner portrait flow", () => {
       },
       async (harness) => {
         harness.client.config.geminiKey = "test-key";
+        const logs = capturePortraitLogs(harness);
         harness.interaction.followUp = async () => {
           throw new Error("Unknown interaction");
         };
@@ -362,6 +363,46 @@ describe("/game winner portrait flow", () => {
 
         expect(harness.calls.editReply).toHaveLength(1);
         expect(harness.calls.editReply[0].embeds[0].data.title).toContain("Alice");
+        expect(logs).toContain(
+          "Winner portrait skipped: no portrait image produced"
+        );
+        expect(logs).toContain(
+          "Winner portrait skipped: notice follow-up failed: Unknown interaction"
+        );
+        expect((await harness.getSavedGame()).winner).toEqual(["user-1"]);
+        expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
+      }
+    );
+  });
+
+  test("stale portrait is cleared even if the notice follow-up hangs", async () => {
+    restores.push(stubPortrait("generatePortraitImage", async () => null));
+
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          name: "Ankh",
+          winnerPortrait: {
+            winnerUserIds: ["user-2"],
+            channelId: "channel-1",
+            messageId: "old-portrait",
+          },
+        }),
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: true },
+        },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        harness.interaction.followUp = () => new Promise(() => {});
+        await runGame(harness);
+        await Promise.race([
+          harness.client.lastWinnerPortraitWork,
+          new Promise((resolve) => setTimeout(resolve, 40)),
+        ]);
+
         expect((await harness.getSavedGame()).winner).toEqual(["user-1"]);
         expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
       }
@@ -734,6 +775,62 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
   const restores = [];
   afterEach(() => {
     while (restores.length) restores.pop()();
+  });
+
+  test("in-flight generate failure does not notify after winners change", async () => {
+    let rejectGenerate;
+    restores.push(
+      stubPortrait(
+        "generatePortraitImage",
+        () =>
+          new Promise((_, reject) => {
+            rejectGenerate = reject;
+          })
+      )
+    );
+
+    await withHarness(
+      {
+        gameData: createActiveGame({ name: "Ankh" }),
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: true },
+        },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        const logs = capturePortraitLogs(harness);
+        await runGame(harness);
+        expect(harness.calls.followUp).toHaveLength(0);
+
+        const latest = await harness.getSavedGame();
+        latest.winner = ["user-2"];
+        latest.winnerPortrait = {
+          winnerUserIds: ["user-2"],
+          channelId: "channel-1",
+          messageId: "bob-msg",
+        };
+        await harness.client.setGameDataV2(
+          harness.interaction.guildId,
+          "game",
+          harness.interaction.channelId,
+          latest
+        );
+
+        rejectGenerate(new Error("SAFETY: image blocked"));
+        await harness.client.lastWinnerPortraitWork;
+
+        expect(harness.calls.followUp).toHaveLength(0);
+        expect(logs).toContain("Winner portrait skipped: SAFETY: image blocked");
+        expect(logs).toContain(
+          "Winner portrait skipped: portrait notice aborted; winners changed"
+        );
+        const saved = await harness.getSavedGame();
+        expect(saved.winner).toEqual(["user-2"]);
+        expect(saved.winnerPortrait.messageId).toBe("bob-msg");
+      }
+    );
   });
 
   test("winner change plus generate failure does not leak the old portrait", async () => {

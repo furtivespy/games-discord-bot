@@ -25,13 +25,16 @@ function logPortraitSkip(client, reason) {
   }
 }
 
-async function notifyPortraitUnavailable(interaction) {
+async function notifyPortraitUnavailable(client, interaction) {
   try {
     if (typeof interaction?.followUp === "function") {
       await interaction.followUp({ content: PORTRAIT_UNAVAILABLE_NOTICE });
     }
-  } catch (_) {
-    // Best-effort notice; never fail game-end over a missing follow-up.
+  } catch (error) {
+    logPortraitSkip(
+      client,
+      `notice follow-up failed: ${error?.message || error}`
+    );
   }
 }
 
@@ -387,6 +390,28 @@ async function clearJobWinnerPortrait(
   );
 }
 
+async function skipFailedGeneration(
+  client,
+  interaction,
+  reason,
+  winnerIds,
+  gameData,
+  clearStale
+) {
+  logPortraitSkip(client, reason);
+  try {
+    await clearStale();
+  } catch (clearError) {
+    logPortraitSkip(client, clearError);
+  }
+  const latest = await loadLatestGame(client, interaction, gameData);
+  if (!jobStillOwnsGame(latest, winnerIds)) {
+    logPortraitSkip(client, "portrait notice aborted; winners changed");
+    return;
+  }
+  await notifyPortraitUnavailable(client, interaction);
+}
+
 async function afterWinnerPosted(ctx) {
   const {
     client,
@@ -467,15 +492,25 @@ async function afterWinnerPosted(ctx) {
           winnerUsers,
         });
       } catch (error) {
-        logPortraitSkip(client, error);
-        await notifyPortraitUnavailable(interaction);
-        await clearStale();
+        await skipFailedGeneration(
+          client,
+          interaction,
+          error,
+          ids,
+          gameData,
+          clearStale
+        );
         return;
       }
       if (!buffer) {
-        logPortraitSkip(client, "no portrait image produced");
-        await notifyPortraitUnavailable(interaction);
-        await clearStale();
+        await skipFailedGeneration(
+          client,
+          interaction,
+          "no portrait image produced",
+          ids,
+          gameData,
+          clearStale
+        );
         return;
       }
     }
