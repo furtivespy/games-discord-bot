@@ -39,6 +39,8 @@ Open:
 | Single game | http://127.0.0.1:3000/?fixture=one-game |
 | No games (empty picker) | http://127.0.0.1:3000/?fixture=no-games |
 
+Snapshot fixtures (`populated`, `no-game`, `not-a-player`) do not load the game picker. Picker fixtures do not load the hand / play area / board table.
+
 With mock **disabled**, the existing outside-Discord fallback still tells you to open visual mode from Discord.
 
 You can also set `EMBEDDED_APP_MOCK=1` on the full bot process (`bun DiscordBot.js`). The standalone script is enough for screenshots and does not need a Discord token.

@@ -150,7 +150,7 @@ describe("mock snapshot fixtures", () => {
 });
 
 describe("mock game list fixtures", () => {
-  test("several-games is newest first and populated aliases it", () => {
+  test("several-games is newest first and snapshot fixtures are not aliased", () => {
     const several = getMockGames({ fixture: "several-games" });
     expect(several.status).toBe(200);
     expect(several.body.games.map((game) => game.channelName)).toEqual([
@@ -159,10 +159,15 @@ describe("mock game list fixtures", () => {
       "Monday Poker",
     ]);
     expect(several.body.games[0]).toEqual(SEVERAL_GAMES_FIXTURE[0]);
-    expect(getMockGames({ fixture: "populated" }).body.games).toEqual(
-      several.body.games
-    );
     expect(JSON.stringify(several.body)).not.toMatch(/hand|playArea|gameBoard|isdeleted/);
+    expect(getMockGames({ fixture: "populated" })).toEqual({
+      status: 400,
+      body: { error: "unknown_fixture" },
+    });
+    expect(getMockGames({ fixture: "no-game" })).toEqual({
+      status: 400,
+      body: { error: "unknown_fixture" },
+    });
   });
 
   test("one-game and no-games cover the other picker states", () => {

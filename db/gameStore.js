@@ -192,12 +192,20 @@ class GameStore {
              WHERE guild_id = ? AND collection = ?`
           )
           .all(String(guildId), collection);
-        span.setAttribute("db.result_count", rows.length);
-        return rows.map((row) => ({
-          channelId: row.channel_id,
-          updatedAt: row.updated_at,
-          data: this._parseRow(row),
-        }));
+        const documents = [];
+        for (const row of rows) {
+          try {
+            documents.push({
+              channelId: row.channel_id,
+              updatedAt: row.updated_at,
+              data: this._parseRow(row),
+            });
+          } catch {
+            // Skip a corrupt row so one bad document cannot hide the rest.
+          }
+        }
+        span.setAttribute("db.result_count", documents.length);
+        return documents;
       } catch (err) {
         span.recordException(err);
         span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });

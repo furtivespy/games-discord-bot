@@ -3,8 +3,9 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const GameStore = require("../db/gameStore");
+const GameDB = require("../db/anygame");
 const {
-  CREATED_AT_SIGNAL,
+  HISTORY_KEEP_LIMIT,
   createdAtMs,
   discordSnowflakeMs,
   filterAndSortActiveGames,
@@ -72,22 +73,29 @@ describe("active game membership", () => {
 });
 
 describe("createdAtMs", () => {
-  test("prefers GAME CREATE history over later activity and updated_at", () => {
-    expect(CREATED_AT_SIGNAL).toContain("GAME CREATE");
+  test("uses the earliest GAME CREATE, not array order or later activity", () => {
     const ms = createdAtMs({
       channelId: "111111111111111111",
       updatedAt: "2026-11-11 23:00:00",
       data: {
         history: [
-          historyEntry("game", "create", "2026-10-01T12:00:00.000Z"),
-          historyEntry("card", "play", "2026-11-11T20:00:00.000Z"),
+          historyEntry(
+            GameDB.ACTION_CATEGORIES.CARD,
+            GameDB.ACTION_TYPES.PLAY,
+            "2026-11-11T20:00:00.000Z"
+          ),
+          historyEntry(
+            GameDB.ACTION_CATEGORIES.GAME,
+            GameDB.ACTION_TYPES.CREATE,
+            "2026-10-01T12:00:00.000Z"
+          ),
         ],
       },
     });
     expect(ms).toBe(Date.parse("2026-10-01T12:00:00.000Z"));
   });
 
-  test("falls back to earliest history, then channel snowflake", () => {
+  test("falls back to earliest history only when the log is not truncated", () => {
     const fromHistory = createdAtMs({
       channelId: "111111111111111111",
       data: {
@@ -102,10 +110,14 @@ describe("createdAtMs", () => {
     const channelId = "545109131330191371";
     const snowflake = discordSnowflakeMs(channelId);
     expect(snowflake).toBeGreaterThan(1_000_000_000_000);
+    const truncated = Array.from({ length: HISTORY_KEEP_LIMIT }, (_, i) =>
+      historyEntry("card", "play", `2026-11-11T20:00:${String(i % 60).padStart(2, "0")}.000Z`)
+    );
     expect(
       createdAtMs({
         channelId,
-        data: { history: [] },
+        updatedAt: "2026-11-11 23:00:00",
+        data: { history: truncated },
       })
     ).toBe(snowflake);
   });
@@ -121,7 +133,13 @@ describe("filterAndSortActiveGames", () => {
           isdeleted: false,
           name: "Old table",
           players: [{ userId }],
-          history: [historyEntry("game", "create", "2026-01-01T00:00:00.000Z")],
+          history: [
+            historyEntry(
+              GameDB.ACTION_CATEGORIES.GAME,
+              GameDB.ACTION_TYPES.CREATE,
+              "2026-01-01T00:00:00.000Z"
+            ),
+          ],
         },
       },
       {
@@ -175,6 +193,25 @@ describe("GameStore.listGameDocuments", () => {
       expect(rows[0].channelId).toBe("ch-1");
       expect(rows[0].data.name).toBe("Table");
       expect(rows[0].updatedAt).toBeTruthy();
+    });
+  });
+
+  test("skips a corrupt data blob instead of failing the whole guild list", async () => {
+    await withStore(async (store) => {
+      store.upsertGameData("guild-a", "game", "ch-good", {
+        isdeleted: false,
+        name: "Good",
+        players: [{ userId: "will" }],
+      });
+      store.db
+        .query(
+          `INSERT INTO game_documents (guild_id, collection, channel_id, data, updated_at)
+           VALUES (?, ?, ?, ?, datetime('now'))`
+        )
+        .run("guild-a", "game", "ch-bad", "{not json");
+
+      const rows = store.listGameDocuments("guild-a", "game");
+      expect(rows.map((row) => row.channelId)).toEqual(["ch-good"]);
     });
   });
 });
@@ -236,7 +273,13 @@ describe("listActiveGamesForUser", () => {
               isdeleted: false,
               name: "Stored channel name",
               players: [{ userId: "will" }],
-              history: [historyEntry("game", "create", "2026-01-01T00:00:00.000Z")],
+              history: [
+            historyEntry(
+              GameDB.ACTION_CATEGORIES.GAME,
+              GameDB.ACTION_TYPES.CREATE,
+              "2026-01-01T00:00:00.000Z"
+            ),
+          ],
             },
           },
         ],

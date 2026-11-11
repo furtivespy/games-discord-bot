@@ -13,7 +13,7 @@ import {
   tokenRequestUrl,
   urlMappingsForApiHost,
 } from "./handshake";
-import { isSnapshotFixture } from "./mockFixtures";
+import { isGameListFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
 import "./style.css";
 
@@ -229,17 +229,16 @@ async function loadGames(
       payload = {};
     }
 
-    if (!response.ok) {
+    if (!response.ok || !Array.isArray(payload.games)) {
       setGamesStatus(GAMES_ERROR_MESSAGE);
       return;
     }
 
-    const games = Array.isArray(payload.games) ? payload.games : [];
-    if (games.length === 0) {
+    if (payload.games.length === 0) {
       showGamesEmpty();
       return;
     }
-    showGamesList(games);
+    showGamesList(payload.games);
   } catch {
     setGamesStatus(GAMES_ERROR_MESSAGE);
   }
@@ -280,34 +279,39 @@ function snapshotErrorMessage(error: string | undefined, status: number): string
 }
 
 async function loadMockSnapshot(config: EmbeddedConfig, accessToken: string) {
-  const response = await fetch(
-    snapshotRequestUrl(config.apiHost, window.location.protocol, {
-      fixture: readFixture(),
-      channelId: config.channelId,
-      guildId: config.guildId,
-    }),
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
-  );
-  let payload: GameSnapshot = {};
   try {
-    payload = (await response.json()) as GameSnapshot;
+    const response = await fetch(
+      snapshotRequestUrl(config.apiHost, window.location.protocol, {
+        fixture: readFixture(),
+        channelId: config.channelId,
+        guildId: config.guildId,
+      }),
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    let payload: GameSnapshot = {};
+    try {
+      payload = (await response.json()) as GameSnapshot;
+    } catch {
+      payload = {};
+    }
+
+    if (!response.ok) {
+      setTableVisible(false);
+      setSnapshotStatus(snapshotErrorMessage(payload.error, response.status));
+      return;
+    }
+
+    setSnapshotStatus(payload.gameName ? payload.gameName : null);
+    renderCards("hand-cards", payload.hand);
+    renderCards("play-area-cards", payload.playArea);
+    renderCards("board-cards", payload.gameBoard);
+    setTableVisible(true);
   } catch {
-    payload = {};
-  }
-
-  if (!response.ok) {
     setTableVisible(false);
-    setSnapshotStatus(snapshotErrorMessage(payload.error, response.status));
-    return;
+    setSnapshotStatus(snapshotErrorMessage(undefined, 0));
   }
-
-  setSnapshotStatus(payload.gameName ? payload.gameName : null);
-  renderCards("hand-cards", payload.hand);
-  renderCards("play-area-cards", payload.playArea);
-  renderCards("board-cards", payload.gameBoard);
-  setTableVisible(true);
 }
 
 function createSdk(config: EmbeddedConfig) {
@@ -402,13 +406,14 @@ async function bootstrap() {
   setOrigin(originLine(payload.origin_channel_name));
 
   const guildId = String(discordSdk.guildId || config.guildId || "").trim();
-  const afterHello: Promise<void>[] = [
-    loadGames(config, accessToken, guildId),
-  ];
-  if (config.mock && isSnapshotFixture(readFixture())) {
-    afterHello.push(loadMockSnapshot(config, accessToken));
+  const fixture = readFixture();
+  if (config.mock && isSnapshotFixture(fixture)) {
+    await loadMockSnapshot(config, accessToken);
+    return;
   }
-  await Promise.all(afterHello);
+  if (!config.mock || isGameListFixture(fixture)) {
+    await loadGames(config, accessToken, guildId);
+  }
 }
 
 bootstrap().catch((error) => {

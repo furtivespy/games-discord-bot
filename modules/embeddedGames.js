@@ -1,19 +1,23 @@
 "use strict";
 
+const GameDB = require("../db/anygame");
+
 const GAME_COLLECTION = "game";
 const DISCORD_EPOCH_MS = 1_420_070_400_000;
+// recordMove keeps only the last 500 history rows; a truncated log is not a
+// reliable creation signal.
+const HISTORY_KEEP_LIMIT = 500;
 
 /**
  * Game documents have no dedicated createdAt field. Newest-first sorting uses
  * this signal, in order:
- * 1. history[] GAME + CREATE timestamp (written at /game newgame, newgameplus,
- *    and LFG start via recordMove)
- * 2. earliest history[].timestamp
+ * 1. earliest history[] GAME + CREATE timestamp (written at /game newgame,
+ *    newgameplus, and LFG start via recordMove)
+ * 2. earliest history[].timestamp, only when the log is shorter than the
+ *    500-entry cap (so CREATE was never written, not dropped)
  * 3. Discord channel/thread snowflake time from channel_id
  * 4. SQLite game_documents.updated_at (last write, not creation)
  */
-const CREATED_AT_SIGNAL =
-  "history GAME CREATE timestamp, else earliest history timestamp, else channel snowflake, else SQLite updated_at";
 
 function parseTimestampMs(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -38,14 +42,15 @@ function discordSnowflakeMs(id) {
 
 function gameCreateHistoryMs(data) {
   const history = Array.isArray(data?.history) ? data.history : [];
+  let earliest = null;
   for (const entry of history) {
-    if (entry?.action?.category !== "game" || entry?.action?.type !== "create") {
-      continue;
-    }
+    if (entry?.action?.category !== GameDB.ACTION_CATEGORIES.GAME) continue;
+    if (entry?.action?.type !== GameDB.ACTION_TYPES.CREATE) continue;
     const ms = parseTimestampMs(entry.timestamp);
-    if (ms != null) return ms;
+    if (ms == null) continue;
+    if (earliest == null || ms < earliest) earliest = ms;
   }
-  return null;
+  return earliest;
 }
 
 function earliestHistoryMs(data) {
@@ -63,8 +68,11 @@ function createdAtMs(doc) {
   const data = doc?.data && typeof doc.data === "object" ? doc.data : doc;
   const fromCreate = gameCreateHistoryMs(data);
   if (fromCreate != null) return fromCreate;
-  const fromHistory = earliestHistoryMs(data);
-  if (fromHistory != null) return fromHistory;
+  const history = Array.isArray(data?.history) ? data.history : [];
+  if (history.length < HISTORY_KEEP_LIMIT) {
+    const fromHistory = earliestHistoryMs(data);
+    if (fromHistory != null) return fromHistory;
+  }
   const fromSnowflake = discordSnowflakeMs(doc?.channelId);
   if (fromSnowflake != null) return fromSnowflake;
   const fromUpdated = parseTimestampMs(doc?.updatedAt);
@@ -133,14 +141,15 @@ async function listActiveGamesForUser({
   }
 
   const active = filterAndSortActiveGames(documents, userId);
-  const games = [];
-  for (const doc of active) {
-    const channelId = String(doc.channelId);
-    const channelName =
-      (await resolveChannelName(channelId, fetchChannelName)) ||
-      fallbackChannelName(doc.data, channelId);
-    games.push({ channelId, channelName });
-  }
+  const games = await Promise.all(
+    active.map(async (doc) => {
+      const channelId = String(doc.channelId);
+      const channelName =
+        (await resolveChannelName(channelId, fetchChannelName)) ||
+        fallbackChannelName(doc.data, channelId);
+      return { channelId, channelName };
+    })
+  );
   return { status: 200, body: { games } };
 }
 
@@ -162,9 +171,9 @@ async function channelNameFromDiscordClient(discordClient, channelId) {
 }
 
 module.exports = {
-  CREATED_AT_SIGNAL,
   DISCORD_EPOCH_MS,
   GAME_COLLECTION,
+  HISTORY_KEEP_LIMIT,
   channelNameFromDiscordClient,
   createdAtMs,
   discordSnowflakeMs,

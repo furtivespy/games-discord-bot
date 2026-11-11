@@ -144,9 +144,7 @@ function sanitizeFixtureName(value) {
 function sanitizeGamesFixtureName(value) {
   const name = String(value || "").trim().toLowerCase();
   if (!name) return "several-games";
-  if (GAME_LIST_FIXTURE_NAMES.includes(name)) return name;
-  if (MOCK_FIXTURE_NAMES.includes(name)) return name;
-  return null;
+  return GAME_LIST_FIXTURE_NAMES.includes(name) ? name : null;
 }
 
 function getMockGames({ fixture } = {}) {

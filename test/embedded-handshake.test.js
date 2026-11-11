@@ -59,6 +59,8 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("config.mock");
     expect(main).toContain("loadGames");
     expect(main).toContain("gamesRequestUrl");
+    expect(main).toContain("isGameListFixture");
+    expect(main).toContain("isSnapshotFixture");
     expect(main).not.toContain("consumeOrigin");
   });
 
