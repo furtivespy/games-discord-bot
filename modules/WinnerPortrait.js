@@ -4,6 +4,8 @@ const { createGeminiAI } = require("./GoogleGemini");
 
 const MAX_WINNERS = 4;
 const PORTRAIT_FILENAME = "winner-portrait.png";
+const PORTRAIT_UNAVAILABLE_NOTICE =
+  "Couldn't generate a winner portrait this time.";
 
 // One tunable prompt. {{gameName}} is replaced at generate time.
 const WINNER_PORTRAIT_PROMPT = `Create a playful, SFW royal portrait from the attached Discord avatar image(s). Keep each person or avatar recognizable as the same character. If more than one avatar is attached, compose one shared group portrait of all of them together. Crown them and add regal flair such as a throne, cape, confetti, or a trophy, themed to the board game "{{gameName}}". They are the undisputed royalty of that game. Use gender-neutral wording and imagery (royalty). Do not include any text, letters, numbers, captions, titles, or watermarks in the image.`;
@@ -20,6 +22,16 @@ function logPortraitSkip(client, reason) {
     client.logger.log(line, "warn");
   } else {
     console.warn(line);
+  }
+}
+
+async function notifyPortraitUnavailable(interaction) {
+  try {
+    if (typeof interaction?.followUp === "function") {
+      await interaction.followUp({ content: PORTRAIT_UNAVAILABLE_NOTICE });
+    }
+  } catch (_) {
+    // Best-effort notice; never fail game-end over a missing follow-up.
   }
 }
 
@@ -446,15 +458,23 @@ async function afterWinnerPosted(ctx) {
     }
 
     if (!buffer && shouldGenerate) {
-      buffer = await WinnerPortrait.generatePortraitImage({
-        client,
-        gameName: gameData.name,
-        winnerIds: decision.winnerIds || ids,
-        guild: interaction.guild,
-        winnerUsers,
-      });
+      try {
+        buffer = await WinnerPortrait.generatePortraitImage({
+          client,
+          gameName: gameData.name,
+          winnerIds: decision.winnerIds || ids,
+          guild: interaction.guild,
+          winnerUsers,
+        });
+      } catch (error) {
+        logPortraitSkip(client, error);
+        await notifyPortraitUnavailable(interaction);
+        await clearStale();
+        return;
+      }
       if (!buffer) {
         logPortraitSkip(client, "no portrait image produced");
+        await notifyPortraitUnavailable(interaction);
         await clearStale();
         return;
       }
@@ -501,6 +521,7 @@ function scheduleAfterWinnerPosted(ctx) {
 const WinnerPortrait = {
   MAX_WINNERS,
   PORTRAIT_FILENAME,
+  PORTRAIT_UNAVAILABLE_NOTICE,
   WINNER_PORTRAIT_PROMPT,
   logPortraitSkip,
   normalizeWinnerIds,
