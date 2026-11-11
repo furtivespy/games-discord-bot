@@ -1,6 +1,18 @@
 const path = require("path");
 const fs = require("fs");
 const express = require("express");
+const {
+  DEFAULT_MOCK_CHANNEL_ID,
+  DEFAULT_MOCK_CHANNEL_NAME,
+  DEFAULT_MOCK_CLIENT_ID,
+  DEFAULT_MOCK_GUILD_ID,
+  allowEmbeddedAppMock,
+  getMockSnapshot,
+  handleMockTokenExchange,
+  isEmbeddedAppMockEnabled,
+  isEmbeddedAppMockRequested,
+  resolveMockRuntimeConfig,
+} = require("./embeddedAppMock");
 
 const DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token";
 const DISCORD_ME_URL = "https://discord.com/api/v10/users/@me";
@@ -206,10 +218,19 @@ async function handleTokenExchange({
 }
 
 function injectEmbeddedConfig(html, config) {
+  const mock = Boolean(config.mock);
   const payload = {
-    clientId: sanitizeClientId(config.clientId),
+    clientId:
+      sanitizeClientId(config.clientId) || (mock ? DEFAULT_MOCK_CLIENT_ID : ""),
     apiHost: sanitizeApiHost(config.apiHost),
   };
+  if (mock) {
+    payload.mock = true;
+    payload.channelId =
+      sanitizeHostChannelId(config.channelId) || DEFAULT_MOCK_CHANNEL_ID;
+    payload.guildId =
+      sanitizeHostChannelId(config.guildId) || DEFAULT_MOCK_GUILD_ID;
+  }
   const snippet = `window.__GAMEBOT_EMBEDDED_CONFIG__=${JSON.stringify(payload)};`;
   if (html.includes(CONFIG_PLACEHOLDER)) {
     return html.replace(CONFIG_PLACEHOLDER, snippet);
@@ -226,12 +247,36 @@ function createEmbeddedApp({
   logger,
   fetchImpl = fetch,
   consumeOrigin,
+  mock = false,
+  mockChannelId,
+  mockGuildId,
+  mockChannelName,
+  env = process.env,
 } = {}) {
+  const mockEnabled = allowEmbeddedAppMock(mock, env);
+  const resolvedMockChannelId =
+    sanitizeHostChannelId(mockChannelId) || DEFAULT_MOCK_CHANNEL_ID;
+  const resolvedMockGuildId =
+    sanitizeHostChannelId(mockGuildId) || DEFAULT_MOCK_GUILD_ID;
+  const resolvedMockChannelName =
+    typeof mockChannelName === "string"
+      ? mockChannelName.trim()
+      : DEFAULT_MOCK_CHANNEL_NAME;
+  const resolvedClientId =
+    sanitizeClientId(clientId) || (mockEnabled ? DEFAULT_MOCK_CLIENT_ID : clientId);
+
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "8kb" }));
 
   async function exchangeToken(req, res) {
+    if (mockEnabled) {
+      const result = handleMockTokenExchange({
+        originChannelName: resolvedMockChannelName,
+      });
+      res.status(result.status).json(result.body);
+      return;
+    }
     const result = await handleTokenExchange({
       code: req.body?.code,
       clientId,
@@ -245,6 +290,22 @@ function createEmbeddedApp({
   }
 
   app.post(["/api/token", "/.proxy/api/token"], exchangeToken);
+
+  function sendGameSnapshot(req, res) {
+    if (!mockEnabled) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const result = getMockSnapshot({
+      fixture: req.query?.fixture,
+      channelId:
+        sanitizeHostChannelId(req.query?.channelId) || resolvedMockChannelId,
+      guildId: sanitizeHostChannelId(req.query?.guildId) || resolvedMockGuildId,
+    });
+    res.status(result.status).json(result.body);
+  }
+
+  app.get(["/api/game/snapshot", "/.proxy/api/game/snapshot"], sendGameSnapshot);
 
   const resolvedStaticDir = staticDir
     ? path.resolve(staticDir)
@@ -266,8 +327,11 @@ function createEmbeddedApp({
       .type("html")
       .send(
         injectEmbeddedConfig(html, {
-          clientId: sanitizeClientId(clientId),
+          clientId: resolvedClientId,
           apiHost: host,
+          mock: mockEnabled,
+          channelId: resolvedMockChannelId,
+          guildId: resolvedMockGuildId,
         })
       );
   }
@@ -301,22 +365,37 @@ function startEmbeddedAppServer({
   consumeOrigin,
 } = {}) {
   const resolved = resolveEmbeddedAppConfig(env, config);
+  const mockRuntime = resolveMockRuntimeConfig(env);
+  if (mockRuntime.requested && !mockRuntime.enabled) {
+    logger?.log(
+      "EMBEDDED_APP_MOCK is set but ignored because NODE_ENV=production",
+      "warn"
+    );
+  }
   const originLookup =
     consumeOrigin || require("./visualLaunch").consumeOrigin;
   const app = createEmbeddedApp({
     ...resolved,
     logger,
     consumeOrigin: originLookup,
+    mock: mockRuntime.enabled,
+    mockChannelId: mockRuntime.channelId,
+    mockGuildId: mockRuntime.guildId,
+    mockChannelName: mockRuntime.channelName,
+    env,
   });
   if (!listen) {
     return { app, config: resolved, server: null };
   }
 
   const server = app.listen(resolved.port, "0.0.0.0", () => {
+    const mockNote = mockRuntime.enabled
+      ? "; MOCK MODE — not for production"
+      : "";
     logger?.log(
       `Embedded app listening on 0.0.0.0:${resolved.port} (client id ${
         resolved.clientId ? "set" : "missing"
-      }; secret ${resolved.clientSecret ? "set" : "missing"})`,
+      }; secret ${resolved.clientSecret ? "set" : "missing"}${mockNote})`,
       "ready"
     );
   });
@@ -340,6 +419,8 @@ module.exports = {
   hostFromPublicBaseUrl,
   injectEmbeddedConfig,
   isDiscordProxyHost,
+  isEmbeddedAppMockEnabled,
+  isEmbeddedAppMockRequested,
   resolveEmbeddedAppConfig,
   resolveInjectedApiHost,
   sanitizeApiHost,

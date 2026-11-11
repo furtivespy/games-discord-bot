@@ -3,22 +3,61 @@ import {
   firstNonEmptyName,
   helloGreeting,
   originLine,
+  OUTSIDE_DISCORD_FALLBACK,
+  snapshotRequestUrl,
   tokenRequestUrl,
   urlMappingsForApiHost,
 } from "./handshake";
+import { MockDiscordSDK } from "./mockSdk";
 import "./style.css";
 
 type EmbeddedConfig = {
   clientId: string;
   apiHost: string;
+  mock: boolean;
+  channelId: string;
+  guildId: string;
 };
+
+type SnapshotCard = {
+  id?: string;
+  name?: string;
+  url?: string | null;
+};
+
+type GameSnapshot = {
+  gameName?: string;
+  channelId?: string;
+  guildId?: string;
+  hand?: SnapshotCard[];
+  playArea?: SnapshotCard[];
+  gameBoard?: SnapshotCard[];
+  error?: string;
+};
+
+function readSearchParams(): URLSearchParams {
+  if (typeof window === "undefined") return new URLSearchParams();
+  return new URLSearchParams(window.location.search);
+}
 
 function readConfig(): EmbeddedConfig {
   const injected = window.__GAMEBOT_EMBEDDED_CONFIG__;
+  const query = readSearchParams();
+  const mock = injected?.mock === true;
   return {
-    clientId: injected?.clientId || import.meta.env.VITE_CLIENT_ID || "",
+    clientId:
+      injected?.clientId ||
+      import.meta.env.VITE_CLIENT_ID ||
+      (mock ? "mock-client-id" : ""),
     apiHost: injected?.apiHost || import.meta.env.VITE_API_HOST || "",
+    mock,
+    channelId: query.get("channelId") || injected?.channelId || "",
+    guildId: query.get("guildId") || injected?.guildId || "",
   };
+}
+
+function readFixture(): string {
+  return readSearchParams().get("fixture") || "populated";
 }
 
 function setGreeting(text: string) {
@@ -40,6 +79,100 @@ function setOrigin(text: string | null) {
   el.hidden = true;
 }
 
+function setSnapshotStatus(text: string | null) {
+  const el = document.getElementById("snapshot-status");
+  if (!el) return;
+  if (text) {
+    el.textContent = text;
+    el.hidden = false;
+    return;
+  }
+  el.textContent = "";
+  el.hidden = true;
+}
+
+function setTableVisible(visible: boolean) {
+  const table = document.getElementById("table");
+  const main = document.querySelector("main");
+  if (table) table.hidden = !visible;
+  main?.classList.toggle("has-table", visible);
+}
+
+function renderCards(containerId: string, cards: SnapshotCard[] | undefined) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.replaceChildren();
+  for (const card of cards || []) {
+    const tile = document.createElement("article");
+    tile.className = "card-tile";
+    if (card.id) tile.dataset.cardId = card.id;
+    const name = typeof card.name === "string" && card.name.trim() ? card.name : "Card";
+    if (card.url) {
+      const img = document.createElement("img");
+      img.src = card.url;
+      img.alt = name;
+      tile.append(img);
+      const label = document.createElement("span");
+      label.textContent = name;
+      tile.append(label);
+    } else {
+      tile.textContent = name;
+    }
+    container.append(tile);
+  }
+}
+
+function snapshotErrorMessage(error: string | undefined, status: number): string {
+  if (error === "no_game" || status === 404) {
+    return "No game in this channel.";
+  }
+  if (error === "not_a_player" || status === 403) {
+    return "You're not a player in this game.";
+  }
+  return "Could not load the game snapshot.";
+}
+
+async function loadMockSnapshot(config: EmbeddedConfig, accessToken: string) {
+  const response = await fetch(
+    snapshotRequestUrl(config.apiHost, window.location.protocol, {
+      fixture: readFixture(),
+      channelId: config.channelId,
+      guildId: config.guildId,
+    }),
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+  let payload: GameSnapshot = {};
+  try {
+    payload = (await response.json()) as GameSnapshot;
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    setTableVisible(false);
+    setSnapshotStatus(snapshotErrorMessage(payload.error, response.status));
+    return;
+  }
+
+  setSnapshotStatus(payload.gameName ? payload.gameName : null);
+  renderCards("hand-cards", payload.hand);
+  renderCards("play-area-cards", payload.playArea);
+  renderCards("board-cards", payload.gameBoard);
+  setTableVisible(true);
+}
+
+function createSdk(config: EmbeddedConfig) {
+  if (config.mock) {
+    return new MockDiscordSDK(config.clientId, {
+      channelId: config.channelId,
+      guildId: config.guildId,
+    });
+  }
+  return new DiscordSDK(config.clientId);
+}
+
 async function bootstrap() {
   const config = readConfig();
   if (!config.clientId) {
@@ -48,9 +181,9 @@ async function bootstrap() {
   }
 
   // 1. Construct the SDK before any authorize/token work.
-  const discordSdk = new DiscordSDK(config.clientId);
+  const discordSdk = createSdk(config);
 
-  // 2. Wait for READY from the Discord client.
+  // 2. Wait for READY from the Discord client (or the mock shim).
   await Promise.race([
     discordSdk.ready(),
     new Promise<never>((_, reject) => {
@@ -71,9 +204,11 @@ async function bootstrap() {
   });
 
   // 4. POST /api/token through patchUrlMappings (not a raw cross-origin fetch).
-  const mappings = urlMappingsForApiHost(config.apiHost);
-  if (mappings.length) {
-    patchUrlMappings(mappings);
+  if (!config.mock) {
+    const mappings = urlMappingsForApiHost(config.apiHost);
+    if (mappings.length) {
+      patchUrlMappings(mappings);
+    }
   }
   const response = await fetch(
     tokenRequestUrl(config.apiHost, window.location.protocol),
@@ -118,9 +253,18 @@ async function bootstrap() {
   }
   setGreeting(helloGreeting(displayName));
   setOrigin(originLine(payload.origin_channel_name));
+
+  if (config.mock) {
+    await loadMockSnapshot(config, accessToken);
+  }
 }
 
 bootstrap().catch((error) => {
+  const config = readConfig();
+  if (config.mock) {
+    setGreeting("Could not start mock visual mode.");
+    return;
+  }
   const insideDiscord =
     typeof window !== "undefined" &&
     /\.discordsays\.com$/i.test(window.location.hostname);
@@ -128,7 +272,5 @@ bootstrap().catch((error) => {
     setGreeting("Could not sign in to Discord.");
     return;
   }
-  setGreeting(
-    "Open visual mode from Discord (App Launcher → Game Bot, or /visual)."
-  );
+  setGreeting(OUTSIDE_DISCORD_FALLBACK);
 });

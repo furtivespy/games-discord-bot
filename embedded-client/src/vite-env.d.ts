@@ -8,6 +8,9 @@ interface ImportMetaEnv {
 interface GameBotEmbeddedConfig {
   clientId?: string;
   apiHost?: string;
+  mock?: boolean;
+  channelId?: string;
+  guildId?: string;
 }
 
 interface Window {
