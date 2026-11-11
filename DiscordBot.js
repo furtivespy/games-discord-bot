@@ -7,7 +7,7 @@ const {Client,
   GatewayIntentBits,
   PermissionsBitField,
   REST,
-  Routes, MessageFlags} = require("discord.js");
+  MessageFlags} = require("discord.js");
 const Enmap = require("./modules/BunEnmap.js");
 const klaw = require("klaw");
 const path = require("path");
@@ -20,11 +20,11 @@ const GatherInterest = require("./modules/GatherInterest.js");
 const DeckEditCardModal = require("./modules/DeckEditCardModal");
 const ReminderSystem = require("./modules/ReminderSystem.js");
 const GameStatusHelper = require("./modules/GameStatusHelper");
+const { startEmbeddedAppServer } = require("./modules/embeddedApp");
+const { registerApplicationCommands } = require("./modules/applicationCommands");
+const VisualLaunch = require("./modules/visualLaunch");
 const { formatGameLookup } = require("./modules/gameLookupDebug.js");
-const {
-  isQaUnlockAdminCommands,
-  slashCommandJsonForRegistration,
-} = require("./modules/qaUnlock.js");
+const { isQaUnlockAdminCommands } = require("./modules/qaUnlock.js");
 
 class DiscordBot extends Client {
   constructor(options) {
@@ -552,6 +552,11 @@ const client = new DiscordBot({
   ],
 });
 const init = async () => {
+  client.embeddedApp = startEmbeddedAppServer({
+    config: client.config,
+    logger: client.logger,
+  });
+
   klaw("./commands").on("data", (item) => {
     const cmdFile = path.parse(item.path);
     if (!cmdFile.ext || cmdFile.ext !== ".js") return;
@@ -633,10 +638,12 @@ const init = async () => {
     });
     client.logger.log(`guild members cached`);
 
+    // Dev client: ordinary slash commands stay on the guild route, and the
+    // Activity Launch primary entry point is registered globally. Discord
+    // rejects that entry point on a guild route. Other clients register slash
+    // commands and Launch together on the global route. If Activities are not
+    // enabled yet, that global registration retries without the entry point.
     //Register Slash Commands
-    const cmds = client.slashcommands.map((sc) =>
-      slashCommandJsonForRegistration(sc)
-    );
     if (isQaUnlockAdminCommands()) {
       client.logger.log(
         "QA_UNLOCK_ADMIN_COMMANDS is set — admin slash commands are registered without Administrator (QA/dev only, not for production)",
@@ -644,30 +651,12 @@ const init = async () => {
       );
     }
     const rest = new REST({ version: "10" }).setToken(client.config.token);
-
-    if (client.config.clientId == "548570412959662080") {
-      //Test Server
-      rest
-        .put(
-          Routes.applicationGuildCommands(
-            client.config.clientId,
-            "545109131330191371"
-          ),
-          { body: cmds }
-        )
-        .then(() =>
-          client.logger.log("Successfully registered application commands.")
-        )
-        .catch((error) => client.logger.error(error));
-    } else {
-      //Prod Server
-      rest
-        .put(Routes.applicationCommands(client.config.clientId), { body: cmds })
-        .then(() =>
-          client.logger.log("Successfully registered application commands.")
-        )
-        .catch((error) => client.logger.error(error));
-    }
+    registerApplicationCommands({
+      rest,
+      clientId: client.config.clientId,
+      slashcommands: client.slashcommands,
+      logger: client.logger,
+    }).catch((error) => client.logger.error(error));
   });
 
   client.on("messageCreate", async (message) => {
@@ -829,6 +818,42 @@ client.on("messageReactionRemove", async (reaction, user) => {
 
 client.on("interactionCreate", async (interaction) => {
   if (interaction.isCommand() || interaction.isAutocomplete()) {
+    if (
+      typeof interaction.isPrimaryEntryPointCommand === "function" &&
+      interaction.isPrimaryEntryPointCommand()
+    ) {
+      try {
+        if (
+          await VisualLaunch.channelBlocksActivities(
+            interaction.channel,
+            interaction.client
+          )
+        ) {
+          await interaction.reply({
+            content: VisualLaunch.FORUM_BLOCKED_MESSAGE,
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        VisualLaunch.forgetOrigin(interaction.user?.id);
+        await interaction.launchActivity();
+      } catch (error) {
+        console.error(error);
+        if (!interaction.replied && !interaction.deferred) {
+          try {
+            await interaction.reply({
+              content:
+                "Could not open visual mode. Try Discord's App Launcher for Game Bot.",
+              flags: MessageFlags.Ephemeral,
+            });
+          } catch {
+            // Interaction may already be expired; ignore.
+          }
+        }
+      }
+      return;
+    }
+
     const command = client.slashcommands.get(interaction.commandName);
 
     if (!command) return;
@@ -874,6 +899,10 @@ client.on("interactionCreate", async (interaction) => {
     });
   } else if (interaction.isButton()) {
     try {
+      if (VisualLaunch.isVisualButton(interaction.customId)) {
+        await VisualLaunch.handleButton(interaction, interaction.client);
+        return;
+      }
       if (await DeckEditCardModal.handleButton(interaction, interaction.client)) {
         return;
       }
@@ -918,6 +947,7 @@ client
 function gracefulShutdown(signal) {
   client.logger.log(`Received ${signal}, shutting down…`, "warn");
   try {
+    client.embeddedApp?.server?.close();
     // Checkpoint WAL and close all SQLite connections so data is fully flushed.
     client.db?.db?.close();
     client.gamedata?.db?.close();

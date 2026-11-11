@@ -543,7 +543,10 @@ function createHarness({
           ? optionBag.booleans[name]
           : null,
       getUser: (name) => optionBag.users[name] || null,
-      getChannel: (name) => optionBag.channels[name] || null,
+      getChannel: (name) =>
+        Object.prototype.hasOwnProperty.call(optionBag.channels, name)
+          ? optionBag.channels[name]
+          : null,
       getFocused: (whole = false) => {
         if (optionBag.focused === undefined && optionBag.focusedName === undefined) {
           throw missingOptionError("Focused option");
