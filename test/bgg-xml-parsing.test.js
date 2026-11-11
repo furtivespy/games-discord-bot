@@ -99,14 +99,46 @@ describe("BGG XML parsing and HTML-entity decoding", () => {
     expect(description).not.toContain("&lt;em&gt;");
   });
 
-  test("awards embed decodes HTML entities in honor text", async () => {
+  test("awards embed includes each honor when boardgamehonor is an array", async () => {
     stubBggFetch();
     const bgg = await BoardGameGeek.CreateAndLoad("102794", fakeClient(), {});
+    expect(Array.isArray(bgg.gameInfo.boardgamehonor)).toBe(true);
     bgg.GetGameAwardsEmbed();
     const honors = bgg.embeds.at(-1).data.description;
     expect(honors).toContain("2013 Golden Geek Best Strategy Game Nominee");
     expect(honors).toContain("Players' Choice Award");
     expect(honors).not.toContain("&apos;");
+  });
+
+  test("awards embed includes a single boardgamehonor object", async () => {
+    const singleHonorXml = `<?xml version="1.0" encoding="utf-8"?>
+<boardgames>
+  <boardgame objectid="13">
+    <name primary="true">Catan</name>
+    <description>Settle an island.</description>
+    <boardgamehonor objectid="12345">Players&amp;apos; Choice Award</boardgamehonor>
+    <statistics>
+      <ratings>
+        <average>7.1</average>
+        <averageweight>2.3</averageweight>
+        <ranks>
+          <rank type="subtype" id="1" name="boardgame" friendlyname="Board Game Rank" value="400"/>
+        </ranks>
+      </ratings>
+    </statistics>
+  </boardgame>
+</boardgames>`;
+    stubBggFetch({ gameXml: singleHonorXml });
+    const bgg = await BoardGameGeek.CreateAndLoad("13", fakeClient(), {});
+    expect(Array.isArray(bgg.gameInfo.boardgamehonor)).toBe(false);
+    expect(bgg.gameInfo.boardgamehonor).toEqual(
+      expect.objectContaining({ text: "Players&apos; Choice Award" })
+    );
+    bgg.GetGameAwardsEmbed();
+    expect(bgg.embeds).toHaveLength(1);
+    expect(bgg.embeds[0].data.title).toBe("Awards and Honors");
+    expect(bgg.embeds[0].data.description).toContain("Players' Choice Award");
+    expect(bgg.embeds[0].data.description).not.toContain("&apos;");
   });
 
   test("details embed decodes HTML entities in rank names", async () => {
