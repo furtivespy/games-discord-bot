@@ -35,14 +35,61 @@ main {
   opacity: 0.8;
 }
 
-main.has-table {
+main.has-table,
+main.has-picker {
   place-items: start center;
   align-content: start;
   gap: 1.25rem;
 }
 
-main.has-table #greeting {
+main.has-table #greeting,
+main.has-picker #greeting {
   font-size: clamp(1.25rem, 3vw, 2rem);
+}
+
+#game-picker {
+  width: min(28rem, 100%);
+  display: grid;
+  gap: 0.75rem;
+  justify-items: stretch;
+}
+
+#game-picker[hidden] {
+  display: none;
+}
+
+#game-select-label {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #b5bac1;
+}
+
+#game-select {
+  width: 100%;
+  background: #1e1f22;
+  color: #f2f3f5;
+  border: 1px solid #3f4147;
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+  font-size: 1rem;
+}
+
+#selected-channel {
+  margin: 0;
+  font-size: clamp(1.25rem, 3vw, 2rem);
+  font-weight: 600;
+  text-align: center;
+}
+
+#games-status,
+#games-empty {
+  margin: 0;
+  text-align: center;
+  color: #b5bac1;
 }
 
 #snapshot-status {

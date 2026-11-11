@@ -35,6 +35,9 @@ Open:
 | Populated layout (hello + hand / play area / board) | http://127.0.0.1:3000/?fixture=populated |
 | No game | http://127.0.0.1:3000/?fixture=no-game |
 | Not a player | http://127.0.0.1:3000/?fixture=not-a-player |
+| Several games (newest first) | http://127.0.0.1:3000/?fixture=several-games |
+| Single game | http://127.0.0.1:3000/?fixture=one-game |
+| No games (empty picker) | http://127.0.0.1:3000/?fixture=no-games |
 
 With mock **disabled**, the existing outside-Discord fallback still tells you to open visual mode from Discord.
 

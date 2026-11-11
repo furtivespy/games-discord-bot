@@ -5,7 +5,14 @@ const fs = require("fs");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-const FIXTURES = ["populated", "no-game", "not-a-player"];
+const FIXTURES = [
+  "populated",
+  "no-game",
+  "not-a-player",
+  "several-games",
+  "one-game",
+  "no-games",
+];
 const DEFAULT_PORT = Number(process.env.PORT || 3000);
 const OUT_DIR = path.resolve(
   process.argv[2] || path.join("tmp", "embedded-mock-screenshots")

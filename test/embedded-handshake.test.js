@@ -1,6 +1,9 @@
 const { describe, expect, test } = require("bun:test");
 const {
   firstNonEmptyName,
+  GAMES_EMPTY_MESSAGE,
+  GAMES_SELECT_PLACEHOLDER,
+  gamesRequestUrl,
   helloGreeting,
   isDiscordProxyHost,
   originLine,
@@ -54,6 +57,9 @@ describe("embedded client handshake URLs", () => {
     );
     expect(main).toContain("OUTSIDE_DISCORD_FALLBACK");
     expect(main).toContain("config.mock");
+    expect(main).toContain("loadGames");
+    expect(main).toContain("gamesRequestUrl");
+    expect(main).not.toContain("consumeOrigin");
   });
 
   test("snapshot URL is same-origin inside Discord and carries fixture query params", () => {
@@ -72,6 +78,23 @@ describe("embedded client handshake URLs", () => {
     ).toBe(
       "https://gamebot.example.com/api/game/snapshot?fixture=populated&channelId=ch-1&guildId=g-1"
     );
+  });
+
+  test("games URL is same-origin inside Discord and carries guild plus mock fixture", () => {
+    expect(gamesRequestUrl("", "https:")).toBe("/api/games");
+    expect(
+      gamesRequestUrl("123.discordsays.com", "https:", {
+        fixture: "no-games",
+        guildId: "g-1",
+      })
+    ).toBe("/api/games?fixture=no-games&guildId=g-1");
+    expect(
+      gamesRequestUrl("gamebot.example.com", "https:", {
+        guildId: "g-1",
+      })
+    ).toBe("https://gamebot.example.com/api/games?guildId=g-1");
+    expect(GAMES_EMPTY_MESSAGE).toContain("not in any active games");
+    expect(GAMES_SELECT_PLACEHOLDER).toBe("Select a game");
   });
 });
 

@@ -176,6 +176,38 @@ class GameStore {
     });
   }
 
+  listGameDocuments(guildId, collection) {
+    return tracer.startActiveSpan("db.list guild game_documents", (span) => {
+      span.setAttributes({
+        "db.system": "sqlite",
+        "db.operation": "SELECT",
+        "db.sql.table": "game_documents",
+        "db.collection": collection,
+      });
+      try {
+        const rows = this.db
+          .query(
+            `SELECT channel_id, data, updated_at
+             FROM game_documents
+             WHERE guild_id = ? AND collection = ?`
+          )
+          .all(String(guildId), collection);
+        span.setAttribute("db.result_count", rows.length);
+        return rows.map((row) => ({
+          channelId: row.channel_id,
+          updatedAt: row.updated_at,
+          data: this._parseRow(row),
+        }));
+      } catch (err) {
+        span.recordException(err);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
+  }
+
   getGameRawRow(guildId, collection, channelId) {
     return this.db
       .query(

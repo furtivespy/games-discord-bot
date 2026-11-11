@@ -555,6 +555,8 @@ const init = async () => {
   client.embeddedApp = startEmbeddedAppServer({
     config: client.config,
     logger: client.logger,
+    gameStore: client.db,
+    discordClient: client,
   });
 
   klaw("./commands").on("data", (item) => {

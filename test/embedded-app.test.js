@@ -17,6 +17,7 @@ const {
   sanitizeClientId,
 } = require("../modules/embeddedApp");
 const VisualLaunch = require("../modules/visualLaunch");
+const GameStore = require("../db/gameStore");
 
 const SECRET_TOKEN = "SUPER_SECRET_ACCESS_TOKEN";
 
@@ -265,7 +266,6 @@ describe("embedded HTTP origin", () => {
       expect(html).not.toContain("server-secret");
       expect(html).not.toContain(SECRET_TOKEN);
       expect(html).toContain('id="origin"');
-      expect(html.toLowerCase()).not.toContain("game picker");
 
       const token = await fetch(`${url}/api/token`, {
         method: "POST",
@@ -358,22 +358,170 @@ describe("embedded HTTP origin", () => {
     expect(injected).not.toContain("</script><script>");
   });
 
-  test("source client is a hello page with optional origin, not a game picker", () => {
+  test("source client greets, then offers a game picker", () => {
     const html = fs.readFileSync(
       path.join(__dirname, "..", "embedded-client", "index.html"),
       "utf8"
     );
     expect(html).toContain('id="greeting"');
     expect(html).toContain('id="origin"');
+    expect(html).toContain('id="game-picker"');
+    expect(html).toContain('id="game-select"');
+    expect(html).toContain("Select a game");
+    expect(html).toContain('id="selected-channel"');
+    expect(html).toContain('id="games-empty"');
+    expect(html).toContain("You're not in any active games on this server.");
     expect(html).toContain('id="table"');
     expect(html).toContain("Hand");
-    expect(html).toContain("My play area");
-    expect(html).toContain("Game board");
-    expect(html.toLowerCase()).not.toMatch(/game picker|select a game|choose a game/);
     const css = fs.readFileSync(
       path.join(__dirname, "..", "embedded-client", "src", "style.css"),
       "utf8"
     );
+    expect(css).toContain("#game-picker[hidden]");
     expect(css).toContain("#table[hidden]");
+  });
+});
+
+describe("GET /api/games", () => {
+  async function withStore(run) {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-list-"));
+    const previous = process.env.GAMEBOT_DATA_DIR;
+    process.env.GAMEBOT_DATA_DIR = dataDir;
+    const store = new GameStore();
+    try {
+      return await run(store);
+    } finally {
+      try {
+        store.db.close();
+      } catch {}
+      if (previous === undefined) delete process.env.GAMEBOT_DATA_DIR;
+      else process.env.GAMEBOT_DATA_DIR = previous;
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  }
+
+  test("lists this user's active guild games newest first and ignores origin memory", async () => {
+    await withStore(async (store) => {
+      store.upsertGameData("guild-1", "game", "thread-new", {
+        isdeleted: false,
+        name: "Should not leak custom title",
+        players: [{ userId: "snowflake-user" }],
+        history: [
+          {
+            timestamp: "2026-11-10T00:00:00.000Z",
+            action: { category: "game", type: "create" },
+          },
+        ],
+      });
+      store.upsertGameData("guild-1", "game", "thread-old", {
+        isdeleted: false,
+        name: "Old table",
+        players: [{ userId: "snowflake-user" }],
+        history: [
+          {
+            timestamp: "2026-01-01T00:00:00.000Z",
+            action: { category: "game", type: "create" },
+          },
+        ],
+      });
+      store.upsertGameData("guild-1", "game", "thread-deleted", {
+        isdeleted: true,
+        name: "Deleted",
+        players: [{ userId: "snowflake-user" }],
+        history: [
+          {
+            timestamp: "2026-12-01T00:00:00.000Z",
+            action: { category: "game", type: "create" },
+          },
+        ],
+      });
+      store.upsertGameData("guild-1", "game", "other-player", {
+        isdeleted: false,
+        name: "Not mine",
+        players: [{ userId: "someone-else" }],
+        history: [
+          {
+            timestamp: "2026-11-20T00:00:00.000Z",
+            action: { category: "game", type: "create" },
+          },
+        ],
+      });
+      store.upsertGameData("guild-2", "game", "other-guild", {
+        isdeleted: false,
+        name: "Other server",
+        players: [{ userId: "snowflake-user" }],
+        history: [
+          {
+            timestamp: "2026-11-30T00:00:00.000Z",
+            action: { category: "game", type: "create" },
+          },
+        ],
+      });
+
+      VisualLaunch.rememberOrigin("snowflake-user", {
+        channelName: "Origin Bridge Channel",
+        hostChannelId: "launch-channel",
+      });
+
+      const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-games-http-"));
+      fs.writeFileSync(
+        path.join(staticDir, "index.html"),
+        `<!doctype html><html><head><script>${CONFIG_PLACEHOLDER}</script></head><body></body></html>`
+      );
+      const app = createEmbeddedApp({
+        clientId: "client-123",
+        clientSecret: "server-secret",
+        staticDir,
+        gameStore: store,
+        consumeOrigin: VisualLaunch.consumeOrigin,
+        fetchChannelName: async (channelId) =>
+          ({
+            "thread-new": "Friday Inis",
+            "thread-old": "Monday Poker",
+          })[channelId] || null,
+        fetchImpl: mockDiscordFetch({
+          meBody: {
+            id: "snowflake-user",
+            username: "willsullivan",
+            global_name: "Will",
+          },
+        }),
+      });
+      const { server, url } = await listen(app);
+      try {
+        const missingAuth = await fetch(`${url}/api/games?guildId=guild-1`);
+        expect(missingAuth.status).toBe(401);
+
+        const missingGuild = await fetch(`${url}/api/games`, {
+          headers: { Authorization: `Bearer ${SECRET_TOKEN}` },
+        });
+        expect(missingGuild.status).toBe(400);
+        expect(await missingGuild.json()).toEqual({ error: "missing_guild" });
+
+        const listed = await fetch(`${url}/api/games?guildId=guild-1`, {
+          headers: { Authorization: `Bearer ${SECRET_TOKEN}` },
+        });
+        expect(listed.status).toBe(200);
+        expect(await listed.json()).toEqual({
+          games: [
+            { channelId: "thread-new", channelName: "Friday Inis" },
+            { channelId: "thread-old", channelName: "Monday Poker" },
+          ],
+        });
+
+        const proxied = await fetch(`${url}/.proxy/api/games?guildId=guild-1`, {
+          headers: { Authorization: `Bearer ${SECRET_TOKEN}` },
+        });
+        expect(proxied.status).toBe(200);
+        expect((await proxied.json()).games[0].channelName).toBe("Friday Inis");
+
+        expect(VisualLaunch.peekOrigin("snowflake-user")?.channelName).toBe(
+          "Origin Bridge Channel"
+        );
+      } finally {
+        server.close();
+        fs.rmSync(staticDir, { recursive: true, force: true });
+      }
+    });
   });
 });

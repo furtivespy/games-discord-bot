@@ -14,6 +14,35 @@ const MOCK_FIXTURE_NAMES = Object.freeze([
   "not-a-player",
 ]);
 
+const GAME_LIST_FIXTURE_NAMES = Object.freeze([
+  "several-games",
+  "one-game",
+  "no-games",
+]);
+
+// Newest first: Friday Inis is the most recently created game.
+const SEVERAL_GAMES_FIXTURE = Object.freeze([
+  Object.freeze({
+    channelId: "newest-thread",
+    channelName: "Friday Inis",
+  }),
+  Object.freeze({
+    channelId: "mid-table",
+    channelName: "Thursday Root",
+  }),
+  Object.freeze({
+    channelId: "oldest-channel",
+    channelName: "Monday Poker",
+  }),
+]);
+
+const ONE_GAME_FIXTURE = Object.freeze([
+  Object.freeze({
+    channelId: "solo-thread",
+    channelName: "Solo Table",
+  }),
+]);
+
 const MOCK_USER = Object.freeze({
   id: "mock-user-1",
   username: "qatester",
@@ -112,6 +141,34 @@ function sanitizeFixtureName(value) {
   return MOCK_FIXTURE_NAMES.includes(name) ? name : null;
 }
 
+function sanitizeGamesFixtureName(value) {
+  const name = String(value || "").trim().toLowerCase();
+  if (!name) return "several-games";
+  if (GAME_LIST_FIXTURE_NAMES.includes(name)) return name;
+  if (MOCK_FIXTURE_NAMES.includes(name)) return name;
+  return null;
+}
+
+function getMockGames({ fixture } = {}) {
+  const name = sanitizeGamesFixtureName(fixture);
+  if (!name) {
+    return { status: 400, body: { error: "unknown_fixture" } };
+  }
+  if (name === "no-games") {
+    return { status: 200, body: { games: [] } };
+  }
+  if (name === "one-game") {
+    return {
+      status: 200,
+      body: { games: ONE_GAME_FIXTURE.map((game) => ({ ...game })) },
+    };
+  }
+  return {
+    status: 200,
+    body: { games: SEVERAL_GAMES_FIXTURE.map((game) => ({ ...game })) },
+  };
+}
+
 function getMockSnapshot({ fixture, channelId, guildId } = {}) {
   const name = sanitizeFixtureName(fixture);
   if (!name) {
@@ -174,11 +231,15 @@ module.exports = {
   DEFAULT_MOCK_CLIENT_ID,
   DEFAULT_MOCK_GUILD_ID,
   ENV_NAME,
+  GAME_LIST_FIXTURE_NAMES,
   MOCK_ACCESS_TOKEN,
   MOCK_FIXTURE_NAMES,
   MOCK_OAUTH_CODE,
   MOCK_USER,
+  ONE_GAME_FIXTURE,
+  SEVERAL_GAMES_FIXTURE,
   allowEmbeddedAppMock,
+  getMockGames,
   getMockSnapshot,
   handleMockTokenExchange,
   isEmbeddedAppMockEnabled,
@@ -189,5 +250,6 @@ module.exports = {
   populatedSeed,
   resolveMockRuntimeConfig,
   sanitizeFixtureName,
+  sanitizeGamesFixtureName,
   snapshotFromSeed,
 };
