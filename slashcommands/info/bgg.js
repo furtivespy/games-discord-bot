@@ -59,11 +59,11 @@ class BGG extends SlashCommand {
           return
         }
 
-        let ephemeral = BoardGameGeek.isEphemeral(interaction.options.getString("details"))
+        const ephemeral = BoardGameGeek.isEphemeral(interaction.options.getString("details"))
         const [, bgg] = await Promise.all([
-          interaction.deferReply({
-            ephemeral: ephemeral
-          }),
+          interaction.deferReply(
+            ephemeral ? { flags: MessageFlags.Ephemeral } : {}
+          ),
           BoardGameGeek.CreateAndLoad(search, this.client, interaction)
         ]);
         await bgg.LoadEmbeds(interaction.options.getString("details") || BoardGameGeek.DetailsEnum.ALL)
@@ -71,7 +71,6 @@ class BGG extends SlashCommand {
         await interaction.editReply({
           embeds: bgg.embeds,
           files: bgg.attachments,
-          ephemeral: ephemeral
         });
         if (bgg.otherAttachments.length > 0){
           await interaction.followUp({

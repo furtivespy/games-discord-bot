@@ -36,7 +36,7 @@ class GameBoardMove {
         }
 
         const [, gameData] = await Promise.all([
-            interaction.deferReply({ ephemeral: false }),
+            interaction.deferReply(),
             GameHelper.getGameData(client, interaction)
         ]);
 
@@ -101,7 +101,6 @@ class GameBoardMove {
         const selectionMessage = await interaction.editReply({
             content: 'Which card(s) would you like to move from Game Board?',
             components: [row],
-            ephemeral: false
         })
 
         const collectorFilter = i => i.user.id === interaction.user.id && i.customId === 'gameboard_move_select'
