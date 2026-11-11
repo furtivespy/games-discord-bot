@@ -38,7 +38,7 @@ class PileMove {
         }
 
         const [, gameData] = await Promise.all([
-            interaction.deferReply({ ephemeral: false }),
+            interaction.deferReply(),
             GameHelper.getGameData(client, interaction)
         ])
         
@@ -93,19 +93,8 @@ class PileMove {
             return
         }
 
-        // Card selection menu - show last 25 cards from pile
-        // If pile is secret, we shouldn't show card details in ephemeral select menu if it's not the creator?
-        // But the command is ephemeral: false? Wait, no.
-        // original code: await interaction.deferReply({ ephemeral: false })
-        // So this interaction is public.
-        // If pile is secret, showing cards in a select menu publicly is bad.
-        // But the select menu is attached to a message that is ephemeral?
-        // "const selectionMessage = await interaction.editReply({ ... ephemeral: false })"
-        // So everyone can see it.
-        // If the pile is secret, this command might expose cards.
-        // However, I'm just refactoring, not fixing security issues unless related.
-        // The original code uses `Formatter.cardSort` and displays cards.
-        // I will keep original behavior but noting it.
+        // Card selection menu - show last 25 cards from pile.
+        // This reply is public, so a secret pile can expose card names in the select.
 
         const options = Formatter.cardSort(sourcePile.cards.slice(-25)).map((card, index) => ({
             label: Formatter.cardShortName(card).substring(0, 100),
@@ -125,7 +114,6 @@ class PileMove {
         const selectionMessage = await interaction.editReply({
             content: `Which card(s) would you like to move from ${sourcePile.name}?`,
             components: [row],
-            ephemeral: false
         })
 
         const collectorFilter = i => i.user.id === interaction.user.id && i.customId === 'pile_move_select'

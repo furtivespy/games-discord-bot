@@ -96,9 +96,9 @@ class Check {
                     );
                 }
 
-                return await interaction.reply({ 
-                    embeds: [embed], 
-                    ephemeral: !showAll
+                return await interaction.reply({
+                    embeds: [embed],
+                    ...(!showAll ? { flags: MessageFlags.Ephemeral } : {}),
                 })
             }
         } else {
@@ -155,9 +155,9 @@ class Check {
             if (hasPublicTokens) embeds.push(publicEmbed)
             if (hasSecretTokens) embeds.push(secretEmbed)
 
-            return await interaction.reply({ 
-                embeds, 
-                ephemeral: !showAll || hasSecretTokens
+            return await interaction.reply({
+                embeds,
+                ...(!showAll || hasSecretTokens ? { flags: MessageFlags.Ephemeral } : {}),
             })
         }
     }
