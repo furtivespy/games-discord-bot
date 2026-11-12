@@ -2,7 +2,7 @@
 
 const GameDB = require("../db/anygame");
 
-const GAME_COLLECTION = "game";
+const GAME_COLLECTION = GameDB.ACTION_CATEGORIES.GAME;
 const DISCORD_EPOCH_MS = 1_420_070_400_000;
 // recordMove keeps only the last 500 history rows; a truncated log is not a
 // reliable creation signal.

@@ -31,3 +31,7 @@ export function isSnapshotFixture(value: string): value is SnapshotFixture {
 export function isGameListFixture(value: string): value is GameListFixture {
   return (GAME_LIST_FIXTURES as readonly string[]).includes(value);
 }
+
+export function isPickerFixture(value: string): boolean {
+  return isGameListFixture(value) || value === "populated";
+}

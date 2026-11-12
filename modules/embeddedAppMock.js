@@ -20,6 +20,12 @@ const GAME_LIST_FIXTURE_NAMES = Object.freeze([
   "no-games",
 ]);
 
+const GAME_LIST_FIXTURE_ALIASES = Object.freeze({
+  populated: "several-games",
+  "no-game": "no-games",
+  "not-a-player": "no-games",
+});
+
 // Newest first: Friday Inis is the most recently created game.
 const SEVERAL_GAMES_FIXTURE = Object.freeze([
   Object.freeze({
@@ -144,7 +150,8 @@ function sanitizeFixtureName(value) {
 function sanitizeGamesFixtureName(value) {
   const name = String(value || "").trim().toLowerCase();
   if (!name) return "several-games";
-  return GAME_LIST_FIXTURE_NAMES.includes(name) ? name : null;
+  if (GAME_LIST_FIXTURE_NAMES.includes(name)) return name;
+  return GAME_LIST_FIXTURE_ALIASES[name] || null;
 }
 
 function getMockGames({ fixture } = {}) {
@@ -229,6 +236,7 @@ module.exports = {
   DEFAULT_MOCK_CLIENT_ID,
   DEFAULT_MOCK_GUILD_ID,
   ENV_NAME,
+  GAME_LIST_FIXTURE_ALIASES,
   GAME_LIST_FIXTURE_NAMES,
   MOCK_ACCESS_TOKEN,
   MOCK_FIXTURE_NAMES,

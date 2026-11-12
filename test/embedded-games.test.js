@@ -5,6 +5,7 @@ const path = require("path");
 const GameStore = require("../db/gameStore");
 const GameDB = require("../db/anygame");
 const {
+  GAME_COLLECTION,
   HISTORY_KEEP_LIMIT,
   createdAtMs,
   discordSnowflakeMs,
@@ -36,6 +37,14 @@ function historyEntry(category, type, timestamp) {
     timestamp,
     action: { category, type },
   };
+}
+
+function gameCreate(timestamp) {
+  return historyEntry(
+    GameDB.ACTION_CATEGORIES.GAME,
+    GameDB.ACTION_TYPES.CREATE,
+    timestamp
+  );
 }
 
 describe("active game membership", () => {
@@ -84,11 +93,7 @@ describe("createdAtMs", () => {
             GameDB.ACTION_TYPES.PLAY,
             "2026-11-11T20:00:00.000Z"
           ),
-          historyEntry(
-            GameDB.ACTION_CATEGORIES.GAME,
-            GameDB.ACTION_TYPES.CREATE,
-            "2026-10-01T12:00:00.000Z"
-          ),
+          gameCreate("2026-10-01T12:00:00.000Z"),
         ],
       },
     });
@@ -100,8 +105,16 @@ describe("createdAtMs", () => {
       channelId: "111111111111111111",
       data: {
         history: [
-          historyEntry("card", "deal", "2026-09-15T08:00:00.000Z"),
-          historyEntry("card", "play", "2026-11-01T08:00:00.000Z"),
+          historyEntry(
+            GameDB.ACTION_CATEGORIES.CARD,
+            GameDB.ACTION_TYPES.DEAL,
+            "2026-09-15T08:00:00.000Z"
+          ),
+          historyEntry(
+            GameDB.ACTION_CATEGORIES.CARD,
+            GameDB.ACTION_TYPES.PLAY,
+            "2026-11-01T08:00:00.000Z"
+          ),
         ],
       },
     });
@@ -111,7 +124,11 @@ describe("createdAtMs", () => {
     const snowflake = discordSnowflakeMs(channelId);
     expect(snowflake).toBeGreaterThan(1_000_000_000_000);
     const truncated = Array.from({ length: HISTORY_KEEP_LIMIT }, (_, i) =>
-      historyEntry("card", "play", `2026-11-11T20:00:${String(i % 60).padStart(2, "0")}.000Z`)
+      historyEntry(
+        GameDB.ACTION_CATEGORIES.CARD,
+        GameDB.ACTION_TYPES.PLAY,
+        `2026-11-11T20:00:${String(i % 60).padStart(2, "0")}.000Z`
+      )
     );
     expect(
       createdAtMs({
@@ -133,13 +150,7 @@ describe("filterAndSortActiveGames", () => {
           isdeleted: false,
           name: "Old table",
           players: [{ userId }],
-          history: [
-            historyEntry(
-              GameDB.ACTION_CATEGORIES.GAME,
-              GameDB.ACTION_TYPES.CREATE,
-              "2026-01-01T00:00:00.000Z"
-            ),
-          ],
+          history: [gameCreate("2026-01-01T00:00:00.000Z")],
         },
       },
       {
@@ -148,7 +159,7 @@ describe("filterAndSortActiveGames", () => {
           isdeleted: false,
           name: "New table",
           players: [{ userId: "will" }],
-          history: [historyEntry("game", "create", "2026-11-01T00:00:00.000Z")],
+          history: [gameCreate("2026-11-01T00:00:00.000Z")],
         },
       },
       {
@@ -157,7 +168,7 @@ describe("filterAndSortActiveGames", () => {
           isdeleted: true,
           name: "Deleted",
           players: [{ userId }],
-          history: [historyEntry("game", "create", "2026-12-01T00:00:00.000Z")],
+          history: [gameCreate("2026-12-01T00:00:00.000Z")],
         },
       },
       {
@@ -166,7 +177,7 @@ describe("filterAndSortActiveGames", () => {
           isdeleted: false,
           name: "Watching",
           players: [{ userId: "other" }],
-          history: [historyEntry("game", "create", "2026-11-15T00:00:00.000Z")],
+          history: [gameCreate("2026-11-15T00:00:00.000Z")],
         },
       },
     ];
@@ -176,19 +187,61 @@ describe("filterAndSortActiveGames", () => {
   });
 });
 
+function goodGameData() {
+  return {
+    isdeleted: false,
+    name: "Good",
+    players: [{ userId: "will" }],
+  };
+}
+
+function insertRawGameRow(store, channelId, data) {
+  store.db
+    .query(
+      `INSERT INTO game_documents (guild_id, collection, channel_id, data, updated_at)
+       VALUES (?, ?, ?, ?, datetime('now'))`
+    )
+    .run("guild-a", GAME_COLLECTION, channelId, data);
+}
+
+async function expectListSkipsCorruptData(data, badChannelId) {
+  await withStore(async (store) => {
+    const logs = [];
+    store.logger = { log: (message) => logs.push(String(message)) };
+    store.upsertGameData("guild-a", GAME_COLLECTION, "ch-good", goodGameData());
+    insertRawGameRow(store, badChannelId, data);
+
+    const rows = store.listGameDocuments("guild-a", GAME_COLLECTION);
+    expect(rows.map((row) => row.channelId)).toEqual(["ch-good"]);
+    expect(rows[0].data.name).toBe("Good");
+    expect(logs.join("\n")).toContain(badChannelId);
+    expect(logs.join("\n")).toMatch(/Skipping corrupt game_documents row/);
+
+    const listed = await listActiveGamesForUser({
+      gameStore: store,
+      guildId: "guild-a",
+      userId: "will",
+    });
+    expect(listed).toEqual({
+      status: 200,
+      body: { games: [{ channelId: "ch-good", channelName: "Good" }] },
+    });
+  });
+}
+
 describe("GameStore.listGameDocuments", () => {
   test("returns channel_id, updated_at, and parsed data for one guild", async () => {
     await withStore(async (store) => {
-      store.upsertGameData("guild-a", "game", "ch-1", {
+      store.upsertGameData("guild-a", GAME_COLLECTION, "ch-1", {
         isdeleted: false,
         name: "Table",
         players: [{ userId: "will" }],
       });
-      store.upsertGameData("guild-b", "game", "ch-2", {
+      store.upsertGameData("guild-b", GAME_COLLECTION, "ch-2", {
         isdeleted: false,
         name: "Other guild",
       });
-      const rows = store.listGameDocuments("guild-a", "game");
+      const rows = store.listGameDocuments("guild-a", GAME_COLLECTION);
       expect(rows).toHaveLength(1);
       expect(rows[0].channelId).toBe("ch-1");
       expect(rows[0].data.name).toBe("Table");
@@ -196,63 +249,45 @@ describe("GameStore.listGameDocuments", () => {
     });
   });
 
-  test("skips a corrupt data blob instead of failing the whole guild list", async () => {
-    await withStore(async (store) => {
-      store.upsertGameData("guild-a", "game", "ch-good", {
-        isdeleted: false,
-        name: "Good",
-        players: [{ userId: "will" }],
-      });
-      const insert = store.db.query(
-        `INSERT INTO game_documents (guild_id, collection, channel_id, data, updated_at)
-         VALUES (?, ?, ?, ?, datetime('now'))`
-      );
-      insert.run("guild-a", "game", "ch-bad-json", "{not json");
-      insert.run("guild-a", "game", "ch-bad-null", "null");
-      insert.run("guild-a", "game", "ch-bad-number", "42");
+  test("skips unparseable data `{not json` alongside a good row", async () => {
+    await expectListSkipsCorruptData("{not json", "ch-bad-json");
+  });
 
-      const rows = store.listGameDocuments("guild-a", "game");
-      expect(rows.map((row) => row.channelId)).toEqual(["ch-good"]);
+  test("skips non-object data `null` alongside a good row", async () => {
+    await expectListSkipsCorruptData("null", "ch-bad-null");
+  });
 
-      const listed = await listActiveGamesForUser({
-        gameStore: store,
-        guildId: "guild-a",
-        userId: "will",
-      });
-      expect(listed).toEqual({
-        status: 200,
-        body: { games: [{ channelId: "ch-good", channelName: "Good" }] },
-      });
-    });
+  test("skips non-object data `42` alongside a good row", async () => {
+    await expectListSkipsCorruptData("42", "ch-bad-number");
   });
 });
 
 describe("listActiveGamesForUser", () => {
   test("lists across the guild from the store and prefers Discord channel names", async () => {
     await withStore(async (store) => {
-      store.upsertGameData("guild-a", "game", "thread-new", {
+      store.upsertGameData("guild-a", GAME_COLLECTION, "thread-new", {
         isdeleted: false,
         name: "Stale custom title",
         players: [{ userId: "will" }],
-        history: [historyEntry("game", "create", "2026-11-10T00:00:00.000Z")],
+        history: [gameCreate("2026-11-10T00:00:00.000Z")],
       });
-      store.upsertGameData("guild-a", "game", "thread-old", {
+      store.upsertGameData("guild-a", GAME_COLLECTION, "thread-old", {
         isdeleted: false,
         name: "Old channel",
         players: [{ userId: "will" }],
-        history: [historyEntry("game", "create", "2026-10-01T00:00:00.000Z")],
+        history: [gameCreate("2026-10-01T00:00:00.000Z")],
       });
-      store.upsertGameData("guild-a", "game", "thread-deleted", {
+      store.upsertGameData("guild-a", GAME_COLLECTION, "thread-deleted", {
         isdeleted: true,
         name: "Gone",
         players: [{ userId: "will" }],
-        history: [historyEntry("game", "create", "2026-11-20T00:00:00.000Z")],
+        history: [gameCreate("2026-11-20T00:00:00.000Z")],
       });
-      store.upsertGameData("guild-b", "game", "other-guild", {
+      store.upsertGameData("guild-b", GAME_COLLECTION, "other-guild", {
         isdeleted: false,
         name: "Other server",
         players: [{ userId: "will" }],
-        history: [historyEntry("game", "create", "2026-11-30T00:00:00.000Z")],
+        history: [gameCreate("2026-11-30T00:00:00.000Z")],
       });
 
       const names = {
@@ -284,13 +319,7 @@ describe("listActiveGamesForUser", () => {
               isdeleted: false,
               name: "Stored channel name",
               players: [{ userId: "will" }],
-              history: [
-            historyEntry(
-              GameDB.ACTION_CATEGORIES.GAME,
-              GameDB.ACTION_TYPES.CREATE,
-              "2026-01-01T00:00:00.000Z"
-            ),
-          ],
+              history: [gameCreate("2026-01-01T00:00:00.000Z")],
             },
           },
         ],

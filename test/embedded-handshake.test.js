@@ -16,6 +16,8 @@ const { MockDiscordSDK } = require("../embedded-client/src/mockSdk.ts");
 const {
   MOCK_OAUTH_CODE,
   MOCK_USER,
+  isPickerFixture,
+  isSnapshotFixture,
 } = require("../embedded-client/src/mockFixtures.ts");
 
 describe("embedded client handshake URLs", () => {
@@ -59,8 +61,9 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("config.mock");
     expect(main).toContain("loadGames");
     expect(main).toContain("gamesRequestUrl");
-    expect(main).toContain("isGameListFixture");
+    expect(main).toContain("isPickerFixture");
     expect(main).toContain("isSnapshotFixture");
+    expect(main).toContain('"several-games"');
     expect(main).not.toContain("consumeOrigin");
   });
 
@@ -97,6 +100,19 @@ describe("embedded client handshake URLs", () => {
     ).toBe("https://gamebot.example.com/api/games?guildId=g-1");
     expect(GAMES_EMPTY_MESSAGE).toContain("not in any active games");
     expect(GAMES_SELECT_PLACEHOLDER).toBe("Select a game");
+  });
+
+  test("default and populated are picker fixtures; no-game stays snapshot-only", () => {
+    expect(isPickerFixture("several-games")).toBe(true);
+    expect(isPickerFixture("one-game")).toBe(true);
+    expect(isPickerFixture("no-games")).toBe(true);
+    expect(isPickerFixture("populated")).toBe(true);
+    expect(isPickerFixture("no-game")).toBe(false);
+    expect(isPickerFixture("not-a-player")).toBe(false);
+    expect(isSnapshotFixture("no-game")).toBe(true);
+    expect(isSnapshotFixture("not-a-player")).toBe(true);
+    expect(isSnapshotFixture("populated")).toBe(true);
+    expect(isSnapshotFixture("several-games")).toBe(false);
   });
 });
 

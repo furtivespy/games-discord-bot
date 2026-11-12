@@ -195,10 +195,19 @@ class GameStore {
         const documents = [];
         for (const row of rows) {
           try {
+            const parsed = JSON.parse(row.data);
+            if (
+              parsed == null ||
+              typeof parsed !== "object" ||
+              Array.isArray(parsed)
+            ) {
+              throw new Error("non-object data");
+            }
+            if (!parsed.id) parsed.id = row.channel_id;
             documents.push({
               channelId: row.channel_id,
               updatedAt: row.updated_at,
-              data: this._parseRow(row),
+              data: parsed,
             });
           } catch (err) {
             this.logger?.log?.(

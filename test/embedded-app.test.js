@@ -18,6 +18,8 @@ const {
 } = require("../modules/embeddedApp");
 const VisualLaunch = require("../modules/visualLaunch");
 const GameStore = require("../db/gameStore");
+const GameDB = require("../db/anygame");
+const { GAME_COLLECTION } = require("../modules/embeddedGames");
 
 const SECRET_TOKEN = "SUPER_SECRET_ACCESS_TOKEN";
 
@@ -402,58 +404,73 @@ describe("GET /api/games", () => {
 
   test("lists this user's active guild games newest first and ignores origin memory", async () => {
     await withStore(async (store) => {
-      store.upsertGameData("guild-1", "game", "thread-new", {
+      store.upsertGameData("guild-1", GAME_COLLECTION, "thread-new", {
         isdeleted: false,
         name: "Should not leak custom title",
         players: [{ userId: "snowflake-user" }],
         history: [
           {
             timestamp: "2026-11-10T00:00:00.000Z",
-            action: { category: "game", type: "create" },
+            action: {
+              category: GameDB.ACTION_CATEGORIES.GAME,
+              type: GameDB.ACTION_TYPES.CREATE,
+            },
           },
         ],
       });
-      store.upsertGameData("guild-1", "game", "thread-old", {
+      store.upsertGameData("guild-1", GAME_COLLECTION, "thread-old", {
         isdeleted: false,
         name: "Old table",
         players: [{ userId: "snowflake-user" }],
         history: [
           {
             timestamp: "2026-01-01T00:00:00.000Z",
-            action: { category: "game", type: "create" },
+            action: {
+              category: GameDB.ACTION_CATEGORIES.GAME,
+              type: GameDB.ACTION_TYPES.CREATE,
+            },
           },
         ],
       });
-      store.upsertGameData("guild-1", "game", "thread-deleted", {
+      store.upsertGameData("guild-1", GAME_COLLECTION, "thread-deleted", {
         isdeleted: true,
         name: "Deleted",
         players: [{ userId: "snowflake-user" }],
         history: [
           {
             timestamp: "2026-12-01T00:00:00.000Z",
-            action: { category: "game", type: "create" },
+            action: {
+              category: GameDB.ACTION_CATEGORIES.GAME,
+              type: GameDB.ACTION_TYPES.CREATE,
+            },
           },
         ],
       });
-      store.upsertGameData("guild-1", "game", "other-player", {
+      store.upsertGameData("guild-1", GAME_COLLECTION, "other-player", {
         isdeleted: false,
         name: "Not mine",
         players: [{ userId: "someone-else" }],
         history: [
           {
             timestamp: "2026-11-20T00:00:00.000Z",
-            action: { category: "game", type: "create" },
+            action: {
+              category: GameDB.ACTION_CATEGORIES.GAME,
+              type: GameDB.ACTION_TYPES.CREATE,
+            },
           },
         ],
       });
-      store.upsertGameData("guild-2", "game", "other-guild", {
+      store.upsertGameData("guild-2", GAME_COLLECTION, "other-guild", {
         isdeleted: false,
         name: "Other server",
         players: [{ userId: "snowflake-user" }],
         history: [
           {
             timestamp: "2026-11-30T00:00:00.000Z",
-            action: { category: "game", type: "create" },
+            action: {
+              category: GameDB.ACTION_CATEGORIES.GAME,
+              type: GameDB.ACTION_TYPES.CREATE,
+            },
           },
         ],
       });
@@ -527,14 +544,17 @@ describe("GET /api/games", () => {
 
   test("one corrupt game_documents row does not 500 the guild list", async () => {
     await withStore(async (store) => {
-      store.upsertGameData("guild-1", "game", "thread-good", {
+      store.upsertGameData("guild-1", GAME_COLLECTION, "thread-good", {
         isdeleted: false,
         name: "Good table",
         players: [{ userId: "snowflake-user" }],
         history: [
           {
             timestamp: "2026-11-10T00:00:00.000Z",
-            action: { category: "game", type: "create" },
+            action: {
+              category: GameDB.ACTION_CATEGORIES.GAME,
+              type: GameDB.ACTION_TYPES.CREATE,
+            },
           },
         ],
       });
@@ -543,7 +563,7 @@ describe("GET /api/games", () => {
           `INSERT INTO game_documents (guild_id, collection, channel_id, data, updated_at)
            VALUES (?, ?, ?, ?, datetime('now'))`
         )
-        .run("guild-1", "game", "thread-bad", "{not json");
+        .run("guild-1", GAME_COLLECTION, "thread-bad", "{not json");
 
       const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-games-bad-"));
       fs.writeFileSync(

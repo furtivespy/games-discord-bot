@@ -13,7 +13,7 @@ import {
   tokenRequestUrl,
   urlMappingsForApiHost,
 } from "./handshake";
-import { isGameListFixture, isSnapshotFixture } from "./mockFixtures";
+import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
 import "./style.css";
 
@@ -68,7 +68,9 @@ function readConfig(): EmbeddedConfig {
 }
 
 function readFixture(): string {
-  return readSearchParams().get("fixture") || "populated";
+  const raw = readSearchParams().get("fixture");
+  if (raw == null || !String(raw).trim()) return "several-games";
+  return String(raw).trim();
 }
 
 function setGreeting(text: string) {
@@ -407,13 +409,11 @@ async function bootstrap() {
 
   const guildId = String(discordSdk.guildId || config.guildId || "").trim();
   const fixture = readFixture();
-  if (config.mock && isSnapshotFixture(fixture)) {
+  if (config.mock && isSnapshotFixture(fixture) && !isPickerFixture(fixture)) {
     await loadMockSnapshot(config, accessToken);
     return;
   }
-  if (!config.mock || isGameListFixture(fixture)) {
-    await loadGames(config, accessToken, guildId);
-  }
+  await loadGames(config, accessToken, guildId);
 }
 
 bootstrap().catch((error) => {

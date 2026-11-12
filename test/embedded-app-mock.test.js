@@ -150,7 +150,7 @@ describe("mock snapshot fixtures", () => {
 });
 
 describe("mock game list fixtures", () => {
-  test("several-games is newest first and snapshot fixtures are not aliased", () => {
+  test("several-games is newest first; default and populated alias that list", () => {
     const several = getMockGames({ fixture: "several-games" });
     expect(several.status).toBe(200);
     expect(several.body.games.map((game) => game.channelName)).toEqual([
@@ -160,14 +160,9 @@ describe("mock game list fixtures", () => {
     ]);
     expect(several.body.games[0]).toEqual(SEVERAL_GAMES_FIXTURE[0]);
     expect(JSON.stringify(several.body)).not.toMatch(/hand|playArea|gameBoard|isdeleted/);
-    expect(getMockGames({ fixture: "populated" })).toEqual({
-      status: 400,
-      body: { error: "unknown_fixture" },
-    });
-    expect(getMockGames({ fixture: "no-game" })).toEqual({
-      status: 400,
-      body: { error: "unknown_fixture" },
-    });
+    expect(getMockGames({})).toEqual(several);
+    expect(getMockGames({ fixture: "populated" })).toEqual(several);
+    expect(getMockGames({ fixture: "" })).toEqual(several);
   });
 
   test("one-game and no-games cover the other picker states", () => {
@@ -176,6 +171,14 @@ describe("mock game list fixtures", () => {
       body: { games: [...ONE_GAME_FIXTURE] },
     });
     expect(getMockGames({ fixture: "no-games" })).toEqual({
+      status: 200,
+      body: { games: [] },
+    });
+    expect(getMockGames({ fixture: "no-game" })).toEqual({
+      status: 200,
+      body: { games: [] },
+    });
+    expect(getMockGames({ fixture: "not-a-player" })).toEqual({
       status: 200,
       body: { games: [] },
     });
@@ -271,6 +274,20 @@ describe("mock embedded HTTP", () => {
       });
       expect(none.status).toBe(200);
       expect(await none.json()).toEqual({ games: [] });
+
+      const omitted = await fetch(`${url}/api/games`, {
+        headers: { Authorization: `Bearer ${MOCK_ACCESS_TOKEN}` },
+      });
+      expect(omitted.status).toBe(200);
+      expect((await omitted.json()).games.map((game) => game.channelName)).toEqual(
+        ["Friday Inis", "Thursday Root", "Monday Poker"]
+      );
+
+      const noGame = await fetch(`${url}/api/games?fixture=no-game`, {
+        headers: { Authorization: `Bearer ${MOCK_ACCESS_TOKEN}` },
+      });
+      expect(noGame.status).toBe(200);
+      expect(await noGame.json()).toEqual({ games: [] });
       expect(fetchCalls).toEqual([]);
     } finally {
       server.close();
