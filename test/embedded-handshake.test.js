@@ -13,6 +13,10 @@ const {
   urlMappingsForApiHost,
 } = require("../embedded-client/src/handshake.ts");
 const { nextOffset, translateCss } = require("../embedded-client/src/drag.ts");
+const {
+  asCardList,
+  createRequestSeq,
+} = require("../embedded-client/src/requestSeq.ts");
 const { MockDiscordSDK } = require("../embedded-client/src/mockSdk.ts");
 const {
   MOCK_OAUTH_CODE,
@@ -67,6 +71,7 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain('"several-games"');
     expect(main).toContain("loadSnapshot");
     expect(main).toContain("enableCardDrag");
+    expect(main).toContain("snapshotRequests");
     expect(main).toContain("Picker option value is the game document key");
     expect(main).not.toContain("consumeOrigin");
     expect(main).not.toContain("loadMockSnapshot");
@@ -149,5 +154,25 @@ describe("client-only card drag", () => {
       x: 20,
       y: 23,
     });
+  });
+});
+
+describe("snapshot request sequencing", () => {
+  test("a later pick invalidates the earlier snapshot apply", () => {
+    const seq = createRequestSeq();
+    const first = seq.next();
+    const second = seq.next();
+    expect(seq.isCurrent(first)).toBe(false);
+    expect(seq.isCurrent(second)).toBe(true);
+    seq.invalidate();
+    expect(seq.isCurrent(second)).toBe(false);
+  });
+
+  test("asCardList ignores non-arrays and non-object entries", () => {
+    expect(asCardList("xxxx")).toEqual([]);
+    expect(asCardList(null)).toEqual([]);
+    expect(asCardList([{ id: "hand-1", name: "Copper" }, "nope", null])).toEqual([
+      { id: "hand-1", name: "Copper" },
+    ]);
   });
 });

@@ -30,36 +30,50 @@ export function enableCardDrag(
     tile.style.transform = translateCss(existing.x, existing.y);
   }
 
+  let activePointer: number | null = null;
+
   tile.addEventListener("pointerdown", (event) => {
     if (event.button != null && event.button !== 0) return;
+    if (activePointer != null) return;
     event.preventDefault();
+    const pointerId = event.pointerId;
+    activePointer = pointerId;
     const origin = positions.get(cardId) || { x: 0, y: 0 };
     const start = { x: event.clientX, y: event.clientY };
     tile.classList.add("dragging");
     try {
-      tile.setPointerCapture(event.pointerId);
+      tile.setPointerCapture(pointerId);
     } catch {
-      // jsdom / older browsers
+      // jsdom / older browsers: document listeners still end the drag
     }
 
-    const move = (ev: PointerEvent) => {
-      const next = nextOffset(origin, start, { x: ev.clientX, y: ev.clientY });
+    const target: EventTarget = tile.ownerDocument ?? tile;
+    const move = (ev: Event) => {
+      const pointer = ev as PointerEvent;
+      if (pointer.pointerId !== pointerId) return;
+      const next = nextOffset(origin, start, {
+        x: pointer.clientX,
+        y: pointer.clientY,
+      });
       positions.set(cardId, next);
       tile.style.transform = translateCss(next.x, next.y);
     };
-    const up = (ev: PointerEvent) => {
+    const up = (ev: Event) => {
+      const pointer = ev as PointerEvent;
+      if (pointer.pointerId !== pointerId) return;
+      activePointer = null;
       try {
-        tile.releasePointerCapture(ev.pointerId);
+        tile.releasePointerCapture(pointerId);
       } catch {
-        // already released
+        // already released or never captured
       }
       tile.classList.remove("dragging");
-      tile.removeEventListener("pointermove", move);
-      tile.removeEventListener("pointerup", up);
-      tile.removeEventListener("pointercancel", up);
+      target.removeEventListener("pointermove", move);
+      target.removeEventListener("pointerup", up);
+      target.removeEventListener("pointercancel", up);
     };
-    tile.addEventListener("pointermove", move);
-    tile.addEventListener("pointerup", up);
-    tile.addEventListener("pointercancel", up);
+    target.addEventListener("pointermove", move);
+    target.addEventListener("pointerup", up);
+    target.addEventListener("pointercancel", up);
   });
 }

@@ -16,7 +16,10 @@ import {
 import { enableCardDrag, type CardOffset } from "./drag";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
+import { asCardList, createRequestSeq } from "./requestSeq";
 import "./style.css";
+
+const snapshotRequests = createRequestSeq();
 
 type EmbeddedConfig = {
   clientId: string;
@@ -161,6 +164,7 @@ function bindGameSelect(
     const channelId = selected && selected.value ? selected.value : "";
     showSelectedChannel(channelId ? selected.textContent : null);
     if (!channelId) {
+      snapshotRequests.invalidate();
       setTableVisible(false);
       setSnapshotStatus(null);
       return;
@@ -202,6 +206,7 @@ function showGamesEmpty() {
   setHidden("game-select", true);
   setHidden("games-empty", false);
   showSelectedChannel(null);
+  snapshotRequests.invalidate();
   setTableVisible(false);
   setSnapshotStatus(null);
 }
@@ -281,14 +286,17 @@ function renderCards(
   const container = document.getElementById(containerId);
   if (!container) return;
   container.replaceChildren();
-  for (const card of cards || []) {
+  for (const card of asCardList(cards)) {
     const tile = document.createElement("article");
     tile.className = "card-tile";
+    const idValue = card.id;
     const cardId =
-      typeof card.id === "string" && card.id.trim() ? card.id.trim() : "";
+      typeof idValue === "string" && idValue.trim() ? idValue.trim() : "";
     if (cardId) tile.dataset.cardId = cardId;
-    const name = typeof card.name === "string" && card.name.trim() ? card.name : "Card";
-    if (card.url) {
+    const nameValue = card.name;
+    const name =
+      typeof nameValue === "string" && nameValue.trim() ? nameValue.trim() : "Card";
+    if (typeof card.url === "string" && card.url) {
       const img = document.createElement("img");
       img.src = card.url;
       img.alt = name;
@@ -314,9 +322,6 @@ function snapshotErrorMessage(error: string | undefined, status: number): string
   if (error === "not_a_player" || status === 403) {
     return "You're not a player in this game.";
   }
-  if (error === "missing_channel" || error === "missing_guild") {
-    return "Could not load the game snapshot.";
-  }
   return "Could not load the game snapshot.";
 }
 
@@ -325,6 +330,7 @@ async function loadSnapshot(
   accessToken: string,
   ids: { channelId: string; guildId: string }
 ) {
+  const requestId = snapshotRequests.next();
   try {
     const response = await fetch(
       snapshotRequestUrl(config.apiHost, window.location.protocol, {
@@ -343,6 +349,8 @@ async function loadSnapshot(
       payload = {};
     }
 
+    if (!snapshotRequests.isCurrent(requestId)) return;
+
     if (!response.ok) {
       setTableVisible(false);
       setSnapshotStatus(snapshotErrorMessage(payload.error, response.status));
@@ -356,6 +364,7 @@ async function loadSnapshot(
     renderCards("board-cards", payload.gameBoard, positions);
     setTableVisible(true);
   } catch {
+    if (!snapshotRequests.isCurrent(requestId)) return;
     setTableVisible(false);
     setSnapshotStatus(snapshotErrorMessage(undefined, 0));
   }
