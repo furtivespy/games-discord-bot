@@ -35,17 +35,12 @@ class Lfg extends SlashCommand {
 
   async execute(interaction) {
     try {
-      const search = interaction.options.getString("game");
       if (interaction.isAutocomplete()) {
-        if (!search) {
-          await interaction.respond([]);
-          return;
-        }
-        await interaction.respond(
-          await BoardGameGeek.Search(search, this.client.config.BGGToken)
-        );
+        await BoardGameGeek.respondAutocomplete(interaction, this.client.config.BGGToken);
         return;
       }
+
+      const search = interaction.options.getString("game");
 
       if (!interaction.guildId) {
         await interaction.reply({

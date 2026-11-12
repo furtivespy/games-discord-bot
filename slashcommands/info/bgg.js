@@ -41,42 +41,37 @@ class BGG extends SlashCommand {
 
   async execute(interaction) {
     try {
-      const search = interaction.options.getString("game");
       if (interaction.isAutocomplete()) {
-        if (!search) {
-          await interaction.respond([]);
-          return;
-        }
-        await interaction.respond(
-          await BoardGameGeek.Search(search, this.client.config.BGGToken)
-        );
-      } else {
-        if (isNaN(search)){
-          await interaction.reply({
-            content: `Please choose from the available options`,
-            flags: MessageFlags.Ephemeral
-          })
-          return
-        }
+        await BoardGameGeek.respondAutocomplete(interaction, this.client.config.BGGToken);
+        return;
+      }
 
-        const ephemeral = BoardGameGeek.isEphemeral(interaction.options.getString("details"))
-        const [, bgg] = await Promise.all([
-          interaction.deferReply(
-            ephemeral ? { flags: MessageFlags.Ephemeral } : {}
-          ),
-          BoardGameGeek.CreateAndLoad(search, this.client, interaction)
-        ]);
-        await bgg.LoadEmbeds(interaction.options.getString("details") || BoardGameGeek.DetailsEnum.ALL)
+      const search = interaction.options.getString("game");
+      if (isNaN(search)){
+        await interaction.reply({
+          content: `Please choose from the available options`,
+          flags: MessageFlags.Ephemeral
+        })
+        return
+      }
 
-        await interaction.editReply({
-          embeds: bgg.embeds,
-          files: bgg.attachments,
+      const ephemeral = BoardGameGeek.isEphemeral(interaction.options.getString("details"))
+      const [, bgg] = await Promise.all([
+        interaction.deferReply(
+          ephemeral ? { flags: MessageFlags.Ephemeral } : {}
+        ),
+        BoardGameGeek.CreateAndLoad(search, this.client, interaction)
+      ]);
+      await bgg.LoadEmbeds(interaction.options.getString("details") || BoardGameGeek.DetailsEnum.ALL)
+
+      await interaction.editReply({
+        embeds: bgg.embeds,
+        files: bgg.attachments,
+      });
+      if (bgg.otherAttachments.length > 0){
+        await interaction.followUp({
+          files: bgg.otherAttachments,
         });
-        if (bgg.otherAttachments.length > 0){
-          await interaction.followUp({
-            files: bgg.otherAttachments,
-          });
-        }
       }
     } catch (e) {
       this.client.logger.log(e, "error");
