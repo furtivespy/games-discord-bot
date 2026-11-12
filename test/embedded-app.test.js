@@ -384,7 +384,9 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain("#game-picker[hidden]");
     expect(css).toContain("#table[hidden]");
     expect(css).toContain(".card-tile.dragging");
+    expect(css).toContain(".card-tile.moved");
     expect(css).toContain(".zone:has(.dragging)");
+    expect(css).toContain(".zone:has(.moved)");
     expect(css).toContain("z-index: 20");
   });
 });

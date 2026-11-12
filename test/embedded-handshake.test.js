@@ -13,7 +13,11 @@ const {
   tokenRequestUrl,
   urlMappingsForApiHost,
 } = require("../embedded-client/src/handshake.ts");
-const { nextOffset, translateCss } = require("../embedded-client/src/drag.ts");
+const {
+  isMovedOffset,
+  nextOffset,
+  translateCss,
+} = require("../embedded-client/src/drag.ts");
 const {
   asCardList,
   createRequestSeq,
@@ -168,6 +172,9 @@ describe("client-only card drag", () => {
       x: 20,
       y: 23,
     });
+    expect(isMovedOffset({ x: 141, y: 126 })).toBe(true);
+    expect(isMovedOffset({ x: 0, y: 0 })).toBe(false);
+    expect(isMovedOffset(undefined)).toBe(false);
   });
 });
 

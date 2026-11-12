@@ -118,7 +118,8 @@ main.has-picker #greeting {
   padding: 0.9rem 1rem 1rem;
 }
 
-.zone:has(.dragging) {
+.zone:has(.dragging),
+.zone:has(.moved) {
   z-index: 2;
 }
 
@@ -152,9 +153,13 @@ main.has-picker #greeting {
   user-select: none;
 }
 
+.card-tile.dragging,
+.card-tile.moved {
+  z-index: 20;
+}
+
 .card-tile.dragging {
   cursor: grabbing;
-  z-index: 20;
 }
 
 .card-tile img {

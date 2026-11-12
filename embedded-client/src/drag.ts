@@ -15,6 +15,14 @@ export function nextOffset(
   };
 }
 
+export function isMovedOffset(offset: CardOffset | undefined): boolean {
+  return Boolean(offset && (offset.x !== 0 || offset.y !== 0));
+}
+
+function syncMovedClass(tile: HTMLElement, offset: CardOffset | undefined) {
+  tile.classList.toggle("moved", isMovedOffset(offset));
+}
+
 /**
  * Client-only drag: store translate(x, y) per card id. No drop targets, no PATCH.
  * Positions live in the provided map and reset whenever the caller replaces it
@@ -29,6 +37,7 @@ export function enableCardDrag(
   if (existing) {
     tile.style.transform = translateCss(existing.x, existing.y);
   }
+  syncMovedClass(tile, existing);
 
   let activePointer: number | null = null;
 
@@ -57,6 +66,7 @@ export function enableCardDrag(
       });
       positions.set(cardId, next);
       tile.style.transform = translateCss(next.x, next.y);
+      syncMovedClass(tile, next);
     };
     const up = (ev: Event) => {
       const pointer = ev as PointerEvent;
@@ -68,6 +78,7 @@ export function enableCardDrag(
         // already released or never captured
       }
       tile.classList.remove("dragging");
+      syncMovedClass(tile, positions.get(cardId));
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", up);
       target.removeEventListener("pointercancel", up);
