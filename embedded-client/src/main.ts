@@ -13,6 +13,7 @@ import {
   tokenRequestUrl,
   urlMappingsForApiHost,
 } from "./handshake";
+import { enableCardDrag, type CardOffset } from "./drag";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
 import "./style.css";
@@ -148,6 +149,28 @@ function showSelectedChannel(name: string | null) {
   el.hidden = false;
 }
 
+function bindGameSelect(
+  config: EmbeddedConfig,
+  accessToken: string,
+  guildId: string
+) {
+  const select = document.getElementById("game-select") as HTMLSelectElement | null;
+  if (!select) return;
+  select.onchange = () => {
+    const selected = select.selectedOptions[0];
+    const channelId = selected && selected.value ? selected.value : "";
+    showSelectedChannel(channelId ? selected.textContent : null);
+    if (!channelId) {
+      setTableVisible(false);
+      setSnapshotStatus(null);
+      return;
+    }
+    // Picker option value is the game document key (thread id for thread games).
+    // discordSdk.channelId is the Activity launch channel and is not this key.
+    void loadSnapshot(config, accessToken, { channelId, guildId });
+  };
+}
+
 function renderGameOptions(games: PickerGame[]) {
   const select = document.getElementById("game-select") as HTMLSelectElement | null;
   if (!select) return;
@@ -169,10 +192,6 @@ function renderGameOptions(games: PickerGame[]) {
     select.append(option);
   }
   select.value = "";
-  select.onchange = () => {
-    const selected = select.selectedOptions[0];
-    showSelectedChannel(selected && selected.value ? selected.textContent : null);
-  };
 }
 
 function showGamesEmpty() {
@@ -183,14 +202,22 @@ function showGamesEmpty() {
   setHidden("game-select", true);
   setHidden("games-empty", false);
   showSelectedChannel(null);
+  setTableVisible(false);
+  setSnapshotStatus(null);
 }
 
-function showGamesList(games: PickerGame[]) {
+function showGamesList(
+  games: PickerGame[],
+  config: EmbeddedConfig,
+  accessToken: string,
+  guildId: string
+) {
   setGamesStatus(null);
   setHidden("games-empty", true);
   setHidden("game-select-label", false);
   setHidden("game-select", false);
   renderGameOptions(games);
+  bindGameSelect(config, accessToken, guildId);
   showSelectedChannel(null);
 }
 
@@ -240,25 +267,32 @@ async function loadGames(
       showGamesEmpty();
       return;
     }
-    showGamesList(payload.games);
+    showGamesList(payload.games, config, accessToken, guildId);
   } catch {
     setGamesStatus(GAMES_ERROR_MESSAGE);
   }
 }
 
-function renderCards(containerId: string, cards: SnapshotCard[] | undefined) {
+function renderCards(
+  containerId: string,
+  cards: SnapshotCard[] | undefined,
+  positions: Map<string, CardOffset>
+) {
   const container = document.getElementById(containerId);
   if (!container) return;
   container.replaceChildren();
   for (const card of cards || []) {
     const tile = document.createElement("article");
     tile.className = "card-tile";
-    if (card.id) tile.dataset.cardId = card.id;
+    const cardId =
+      typeof card.id === "string" && card.id.trim() ? card.id.trim() : "";
+    if (cardId) tile.dataset.cardId = cardId;
     const name = typeof card.name === "string" && card.name.trim() ? card.name : "Card";
     if (card.url) {
       const img = document.createElement("img");
       img.src = card.url;
       img.alt = name;
+      img.draggable = false;
       tile.append(img);
       const label = document.createElement("span");
       label.textContent = name;
@@ -266,27 +300,37 @@ function renderCards(containerId: string, cards: SnapshotCard[] | undefined) {
     } else {
       tile.textContent = name;
     }
+    if (cardId) {
+      enableCardDrag(tile, cardId, positions);
+    }
     container.append(tile);
   }
 }
 
 function snapshotErrorMessage(error: string | undefined, status: number): string {
   if (error === "no_game" || status === 404) {
-    return "No game in this channel.";
+    return "No game for that channel.";
   }
   if (error === "not_a_player" || status === 403) {
     return "You're not a player in this game.";
   }
+  if (error === "missing_channel" || error === "missing_guild") {
+    return "Could not load the game snapshot.";
+  }
   return "Could not load the game snapshot.";
 }
 
-async function loadMockSnapshot(config: EmbeddedConfig, accessToken: string) {
+async function loadSnapshot(
+  config: EmbeddedConfig,
+  accessToken: string,
+  ids: { channelId: string; guildId: string }
+) {
   try {
     const response = await fetch(
       snapshotRequestUrl(config.apiHost, window.location.protocol, {
-        fixture: readFixture(),
-        channelId: config.channelId,
-        guildId: config.guildId,
+        fixture: config.mock ? readFixture() : undefined,
+        channelId: ids.channelId,
+        guildId: ids.guildId,
       }),
       {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -306,9 +350,10 @@ async function loadMockSnapshot(config: EmbeddedConfig, accessToken: string) {
     }
 
     setSnapshotStatus(payload.gameName ? payload.gameName : null);
-    renderCards("hand-cards", payload.hand);
-    renderCards("play-area-cards", payload.playArea);
-    renderCards("board-cards", payload.gameBoard);
+    const positions = new Map<string, CardOffset>();
+    renderCards("hand-cards", payload.hand, positions);
+    renderCards("play-area-cards", payload.playArea, positions);
+    renderCards("board-cards", payload.gameBoard, positions);
     setTableVisible(true);
   } catch {
     setTableVisible(false);
@@ -407,10 +452,15 @@ async function bootstrap() {
   setGreeting(helloGreeting(displayName));
   setOrigin(originLine(payload.origin_channel_name));
 
+  // discordSdk.guildId is the SDK field (query param guild_id). The game
+  // channel/thread id comes from the picker, not discordSdk.channelId.
   const guildId = String(discordSdk.guildId || config.guildId || "").trim();
   const fixture = readFixture();
   if (config.mock && isSnapshotFixture(fixture) && !isPickerFixture(fixture)) {
-    await loadMockSnapshot(config, accessToken);
+    await loadSnapshot(config, accessToken, {
+      channelId: config.channelId,
+      guildId: guildId || config.guildId,
+    });
     return;
   }
   await loadGames(config, accessToken, guildId);

@@ -12,6 +12,7 @@ const {
   tokenRequestUrl,
   urlMappingsForApiHost,
 } = require("../embedded-client/src/handshake.ts");
+const { nextOffset, translateCss } = require("../embedded-client/src/drag.ts");
 const { MockDiscordSDK } = require("../embedded-client/src/mockSdk.ts");
 const {
   MOCK_OAUTH_CODE,
@@ -64,7 +65,11 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("isPickerFixture");
     expect(main).toContain("isSnapshotFixture");
     expect(main).toContain('"several-games"');
+    expect(main).toContain("loadSnapshot");
+    expect(main).toContain("enableCardDrag");
+    expect(main).toContain("Picker option value is the game document key");
     expect(main).not.toContain("consumeOrigin");
+    expect(main).not.toContain("loadMockSnapshot");
   });
 
   test("snapshot URL is same-origin inside Discord and carries fixture query params", () => {
@@ -133,6 +138,16 @@ describe("mock Discord SDK shim", () => {
       id: MOCK_USER.id,
       username: MOCK_USER.username,
       global_name: MOCK_USER.global_name,
+    });
+  });
+});
+
+describe("client-only card drag", () => {
+  test("stores translate(x, y) from pointer deltas", () => {
+    expect(translateCss(12, -4)).toBe("translate(12px, -4px)");
+    expect(nextOffset({ x: 10, y: 20 }, { x: 5, y: 5 }, { x: 15, y: 8 })).toEqual({
+      x: 20,
+      y: 23,
     });
   });
 });

@@ -38,7 +38,7 @@ Open:
 | Snapshot: no game in this channel | http://127.0.0.1:3000/?fixture=no-game |
 | Snapshot: not a player | http://127.0.0.1:3000/?fixture=not-a-player |
 
-The default mock URL and `?fixture=populated` are picker-only (no hand / play area / board). Snapshot URLs `no-game` and `not-a-player` do not load the picker. `/api/games?fixture=no-game` and `?fixture=not-a-player` return `{ games: [] }` so they stay consistent with `no-games`.
+The default mock URL and `?fixture=populated` are picker-only until you choose a game. Selecting a game loads that game’s hand, play area, and board (`GET /api/game/snapshot?channelId=<selected>&guildId=<sdk guild id>`). Snapshot URLs `no-game` and `not-a-player` skip the picker and show those errors. `/api/games?fixture=no-game` and `?fixture=not-a-player` return `{ games: [] }` so they stay consistent with `no-games`.
 
 With mock **disabled**, the existing outside-Discord fallback still tells you to open visual mode from Discord.
 
@@ -46,7 +46,7 @@ You can also set `EMBEDDED_APP_MOCK=1` on the full bot process (`bun DiscordBot.
 
 ## Point the shim at a locally seeded game
 
-Channel and guild IDs on the shim are configurable so they can match a game you seeded locally (for when a live snapshot endpoint exists):
+Channel and guild IDs on the shim are configurable so they can match a game you seeded locally. The snapshot still uses the **picker-selected** channel/thread id as the game document key (`getGameDataV2(guildId, 'game', channelId)`), not the Activity launch channel:
 
 ```bash
 EMBEDDED_APP_MOCK=1 \

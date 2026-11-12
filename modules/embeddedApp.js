@@ -18,6 +18,8 @@ const {
 const {
   channelNameFromDiscordClient,
   listActiveGamesForUser,
+  optionalDiscordAccessGuard,
+  snapshotGameForUser,
 } = require("./embeddedGames");
 
 const DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token";
@@ -271,6 +273,8 @@ function createEmbeddedApp({
   gameStore,
   discordClient,
   fetchChannelName,
+  getGameData,
+  botToken,
   env = process.env,
 } = {}) {
   const mockEnabled = allowEmbeddedAppMock(mock, env);
@@ -363,16 +367,72 @@ function createEmbeddedApp({
 
   app.get(["/api/games", "/.proxy/api/games"], sendActiveGames);
 
-  function sendGameSnapshot(req, res) {
-    if (!mockEnabled) {
-      res.status(404).json({ error: "not_found" });
+  async function sendGameSnapshot(req, res) {
+    const accessToken = bearerTokenFromHeader(req.get("authorization"));
+    const requestedChannelId = sanitizeHostChannelId(
+      firstQueryValue(req.query?.channelId)
+    );
+    const requestedGuildId = sanitizeHostChannelId(
+      firstQueryValue(req.query?.guildId)
+    );
+    if (mockEnabled) {
+      if (accessToken !== MOCK_ACCESS_TOKEN) {
+        res.status(401).json({ error: "unauthorized" });
+        return;
+      }
+      const result = getMockSnapshot({
+        fixture: firstQueryValue(req.query?.fixture),
+        channelId: requestedChannelId || resolvedMockChannelId,
+        guildId: requestedGuildId || resolvedMockGuildId,
+      });
+      res.status(result.status).json(result.body);
       return;
     }
-    const result = getMockSnapshot({
-      fixture: req.query?.fixture,
-      channelId:
-        sanitizeHostChannelId(req.query?.channelId) || resolvedMockChannelId,
-      guildId: sanitizeHostChannelId(req.query?.guildId) || resolvedMockGuildId,
+    if (!accessToken) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    let user = null;
+    try {
+      user = await fetchDiscordUser(accessToken, fetchImpl);
+    } catch (err) {
+      logger?.log?.(
+        `Discord users/@me lookup failed: ${err.message || err}`,
+        "warn"
+      );
+    }
+    if (!user?.id) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    if (!requestedGuildId) {
+      res.status(400).json({ error: "missing_guild" });
+      return;
+    }
+    if (!requestedChannelId) {
+      res.status(400).json({ error: "missing_channel" });
+      return;
+    }
+    const guard = await optionalDiscordAccessGuard({
+      fetchImpl,
+      botToken,
+      discordClient,
+      guildId: requestedGuildId,
+      channelId: requestedChannelId,
+      userId: user.id,
+    });
+    if (!guard.ok) {
+      res.status(guard.status).json(guard.body);
+      return;
+    }
+    const result = await snapshotGameForUser({
+      getGameData,
+      discordClient,
+      gameStore,
+      guildId: requestedGuildId,
+      channelId: requestedChannelId,
+      userId: user.id,
+      logger,
     });
     res.status(result.status).json(result.body);
   }
@@ -438,6 +498,8 @@ function startEmbeddedAppServer({
   gameStore,
   discordClient,
   fetchChannelName,
+  getGameData,
+  botToken,
 } = {}) {
   const resolved = resolveEmbeddedAppConfig(env, config);
   const mockRuntime = resolveMockRuntimeConfig(env);
@@ -460,6 +522,8 @@ function startEmbeddedAppServer({
     gameStore,
     discordClient,
     fetchChannelName,
+    getGameData,
+    botToken,
     env,
   });
   if (!listen) {

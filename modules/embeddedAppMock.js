@@ -144,7 +144,10 @@ function snapshotFromSeed(seed, { channelId, guildId } = {}) {
 function sanitizeFixtureName(value) {
   const name = String(value || "").trim().toLowerCase();
   if (!name) return "populated";
-  return MOCK_FIXTURE_NAMES.includes(name) ? name : null;
+  if (MOCK_FIXTURE_NAMES.includes(name)) return name;
+  if (name === "several-games" || name === "one-game") return "populated";
+  if (name === "no-games") return "no-game";
+  return null;
 }
 
 function sanitizeGamesFixtureName(value) {

@@ -129,6 +129,7 @@ main.has-picker #greeting {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  overflow: visible;
 }
 
 .card-tile {
@@ -139,6 +140,15 @@ main.has-picker #greeting {
   padding: 0.7rem 0.85rem;
   text-align: center;
   font-weight: 600;
+  position: relative;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.card-tile.dragging {
+  cursor: grabbing;
+  z-index: 5;
 }
 
 .card-tile img {
@@ -146,4 +156,5 @@ main.has-picker #greeting {
   max-width: 6.5rem;
   max-height: 9rem;
   margin: 0 auto 0.4rem;
+  pointer-events: none;
 }
