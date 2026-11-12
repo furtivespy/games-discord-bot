@@ -20,6 +20,10 @@ const VisualLaunch = require("../modules/visualLaunch");
 const GameStore = require("../db/gameStore");
 const GameDB = require("../db/anygame");
 const { GAME_COLLECTION } = require("../modules/embeddedGames");
+const {
+  cardImagePath,
+  deriveImageProxyKey,
+} = require("../modules/embeddedImageProxy");
 
 const SECRET_TOKEN = "SUPER_SECRET_ACCESS_TOKEN";
 
@@ -712,11 +716,14 @@ describe("GET /api/game/snapshot", () => {
           channelId: "thread-game",
           guildId: "guild-1",
           hand: [
-            { id: "hand-1", name: "Copper", url: null },
+            { id: "hand-1", name: "Copper" },
             {
               id: "hand-2",
               name: "Gold",
-              url: "https://gamebot.example.com/gold.png",
+              imageUrl: cardImagePath(
+                "https://gamebot.example.com/gold.png",
+                deriveImageProxyKey("server-secret")
+              ),
             },
           ],
           playArea: [{ id: "play-1", name: "Village" }],
@@ -724,6 +731,7 @@ describe("GET /api/game/snapshot", () => {
         });
         expect(JSON.stringify(body)).not.toContain("Other Player Secret");
         expect(JSON.stringify(body)).not.toContain("Draft Only");
+        expect(JSON.stringify(body)).not.toContain('"url"');
         expect(loads).toEqual([
           {
             guildId: "guild-1",

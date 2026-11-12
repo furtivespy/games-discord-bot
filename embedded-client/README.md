@@ -42,6 +42,8 @@ Open:
 
 The default mock URL and `?fixture=populated` are picker-only until you choose a game. Selecting a game loads that game’s hand, play area, and board (`GET /api/game/snapshot?channelId=<selected>&guildId=<sdk guild id>`). Snapshot URLs `no-game` and `not-a-player` skip the picker and show those errors. `/api/games?fixture=no-game` and `?fixture=not-a-player` return `{ games: [] }` so they stay consistent with `no-games`.
 
+Card art is never loaded straight from the card's URL: Discord's Activity CSP blocks other hosts. The snapshot replaces each card `url` with a signed `imageUrl` (`/api/card-image?u=…&s=…`) and the bot fetches the image server-side. Only URLs the bot signed are served (the key is derived from `CLIENT_SECRET`), private/internal addresses are refused on every redirect hop, and only `image/*` responses up to 10 MB are returned.
+
 With mock **disabled**, the existing outside-Discord fallback still tells you to open visual mode from Discord.
 
 You can also set `EMBEDDED_APP_MOCK=1` on the full bot process (`bun DiscordBot.js`). The standalone script is enough for screenshots and does not need a Discord token.

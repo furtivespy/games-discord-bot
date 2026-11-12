@@ -49,6 +49,19 @@ export function snapshotRequestUrl(
   );
 }
 
+export const CARD_IMAGE_PATH = "/api/card-image";
+
+/** Only bot-signed proxy paths; raw external URLs are blocked by Discord's CSP. */
+export function cardImageRequestUrl(
+  apiHost: string,
+  protocol: string,
+  imageUrl: unknown
+): string | null {
+  if (typeof imageUrl !== "string") return null;
+  if (!imageUrl.startsWith(`${CARD_IMAGE_PATH}?`)) return null;
+  return apiUrl(apiHost, protocol, imageUrl);
+}
+
 export function gamesRequestUrl(
   apiHost: string,
   protocol: string,

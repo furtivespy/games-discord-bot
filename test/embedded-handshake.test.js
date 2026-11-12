@@ -1,5 +1,6 @@
 const { describe, expect, test } = require("bun:test");
 const {
+  cardImageRequestUrl,
   firstNonEmptyName,
   GAMES_EMPTY_MESSAGE,
   GAMES_SELECT_PLACEHOLDER,
@@ -111,6 +112,20 @@ describe("embedded client handshake URLs", () => {
     ).toBe(
       "https://gamebot.example.com/api/game/snapshot?fixture=populated&channelId=ch-1&guildId=g-1"
     );
+  });
+
+  test("card images load only from the bot's signed proxy path", () => {
+    const signed = "/api/card-image?u=https%3A%2F%2Ffurtivespy.com%2Fa.png&s=sig";
+    expect(cardImageRequestUrl("", "https:", signed)).toBe(signed);
+    expect(cardImageRequestUrl("123.discordsays.com", "https:", signed)).toBe(signed);
+    expect(cardImageRequestUrl("gamebot.example.com", "https:", signed)).toBe(
+      `https://gamebot.example.com${signed}`
+    );
+    expect(
+      cardImageRequestUrl("", "https:", "https://furtivespy.com/a.png")
+    ).toBeNull();
+    expect(cardImageRequestUrl("", "https:", "/api/card-imagex?u=1")).toBeNull();
+    expect(cardImageRequestUrl("", "https:", null)).toBeNull();
   });
 
   test("games URL is same-origin inside Discord and carries guild plus mock fixture", () => {

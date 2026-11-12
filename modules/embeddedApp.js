@@ -21,6 +21,12 @@ const {
   optionalDiscordAccessGuard,
   snapshotGameForUser,
 } = require("./embeddedGames");
+const {
+  CARD_IMAGE_PATH,
+  createCardImageHandler,
+  deriveImageProxyKey,
+  proxySnapshotImages,
+} = require("./embeddedImageProxy");
 
 const DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token";
 const DISCORD_ME_URL = "https://discord.com/api/v10/users/@me";
@@ -276,8 +282,12 @@ function createEmbeddedApp({
   getGameData,
   botToken,
   env = process.env,
+  imageProxyKey,
+  imageFetchImpl = fetch,
+  imageLookup,
 } = {}) {
   const mockEnabled = allowEmbeddedAppMock(mock, env);
+  const cardImageKey = imageProxyKey || deriveImageProxyKey(clientSecret);
   const resolvedMockChannelId =
     sanitizeHostChannelId(mockChannelId) || DEFAULT_MOCK_CHANNEL_ID;
   const resolvedMockGuildId =
@@ -367,6 +377,14 @@ function createEmbeddedApp({
 
   app.get(["/api/games", "/.proxy/api/games"], sendActiveGames);
 
+  function sendSnapshotResult(res, result) {
+    const body =
+      result.status === 200
+        ? proxySnapshotImages(result.body, cardImageKey)
+        : result.body;
+    res.status(result.status).json(body);
+  }
+
   async function sendGameSnapshot(req, res) {
     const accessToken = bearerTokenFromHeader(req.get("authorization"));
     const requestedChannelId = sanitizeHostChannelId(
@@ -385,7 +403,7 @@ function createEmbeddedApp({
         channelId: requestedChannelId || resolvedMockChannelId,
         guildId: requestedGuildId || resolvedMockGuildId,
       });
-      res.status(result.status).json(result.body);
+      sendSnapshotResult(res, result);
       return;
     }
     if (!accessToken) {
@@ -434,10 +452,20 @@ function createEmbeddedApp({
       userId: user.id,
       logger,
     });
-    res.status(result.status).json(result.body);
+    sendSnapshotResult(res, result);
   }
 
   app.get(["/api/game/snapshot", "/.proxy/api/game/snapshot"], sendGameSnapshot);
+
+  app.get(
+    [CARD_IMAGE_PATH, `/.proxy${CARD_IMAGE_PATH}`],
+    createCardImageHandler({
+      key: cardImageKey,
+      fetchImpl: imageFetchImpl,
+      lookup: imageLookup,
+      logger,
+    })
+  );
 
   const resolvedStaticDir = staticDir
     ? path.resolve(staticDir)

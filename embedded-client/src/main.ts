@@ -1,5 +1,10 @@
-import { DiscordSDK, patchUrlMappings } from "@discord/embedded-app-sdk";
 import {
+  attemptRemap,
+  DiscordSDK,
+  patchUrlMappings,
+} from "@discord/embedded-app-sdk";
+import {
+  cardImageRequestUrl,
   firstNonEmptyName,
   GAMES_EMPTY_MESSAGE,
   GAMES_ERROR_MESSAGE,
@@ -21,6 +26,8 @@ import { asCardList, createSnapshotLoader } from "./requestSeq";
 import "./style.css";
 
 const snapshotLoader = createSnapshotLoader();
+// patchUrlMappings only rewrites fetch/XHR/WebSocket, not <img src>.
+let activeUrlMappings: ReturnType<typeof urlMappingsForApiHost> = [];
 
 type EmbeddedConfig = {
   clientId: string;
@@ -33,7 +40,7 @@ type EmbeddedConfig = {
 type SnapshotCard = {
   id?: string;
   name?: string;
-  url?: string | null;
+  imageUrl?: string;
 };
 
 type GameSnapshot = {
@@ -291,7 +298,17 @@ async function loadGames(
   }
 }
 
+function cardImageSrc(config: EmbeddedConfig, imageUrl: unknown): string | null {
+  const src = cardImageRequestUrl(config.apiHost, window.location.protocol, imageUrl);
+  if (!src || !activeUrlMappings.length) return src;
+  return attemptRemap({
+    url: new URL(src, window.location.href),
+    mappings: activeUrlMappings,
+  }).toString();
+}
+
 function renderCards(
+  config: EmbeddedConfig,
   containerId: string,
   cards: SnapshotCard[] | undefined,
   positions: Map<string, CardOffset>
@@ -309,9 +326,10 @@ function renderCards(
     const nameValue = card.name;
     const name =
       typeof nameValue === "string" && nameValue.trim() ? nameValue.trim() : "Card";
-    if (typeof card.url === "string" && card.url) {
+    const imageSrc = cardImageSrc(config, card.imageUrl);
+    if (imageSrc) {
       const img = document.createElement("img");
-      img.src = card.url;
+      img.src = imageSrc;
       img.alt = name;
       img.draggable = false;
       tile.append(img);
@@ -403,9 +421,9 @@ async function loadSnapshot(
 
   setSnapshotStatus(payload.gameName ? payload.gameName : null);
   const positions = new Map<string, CardOffset>();
-  renderCards("hand-cards", payload.hand, positions);
-  renderCards("play-area-cards", payload.playArea, positions);
-  renderCards("board-cards", payload.gameBoard, positions);
+  renderCards(config, "hand-cards", payload.hand, positions);
+  renderCards(config, "play-area-cards", payload.playArea, positions);
+  renderCards(config, "board-cards", payload.gameBoard, positions);
   setTableVisible(true);
 }
 
@@ -454,6 +472,7 @@ async function bootstrap() {
     const mappings = urlMappingsForApiHost(config.apiHost);
     if (mappings.length) {
       patchUrlMappings(mappings);
+      activeUrlMappings = mappings;
     }
   }
   const response = await fetch(
