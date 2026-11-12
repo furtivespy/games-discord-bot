@@ -17,6 +17,8 @@ const { nextOffset, translateCss } = require("../embedded-client/src/drag.ts");
 const {
   asCardList,
   createRequestSeq,
+  createSnapshotLoader,
+  isAbortError,
   shouldApplySnapshot,
 } = require("../embedded-client/src/requestSeq.ts");
 const { MockDiscordSDK } = require("../embedded-client/src/mockSdk.ts");
@@ -73,11 +75,18 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain('"several-games"');
     expect(main).toContain("loadSnapshot");
     expect(main).toContain("enableCardDrag");
-    expect(main).toContain("snapshotRequests");
-    expect(main).toContain("shouldApplySnapshot");
-    expect(main).toContain("AbortController");
+    expect(main).toContain("snapshotLoader");
+    expect(main).toContain("createSnapshotLoader");
+    expect(main).toContain("liveSelectedChannelId");
     expect(main).toContain("SNAPSHOT_LOADING_MESSAGE");
     expect(main).toContain("Picker option value is the game document key");
+    const requestSeq = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "embedded-client", "src", "requestSeq.ts"),
+      "utf8"
+    );
+    expect(requestSeq).toContain("AbortController");
+    expect(requestSeq).toContain("shouldApplySnapshot");
+    expect(requestSeq).toContain("abortInFlight");
     expect(main).not.toContain("consumeOrigin");
     expect(main).not.toContain("loadMockSnapshot");
   });
@@ -211,5 +220,121 @@ describe("snapshot request sequencing", () => {
       })
     ).toBe(false);
     expect(SNAPSHOT_LOADING_MESSAGE).toContain("Loading");
+  });
+});
+
+function abortableDeferred() {
+  let resolveFn;
+  let aborted = false;
+  return {
+    get aborted() {
+      return aborted;
+    },
+    start(signal) {
+      return new Promise((resolve, reject) => {
+        const abort = () => {
+          aborted = true;
+          const err = new Error("The operation was aborted.");
+          err.name = "AbortError";
+          reject(err);
+        };
+        if (signal.aborted) {
+          abort();
+          return;
+        }
+        signal.addEventListener("abort", abort, { once: true });
+        resolveFn = (value) => resolve(value);
+      });
+    },
+    resolve(value) {
+      resolveFn?.(value);
+    },
+  };
+}
+
+function snapshotBody(channelId, name) {
+  return {
+    ok: true,
+    status: 200,
+    payload: {
+      channelId,
+      gameName: name,
+      hand: [{ id: `${channelId}-hand`, name }],
+    },
+  };
+}
+
+describe("snapshot load races", () => {
+  test("isAbortError only matches AbortError", () => {
+    const abort = new Error("nope");
+    abort.name = "AbortError";
+    expect(isAbortError(abort)).toBe(true);
+    expect(isAbortError(new Error("boom"))).toBe(false);
+    expect(isAbortError(null)).toBe(false);
+  });
+
+  test("out-of-order resolve (A slow, B fast) keeps B and drops A", async () => {
+    const loader = createSnapshotLoader();
+    const a = abortableDeferred();
+    const b = abortableDeferred();
+    let selected = "newest-thread";
+
+    const pA = loader.load(
+      "newest-thread",
+      (signal) => a.start(signal),
+      () => selected
+    );
+    selected = "mid-table";
+    const pB = loader.load(
+      "mid-table",
+      (signal) => b.start(signal),
+      () => selected
+    );
+
+    expect(a.aborted).toBe(true);
+    expect(b.aborted).toBe(false);
+
+    b.resolve(snapshotBody("mid-table", "Thursday Root"));
+    expect(await pB).toEqual({
+      status: "applied",
+      result: snapshotBody("mid-table", "Thursday Root"),
+    });
+
+    a.resolve(snapshotBody("newest-thread", "Friday Inis"));
+    expect(await pA).toEqual({ status: "aborted" });
+  });
+
+  test("switching back to none while a request is pending aborts and does not error", async () => {
+    const loader = createSnapshotLoader();
+    const pending = abortableDeferred();
+    let selected = "newest-thread";
+
+    const pLoad = loader.load(
+      "newest-thread",
+      (signal) => pending.start(signal),
+      () => selected
+    );
+    selected = "";
+    loader.clear();
+    expect(pending.aborted).toBe(true);
+    expect(
+      await loader.load("", async () => snapshotBody("newest-thread", "Friday Inis"))
+    ).toEqual({ status: "cleared" });
+
+    pending.resolve(snapshotBody("newest-thread", "Friday Inis"));
+    expect(await pLoad).toEqual({ status: "aborted" });
+  });
+
+  test("a late response after Select a game is stale, not an error", async () => {
+    const loader = createSnapshotLoader();
+    let resolveFetch;
+    const pLoad = loader.load("newest-thread", () =>
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      })
+    );
+    loader.clear();
+    resolveFetch(snapshotBody("newest-thread", "Friday Inis"));
+    expect(await pLoad).toEqual({ status: "stale" });
   });
 });

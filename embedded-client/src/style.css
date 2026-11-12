@@ -154,7 +154,7 @@ main.has-picker #greeting {
 
 .card-tile.dragging {
   cursor: grabbing;
-  z-index: 5;
+  z-index: 20;
 }
 
 .card-tile img {

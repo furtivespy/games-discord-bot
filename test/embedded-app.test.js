@@ -385,6 +385,7 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain("#table[hidden]");
     expect(css).toContain(".card-tile.dragging");
     expect(css).toContain(".zone:has(.dragging)");
+    expect(css).toContain("z-index: 20");
   });
 });
 

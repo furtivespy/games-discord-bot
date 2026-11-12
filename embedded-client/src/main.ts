@@ -17,15 +17,10 @@ import {
 import { enableCardDrag, type CardOffset } from "./drag";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
-import {
-  asCardList,
-  createRequestSeq,
-  shouldApplySnapshot,
-} from "./requestSeq";
+import { asCardList, createSnapshotLoader } from "./requestSeq";
 import "./style.css";
 
-const snapshotRequests = createRequestSeq();
-let snapshotAbort: AbortController | null = null;
+const snapshotLoader = createSnapshotLoader();
 
 type EmbeddedConfig = {
   clientId: string;
@@ -152,9 +147,7 @@ function liveSelectedChannelId(requestedChannelId: string): string {
 }
 
 function cancelSnapshotLoad() {
-  snapshotAbort?.abort();
-  snapshotAbort = null;
-  snapshotRequests.invalidate();
+  snapshotLoader.clear();
 }
 
 function showSelectedChannel(name: string | null) {
@@ -350,61 +343,70 @@ async function loadSnapshot(
   accessToken: string,
   ids: { channelId: string; guildId: string }
 ) {
-  snapshotAbort?.abort();
-  const controller = new AbortController();
-  snapshotAbort = controller;
-  const requestId = snapshotRequests.next();
-  try {
-    const response = await fetch(
-      snapshotRequestUrl(config.apiHost, window.location.protocol, {
-        fixture: config.mock ? readFixture() : undefined,
-        channelId: ids.channelId,
-        guildId: ids.guildId,
-      }),
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        signal: controller.signal,
+  const outcome = await snapshotLoader.load(
+    ids.channelId,
+    async (signal) => {
+      const response = await fetch(
+        snapshotRequestUrl(config.apiHost, window.location.protocol, {
+          fixture: config.mock ? readFixture() : undefined,
+          channelId: ids.channelId,
+          guildId: ids.guildId,
+        }),
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal,
+        }
+      );
+      let payload: GameSnapshot = {};
+      try {
+        payload = (await response.json()) as GameSnapshot;
+      } catch {
+        payload = {};
       }
-    );
-    let payload: GameSnapshot = {};
-    try {
-      payload = (await response.json()) as GameSnapshot;
-    } catch {
-      payload = {};
-    }
+      return { ok: response.ok, status: response.status, payload };
+    },
+    () => liveSelectedChannelId(ids.channelId)
+  );
 
-    const selectedChannelId = liveSelectedChannelId(ids.channelId);
-    if (
-      !shouldApplySnapshot({
-        isCurrent: snapshotRequests.isCurrent(requestId),
-        selectedChannelId,
-        requestedChannelId: ids.channelId,
-        payloadChannelId: payload.channelId,
-      })
-    ) {
-      return;
-    }
+  // Aborted or superseded requests must not render and must not show errors.
+  if (
+    outcome.status === "aborted" ||
+    outcome.status === "stale" ||
+    outcome.status === "cleared"
+  ) {
+    return;
+  }
 
-    if (!response.ok) {
-      setTableVisible(false);
-      setSnapshotStatus(snapshotErrorMessage(payload.error, response.status));
-      return;
-    }
-
-    setSnapshotStatus(payload.gameName ? payload.gameName : null);
-    const positions = new Map<string, CardOffset>();
-    renderCards("hand-cards", payload.hand, positions);
-    renderCards("play-area-cards", payload.playArea, positions);
-    renderCards("board-cards", payload.gameBoard, positions);
-    setTableVisible(true);
-  } catch (err) {
-    if (!snapshotRequests.isCurrent(requestId)) return;
-    if (err && typeof err === "object" && "name" in err && err.name === "AbortError") {
-      return;
-    }
+  if (outcome.status === "failed") {
     setTableVisible(false);
     setSnapshotStatus(snapshotErrorMessage(undefined, 0));
+    return;
   }
+
+  const payload = outcome.result.payload as GameSnapshot;
+  if (liveSelectedChannelId(ids.channelId) !== ids.channelId) {
+    return;
+  }
+  if (
+    typeof payload.channelId === "string" &&
+    payload.channelId.trim() &&
+    payload.channelId !== ids.channelId
+  ) {
+    return;
+  }
+
+  if (outcome.status === "error") {
+    setTableVisible(false);
+    setSnapshotStatus(snapshotErrorMessage(payload.error, outcome.result.status));
+    return;
+  }
+
+  setSnapshotStatus(payload.gameName ? payload.gameName : null);
+  const positions = new Map<string, CardOffset>();
+  renderCards("hand-cards", payload.hand, positions);
+  renderCards("play-area-cards", payload.playArea, positions);
+  renderCards("board-cards", payload.gameBoard, positions);
+  setTableVisible(true);
 }
 
 function createSdk(config: EmbeddedConfig) {
