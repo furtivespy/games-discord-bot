@@ -25,9 +25,12 @@ const { config, server } = startEmbeddedAppServer({
 });
 
 const port = config.port;
+console.log(`Mock visual mode: http://127.0.0.1:${port}/`);
 console.log(
-  `Mock visual mode: http://127.0.0.1:${port}/?fixture=populated`
+  `  several-games:  http://127.0.0.1:${port}/?fixture=several-games`
 );
+console.log(`  one-game:       http://127.0.0.1:${port}/?fixture=one-game`);
+console.log(`  no-games:       http://127.0.0.1:${port}/?fixture=no-games`);
 console.log(`  no-game:        http://127.0.0.1:${port}/?fixture=no-game`);
 console.log(
   `  not-a-player:   http://127.0.0.1:${port}/?fixture=not-a-player`

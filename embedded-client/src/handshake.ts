@@ -49,6 +49,29 @@ export function snapshotRequestUrl(
   );
 }
 
+export function gamesRequestUrl(
+  apiHost: string,
+  protocol: string,
+  query: {
+    fixture?: string | null;
+    guildId?: string | null;
+  } = {}
+): string {
+  const params = new URLSearchParams();
+  const fixture = String(query.fixture || "").trim();
+  const guildId = String(query.guildId || "").trim();
+  if (fixture) params.set("fixture", fixture);
+  if (guildId) params.set("guildId", guildId);
+  const qs = params.toString();
+  return apiUrl(apiHost, protocol, `/api/games${qs ? `?${qs}` : ""}`);
+}
+
+export const GAMES_EMPTY_MESSAGE =
+  "You're not in any active games on this server.";
+export const GAMES_ERROR_MESSAGE = "Could not load your games.";
+export const GAMES_LOADING_MESSAGE = "Loading your games…";
+export const GAMES_SELECT_PLACEHOLDER = "Select a game";
+
 export function firstNonEmptyName(...values: unknown[]): string | null {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) return value.trim();

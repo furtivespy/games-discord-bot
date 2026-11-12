@@ -12,6 +12,15 @@
     <main>
       <p id="greeting">Connecting…</p>
       <p id="origin" hidden></p>
+      <section id="game-picker" hidden>
+        <p id="games-status" hidden></p>
+        <label id="game-select-label" for="game-select" hidden>Your games</label>
+        <select id="game-select" hidden>
+          <option value="">Select a game</option>
+        </select>
+        <p id="selected-channel" hidden></p>
+        <p id="games-empty" hidden>You're not in any active games on this server.</p>
+      </section>
       <p id="snapshot-status" hidden></p>
       <div id="table" hidden>
         <section class="zone" data-zone="hand">

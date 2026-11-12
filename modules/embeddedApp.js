@@ -6,13 +6,19 @@ const {
   DEFAULT_MOCK_CHANNEL_NAME,
   DEFAULT_MOCK_CLIENT_ID,
   DEFAULT_MOCK_GUILD_ID,
+  MOCK_ACCESS_TOKEN,
   allowEmbeddedAppMock,
+  getMockGames,
   getMockSnapshot,
   handleMockTokenExchange,
   isEmbeddedAppMockEnabled,
   isEmbeddedAppMockRequested,
   resolveMockRuntimeConfig,
 } = require("./embeddedAppMock");
+const {
+  channelNameFromDiscordClient,
+  listActiveGamesForUser,
+} = require("./embeddedGames");
 
 const DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token";
 const DISCORD_ME_URL = "https://discord.com/api/v10/users/@me";
@@ -93,6 +99,17 @@ function isNonEmptyString(value) {
 function sanitizeHostChannelId(value) {
   const s = String(value || "").trim();
   return /^[A-Za-z0-9_-]{1,32}$/.test(s) ? s : "";
+}
+
+function firstQueryValue(value) {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
+function bearerTokenFromHeader(value) {
+  const s = String(value || "").trim();
+  const match = /^Bearer\s+(\S+)/i.exec(s);
+  return match ? match[1] : "";
 }
 
 async function exchangeCodeForAccessToken({
@@ -251,6 +268,9 @@ function createEmbeddedApp({
   mockChannelId,
   mockGuildId,
   mockChannelName,
+  gameStore,
+  discordClient,
+  fetchChannelName,
   env = process.env,
 } = {}) {
   const mockEnabled = allowEmbeddedAppMock(mock, env);
@@ -290,6 +310,58 @@ function createEmbeddedApp({
   }
 
   app.post(["/api/token", "/.proxy/api/token"], exchangeToken);
+
+  const resolveChannelName =
+    typeof fetchChannelName === "function"
+      ? fetchChannelName
+      : (channelId) => channelNameFromDiscordClient(discordClient, channelId);
+
+  async function sendActiveGames(req, res) {
+    const accessToken = bearerTokenFromHeader(req.get("authorization"));
+    if (mockEnabled) {
+      if (accessToken !== MOCK_ACCESS_TOKEN) {
+        res.status(401).json({ error: "unauthorized" });
+        return;
+      }
+      const result = getMockGames({
+        fixture: firstQueryValue(req.query?.fixture),
+      });
+      res.status(result.status).json(result.body);
+      return;
+    }
+    if (!accessToken) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    let user = null;
+    try {
+      user = await fetchDiscordUser(accessToken, fetchImpl);
+    } catch (err) {
+      logger?.log?.(
+        `Discord users/@me lookup failed: ${err.message || err}`,
+        "warn"
+      );
+    }
+    if (!user?.id) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    const guildId = sanitizeHostChannelId(firstQueryValue(req.query?.guildId));
+    if (!guildId) {
+      res.status(400).json({ error: "missing_guild" });
+      return;
+    }
+    const result = await listActiveGamesForUser({
+      gameStore,
+      guildId,
+      userId: user.id,
+      fetchChannelName: resolveChannelName,
+      logger,
+    });
+    res.status(result.status).json(result.body);
+  }
+
+  app.get(["/api/games", "/.proxy/api/games"], sendActiveGames);
 
   function sendGameSnapshot(req, res) {
     if (!mockEnabled) {
@@ -363,6 +435,9 @@ function startEmbeddedAppServer({
   env = process.env,
   listen = true,
   consumeOrigin,
+  gameStore,
+  discordClient,
+  fetchChannelName,
 } = {}) {
   const resolved = resolveEmbeddedAppConfig(env, config);
   const mockRuntime = resolveMockRuntimeConfig(env);
@@ -382,6 +457,9 @@ function startEmbeddedAppServer({
     mockChannelId: mockRuntime.channelId,
     mockGuildId: mockRuntime.guildId,
     mockChannelName: mockRuntime.channelName,
+    gameStore,
+    discordClient,
+    fetchChannelName,
     env,
   });
   if (!listen) {
@@ -413,6 +491,7 @@ module.exports = {
   DEFAULT_PORT,
   DISCORD_ME_URL,
   DISCORD_TOKEN_URL,
+  bearerTokenFromHeader,
   createEmbeddedApp,
   displayNameFromDiscordUser,
   handleTokenExchange,

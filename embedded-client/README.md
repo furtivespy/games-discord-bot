@@ -32,9 +32,13 @@ Open:
 
 | State | URL |
 | -- | -- |
-| Populated layout (hello + hand / play area / board) | http://127.0.0.1:3000/?fixture=populated |
-| No game | http://127.0.0.1:3000/?fixture=no-game |
-| Not a player | http://127.0.0.1:3000/?fixture=not-a-player |
+| Several games (newest first; default) | http://127.0.0.1:3000/ or `?fixture=several-games` or `?fixture=populated` |
+| Single game | http://127.0.0.1:3000/?fixture=one-game |
+| No games (empty picker) | http://127.0.0.1:3000/?fixture=no-games |
+| Snapshot: no game in this channel | http://127.0.0.1:3000/?fixture=no-game |
+| Snapshot: not a player | http://127.0.0.1:3000/?fixture=not-a-player |
+
+The default mock URL and `?fixture=populated` are picker-only (no hand / play area / board). Snapshot URLs `no-game` and `not-a-player` do not load the picker. `/api/games?fixture=no-game` and `?fixture=not-a-player` return `{ games: [] }` so they stay consistent with `no-games`.
 
 With mock **disabled**, the existing outside-Discord fallback still tells you to open visual mode from Discord.
 

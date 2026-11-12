@@ -15,8 +15,23 @@ export const SNAPSHOT_FIXTURES = [
   "not-a-player",
 ] as const;
 
+export const GAME_LIST_FIXTURES = [
+  "several-games",
+  "one-game",
+  "no-games",
+] as const;
+
 export type SnapshotFixture = (typeof SNAPSHOT_FIXTURES)[number];
+export type GameListFixture = (typeof GAME_LIST_FIXTURES)[number];
 
 export function isSnapshotFixture(value: string): value is SnapshotFixture {
   return (SNAPSHOT_FIXTURES as readonly string[]).includes(value);
+}
+
+export function isGameListFixture(value: string): value is GameListFixture {
+  return (GAME_LIST_FIXTURES as readonly string[]).includes(value);
+}
+
+export function isPickerFixture(value: string): boolean {
+  return isGameListFixture(value) || value === "populated";
 }
