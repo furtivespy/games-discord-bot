@@ -7,6 +7,8 @@
   "scripts": {
     "test": "bun test",
     "start": "bun DiscordBot.js",
+    "build:client": "cd embedded-client && bun install && bun run build",
+    "build-start": "bun run build:client && bun run start",
     "embedded:mock": "bun scripts/embedded-app-mock.js",
     "migrate:enmap": "bun scripts/migrate-enmap-to-bun-sqlite.js",
     "migrate:game-documents": "bun scripts/migrate-to-game-documents.js"

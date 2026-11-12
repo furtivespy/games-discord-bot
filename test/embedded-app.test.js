@@ -20,6 +20,10 @@ const VisualLaunch = require("../modules/visualLaunch");
 const GameStore = require("../db/gameStore");
 const GameDB = require("../db/anygame");
 const { GAME_COLLECTION } = require("../modules/embeddedGames");
+const {
+  cardImagePath,
+  deriveImageProxyKey,
+} = require("../modules/embeddedImageProxy");
 
 const SECRET_TOKEN = "SUPER_SECRET_ACCESS_TOKEN";
 
@@ -375,12 +379,19 @@ describe("embedded HTTP origin", () => {
     expect(html).toContain("You're not in any active games on this server.");
     expect(html).toContain('id="table"');
     expect(html).toContain("Hand");
+    expect(html).toContain("My play area");
+    expect(html).toContain("Game board");
     const css = fs.readFileSync(
       path.join(__dirname, "..", "embedded-client", "src", "style.css"),
       "utf8"
     );
     expect(css).toContain("#game-picker[hidden]");
     expect(css).toContain("#table[hidden]");
+    expect(css).toContain(".card-tile.dragging");
+    expect(css).toContain(".card-tile.moved");
+    expect(css).toContain(".zone:has(.dragging)");
+    expect(css).toContain(".zone:has(.moved)");
+    expect(css).toContain("z-index: 20");
   });
 });
 
@@ -592,6 +603,197 @@ describe("GET /api/games", () => {
         expect(await listed.json()).toEqual({
           games: [{ channelId: "thread-good", channelName: "Good table" }],
         });
+      } finally {
+        server.close();
+        fs.rmSync(staticDir, { recursive: true, force: true });
+      }
+    });
+  });
+});
+
+describe("GET /api/game/snapshot", () => {
+  async function withStore(run) {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-snap-"));
+    const previous = process.env.GAMEBOT_DATA_DIR;
+    process.env.GAMEBOT_DATA_DIR = dataDir;
+    const store = new GameStore();
+    try {
+      return await run(store);
+    } finally {
+      try {
+        store.db.close();
+      } catch {}
+      if (previous === undefined) delete process.env.GAMEBOT_DATA_DIR;
+      else process.env.GAMEBOT_DATA_DIR = previous;
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  }
+
+  function snapshotGame(userId = "snowflake-user") {
+    return {
+      isdeleted: false,
+      name: "Friday Inis",
+      players: [
+        {
+          userId,
+          hands: {
+            main: [
+              { id: "hand-1", name: "Copper", url: null },
+              {
+                id: "hand-2",
+                name: "Gold",
+                url: "https://gamebot.example.com/gold.png",
+              },
+            ],
+            draft: [{ id: "draft-1", name: "Draft Only" }],
+          },
+          playArea: [{ id: "play-1", name: "Village" }],
+        },
+        {
+          userId: "other-player",
+          hands: { main: [{ id: "secret", name: "Other Player Secret" }] },
+          playArea: [{ id: "other-play", name: "Other Play Area" }],
+        },
+      ],
+      gameBoard: [{ id: "board-1", name: "Province" }],
+    };
+  }
+
+  test("loads the picker-selected channel with Bearer auth and never leaks another hand", async () => {
+    await withStore(async (store) => {
+      store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", snapshotGame());
+      const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-snap-http-"));
+      fs.writeFileSync(
+        path.join(staticDir, "index.html"),
+        `<!doctype html><html><head><script>${CONFIG_PLACEHOLDER}</script></head><body></body></html>`
+      );
+      const loads = [];
+      const app = createEmbeddedApp({
+        clientId: "client-123",
+        clientSecret: "server-secret",
+        staticDir,
+        gameStore: store,
+        getGameData: async (guildId, collection, channelId) => {
+          loads.push({ guildId, collection, channelId });
+          return store.getSpecificGameData(guildId, collection, channelId);
+        },
+        fetchImpl: mockDiscordFetch({
+          meBody: {
+            id: "snowflake-user",
+            username: "willsullivan",
+            global_name: "Will",
+          },
+        }),
+      });
+      const { server, url } = await listen(app);
+      try {
+        const missingAuth = await fetch(
+          `${url}/api/game/snapshot?guildId=guild-1&channelId=thread-game`
+        );
+        expect(missingAuth.status).toBe(401);
+
+        const missingChannel = await fetch(`${url}/api/game/snapshot?guildId=guild-1`, {
+          headers: { Authorization: `Bearer ${SECRET_TOKEN}` },
+        });
+        expect(missingChannel.status).toBe(400);
+        expect(await missingChannel.json()).toEqual({ error: "missing_channel" });
+
+        const launchChannel = await fetch(
+          `${url}/api/game/snapshot?guildId=guild-1&channelId=activity-launch`,
+          { headers: { Authorization: `Bearer ${SECRET_TOKEN}` } }
+        );
+        expect(launchChannel.status).toBe(404);
+        expect(await launchChannel.json()).toEqual({ error: "no_game" });
+
+        const snapshot = await fetch(
+          `${url}/api/game/snapshot?guildId=guild-1&channelId=thread-game`,
+          { headers: { Authorization: `Bearer ${SECRET_TOKEN}` } }
+        );
+        expect(snapshot.status).toBe(200);
+        const body = await snapshot.json();
+        expect(body).toEqual({
+          gameName: "Friday Inis",
+          channelId: "thread-game",
+          guildId: "guild-1",
+          hand: [
+            { id: "hand-1", name: "Copper" },
+            {
+              id: "hand-2",
+              name: "Gold",
+              imageUrl: cardImagePath(
+                "https://gamebot.example.com/gold.png",
+                deriveImageProxyKey("server-secret")
+              ),
+            },
+          ],
+          playArea: [{ id: "play-1", name: "Village" }],
+          gameBoard: [{ id: "board-1", name: "Province" }],
+        });
+        expect(JSON.stringify(body)).not.toContain("Other Player Secret");
+        expect(JSON.stringify(body)).not.toContain("Draft Only");
+        expect(JSON.stringify(body)).not.toContain('"url"');
+        expect(loads).toEqual([
+          {
+            guildId: "guild-1",
+            collection: GAME_COLLECTION,
+            channelId: "activity-launch",
+          },
+          {
+            guildId: "guild-1",
+            collection: GAME_COLLECTION,
+            channelId: "thread-game",
+          },
+        ]);
+
+        const proxied = await fetch(
+          `${url}/.proxy/api/game/snapshot?guildId=guild-1&channelId=thread-game`,
+          { headers: { Authorization: `Bearer ${SECRET_TOKEN}` } }
+        );
+        expect(proxied.status).toBe(200);
+        expect((await proxied.json()).channelId).toBe("thread-game");
+      } finally {
+        server.close();
+        fs.rmSync(staticDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  test("non-player gets a clear error and no cards", async () => {
+    await withStore(async (store) => {
+      store.upsertGameData(
+        "guild-1",
+        GAME_COLLECTION,
+        "thread-game",
+        snapshotGame("someone-else")
+      );
+      const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-snap-np-"));
+      fs.writeFileSync(
+        path.join(staticDir, "index.html"),
+        `<!doctype html><html><head></head><body></body></html>`
+      );
+      const app = createEmbeddedApp({
+        clientId: "client-123",
+        clientSecret: "server-secret",
+        staticDir,
+        gameStore: store,
+        fetchImpl: mockDiscordFetch({
+          meBody: {
+            id: "snowflake-user",
+            username: "willsullivan",
+            global_name: "Will",
+          },
+        }),
+      });
+      const { server, url } = await listen(app);
+      try {
+        const response = await fetch(
+          `${url}/api/game/snapshot?guildId=guild-1&channelId=thread-game`,
+          { headers: { Authorization: `Bearer ${SECRET_TOKEN}` } }
+        );
+        expect(response.status).toBe(403);
+        const body = await response.json();
+        expect(body).toEqual({ error: "not_a_player" });
+        expect(JSON.stringify(body)).not.toMatch(/Copper|Village|Province|Other Player Secret/);
       } finally {
         server.close();
         fs.rmSync(staticDir, { recursive: true, force: true });

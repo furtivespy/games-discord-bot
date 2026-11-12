@@ -49,6 +49,19 @@ export function snapshotRequestUrl(
   );
 }
 
+export const CARD_IMAGE_PATH = "/api/card-image";
+
+/** Only bot-signed proxy paths; raw external URLs are blocked by Discord's CSP. */
+export function cardImageRequestUrl(
+  apiHost: string,
+  protocol: string,
+  imageUrl: unknown
+): string | null {
+  if (typeof imageUrl !== "string") return null;
+  if (!imageUrl.startsWith(`${CARD_IMAGE_PATH}?`)) return null;
+  return apiUrl(apiHost, protocol, imageUrl);
+}
+
 export function gamesRequestUrl(
   apiHost: string,
   protocol: string,
@@ -71,6 +84,7 @@ export const GAMES_EMPTY_MESSAGE =
 export const GAMES_ERROR_MESSAGE = "Could not load your games.";
 export const GAMES_LOADING_MESSAGE = "Loading your games…";
 export const GAMES_SELECT_PLACEHOLDER = "Select a game";
+export const SNAPSHOT_LOADING_MESSAGE = "Loading the table…";
 
 export function firstNonEmptyName(...values: unknown[]): string | null {
   for (const value of values) {

@@ -1,8 +1,10 @@
 const { describe, expect, test } = require("bun:test");
 const {
+  cardImageRequestUrl,
   firstNonEmptyName,
   GAMES_EMPTY_MESSAGE,
   GAMES_SELECT_PLACEHOLDER,
+  SNAPSHOT_LOADING_MESSAGE,
   gamesRequestUrl,
   helloGreeting,
   isDiscordProxyHost,
@@ -12,6 +14,18 @@ const {
   tokenRequestUrl,
   urlMappingsForApiHost,
 } = require("../embedded-client/src/handshake.ts");
+const {
+  isMovedOffset,
+  nextOffset,
+  translateCss,
+} = require("../embedded-client/src/drag.ts");
+const {
+  asCardList,
+  createRequestSeq,
+  createSnapshotLoader,
+  isAbortError,
+  shouldApplySnapshot,
+} = require("../embedded-client/src/requestSeq.ts");
 const { MockDiscordSDK } = require("../embedded-client/src/mockSdk.ts");
 const {
   MOCK_OAUTH_CODE,
@@ -64,7 +78,22 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("isPickerFixture");
     expect(main).toContain("isSnapshotFixture");
     expect(main).toContain('"several-games"');
+    expect(main).toContain("loadSnapshot");
+    expect(main).toContain("enableCardDrag");
+    expect(main).toContain("snapshotLoader");
+    expect(main).toContain("createSnapshotLoader");
+    expect(main).toContain("liveSelectedChannelId");
+    expect(main).toContain("SNAPSHOT_LOADING_MESSAGE");
+    expect(main).toContain("Picker option value is the game document key");
+    const requestSeq = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "embedded-client", "src", "requestSeq.ts"),
+      "utf8"
+    );
+    expect(requestSeq).toContain("AbortController");
+    expect(requestSeq).toContain("shouldApplySnapshot");
+    expect(requestSeq).toContain("abortInFlight");
     expect(main).not.toContain("consumeOrigin");
+    expect(main).not.toContain("loadMockSnapshot");
   });
 
   test("snapshot URL is same-origin inside Discord and carries fixture query params", () => {
@@ -83,6 +112,20 @@ describe("embedded client handshake URLs", () => {
     ).toBe(
       "https://gamebot.example.com/api/game/snapshot?fixture=populated&channelId=ch-1&guildId=g-1"
     );
+  });
+
+  test("card images load only from the bot's signed proxy path", () => {
+    const signed = "/api/card-image?u=https%3A%2F%2Ffurtivespy.com%2Fa.png&s=sig";
+    expect(cardImageRequestUrl("", "https:", signed)).toBe(signed);
+    expect(cardImageRequestUrl("123.discordsays.com", "https:", signed)).toBe(signed);
+    expect(cardImageRequestUrl("gamebot.example.com", "https:", signed)).toBe(
+      `https://gamebot.example.com${signed}`
+    );
+    expect(
+      cardImageRequestUrl("", "https:", "https://furtivespy.com/a.png")
+    ).toBeNull();
+    expect(cardImageRequestUrl("", "https:", "/api/card-imagex?u=1")).toBeNull();
+    expect(cardImageRequestUrl("", "https:", null)).toBeNull();
   });
 
   test("games URL is same-origin inside Discord and carries guild plus mock fixture", () => {
@@ -134,5 +177,186 @@ describe("mock Discord SDK shim", () => {
       username: MOCK_USER.username,
       global_name: MOCK_USER.global_name,
     });
+  });
+});
+
+describe("client-only card drag", () => {
+  test("stores translate(x, y) from pointer deltas", () => {
+    expect(translateCss(12, -4)).toBe("translate(12px, -4px)");
+    expect(nextOffset({ x: 10, y: 20 }, { x: 5, y: 5 }, { x: 15, y: 8 })).toEqual({
+      x: 20,
+      y: 23,
+    });
+    expect(isMovedOffset({ x: 141, y: 126 })).toBe(true);
+    expect(isMovedOffset({ x: 0, y: 0 })).toBe(false);
+    expect(isMovedOffset(undefined)).toBe(false);
+  });
+});
+
+describe("snapshot request sequencing", () => {
+  test("a later pick invalidates the earlier snapshot apply", () => {
+    const seq = createRequestSeq();
+    const first = seq.next();
+    const second = seq.next();
+    expect(seq.isCurrent(first)).toBe(false);
+    expect(seq.isCurrent(second)).toBe(true);
+    seq.invalidate();
+    expect(seq.isCurrent(second)).toBe(false);
+  });
+
+  test("asCardList ignores non-arrays and non-object entries", () => {
+    expect(asCardList("xxxx")).toEqual([]);
+    expect(asCardList(null)).toEqual([]);
+    expect(asCardList([{ id: "hand-1", name: "Copper" }, "nope", null])).toEqual([
+      { id: "hand-1", name: "Copper" },
+    ]);
+  });
+
+  test("slow game A cannot replace the table after picking game B", () => {
+    const seq = createRequestSeq();
+    const requestA = seq.next();
+    const requestB = seq.next();
+    expect(
+      shouldApplySnapshot({
+        isCurrent: seq.isCurrent(requestA),
+        selectedChannelId: "mid-table",
+        requestedChannelId: "newest-thread",
+        payloadChannelId: "newest-thread",
+      })
+    ).toBe(false);
+    expect(
+      shouldApplySnapshot({
+        isCurrent: seq.isCurrent(requestB),
+        selectedChannelId: "mid-table",
+        requestedChannelId: "mid-table",
+        payloadChannelId: "mid-table",
+      })
+    ).toBe(true);
+    seq.invalidate();
+    expect(
+      shouldApplySnapshot({
+        isCurrent: seq.isCurrent(requestA),
+        selectedChannelId: "",
+        requestedChannelId: "newest-thread",
+        payloadChannelId: "newest-thread",
+      })
+    ).toBe(false);
+    expect(SNAPSHOT_LOADING_MESSAGE).toContain("Loading");
+  });
+});
+
+function abortableDeferred() {
+  let resolveFn;
+  let aborted = false;
+  return {
+    get aborted() {
+      return aborted;
+    },
+    start(signal) {
+      return new Promise((resolve, reject) => {
+        const abort = () => {
+          aborted = true;
+          const err = new Error("The operation was aborted.");
+          err.name = "AbortError";
+          reject(err);
+        };
+        if (signal.aborted) {
+          abort();
+          return;
+        }
+        signal.addEventListener("abort", abort, { once: true });
+        resolveFn = (value) => resolve(value);
+      });
+    },
+    resolve(value) {
+      resolveFn?.(value);
+    },
+  };
+}
+
+function snapshotBody(channelId, name) {
+  return {
+    ok: true,
+    status: 200,
+    payload: {
+      channelId,
+      gameName: name,
+      hand: [{ id: `${channelId}-hand`, name }],
+    },
+  };
+}
+
+describe("snapshot load races", () => {
+  test("isAbortError only matches AbortError", () => {
+    const abort = new Error("nope");
+    abort.name = "AbortError";
+    expect(isAbortError(abort)).toBe(true);
+    expect(isAbortError(new Error("boom"))).toBe(false);
+    expect(isAbortError(null)).toBe(false);
+  });
+
+  test("out-of-order resolve (A slow, B fast) keeps B and drops A", async () => {
+    const loader = createSnapshotLoader();
+    const a = abortableDeferred();
+    const b = abortableDeferred();
+    let selected = "newest-thread";
+
+    const pA = loader.load(
+      "newest-thread",
+      (signal) => a.start(signal),
+      () => selected
+    );
+    selected = "mid-table";
+    const pB = loader.load(
+      "mid-table",
+      (signal) => b.start(signal),
+      () => selected
+    );
+
+    expect(a.aborted).toBe(true);
+    expect(b.aborted).toBe(false);
+
+    b.resolve(snapshotBody("mid-table", "Thursday Root"));
+    expect(await pB).toEqual({
+      status: "applied",
+      result: snapshotBody("mid-table", "Thursday Root"),
+    });
+
+    a.resolve(snapshotBody("newest-thread", "Friday Inis"));
+    expect(await pA).toEqual({ status: "aborted" });
+  });
+
+  test("switching back to none while a request is pending aborts and does not error", async () => {
+    const loader = createSnapshotLoader();
+    const pending = abortableDeferred();
+    let selected = "newest-thread";
+
+    const pLoad = loader.load(
+      "newest-thread",
+      (signal) => pending.start(signal),
+      () => selected
+    );
+    selected = "";
+    loader.clear();
+    expect(pending.aborted).toBe(true);
+    expect(
+      await loader.load("", async () => snapshotBody("newest-thread", "Friday Inis"))
+    ).toEqual({ status: "cleared" });
+
+    pending.resolve(snapshotBody("newest-thread", "Friday Inis"));
+    expect(await pLoad).toEqual({ status: "aborted" });
+  });
+
+  test("a late response after Select a game is stale, not an error", async () => {
+    const loader = createSnapshotLoader();
+    let resolveFetch;
+    const pLoad = loader.load("newest-thread", () =>
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      })
+    );
+    loader.clear();
+    resolveFetch(snapshotBody("newest-thread", "Friday Inis"));
+    expect(await pLoad).toEqual({ status: "stale" });
   });
 });

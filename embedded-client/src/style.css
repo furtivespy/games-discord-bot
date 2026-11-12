@@ -110,10 +110,17 @@ main.has-picker #greeting {
 }
 
 .zone {
+  position: relative;
+  z-index: 0;
   background: #2b2d31;
   border: 1px solid #3f4147;
   border-radius: 12px;
   padding: 0.9rem 1rem 1rem;
+}
+
+.zone:has(.dragging),
+.zone:has(.moved) {
+  z-index: 2;
 }
 
 .zone h2 {
@@ -129,6 +136,7 @@ main.has-picker #greeting {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  overflow: visible;
 }
 
 .card-tile {
@@ -139,6 +147,19 @@ main.has-picker #greeting {
   padding: 0.7rem 0.85rem;
   text-align: center;
   font-weight: 600;
+  position: relative;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.card-tile.dragging,
+.card-tile.moved {
+  z-index: 20;
+}
+
+.card-tile.dragging {
+  cursor: grabbing;
 }
 
 .card-tile img {
@@ -146,4 +167,5 @@ main.has-picker #greeting {
   max-width: 6.5rem;
   max-height: 9rem;
   margin: 0 auto 0.4rem;
+  pointer-events: none;
 }

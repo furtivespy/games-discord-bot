@@ -147,6 +147,25 @@ describe("mock snapshot fixtures", () => {
       body: { error: "unknown_fixture" },
     });
   });
+
+  test("picker fixtures load the populated table for the selected channel id", () => {
+    const selected = getMockSnapshot({
+      fixture: "several-games",
+      channelId: "newest-thread",
+      guildId: "mock-guild",
+    });
+    expect(selected.status).toBe(200);
+    expect(selected.body.channelId).toBe("newest-thread");
+    expect(selected.body.hand).toHaveLength(3);
+    expect(
+      getMockSnapshot({ fixture: "one-game", channelId: "solo-thread" }).body
+        .channelId
+    ).toBe("solo-thread");
+    expect(getMockSnapshot({ fixture: "no-games" })).toEqual({
+      status: 404,
+      body: { error: "no_game" },
+    });
+  });
 });
 
 describe("mock game list fixtures", () => {
@@ -305,9 +324,15 @@ describe("mock embedded HTTP", () => {
       staticDir,
     });
     const { server, url } = await listen(app);
+    const auth = { Authorization: `Bearer ${MOCK_ACCESS_TOKEN}` };
 
     try {
-      const populated = await fetch(`${url}/api/game/snapshot`);
+      const unauthorized = await fetch(`${url}/api/game/snapshot`);
+      expect(unauthorized.status).toBe(401);
+
+      const populated = await fetch(`${url}/api/game/snapshot`, {
+        headers: auth,
+      });
       expect(populated.status).toBe(200);
       const body = await populated.json();
       expect(body.channelId).toBe("table-9");
@@ -315,22 +340,27 @@ describe("mock embedded HTTP", () => {
       expect(body.hand).toHaveLength(3);
       expect(JSON.stringify(body)).not.toContain("Other Player Secret");
 
-      const noGame = await fetch(`${url}/api/game/snapshot?fixture=no-game`);
+      const noGame = await fetch(`${url}/api/game/snapshot?fixture=no-game`, {
+        headers: auth,
+      });
       expect(noGame.status).toBe(404);
       expect(await noGame.json()).toEqual({ error: "no_game" });
 
       const notPlayer = await fetch(
-        `${url}/.proxy/api/game/snapshot?fixture=not-a-player`
+        `${url}/.proxy/api/game/snapshot?fixture=not-a-player`,
+        { headers: auth }
       );
       expect(notPlayer.status).toBe(403);
       expect(await notPlayer.json()).toEqual({ error: "not_a_player" });
 
       const override = await fetch(
-        `${url}/api/game/snapshot?channelId=from-query&guildId=g-query`
+        `${url}/api/game/snapshot?channelId=newest-thread&guildId=g-query&fixture=several-games`,
+        { headers: auth }
       );
       expect(await override.json()).toMatchObject({
-        channelId: "from-query",
+        channelId: "newest-thread",
         guildId: "g-query",
+        gameName: "Fixture Game",
       });
     } finally {
       server.close();
@@ -374,8 +404,8 @@ describe("mock embedded HTTP", () => {
 
     try {
       const snapshot = await fetch(`${url}/api/game/snapshot`);
-      expect(snapshot.status).toBe(404);
-      expect(await snapshot.json()).toEqual({ error: "not_found" });
+      expect(snapshot.status).toBe(401);
+      expect(await snapshot.json()).toEqual({ error: "unauthorized" });
 
       const token = await fetch(`${url}/api/token`, {
         method: "POST",
@@ -424,7 +454,7 @@ describe("mock embedded HTTP", () => {
       expect(await token.json()).toEqual({ error: "oauth_not_configured" });
 
       const snapshot = await fetch(`${url}/api/game/snapshot`);
-      expect(snapshot.status).toBe(404);
+      expect(snapshot.status).toBe(401);
 
       const page = await fetch(url);
       expect(await page.text()).not.toContain('"mock":true');

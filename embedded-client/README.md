@@ -24,9 +24,11 @@ EMBEDDED_APP_MOCK=1 bun scripts/embedded-app-mock.js
 Or the npm script:
 
 ```bash
-cd embedded-client && bun install && bun run build && cd ..
+bun run build:client
 bun run embedded:mock
 ```
+
+The bot serves the last build in `embedded-client/dist`, which is gitignored and is not rebuilt by `npm start`. After pulling or switching branches that change `embedded-client/src`, use `npm run build-start` to rebuild the client and start the bot.
 
 Open:
 
@@ -38,7 +40,9 @@ Open:
 | Snapshot: no game in this channel | http://127.0.0.1:3000/?fixture=no-game |
 | Snapshot: not a player | http://127.0.0.1:3000/?fixture=not-a-player |
 
-The default mock URL and `?fixture=populated` are picker-only (no hand / play area / board). Snapshot URLs `no-game` and `not-a-player` do not load the picker. `/api/games?fixture=no-game` and `?fixture=not-a-player` return `{ games: [] }` so they stay consistent with `no-games`.
+The default mock URL and `?fixture=populated` are picker-only until you choose a game. Selecting a game loads that game’s hand, play area, and board (`GET /api/game/snapshot?channelId=<selected>&guildId=<sdk guild id>`). Snapshot URLs `no-game` and `not-a-player` skip the picker and show those errors. `/api/games?fixture=no-game` and `?fixture=not-a-player` return `{ games: [] }` so they stay consistent with `no-games`.
+
+Card art is never loaded straight from the card's URL: Discord's Activity CSP blocks other hosts. The snapshot replaces each card `url` with a signed `imageUrl` (`/api/card-image?u=…&s=…`) and the bot fetches the image server-side. Only URLs the bot signed are served (the key is derived from `CLIENT_SECRET`), private/internal addresses are refused on every redirect hop, and only `image/*` responses up to 10 MB are returned.
 
 With mock **disabled**, the existing outside-Discord fallback still tells you to open visual mode from Discord.
 
@@ -46,7 +50,7 @@ You can also set `EMBEDDED_APP_MOCK=1` on the full bot process (`bun DiscordBot.
 
 ## Point the shim at a locally seeded game
 
-Channel and guild IDs on the shim are configurable so they can match a game you seeded locally (for when a live snapshot endpoint exists):
+Channel and guild IDs on the shim are configurable so they can match a game you seeded locally. The snapshot still uses the **picker-selected** channel/thread id as the game document key (`getGameDataV2(guildId, 'game', channelId)`), not the Activity launch channel:
 
 ```bash
 EMBEDDED_APP_MOCK=1 \

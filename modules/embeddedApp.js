@@ -18,7 +18,15 @@ const {
 const {
   channelNameFromDiscordClient,
   listActiveGamesForUser,
+  optionalDiscordAccessGuard,
+  snapshotGameForUser,
 } = require("./embeddedGames");
+const {
+  CARD_IMAGE_PATH,
+  createCardImageHandler,
+  deriveImageProxyKey,
+  proxySnapshotImages,
+} = require("./embeddedImageProxy");
 
 const DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token";
 const DISCORD_ME_URL = "https://discord.com/api/v10/users/@me";
@@ -271,9 +279,15 @@ function createEmbeddedApp({
   gameStore,
   discordClient,
   fetchChannelName,
+  getGameData,
+  botToken,
   env = process.env,
+  imageProxyKey,
+  imageFetchImpl = fetch,
+  imageLookup,
 } = {}) {
   const mockEnabled = allowEmbeddedAppMock(mock, env);
+  const cardImageKey = imageProxyKey || deriveImageProxyKey(clientSecret);
   const resolvedMockChannelId =
     sanitizeHostChannelId(mockChannelId) || DEFAULT_MOCK_CHANNEL_ID;
   const resolvedMockGuildId =
@@ -363,21 +377,95 @@ function createEmbeddedApp({
 
   app.get(["/api/games", "/.proxy/api/games"], sendActiveGames);
 
-  function sendGameSnapshot(req, res) {
-    if (!mockEnabled) {
-      res.status(404).json({ error: "not_found" });
+  function sendSnapshotResult(res, result) {
+    const body =
+      result.status === 200
+        ? proxySnapshotImages(result.body, cardImageKey)
+        : result.body;
+    res.status(result.status).json(body);
+  }
+
+  async function sendGameSnapshot(req, res) {
+    const accessToken = bearerTokenFromHeader(req.get("authorization"));
+    const requestedChannelId = sanitizeHostChannelId(
+      firstQueryValue(req.query?.channelId)
+    );
+    const requestedGuildId = sanitizeHostChannelId(
+      firstQueryValue(req.query?.guildId)
+    );
+    if (mockEnabled) {
+      if (accessToken !== MOCK_ACCESS_TOKEN) {
+        res.status(401).json({ error: "unauthorized" });
+        return;
+      }
+      const result = getMockSnapshot({
+        fixture: firstQueryValue(req.query?.fixture),
+        channelId: requestedChannelId || resolvedMockChannelId,
+        guildId: requestedGuildId || resolvedMockGuildId,
+      });
+      sendSnapshotResult(res, result);
       return;
     }
-    const result = getMockSnapshot({
-      fixture: req.query?.fixture,
-      channelId:
-        sanitizeHostChannelId(req.query?.channelId) || resolvedMockChannelId,
-      guildId: sanitizeHostChannelId(req.query?.guildId) || resolvedMockGuildId,
+    if (!accessToken) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    let user = null;
+    try {
+      user = await fetchDiscordUser(accessToken, fetchImpl);
+    } catch (err) {
+      logger?.log?.(
+        `Discord users/@me lookup failed: ${err.message || err}`,
+        "warn"
+      );
+    }
+    if (!user?.id) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    if (!requestedGuildId) {
+      res.status(400).json({ error: "missing_guild" });
+      return;
+    }
+    if (!requestedChannelId) {
+      res.status(400).json({ error: "missing_channel" });
+      return;
+    }
+    const guard = await optionalDiscordAccessGuard({
+      fetchImpl,
+      botToken,
+      discordClient,
+      guildId: requestedGuildId,
+      channelId: requestedChannelId,
+      userId: user.id,
     });
-    res.status(result.status).json(result.body);
+    if (!guard.ok) {
+      res.status(guard.status).json(guard.body);
+      return;
+    }
+    const result = await snapshotGameForUser({
+      getGameData,
+      discordClient,
+      gameStore,
+      guildId: requestedGuildId,
+      channelId: requestedChannelId,
+      userId: user.id,
+      logger,
+    });
+    sendSnapshotResult(res, result);
   }
 
   app.get(["/api/game/snapshot", "/.proxy/api/game/snapshot"], sendGameSnapshot);
+
+  app.get(
+    [CARD_IMAGE_PATH, `/.proxy${CARD_IMAGE_PATH}`],
+    createCardImageHandler({
+      key: cardImageKey,
+      fetchImpl: imageFetchImpl,
+      lookup: imageLookup,
+      logger,
+    })
+  );
 
   const resolvedStaticDir = staticDir
     ? path.resolve(staticDir)
@@ -438,6 +526,8 @@ function startEmbeddedAppServer({
   gameStore,
   discordClient,
   fetchChannelName,
+  getGameData,
+  botToken,
 } = {}) {
   const resolved = resolveEmbeddedAppConfig(env, config);
   const mockRuntime = resolveMockRuntimeConfig(env);
@@ -460,6 +550,8 @@ function startEmbeddedAppServer({
     gameStore,
     discordClient,
     fetchChannelName,
+    getGameData,
+    botToken,
     env,
   });
   if (!listen) {

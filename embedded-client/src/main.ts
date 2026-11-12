@@ -1,10 +1,16 @@
-import { DiscordSDK, patchUrlMappings } from "@discord/embedded-app-sdk";
 import {
+  attemptRemap,
+  DiscordSDK,
+  patchUrlMappings,
+} from "@discord/embedded-app-sdk";
+import {
+  cardImageRequestUrl,
   firstNonEmptyName,
   GAMES_EMPTY_MESSAGE,
   GAMES_ERROR_MESSAGE,
   GAMES_LOADING_MESSAGE,
   GAMES_SELECT_PLACEHOLDER,
+  SNAPSHOT_LOADING_MESSAGE,
   gamesRequestUrl,
   helloGreeting,
   originLine,
@@ -13,9 +19,15 @@ import {
   tokenRequestUrl,
   urlMappingsForApiHost,
 } from "./handshake";
+import { enableCardDrag, type CardOffset } from "./drag";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
+import { asCardList, createSnapshotLoader } from "./requestSeq";
 import "./style.css";
+
+const snapshotLoader = createSnapshotLoader();
+// patchUrlMappings only rewrites fetch/XHR/WebSocket, not <img src>.
+let activeUrlMappings: ReturnType<typeof urlMappingsForApiHost> = [];
 
 type EmbeddedConfig = {
   clientId: string;
@@ -28,7 +40,7 @@ type EmbeddedConfig = {
 type SnapshotCard = {
   id?: string;
   name?: string;
-  url?: string | null;
+  imageUrl?: string;
 };
 
 type GameSnapshot = {
@@ -135,6 +147,16 @@ function setGamesStatus(text: string | null) {
   el.hidden = true;
 }
 
+function liveSelectedChannelId(requestedChannelId: string): string {
+  const select = document.getElementById("game-select") as HTMLSelectElement | null;
+  if (!select || select.hidden) return requestedChannelId;
+  return String(select.value || "").trim();
+}
+
+function cancelSnapshotLoad() {
+  snapshotLoader.clear();
+}
+
 function showSelectedChannel(name: string | null) {
   const el = document.getElementById("selected-channel");
   if (!el) return;
@@ -146,6 +168,31 @@ function showSelectedChannel(name: string | null) {
   }
   el.textContent = text;
   el.hidden = false;
+}
+
+function bindGameSelect(
+  config: EmbeddedConfig,
+  accessToken: string,
+  guildId: string
+) {
+  const select = document.getElementById("game-select") as HTMLSelectElement | null;
+  if (!select) return;
+  select.onchange = () => {
+    const selected = select.selectedOptions[0];
+    const channelId = selected && selected.value ? selected.value : "";
+    showSelectedChannel(channelId ? selected.textContent : null);
+    if (!channelId) {
+      cancelSnapshotLoad();
+      setTableVisible(false);
+      setSnapshotStatus(null);
+      return;
+    }
+    // Picker option value is the game document key (thread id for thread games).
+    // discordSdk.channelId is the Activity launch channel and is not this key.
+    setTableVisible(false);
+    setSnapshotStatus(SNAPSHOT_LOADING_MESSAGE);
+    void loadSnapshot(config, accessToken, { channelId, guildId });
+  };
 }
 
 function renderGameOptions(games: PickerGame[]) {
@@ -169,10 +216,6 @@ function renderGameOptions(games: PickerGame[]) {
     select.append(option);
   }
   select.value = "";
-  select.onchange = () => {
-    const selected = select.selectedOptions[0];
-    showSelectedChannel(selected && selected.value ? selected.textContent : null);
-  };
 }
 
 function showGamesEmpty() {
@@ -183,14 +226,23 @@ function showGamesEmpty() {
   setHidden("game-select", true);
   setHidden("games-empty", false);
   showSelectedChannel(null);
+  cancelSnapshotLoad();
+  setTableVisible(false);
+  setSnapshotStatus(null);
 }
 
-function showGamesList(games: PickerGame[]) {
+function showGamesList(
+  games: PickerGame[],
+  config: EmbeddedConfig,
+  accessToken: string,
+  guildId: string
+) {
   setGamesStatus(null);
   setHidden("games-empty", true);
   setHidden("game-select-label", false);
   setHidden("game-select", false);
   renderGameOptions(games);
+  bindGameSelect(config, accessToken, guildId);
   showSelectedChannel(null);
 }
 
@@ -240,25 +292,46 @@ async function loadGames(
       showGamesEmpty();
       return;
     }
-    showGamesList(payload.games);
+    showGamesList(payload.games, config, accessToken, guildId);
   } catch {
     setGamesStatus(GAMES_ERROR_MESSAGE);
   }
 }
 
-function renderCards(containerId: string, cards: SnapshotCard[] | undefined) {
+function cardImageSrc(config: EmbeddedConfig, imageUrl: unknown): string | null {
+  const src = cardImageRequestUrl(config.apiHost, window.location.protocol, imageUrl);
+  if (!src || !activeUrlMappings.length) return src;
+  return attemptRemap({
+    url: new URL(src, window.location.href),
+    mappings: activeUrlMappings,
+  }).toString();
+}
+
+function renderCards(
+  config: EmbeddedConfig,
+  containerId: string,
+  cards: SnapshotCard[] | undefined,
+  positions: Map<string, CardOffset>
+) {
   const container = document.getElementById(containerId);
   if (!container) return;
   container.replaceChildren();
-  for (const card of cards || []) {
+  for (const card of asCardList(cards)) {
     const tile = document.createElement("article");
     tile.className = "card-tile";
-    if (card.id) tile.dataset.cardId = card.id;
-    const name = typeof card.name === "string" && card.name.trim() ? card.name : "Card";
-    if (card.url) {
+    const idValue = card.id;
+    const cardId =
+      typeof idValue === "string" && idValue.trim() ? idValue.trim() : "";
+    if (cardId) tile.dataset.cardId = cardId;
+    const nameValue = card.name;
+    const name =
+      typeof nameValue === "string" && nameValue.trim() ? nameValue.trim() : "Card";
+    const imageSrc = cardImageSrc(config, card.imageUrl);
+    if (imageSrc) {
       const img = document.createElement("img");
-      img.src = card.url;
+      img.src = imageSrc;
       img.alt = name;
+      img.draggable = false;
       tile.append(img);
       const label = document.createElement("span");
       label.textContent = name;
@@ -266,13 +339,16 @@ function renderCards(containerId: string, cards: SnapshotCard[] | undefined) {
     } else {
       tile.textContent = name;
     }
+    if (cardId) {
+      enableCardDrag(tile, cardId, positions);
+    }
     container.append(tile);
   }
 }
 
 function snapshotErrorMessage(error: string | undefined, status: number): string {
   if (error === "no_game" || status === 404) {
-    return "No game in this channel.";
+    return "No game for that channel.";
   }
   if (error === "not_a_player" || status === 403) {
     return "You're not a player in this game.";
@@ -280,40 +356,75 @@ function snapshotErrorMessage(error: string | undefined, status: number): string
   return "Could not load the game snapshot.";
 }
 
-async function loadMockSnapshot(config: EmbeddedConfig, accessToken: string) {
-  try {
-    const response = await fetch(
-      snapshotRequestUrl(config.apiHost, window.location.protocol, {
-        fixture: readFixture(),
-        channelId: config.channelId,
-        guildId: config.guildId,
-      }),
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
+async function loadSnapshot(
+  config: EmbeddedConfig,
+  accessToken: string,
+  ids: { channelId: string; guildId: string }
+) {
+  const outcome = await snapshotLoader.load(
+    ids.channelId,
+    async (signal) => {
+      const response = await fetch(
+        snapshotRequestUrl(config.apiHost, window.location.protocol, {
+          fixture: config.mock ? readFixture() : undefined,
+          channelId: ids.channelId,
+          guildId: ids.guildId,
+        }),
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal,
+        }
+      );
+      let payload: GameSnapshot = {};
+      try {
+        payload = (await response.json()) as GameSnapshot;
+      } catch {
+        payload = {};
       }
-    );
-    let payload: GameSnapshot = {};
-    try {
-      payload = (await response.json()) as GameSnapshot;
-    } catch {
-      payload = {};
-    }
+      return { ok: response.ok, status: response.status, payload };
+    },
+    () => liveSelectedChannelId(ids.channelId)
+  );
 
-    if (!response.ok) {
-      setTableVisible(false);
-      setSnapshotStatus(snapshotErrorMessage(payload.error, response.status));
-      return;
-    }
+  // Aborted or superseded requests must not render and must not show errors.
+  if (
+    outcome.status === "aborted" ||
+    outcome.status === "stale" ||
+    outcome.status === "cleared"
+  ) {
+    return;
+  }
 
-    setSnapshotStatus(payload.gameName ? payload.gameName : null);
-    renderCards("hand-cards", payload.hand);
-    renderCards("play-area-cards", payload.playArea);
-    renderCards("board-cards", payload.gameBoard);
-    setTableVisible(true);
-  } catch {
+  if (outcome.status === "failed") {
     setTableVisible(false);
     setSnapshotStatus(snapshotErrorMessage(undefined, 0));
+    return;
   }
+
+  const payload = outcome.result.payload as GameSnapshot;
+  if (liveSelectedChannelId(ids.channelId) !== ids.channelId) {
+    return;
+  }
+  if (
+    typeof payload.channelId === "string" &&
+    payload.channelId.trim() &&
+    payload.channelId !== ids.channelId
+  ) {
+    return;
+  }
+
+  if (outcome.status === "error") {
+    setTableVisible(false);
+    setSnapshotStatus(snapshotErrorMessage(payload.error, outcome.result.status));
+    return;
+  }
+
+  setSnapshotStatus(payload.gameName ? payload.gameName : null);
+  const positions = new Map<string, CardOffset>();
+  renderCards(config, "hand-cards", payload.hand, positions);
+  renderCards(config, "play-area-cards", payload.playArea, positions);
+  renderCards(config, "board-cards", payload.gameBoard, positions);
+  setTableVisible(true);
 }
 
 function createSdk(config: EmbeddedConfig) {
@@ -361,6 +472,7 @@ async function bootstrap() {
     const mappings = urlMappingsForApiHost(config.apiHost);
     if (mappings.length) {
       patchUrlMappings(mappings);
+      activeUrlMappings = mappings;
     }
   }
   const response = await fetch(
@@ -407,10 +519,15 @@ async function bootstrap() {
   setGreeting(helloGreeting(displayName));
   setOrigin(originLine(payload.origin_channel_name));
 
+  // discordSdk.guildId is the SDK field (query param guild_id). The game
+  // channel/thread id comes from the picker, not discordSdk.channelId.
   const guildId = String(discordSdk.guildId || config.guildId || "").trim();
   const fixture = readFixture();
   if (config.mock && isSnapshotFixture(fixture) && !isPickerFixture(fixture)) {
-    await loadMockSnapshot(config, accessToken);
+    await loadSnapshot(config, accessToken, {
+      channelId: config.channelId,
+      guildId: guildId || config.guildId,
+    });
     return;
   }
   await loadGames(config, accessToken, guildId);

@@ -5,6 +5,7 @@ const path = require("path");
 const GameStore = require("../db/gameStore");
 const GameDB = require("../db/anygame");
 const {
+  DISCORD_API_BASE,
   GAME_COLLECTION,
   HISTORY_KEEP_LIMIT,
   createdAtMs,
@@ -12,6 +13,9 @@ const {
   filterAndSortActiveGames,
   isActivePlayerGame,
   listActiveGamesForUser,
+  optionalDiscordAccessGuard,
+  snapshotFromGameData,
+  snapshotGameForUser,
   userIsPlayer,
 } = require("../modules/embeddedGames");
 
@@ -331,5 +335,238 @@ describe("listActiveGamesForUser", () => {
     expect(result.body.games).toEqual([
       { channelId: "missing", channelName: "Stored channel name" },
     ]);
+  });
+});
+
+function snapshotSeed(userId = "will") {
+  return {
+    isdeleted: false,
+    name: "Friday Inis",
+    players: [
+      {
+        userId,
+        hands: {
+          main: [
+            { id: "hand-1", name: "Copper", url: null },
+            {
+              id: "hand-2",
+              name: "Gold",
+              url: "https://gamebot.example.com/gold.png",
+            },
+          ],
+          draft: [{ id: "draft-1", name: "Draft Only" }],
+          simultaneous: [{ id: "sim-1", name: "Simultaneous Only" }],
+        },
+        playArea: [{ id: "play-1", name: "Village", url: null }],
+      },
+      {
+        userId: "other-player",
+        hands: { main: [{ id: "other-secret-1", name: "Other Player Secret" }] },
+        playArea: [{ id: "other-play-1", name: "Other Play Area" }],
+      },
+    ],
+    gameBoard: [{ id: "board-1", name: "Province", url: null }],
+    decks: [{ name: "Main", piles: { draw: { cards: [{ name: "Hidden Draw" }] } } }],
+  };
+}
+
+describe("snapshotGameForUser", () => {
+  test("returns this player's main hand, play area, and shared board only", async () => {
+    await withStore(async (store) => {
+      store.upsertGameData("guild-a", GAME_COLLECTION, "thread-game", snapshotSeed());
+      const loads = [];
+      const result = await snapshotGameForUser({
+        gameStore: store,
+        getGameData: async (guildId, collection, channelId) => {
+          loads.push({ guildId, collection, channelId });
+          return store.getSpecificGameData(guildId, collection, channelId);
+        },
+        guildId: "guild-a",
+        channelId: "thread-game",
+        userId: "will",
+      });
+      expect(loads).toEqual([
+        { guildId: "guild-a", collection: GAME_COLLECTION, channelId: "thread-game" },
+      ]);
+      expect(result.status).toBe(200);
+      expect(result.body).toEqual({
+        gameName: "Friday Inis",
+        channelId: "thread-game",
+        guildId: "guild-a",
+        hand: [
+          { id: "hand-1", name: "Copper", url: null },
+          {
+            id: "hand-2",
+            name: "Gold",
+            url: "https://gamebot.example.com/gold.png",
+          },
+        ],
+        playArea: [{ id: "play-1", name: "Village", url: null }],
+        gameBoard: [{ id: "board-1", name: "Province", url: null }],
+      });
+      const json = JSON.stringify(result.body);
+      expect(json).not.toContain("Other Player Secret");
+      expect(json).not.toContain("other-secret-1");
+      expect(json).not.toContain("Other Play Area");
+      expect(json).not.toContain("Draft Only");
+      expect(json).not.toContain("Simultaneous Only");
+      expect(json).not.toContain("Hidden Draw");
+      expect(result.body.players).toBeUndefined();
+      expect(result.body.decks).toBeUndefined();
+    });
+  });
+
+  test("uses the selected channel id as the game document key, not a launch channel", async () => {
+    await withStore(async (store) => {
+      store.upsertGameData("guild-a", GAME_COLLECTION, "thread-game", snapshotSeed());
+      const launchMiss = await snapshotGameForUser({
+        gameStore: store,
+        guildId: "guild-a",
+        channelId: "activity-launch-channel",
+        userId: "will",
+      });
+      expect(launchMiss).toEqual({ status: 404, body: { error: "no_game" } });
+      expect(launchMiss.body.hand).toBeUndefined();
+
+      const hit = await snapshotGameForUser({
+        gameStore: store,
+        guildId: "guild-a",
+        channelId: "thread-game",
+        userId: "will",
+      });
+      expect(hit.status).toBe(200);
+      expect(hit.body.channelId).toBe("thread-game");
+    });
+  });
+
+  test("missing game, deleted game, and non-player are errors with no cards", async () => {
+    await withStore(async (store) => {
+      store.upsertGameData("guild-a", GAME_COLLECTION, "deleted", {
+        ...snapshotSeed(),
+        isdeleted: true,
+      });
+      store.upsertGameData("guild-a", GAME_COLLECTION, "spectator", {
+        ...snapshotSeed("someone-else"),
+      });
+
+      expect(
+        await snapshotGameForUser({
+          gameStore: store,
+          guildId: "guild-a",
+          channelId: "no-such-thread",
+          userId: "will",
+        })
+      ).toEqual({ status: 404, body: { error: "no_game" } });
+
+      const deleted = await snapshotGameForUser({
+        gameStore: store,
+        guildId: "guild-a",
+        channelId: "deleted",
+        userId: "will",
+      });
+      expect(deleted).toEqual({ status: 404, body: { error: "no_game" } });
+      expect(JSON.stringify(deleted.body)).not.toMatch(/Copper|Village|Province/);
+
+      const spectator = await snapshotGameForUser({
+        gameStore: store,
+        guildId: "guild-a",
+        channelId: "spectator",
+        userId: "will",
+      });
+      expect(spectator).toEqual({
+        status: 403,
+        body: { error: "not_a_player" },
+      });
+      expect(JSON.stringify(spectator.body)).not.toMatch(
+        /Copper|Other Player Secret|Province/
+      );
+    });
+  });
+
+  test("prefers getGameDataV2 when the Discord client exposes it", async () => {
+    const calls = [];
+    const discordClient = {
+      getGameDataV2: async (guildId, collection, channelId) => {
+        calls.push({ guildId, collection, channelId });
+        return snapshotSeed();
+      },
+    };
+    const result = await snapshotGameForUser({
+      discordClient,
+      guildId: "guild-a",
+      channelId: "thread-game",
+      userId: "will",
+    });
+    expect(calls).toEqual([
+      { guildId: "guild-a", collection: "game", channelId: "thread-game" },
+    ]);
+    expect(result.body.hand.map((card) => card.id)).toEqual(["hand-1", "hand-2"]);
+  });
+});
+
+describe("snapshotFromGameData", () => {
+  test("empty hands and missing playArea become empty arrays", () => {
+    const snapshot = snapshotFromGameData(
+      {
+        name: "Bare",
+        players: [{ userId: "will", hands: {} }],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(snapshot.hand).toEqual([]);
+    expect(snapshot.playArea).toEqual([]);
+    expect(snapshot.gameBoard).toEqual([]);
+  });
+});
+
+describe("optionalDiscordAccessGuard", () => {
+  test("404 member is not_a_player; other Discord errors fail open", async () => {
+    const denied = await optionalDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "thread-game",
+      userId: "will",
+      fetchImpl: async (url) => {
+        if (String(url).includes("/members/")) {
+          return { status: 404 };
+        }
+        return { status: 200 };
+      },
+    });
+    expect(denied).toEqual({
+      ok: false,
+      status: 403,
+      body: { error: "not_a_player" },
+    });
+
+    const urls = [];
+    const open = await optionalDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "thread-game",
+      userId: "will",
+      fetchImpl: async (url) => {
+        urls.push(String(url));
+        return { status: 500 };
+      },
+    });
+    expect(open).toEqual({ ok: true });
+    expect(urls[0]).toBe(`${DISCORD_API_BASE}/guilds/guild-a/members/will`);
+    expect(urls[1]).toBe(`${DISCORD_API_BASE}/channels/thread-game`);
+  });
+
+  test("skips Discord when there is no bot token", async () => {
+    let called = false;
+    const result = await optionalDiscordAccessGuard({
+      guildId: "guild-a",
+      channelId: "thread-game",
+      userId: "will",
+      fetchImpl: async () => {
+        called = true;
+        throw new Error("should not run");
+      },
+    });
+    expect(result).toEqual({ ok: true });
+    expect(called).toBe(false);
   });
 });
