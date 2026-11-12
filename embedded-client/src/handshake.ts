@@ -71,6 +71,7 @@ export const GAMES_EMPTY_MESSAGE =
 export const GAMES_ERROR_MESSAGE = "Could not load your games.";
 export const GAMES_LOADING_MESSAGE = "Loading your games…";
 export const GAMES_SELECT_PLACEHOLDER = "Select a game";
+export const SNAPSHOT_LOADING_MESSAGE = "Loading the table…";
 
 export function firstNonEmptyName(...values: unknown[]): string | null {
   for (const value of values) {

@@ -3,6 +3,7 @@ const {
   firstNonEmptyName,
   GAMES_EMPTY_MESSAGE,
   GAMES_SELECT_PLACEHOLDER,
+  SNAPSHOT_LOADING_MESSAGE,
   gamesRequestUrl,
   helloGreeting,
   isDiscordProxyHost,
@@ -16,6 +17,7 @@ const { nextOffset, translateCss } = require("../embedded-client/src/drag.ts");
 const {
   asCardList,
   createRequestSeq,
+  shouldApplySnapshot,
 } = require("../embedded-client/src/requestSeq.ts");
 const { MockDiscordSDK } = require("../embedded-client/src/mockSdk.ts");
 const {
@@ -72,6 +74,9 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("loadSnapshot");
     expect(main).toContain("enableCardDrag");
     expect(main).toContain("snapshotRequests");
+    expect(main).toContain("shouldApplySnapshot");
+    expect(main).toContain("AbortController");
+    expect(main).toContain("SNAPSHOT_LOADING_MESSAGE");
     expect(main).toContain("Picker option value is the game document key");
     expect(main).not.toContain("consumeOrigin");
     expect(main).not.toContain("loadMockSnapshot");
@@ -174,5 +179,37 @@ describe("snapshot request sequencing", () => {
     expect(asCardList([{ id: "hand-1", name: "Copper" }, "nope", null])).toEqual([
       { id: "hand-1", name: "Copper" },
     ]);
+  });
+
+  test("slow game A cannot replace the table after picking game B", () => {
+    const seq = createRequestSeq();
+    const requestA = seq.next();
+    const requestB = seq.next();
+    expect(
+      shouldApplySnapshot({
+        isCurrent: seq.isCurrent(requestA),
+        selectedChannelId: "mid-table",
+        requestedChannelId: "newest-thread",
+        payloadChannelId: "newest-thread",
+      })
+    ).toBe(false);
+    expect(
+      shouldApplySnapshot({
+        isCurrent: seq.isCurrent(requestB),
+        selectedChannelId: "mid-table",
+        requestedChannelId: "mid-table",
+        payloadChannelId: "mid-table",
+      })
+    ).toBe(true);
+    seq.invalidate();
+    expect(
+      shouldApplySnapshot({
+        isCurrent: seq.isCurrent(requestA),
+        selectedChannelId: "",
+        requestedChannelId: "newest-thread",
+        payloadChannelId: "newest-thread",
+      })
+    ).toBe(false);
+    expect(SNAPSHOT_LOADING_MESSAGE).toContain("Loading");
   });
 });

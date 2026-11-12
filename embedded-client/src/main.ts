@@ -5,6 +5,7 @@ import {
   GAMES_ERROR_MESSAGE,
   GAMES_LOADING_MESSAGE,
   GAMES_SELECT_PLACEHOLDER,
+  SNAPSHOT_LOADING_MESSAGE,
   gamesRequestUrl,
   helloGreeting,
   originLine,
@@ -16,10 +17,15 @@ import {
 import { enableCardDrag, type CardOffset } from "./drag";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
-import { asCardList, createRequestSeq } from "./requestSeq";
+import {
+  asCardList,
+  createRequestSeq,
+  shouldApplySnapshot,
+} from "./requestSeq";
 import "./style.css";
 
 const snapshotRequests = createRequestSeq();
+let snapshotAbort: AbortController | null = null;
 
 type EmbeddedConfig = {
   clientId: string;
@@ -139,6 +145,18 @@ function setGamesStatus(text: string | null) {
   el.hidden = true;
 }
 
+function liveSelectedChannelId(requestedChannelId: string): string {
+  const select = document.getElementById("game-select") as HTMLSelectElement | null;
+  if (!select || select.hidden) return requestedChannelId;
+  return String(select.value || "").trim();
+}
+
+function cancelSnapshotLoad() {
+  snapshotAbort?.abort();
+  snapshotAbort = null;
+  snapshotRequests.invalidate();
+}
+
 function showSelectedChannel(name: string | null) {
   const el = document.getElementById("selected-channel");
   if (!el) return;
@@ -164,13 +182,15 @@ function bindGameSelect(
     const channelId = selected && selected.value ? selected.value : "";
     showSelectedChannel(channelId ? selected.textContent : null);
     if (!channelId) {
-      snapshotRequests.invalidate();
+      cancelSnapshotLoad();
       setTableVisible(false);
       setSnapshotStatus(null);
       return;
     }
     // Picker option value is the game document key (thread id for thread games).
     // discordSdk.channelId is the Activity launch channel and is not this key.
+    setTableVisible(false);
+    setSnapshotStatus(SNAPSHOT_LOADING_MESSAGE);
     void loadSnapshot(config, accessToken, { channelId, guildId });
   };
 }
@@ -206,7 +226,7 @@ function showGamesEmpty() {
   setHidden("game-select", true);
   setHidden("games-empty", false);
   showSelectedChannel(null);
-  snapshotRequests.invalidate();
+  cancelSnapshotLoad();
   setTableVisible(false);
   setSnapshotStatus(null);
 }
@@ -330,6 +350,9 @@ async function loadSnapshot(
   accessToken: string,
   ids: { channelId: string; guildId: string }
 ) {
+  snapshotAbort?.abort();
+  const controller = new AbortController();
+  snapshotAbort = controller;
   const requestId = snapshotRequests.next();
   try {
     const response = await fetch(
@@ -340,6 +363,7 @@ async function loadSnapshot(
       }),
       {
         headers: { Authorization: `Bearer ${accessToken}` },
+        signal: controller.signal,
       }
     );
     let payload: GameSnapshot = {};
@@ -349,7 +373,17 @@ async function loadSnapshot(
       payload = {};
     }
 
-    if (!snapshotRequests.isCurrent(requestId)) return;
+    const selectedChannelId = liveSelectedChannelId(ids.channelId);
+    if (
+      !shouldApplySnapshot({
+        isCurrent: snapshotRequests.isCurrent(requestId),
+        selectedChannelId,
+        requestedChannelId: ids.channelId,
+        payloadChannelId: payload.channelId,
+      })
+    ) {
+      return;
+    }
 
     if (!response.ok) {
       setTableVisible(false);
@@ -363,8 +397,11 @@ async function loadSnapshot(
     renderCards("play-area-cards", payload.playArea, positions);
     renderCards("board-cards", payload.gameBoard, positions);
     setTableVisible(true);
-  } catch {
+  } catch (err) {
     if (!snapshotRequests.isCurrent(requestId)) return;
+    if (err && typeof err === "object" && "name" in err && err.name === "AbortError") {
+      return;
+    }
     setTableVisible(false);
     setSnapshotStatus(snapshotErrorMessage(undefined, 0));
   }
