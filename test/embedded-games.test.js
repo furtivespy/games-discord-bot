@@ -203,15 +203,26 @@ describe("GameStore.listGameDocuments", () => {
         name: "Good",
         players: [{ userId: "will" }],
       });
-      store.db
-        .query(
-          `INSERT INTO game_documents (guild_id, collection, channel_id, data, updated_at)
-           VALUES (?, ?, ?, ?, datetime('now'))`
-        )
-        .run("guild-a", "game", "ch-bad", "{not json");
+      const insert = store.db.query(
+        `INSERT INTO game_documents (guild_id, collection, channel_id, data, updated_at)
+         VALUES (?, ?, ?, ?, datetime('now'))`
+      );
+      insert.run("guild-a", "game", "ch-bad-json", "{not json");
+      insert.run("guild-a", "game", "ch-bad-null", "null");
+      insert.run("guild-a", "game", "ch-bad-number", "42");
 
       const rows = store.listGameDocuments("guild-a", "game");
       expect(rows.map((row) => row.channelId)).toEqual(["ch-good"]);
+
+      const listed = await listActiveGamesForUser({
+        gameStore: store,
+        guildId: "guild-a",
+        userId: "will",
+      });
+      expect(listed).toEqual({
+        status: 200,
+        body: { games: [{ channelId: "ch-good", channelName: "Good" }] },
+      });
     });
   });
 });

@@ -524,4 +524,58 @@ describe("GET /api/games", () => {
       }
     });
   });
+
+  test("one corrupt game_documents row does not 500 the guild list", async () => {
+    await withStore(async (store) => {
+      store.upsertGameData("guild-1", "game", "thread-good", {
+        isdeleted: false,
+        name: "Good table",
+        players: [{ userId: "snowflake-user" }],
+        history: [
+          {
+            timestamp: "2026-11-10T00:00:00.000Z",
+            action: { category: "game", type: "create" },
+          },
+        ],
+      });
+      store.db
+        .query(
+          `INSERT INTO game_documents (guild_id, collection, channel_id, data, updated_at)
+           VALUES (?, ?, ?, ?, datetime('now'))`
+        )
+        .run("guild-1", "game", "thread-bad", "{not json");
+
+      const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-games-bad-"));
+      fs.writeFileSync(
+        path.join(staticDir, "index.html"),
+        `<!doctype html><html><head></head><body></body></html>`
+      );
+      const app = createEmbeddedApp({
+        clientId: "client-123",
+        clientSecret: "server-secret",
+        staticDir,
+        gameStore: store,
+        fetchImpl: mockDiscordFetch({
+          meBody: {
+            id: "snowflake-user",
+            username: "willsullivan",
+            global_name: "Will",
+          },
+        }),
+      });
+      const { server, url } = await listen(app);
+      try {
+        const listed = await fetch(`${url}/api/games?guildId=guild-1`, {
+          headers: { Authorization: `Bearer ${SECRET_TOKEN}` },
+        });
+        expect(listed.status).toBe(200);
+        expect(await listed.json()).toEqual({
+          games: [{ channelId: "thread-good", channelName: "Good table" }],
+        });
+      } finally {
+        server.close();
+        fs.rmSync(staticDir, { recursive: true, force: true });
+      }
+    });
+  });
 });

@@ -200,8 +200,11 @@ class GameStore {
               updatedAt: row.updated_at,
               data: this._parseRow(row),
             });
-          } catch {
-            // Skip a corrupt row so one bad document cannot hide the rest.
+          } catch (err) {
+            this.logger?.log?.(
+              `Skipping corrupt game_documents row guild=${guildId} collection=${collection} channel=${row.channel_id}: ${err.message || err}`,
+              "warn"
+            );
           }
         }
         span.setAttribute("db.result_count", documents.length);
