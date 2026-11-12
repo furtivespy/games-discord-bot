@@ -24,9 +24,11 @@ EMBEDDED_APP_MOCK=1 bun scripts/embedded-app-mock.js
 Or the npm script:
 
 ```bash
-cd embedded-client && bun install && bun run build && cd ..
+bun run build:client
 bun run embedded:mock
 ```
+
+The bot serves the last build in `embedded-client/dist`, which is gitignored and is not rebuilt by `npm start`. After pulling or switching branches that change `embedded-client/src`, use `npm run build-start` to rebuild the client and start the bot.
 
 Open:
 
