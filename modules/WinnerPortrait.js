@@ -4,6 +4,8 @@ const { createGeminiAI } = require("./GoogleGemini");
 
 const MAX_WINNERS = 4;
 const PORTRAIT_FILENAME = "winner-portrait.png";
+const PORTRAIT_UNAVAILABLE_NOTICE =
+  "Couldn't generate a winner portrait this time.";
 
 // One tunable prompt. {{gameName}} is replaced at generate time.
 const WINNER_PORTRAIT_PROMPT = `Create a playful, SFW royal portrait from the attached Discord avatar image(s). Keep each person or avatar recognizable as the same character. If more than one avatar is attached, compose one shared group portrait of all of them together. Crown them and add regal flair such as a throne, cape, confetti, or a trophy, themed to the board game "{{gameName}}". They are the undisputed royalty of that game. Use gender-neutral wording and imagery (royalty). Do not include any text, letters, numbers, captions, titles, or watermarks in the image.`;
@@ -20,6 +22,19 @@ function logPortraitSkip(client, reason) {
     client.logger.log(line, "warn");
   } else {
     console.warn(line);
+  }
+}
+
+async function notifyPortraitUnavailable(client, interaction) {
+  try {
+    if (typeof interaction?.followUp === "function") {
+      await interaction.followUp({ content: PORTRAIT_UNAVAILABLE_NOTICE });
+    }
+  } catch (error) {
+    logPortraitSkip(
+      client,
+      `notice follow-up failed: ${error?.message || error}`
+    );
   }
 }
 
@@ -375,6 +390,28 @@ async function clearJobWinnerPortrait(
   );
 }
 
+async function skipFailedGeneration(
+  client,
+  interaction,
+  reason,
+  winnerIds,
+  gameData,
+  clearStale
+) {
+  logPortraitSkip(client, reason);
+  try {
+    await clearStale();
+  } catch (clearError) {
+    logPortraitSkip(client, clearError);
+  }
+  const latest = await loadLatestGame(client, interaction, gameData);
+  if (!jobStillOwnsGame(latest, winnerIds)) {
+    logPortraitSkip(client, "portrait notice aborted; winners changed");
+    return;
+  }
+  await notifyPortraitUnavailable(client, interaction);
+}
+
 async function afterWinnerPosted(ctx) {
   const {
     client,
@@ -446,16 +483,34 @@ async function afterWinnerPosted(ctx) {
     }
 
     if (!buffer && shouldGenerate) {
-      buffer = await WinnerPortrait.generatePortraitImage({
-        client,
-        gameName: gameData.name,
-        winnerIds: decision.winnerIds || ids,
-        guild: interaction.guild,
-        winnerUsers,
-      });
+      try {
+        buffer = await WinnerPortrait.generatePortraitImage({
+          client,
+          gameName: gameData.name,
+          winnerIds: decision.winnerIds || ids,
+          guild: interaction.guild,
+          winnerUsers,
+        });
+      } catch (error) {
+        await skipFailedGeneration(
+          client,
+          interaction,
+          error,
+          ids,
+          gameData,
+          clearStale
+        );
+        return;
+      }
       if (!buffer) {
-        logPortraitSkip(client, "no portrait image produced");
-        await clearStale();
+        await skipFailedGeneration(
+          client,
+          interaction,
+          "no portrait image produced",
+          ids,
+          gameData,
+          clearStale
+        );
         return;
       }
     }
@@ -501,6 +556,7 @@ function scheduleAfterWinnerPosted(ctx) {
 const WinnerPortrait = {
   MAX_WINNERS,
   PORTRAIT_FILENAME,
+  PORTRAIT_UNAVAILABLE_NOTICE,
   WINNER_PORTRAIT_PROMPT,
   logPortraitSkip,
   normalizeWinnerIds,

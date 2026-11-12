@@ -27,6 +27,21 @@ function stubPortrait(method, impl) {
   };
 }
 
+function capturePortraitLogs(harness) {
+  const lines = [];
+  harness.client.logger.warn = (line) => lines.push(String(line));
+  harness.client.logger.log = (line) => lines.push(String(line));
+  return lines;
+}
+
+function expectPortraitUnavailableNotice(harness) {
+  expect(harness.calls.followUp).toHaveLength(1);
+  expect(harness.calls.followUp[0].content).toBe(
+    WinnerPortrait.PORTRAIT_UNAVAILABLE_NOTICE
+  );
+  expect(harness.calls.followUp[0].flags).not.toBe(MessageFlags.Ephemeral);
+}
+
 describe("winner portrait prompt and decisions", () => {
   test("buildPrompt keeps the tunable constant, game name, royalty, and no image text", () => {
     expect(WinnerPortrait.WINNER_PORTRAIT_PROMPT).toContain("{{gameName}}");
@@ -258,7 +273,7 @@ describe("/game winner portrait flow", () => {
     );
   });
 
-  test("forced Gemini errors still post the winner embed with no user-facing error", async () => {
+  test("thrown generateImage still posts the winner embed and a channel notice", async () => {
     restores.push(
       stubPortrait("generatePortraitImage", async () => {
         throw new Error("SAFETY: image blocked");
@@ -276,6 +291,7 @@ describe("/game winner portrait flow", () => {
       },
       async (harness) => {
         harness.client.config.geminiKey = "test-key";
+        const logs = capturePortraitLogs(harness);
         await runGame(harness);
         await harness.client.lastWinnerPortraitWork;
 
@@ -283,9 +299,110 @@ describe("/game winner portrait flow", () => {
         expect(harness.calls.reply).toHaveLength(0);
         expect(harness.calls.editReply).toHaveLength(1);
         expect(harness.calls.editReply[0].embeds[0].data.title).toContain("Alice");
+        expect(harness.calls.editReply[0].files).toBeUndefined();
         expect(harness.calls.editReply[0].flags).not.toBe(MessageFlags.Ephemeral);
-        expect(harness.calls.followUp).toHaveLength(0);
-        expect(collectedReplyText(harness).toLowerCase()).not.toContain("error");
+        expectPortraitUnavailableNotice(harness);
+        expect(logs).toContain("Winner portrait skipped: SAFETY: image blocked");
+        expect((await harness.getSavedGame()).winner).toEqual(["user-1"]);
+        expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
+      }
+    );
+  });
+
+  test("null generateImage still posts the winner embed and a channel notice", async () => {
+    restores.push(stubPortrait("generatePortraitImage", async () => null));
+
+    await withHarness(
+      {
+        gameData: createActiveGame({ name: "Ankh" }),
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: true },
+        },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        const logs = capturePortraitLogs(harness);
+        await runGame(harness);
+        await harness.client.lastWinnerPortraitWork;
+
+        expect(harness.calls.editReply).toHaveLength(1);
+        expect(harness.calls.editReply[0].embeds[0].data.title).toContain("Alice");
+        expect(harness.calls.editReply[0].files).toBeUndefined();
+        expectPortraitUnavailableNotice(harness);
+        expect(logs).toContain(
+          "Winner portrait skipped: no portrait image produced"
+        );
+        expect((await harness.getSavedGame()).winner).toEqual(["user-1"]);
+        expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
+      }
+    );
+  });
+
+  test("portrait notice followUp failure does not break game-end", async () => {
+    restores.push(stubPortrait("generatePortraitImage", async () => null));
+
+    await withHarness(
+      {
+        gameData: createActiveGame({ name: "Ankh" }),
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: true },
+        },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        const logs = capturePortraitLogs(harness);
+        harness.interaction.followUp = async () => {
+          throw new Error("Unknown interaction");
+        };
+        await runGame(harness);
+        await harness.client.lastWinnerPortraitWork;
+
+        expect(harness.calls.editReply).toHaveLength(1);
+        expect(harness.calls.editReply[0].embeds[0].data.title).toContain("Alice");
+        expect(logs).toContain(
+          "Winner portrait skipped: no portrait image produced"
+        );
+        expect(logs).toContain(
+          "Winner portrait skipped: notice follow-up failed: Unknown interaction"
+        );
+        expect((await harness.getSavedGame()).winner).toEqual(["user-1"]);
+        expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
+      }
+    );
+  });
+
+  test("stale portrait is cleared even if the notice follow-up hangs", async () => {
+    restores.push(stubPortrait("generatePortraitImage", async () => null));
+
+    await withHarness(
+      {
+        gameData: createActiveGame({
+          name: "Ankh",
+          winnerPortrait: {
+            winnerUserIds: ["user-2"],
+            channelId: "channel-1",
+            messageId: "old-portrait",
+          },
+        }),
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: true },
+        },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        harness.interaction.followUp = () => new Promise(() => {});
+        await runGame(harness);
+        await Promise.race([
+          harness.client.lastWinnerPortraitWork,
+          new Promise((resolve) => setTimeout(resolve, 40)),
+        ]);
+
         expect((await harness.getSavedGame()).winner).toEqual(["user-1"]);
         expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
       }
@@ -660,6 +777,62 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
     while (restores.length) restores.pop()();
   });
 
+  test("in-flight generate failure does not notify after winners change", async () => {
+    let rejectGenerate;
+    restores.push(
+      stubPortrait(
+        "generatePortraitImage",
+        () =>
+          new Promise((_, reject) => {
+            rejectGenerate = reject;
+          })
+      )
+    );
+
+    await withHarness(
+      {
+        gameData: createActiveGame({ name: "Ankh" }),
+        options: {
+          subcommand: "winner",
+          users: { player1: createUser() },
+          booleans: { portrait: true },
+        },
+      },
+      async (harness) => {
+        harness.client.config.geminiKey = "test-key";
+        const logs = capturePortraitLogs(harness);
+        await runGame(harness);
+        expect(harness.calls.followUp).toHaveLength(0);
+
+        const latest = await harness.getSavedGame();
+        latest.winner = ["user-2"];
+        latest.winnerPortrait = {
+          winnerUserIds: ["user-2"],
+          channelId: "channel-1",
+          messageId: "bob-msg",
+        };
+        await harness.client.setGameDataV2(
+          harness.interaction.guildId,
+          "game",
+          harness.interaction.channelId,
+          latest
+        );
+
+        rejectGenerate(new Error("SAFETY: image blocked"));
+        await harness.client.lastWinnerPortraitWork;
+
+        expect(harness.calls.followUp).toHaveLength(0);
+        expect(logs).toContain("Winner portrait skipped: SAFETY: image blocked");
+        expect(logs).toContain(
+          "Winner portrait skipped: portrait notice aborted; winners changed"
+        );
+        const saved = await harness.getSavedGame();
+        expect(saved.winner).toEqual(["user-2"]);
+        expect(saved.winnerPortrait.messageId).toBe("bob-msg");
+      }
+    );
+  });
+
   test("winner change plus generate failure does not leak the old portrait", async () => {
     restores.push(
       stubPortrait("generatePortraitImage", async () => {
@@ -692,8 +865,7 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
         expect(saved.winner).toEqual(["user-1"]);
         expect(saved.winnerPortrait == null).toBe(true);
         expect(harness.calls.editReply[0].embeds[0].data.title).toContain("Alice");
-        expect(harness.calls.followUp).toHaveLength(0);
-        expect(collectedReplyText(harness).toLowerCase()).not.toContain("error");
+        expectPortraitUnavailableNotice(harness);
         expect(
           WinnerPortrait.canReusePortrait(saved.winnerPortrait, saved.winner)
         ).toBe(false);
@@ -1058,7 +1230,7 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
     );
   });
 
-  test("timeout path stays silent and does not persist a portrait", async () => {
+  test("timeout path posts a channel notice and does not persist a portrait", async () => {
     restores.push(
       stubPortrait("generatePortraitImage", async () => {
         throw new Error("Gemini image generation timed out");
@@ -1076,13 +1248,16 @@ describe("winner portrait races, fallbacks, and silent failures", () => {
       },
       async (harness) => {
         harness.client.config.geminiKey = "test-key";
+        const logs = capturePortraitLogs(harness);
         await runGame(harness);
         await harness.client.lastWinnerPortraitWork;
 
         expect(harness.calls.editReply).toHaveLength(1);
         expect(harness.calls.editReply[0].embeds[0].data.title).toContain("Alice");
-        expect(harness.calls.followUp).toHaveLength(0);
-        expect(collectedReplyText(harness).toLowerCase()).not.toContain("error");
+        expectPortraitUnavailableNotice(harness);
+        expect(logs).toContain(
+          "Winner portrait skipped: Gemini image generation timed out"
+        );
         expect(collectedReplyText(harness).toLowerCase()).not.toContain("timed out");
         expect((await harness.getSavedGame()).winnerPortrait == null).toBe(true);
       }
