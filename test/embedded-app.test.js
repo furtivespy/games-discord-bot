@@ -400,11 +400,45 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain(".card-tile:hover .card-face");
     expect(css).toContain("scale(1.28)");
     expect(css).toContain(".hand-fan .card-tile + .card-tile");
-    const boardSpread = css.slice(css.indexOf(".board-spread {"));
-    const boardSpreadBlock = boardSpread.slice(0, boardSpread.indexOf("}") + 1);
-    expect(boardSpreadBlock).toContain("overflow: visible");
-    expect(boardSpreadBlock).not.toMatch(/overflow-x\s*:/);
-    expect(css).toContain(".cards {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 0.5rem;\n  overflow: visible;");
+    expect(css).toContain(".zone:has(.card-tile:hover)");
+  });
+
+  test("card rows are not scroll containers so drag and hover zoom are not clipped", () => {
+    const css = fs
+      .readFileSync(
+        path.join(__dirname, "..", "embedded-client", "src", "style.css"),
+        "utf8"
+      )
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+    const html = fs.readFileSync(
+      path.join(__dirname, "..", "embedded-client", "index.html"),
+      "utf8"
+    );
+    expect(html).toMatch(/class="cards board-spread" id="board-cards"/);
+    expect(html).toMatch(/class="cards board-spread" id="play-area-cards"/);
+    expect(html).toMatch(/class="cards hand-fan" id="hand-cards"/);
+
+    const ruleBody = (selector) => {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const match = css.match(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`));
+      expect(match).toBeTruthy();
+      return match[1];
+    };
+    const overflowIsVisible = (body) => {
+      expect(body).toMatch(/overflow:\s*visible/);
+      expect(body).not.toMatch(/overflow-x:\s*(auto|scroll|hidden)/);
+      expect(body).not.toMatch(/overflow-y:\s*(auto|scroll|hidden)/);
+      expect(body).not.toMatch(/overflow:\s*(auto|scroll|hidden)/);
+    };
+
+    overflowIsVisible(ruleBody("#table"));
+    overflowIsVisible(ruleBody(".zone"));
+    overflowIsVisible(ruleBody(".cards"));
+    overflowIsVisible(ruleBody(".board-spread"));
+    overflowIsVisible(ruleBody(".hand-fan"));
+    expect(ruleBody(".board-spread")).toMatch(/flex-wrap:\s*wrap/);
+    expect(ruleBody(".cards")).toMatch(/min-height:\s*7\.55rem/);
+    expect(ruleBody(".card-face")).toMatch(/box-sizing:\s*border-box/);
   });
 });
 
