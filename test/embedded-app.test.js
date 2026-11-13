@@ -400,6 +400,11 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain(".card-tile:hover .card-face");
     expect(css).toContain("scale(1.28)");
     expect(css).toContain(".hand-fan .card-tile + .card-tile");
+    const boardSpread = css.slice(css.indexOf(".board-spread {"));
+    const boardSpreadBlock = boardSpread.slice(0, boardSpread.indexOf("}") + 1);
+    expect(boardSpreadBlock).toContain("overflow: visible");
+    expect(boardSpreadBlock).not.toMatch(/overflow-x\s*:/);
+    expect(css).toContain(".cards {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 0.5rem;\n  overflow: visible;");
   });
 });
 

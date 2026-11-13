@@ -223,6 +223,7 @@ body {
   gap: 0.85rem;
   padding: 0.9rem 1rem 1.1rem;
   align-content: start;
+  overflow: visible;
 }
 
 #table[hidden] {
@@ -305,7 +306,9 @@ body {
 }
 
 .zone:has(.dragging),
-.zone:has(.moved) {
+.zone:has(.moved),
+.zone:has(.card-tile:hover),
+.zone:has(.deck-tile:hover) {
   z-index: 2;
 }
 
@@ -328,11 +331,13 @@ body {
   min-height: 7.4rem;
 }
 
+/* overflow-x: auto also forces overflow-y clipping, which hid dragged
+   board/play-area cards and cut off hover zoom. Wrap extra cards instead. */
 .board-spread {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 0.4rem;
-  overflow-x: auto;
-  padding: 1.4rem 0.4rem 0.4rem;
+  overflow: visible;
+  padding: 1.6rem 0.4rem 0.5rem;
 }
 
 .hand-fan {
