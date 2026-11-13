@@ -379,8 +379,13 @@ describe("embedded HTTP origin", () => {
     expect(html).toContain("You're not in any active games on this server.");
     expect(html).toContain('id="table"');
     expect(html).toContain("Hand");
-    expect(html).toContain("My play area");
-    expect(html).toContain("Game board");
+    expect(html).toContain("Play Area");
+    expect(html).toContain("Game Board");
+    expect(html).toContain('id="side-panel"');
+    expect(html).toContain('id="other-players"');
+    expect(html).toContain('id="game-status"');
+    expect(html).toContain('id="decks"');
+    expect(html).toContain("hand-fan");
     const css = fs.readFileSync(
       path.join(__dirname, "..", "embedded-client", "src", "style.css"),
       "utf8"
@@ -392,6 +397,9 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain(".zone:has(.dragging)");
     expect(css).toContain(".zone:has(.moved)");
     expect(css).toContain("z-index: 20");
+    expect(css).toContain(".card-tile:hover .card-face");
+    expect(css).toContain("scale(1.28)");
+    expect(css).toContain(".hand-fan .card-tile + .card-tile");
   });
 });
 
@@ -711,7 +719,7 @@ describe("GET /api/game/snapshot", () => {
         );
         expect(snapshot.status).toBe(200);
         const body = await snapshot.json();
-        expect(body).toEqual({
+        expect(body).toMatchObject({
           gameName: "Friday Inis",
           channelId: "thread-game",
           guildId: "guild-1",
@@ -728,7 +736,18 @@ describe("GET /api/game/snapshot", () => {
           ],
           playArea: [{ id: "play-1", name: "Village" }],
           gameBoard: [{ id: "board-1", name: "Province" }],
+          otherPlayers: [
+            {
+              userId: "other-player",
+              name: "other-player",
+              handCount: 1,
+              avatarUrl: null,
+            },
+          ],
         });
+        expect(body.decks).toEqual([]);
+        expect(body.status.players[0].isYou).toBe(true);
+        expect(body.status.players[1].handCount).toBe(1);
         expect(JSON.stringify(body)).not.toContain("Other Player Secret");
         expect(JSON.stringify(body)).not.toContain("Draft Only");
         expect(JSON.stringify(body)).not.toContain('"url"');

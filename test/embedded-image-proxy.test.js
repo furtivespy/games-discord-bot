@@ -109,6 +109,28 @@ describe("card image signing", () => {
     ]);
     expect(snapshot.gameName).toBe("ARCS");
   });
+
+  test("proxies other-player avatars and deck backs without leaking source URLs", () => {
+    const avatar = "https://cdn.discordapp.com/avatars/riley/a.png?size=128";
+    const back = "https://furtivespy.com/backs/main.png";
+    const snapshot = proxySnapshotImages(
+      {
+        otherPlayers: [{ userId: "riley", name: "Riley", handCount: 2, avatarUrl: avatar }],
+        decks: [{ name: "Main", remaining: 30, total: 42, backUrl: back }],
+      },
+      KEY
+    );
+    expect(snapshot.otherPlayers[0].avatarUrl).toBe(cardImagePath(avatar, KEY));
+    expect(snapshot.decks[0]).toEqual({
+      name: "Main",
+      remaining: 30,
+      total: 42,
+      backImageUrl: cardImagePath(back, KEY),
+    });
+    expect(JSON.stringify(snapshot)).not.toContain(avatar);
+    expect(JSON.stringify(snapshot)).not.toContain(back);
+    expect(JSON.stringify(snapshot)).not.toContain("backUrl");
+  });
 });
 
 describe("private address blocking", () => {

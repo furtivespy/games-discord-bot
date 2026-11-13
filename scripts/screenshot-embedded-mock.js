@@ -6,12 +6,13 @@ const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
 const FIXTURES = [
-  "populated",
-  "no-game",
-  "not-a-player",
-  "several-games",
-  "one-game",
-  "no-games",
+  { name: "populated", query: "fixture=populated" },
+  { name: "no-game", query: "fixture=no-game" },
+  { name: "not-a-player", query: "fixture=not-a-player" },
+  { name: "several-games", query: "fixture=several-games" },
+  { name: "one-game", query: "fixture=one-game" },
+  { name: "no-games", query: "fixture=no-games" },
+  { name: "table", query: "fixture=several-games&game=newest-thread" },
 ];
 const DEFAULT_PORT = Number(process.env.PORT || 3000);
 const OUT_DIR = path.resolve(
@@ -59,7 +60,7 @@ function runChromeScreenshot(chrome, url, dest) {
     "--no-sandbox",
     "--disable-dev-shm-usage",
     "--window-size=1280,800",
-    "--virtual-time-budget=5000",
+    "--virtual-time-budget=8000",
     `--screenshot=${dest}`,
     url,
   ];
@@ -100,8 +101,8 @@ async function main() {
   try {
     await waitForServer(base);
     for (const fixture of FIXTURES) {
-      const dest = path.join(OUT_DIR, `mock-${fixture}.png`);
-      runChromeScreenshot(chrome, `${base}/?fixture=${fixture}`, dest);
+      const dest = path.join(OUT_DIR, `mock-${fixture.name}.png`);
+      runChromeScreenshot(chrome, `${base}/?${fixture.query}`, dest);
       console.log(`Wrote ${dest}`);
     }
   } finally {

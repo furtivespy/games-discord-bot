@@ -9,34 +9,47 @@
     </script>
   </head>
   <body>
-    <main>
-      <p id="greeting">Connecting…</p>
-      <p id="origin" hidden></p>
-      <section id="game-picker" hidden>
-        <p id="games-status" hidden></p>
-        <label id="game-select-label" for="game-select" hidden>Your games</label>
-        <select id="game-select" hidden>
-          <option value="">Select a game</option>
-        </select>
-        <p id="selected-channel" hidden></p>
-        <p id="games-empty" hidden>You're not in any active games on this server.</p>
-      </section>
-      <p id="snapshot-status" hidden></p>
+    <div id="app">
+      <aside id="side-panel">
+        <p id="greeting">Connecting…</p>
+        <p id="origin" hidden></p>
+        <section id="game-picker" hidden>
+          <p id="games-status" hidden></p>
+          <label id="game-select-label" for="game-select" hidden>Your games</label>
+          <select id="game-select" hidden>
+            <option value="">Select a game</option>
+          </select>
+          <p id="selected-channel" hidden></p>
+          <p id="games-empty" hidden>You're not in any active games on this server.</p>
+        </section>
+        <p id="snapshot-status" hidden></p>
+        <section id="game-status" hidden></section>
+      </aside>
       <div id="table" hidden>
-        <section class="zone" data-zone="hand">
-          <h2>Hand</h2>
-          <div class="cards" id="hand-cards"></div>
+        <section id="other-players" class="row players-row" hidden>
+          <h2>Players</h2>
+          <div id="other-players-list" class="players-rail"></div>
+        </section>
+        <section id="board-row" class="row board-row">
+          <section class="zone" data-zone="board">
+            <h2>Game Board</h2>
+            <div class="cards board-spread" id="board-cards"></div>
+          </section>
+          <section class="zone decks-zone" data-zone="decks">
+            <h2>Decks</h2>
+            <div id="decks" class="decks"></div>
+          </section>
         </section>
         <section class="zone" data-zone="play-area">
-          <h2>My play area</h2>
-          <div class="cards" id="play-area-cards"></div>
+          <h2>Play Area</h2>
+          <div class="cards board-spread" id="play-area-cards"></div>
         </section>
-        <section class="zone" data-zone="board">
-          <h2>Game board</h2>
-          <div class="cards" id="board-cards"></div>
+        <section class="zone hand-zone" data-zone="hand">
+          <h2>Hand</h2>
+          <div class="cards hand-fan" id="hand-cards"></div>
         </section>
       </div>
-    </main>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

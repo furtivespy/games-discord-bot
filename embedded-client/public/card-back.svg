@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 350" role="img" aria-label="Card back">
+  <defs>
+    <linearGradient id="felt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7a1f2b"/>
+      <stop offset="50%" stop-color="#5a1420"/>
+      <stop offset="100%" stop-color="#3d0e16"/>
+    </linearGradient>
+    <pattern id="diamonds" width="28" height="28" patternUnits="userSpaceOnUse">
+      <path d="M14 2 L26 14 L14 26 L2 14 Z" fill="none" stroke="#d4af37" stroke-width="1.1" opacity="0.55"/>
+      <circle cx="14" cy="14" r="2.2" fill="#d4af37" opacity="0.45"/>
+    </pattern>
+  </defs>
+  <rect width="250" height="350" rx="18" fill="#2a0c12"/>
+  <rect x="10" y="10" width="230" height="330" rx="12" fill="url(#felt)"/>
+  <rect x="18" y="18" width="214" height="314" rx="10" fill="none" stroke="#e6c35c" stroke-width="3"/>
+  <rect x="28" y="28" width="194" height="294" rx="8" fill="url(#diamonds)"/>
+  <rect x="28" y="28" width="194" height="294" rx="8" fill="none" stroke="#f3d98c" stroke-width="1.5" opacity="0.85"/>
+  <circle cx="125" cy="175" r="42" fill="#4a1018" stroke="#e6c35c" stroke-width="3"/>
+  <path d="M125 145 L148 175 L125 205 L102 175 Z" fill="none" stroke="#f8e7a1" stroke-width="2.4"/>
+  <circle cx="125" cy="175" r="8" fill="#f8e7a1"/>
+</svg>

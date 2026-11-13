@@ -85,6 +85,20 @@ function withProxiedImages(cards, key) {
   });
 }
 
+function withProxiedUrlField(items, sourceKey, destKey, key) {
+  if (!Array.isArray(items)) return items;
+  return items.map((item) => {
+    if (!item || typeof item !== "object") return item;
+    const source = item[sourceKey];
+    const imageUrl = cardImagePath(source, key);
+    if (sourceKey === destKey) {
+      return { ...item, [destKey]: imageUrl || null };
+    }
+    const { [sourceKey]: _raw, ...rest } = item;
+    return imageUrl ? { ...rest, [destKey]: imageUrl } : rest;
+  });
+}
+
 /** Replaces each card's raw `url` with a signed `imageUrl` proxy path. */
 function proxySnapshotImages(snapshot, key) {
   if (!snapshot || typeof snapshot !== "object") return snapshot;
@@ -93,6 +107,13 @@ function proxySnapshotImages(snapshot, key) {
     hand: withProxiedImages(snapshot.hand, key),
     playArea: withProxiedImages(snapshot.playArea, key),
     gameBoard: withProxiedImages(snapshot.gameBoard, key),
+    otherPlayers: withProxiedUrlField(
+      snapshot.otherPlayers,
+      "avatarUrl",
+      "avatarUrl",
+      key
+    ),
+    decks: withProxiedUrlField(snapshot.decks, "backUrl", "backImageUrl", key),
   };
 }
 

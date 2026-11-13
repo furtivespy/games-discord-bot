@@ -33,6 +33,17 @@ const {
   isPickerFixture,
   isSnapshotFixture,
 } = require("../embedded-client/src/mockFixtures.ts");
+const {
+  CUSTOM_GAME_LABEL,
+  DEFAULT_CARD_BACK,
+  autoSelectGameId,
+  deckCountLabel,
+  handCountLabel,
+  initialsFromName,
+  statusGameTitle,
+  suitGlyph,
+  visibleDecks,
+} = require("../embedded-client/src/tableLayout.ts");
 
 describe("embedded client handshake URLs", () => {
   test("maps the public API host onto /api so fetch is not raw cross-origin", () => {
@@ -85,6 +96,10 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("liveSelectedChannelId");
     expect(main).toContain("SNAPSHOT_LOADING_MESSAGE");
     expect(main).toContain("Picker option value is the game document key");
+    expect(main).toContain("renderGameStatus");
+    expect(main).toContain("renderOtherPlayers");
+    expect(main).toContain("renderDecks");
+    expect(main).toContain("autoSelectGameId");
     const requestSeq = require("fs").readFileSync(
       require("path").join(__dirname, "..", "embedded-client", "src", "requestSeq.ts"),
       "utf8"
@@ -177,6 +192,39 @@ describe("mock Discord SDK shim", () => {
       username: MOCK_USER.username,
       global_name: MOCK_USER.global_name,
     });
+  });
+});
+
+describe("visual table layout helpers", () => {
+  test("keeps at most two decks and formats Balatro-style counts", () => {
+    expect(visibleDecks([{ name: "a" }, { name: "b" }, { name: "c" }])).toEqual([
+      { name: "a" },
+      { name: "b" },
+    ]);
+    expect(visibleDecks(null)).toEqual([]);
+    expect(deckCountLabel(30, 42)).toBe("30/42");
+    expect(deckCountLabel("?", 42)).toBe("?/42");
+    expect(handCountLabel(1)).toBe("1 card");
+    expect(handCountLabel(4)).toBe("4 cards");
+    expect(handCountLabel("?")).toBe("? cards");
+    expect(DEFAULT_CARD_BACK).toBe("/card-back.svg");
+    expect(
+      require("fs").existsSync(
+        require("path").join(__dirname, "..", "embedded-client", "public", "card-back.svg")
+      )
+    ).toBe(true);
+  });
+
+  test("status title, initials, suits, and mock auto-select", () => {
+    expect(statusGameTitle({ gameName: "Inis", isCustomGame: true })).toBe(
+      `Inis (${CUSTOM_GAME_LABEL}) Status`
+    );
+    expect(initialsFromName("QA Tester")).toBe("QT");
+    expect(suitGlyph("hearts")).toBe("♥");
+    expect(autoSelectGameId("?fixture=several-games&game=newest-thread", true)).toBe(
+      "newest-thread"
+    );
+    expect(autoSelectGameId("?game=newest-thread", false)).toBe("");
   });
 });
 
