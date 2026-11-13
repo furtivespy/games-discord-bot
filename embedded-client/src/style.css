@@ -294,22 +294,17 @@ body {
   align-items: stretch;
 }
 
+/* No z-index on .zone: a value other than auto makes the row a stacking
+   context, so a later row (Play Area) paints over every earlier-row card
+   once both rows have a moved tile. Tiles share #table's stacking instead. */
 .zone {
   position: relative;
-  z-index: 0;
   background: rgba(8, 22, 18, 0.28);
   border: 1px solid rgba(201, 227, 210, 0.18);
   border-radius: 14px;
   padding: 0.7rem 0.8rem 0.85rem;
   overflow: visible;
   min-height: 8.5rem;
-}
-
-.zone:has(.dragging),
-.zone:has(.moved),
-.zone:has(.card-tile:hover),
-.zone:has(.deck-tile:hover) {
-  z-index: 2;
 }
 
 .decks-zone {

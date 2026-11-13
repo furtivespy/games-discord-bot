@@ -15,7 +15,11 @@ const {
   urlMappingsForApiHost,
 } = require("../embedded-client/src/handshake.ts");
 const {
+  STACK_ABOVE_HOVER,
+  applyCardOffset,
+  enableCardDrag,
   isMovedOffset,
+  nextCardStackOrder,
   nextOffset,
   translateCss,
 } = require("../embedded-client/src/drag.ts");
@@ -235,9 +239,117 @@ describe("client-only card drag", () => {
       x: 20,
       y: 23,
     });
+    expect(
+      nextOffset({ x: 10, y: 20, z: 41 }, { x: 5, y: 5 }, { x: 15, y: 8 })
+    ).toEqual({
+      x: 20,
+      y: 23,
+      z: 41,
+    });
     expect(isMovedOffset({ x: 141, y: 126 })).toBe(true);
     expect(isMovedOffset({ x: 0, y: 0 })).toBe(false);
     expect(isMovedOffset(undefined)).toBe(false);
+  });
+
+  test("stack order stays above hover and increases per raise", () => {
+    const first = nextCardStackOrder();
+    const second = nextCardStackOrder();
+    expect(first).toBeGreaterThan(STACK_ABOVE_HOVER);
+    expect(second).toBeGreaterThan(first);
+    const tile = {
+      style: {},
+      classList: { toggle() {} },
+    };
+    applyCardOffset(tile, { x: 8, y: -4, z: first });
+    expect(tile.style.transform).toBe("translate(8px, -4px)");
+    expect(tile.style.zIndex).toBe(String(first));
+  });
+
+  test("pointerdown raises the last-touched card above an earlier moved card", () => {
+    function createTileStub() {
+      const listeners = new Map();
+      const ownerListeners = new Map();
+      const classSet = new Set();
+      const ownerDocument = {
+        addEventListener(type, fn) {
+          const list = ownerListeners.get(type) || [];
+          list.push(fn);
+          ownerListeners.set(type, list);
+        },
+        removeEventListener(type, fn) {
+          ownerListeners.set(
+            type,
+            (ownerListeners.get(type) || []).filter((item) => item !== fn)
+          );
+        },
+        dispatch(type, event) {
+          for (const fn of ownerListeners.get(type) || []) fn(event);
+        },
+      };
+      return {
+        style: {},
+        classList: {
+          add: (name) => classSet.add(name),
+          remove: (name) => classSet.delete(name),
+          toggle: (name, on) => {
+            if (on) classSet.add(name);
+            else classSet.delete(name);
+          },
+        },
+        ownerDocument,
+        addEventListener(type, fn) {
+          const list = listeners.get(type) || [];
+          list.push(fn);
+          listeners.set(type, list);
+        },
+        setPointerCapture() {},
+        releasePointerCapture() {},
+        dispatch(type, event) {
+          for (const fn of listeners.get(type) || []) fn(event);
+        },
+      };
+    }
+
+    const positions = new Map();
+    const boardCard = createTileStub();
+    const playCard = createTileStub();
+    enableCardDrag(boardCard, "province", positions);
+    enableCardDrag(playCard, "market", positions);
+
+    boardCard.dispatch("pointerdown", {
+      button: 0,
+      pointerId: 1,
+      clientX: 10,
+      clientY: 10,
+      preventDefault() {},
+    });
+    boardCard.ownerDocument.dispatch("pointermove", {
+      pointerId: 1,
+      clientX: 10,
+      clientY: 80,
+    });
+    boardCard.ownerDocument.dispatch("pointerup", { pointerId: 1 });
+
+    playCard.dispatch("pointerdown", {
+      button: 0,
+      pointerId: 2,
+      clientX: 20,
+      clientY: 20,
+      preventDefault() {},
+    });
+    playCard.ownerDocument.dispatch("pointermove", {
+      pointerId: 2,
+      clientX: 20,
+      clientY: 90,
+    });
+    playCard.ownerDocument.dispatch("pointerup", { pointerId: 2 });
+
+    const provinceZ = Number(boardCard.style.zIndex);
+    const marketZ = Number(playCard.style.zIndex);
+    expect(provinceZ).toBeGreaterThan(STACK_ABOVE_HOVER);
+    expect(marketZ).toBeGreaterThan(provinceZ);
+    expect(positions.get("province").z).toBe(provinceZ);
+    expect(positions.get("market").z).toBe(marketZ);
   });
 });
 

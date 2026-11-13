@@ -394,13 +394,15 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain("#table[hidden]");
     expect(css).toContain(".card-tile.dragging");
     expect(css).toContain(".card-tile.moved");
-    expect(css).toContain(".zone:has(.dragging)");
-    expect(css).toContain(".zone:has(.moved)");
+    expect(css).not.toContain(".zone:has(.dragging)");
+    expect(css).not.toContain(".zone:has(.moved)");
+    const zoneBlock = css.slice(css.indexOf(".zone {"), css.indexOf("}", css.indexOf(".zone {")) + 1);
+    expect(zoneBlock).toContain("overflow: visible");
+    expect(zoneBlock).not.toMatch(/z-index/);
     expect(css).toContain("z-index: 20");
     expect(css).toContain(".card-tile:hover .card-face");
     expect(css).toContain("scale(1.28)");
     expect(css).toContain(".hand-fan .card-tile + .card-tile");
-    expect(css).toContain(".zone:has(.card-tile:hover)");
   });
 
   test("card rows are not scroll containers so drag and hover zoom are not clipped", () => {

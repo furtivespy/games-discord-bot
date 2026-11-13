@@ -1,4 +1,14 @@
-export type CardOffset = { x: number; y: number };
+export type CardOffset = { x: number; y: number; z?: number };
+
+/** Above `.card-tile:hover { z-index: 30 }` so a dropped card stays grabbable. */
+export const STACK_ABOVE_HOVER = 40;
+
+let stackSeq = STACK_ABOVE_HOVER;
+
+export function nextCardStackOrder(): number {
+  stackSeq += 1;
+  return stackSeq;
+}
 
 export function translateCss(x: number, y: number): string {
   return `translate(${x}px, ${y}px)`;
@@ -9,10 +19,12 @@ export function nextOffset(
   start: CardOffset,
   current: CardOffset
 ): CardOffset {
-  return {
+  const next: CardOffset = {
     x: origin.x + (current.x - start.x),
     y: origin.y + (current.y - start.y),
   };
+  if (origin.z != null) next.z = origin.z;
+  return next;
 }
 
 export function isMovedOffset(offset: CardOffset | undefined): boolean {
@@ -23,21 +35,31 @@ function syncMovedClass(tile: HTMLElement, offset: CardOffset | undefined) {
   tile.classList.toggle("moved", isMovedOffset(offset));
 }
 
+export function applyCardOffset(tile: HTMLElement, offset: CardOffset | undefined) {
+  if (!offset) return;
+  tile.style.transform = translateCss(offset.x, offset.y);
+  if (offset.z != null) tile.style.zIndex = String(offset.z);
+  syncMovedClass(tile, offset);
+}
+
+function raiseTile(tile: HTMLElement, origin: CardOffset): CardOffset {
+  const raised = { ...origin, z: nextCardStackOrder() };
+  applyCardOffset(tile, raised);
+  return raised;
+}
+
 /**
  * Client-only drag: store translate(x, y) per card id. No drop targets, no PATCH.
  * Positions live in the provided map and reset whenever the caller replaces it
- * (snapshot reload or a full page refresh).
+ * (snapshot reload or a full page refresh). Each pointerdown bumps the tile's
+ * z-index so the last-touched card stays above other rows' cards.
  */
 export function enableCardDrag(
   tile: HTMLElement,
   cardId: string,
   positions: Map<string, CardOffset>
 ) {
-  const existing = positions.get(cardId);
-  if (existing) {
-    tile.style.transform = translateCss(existing.x, existing.y);
-  }
-  syncMovedClass(tile, existing);
+  applyCardOffset(tile, positions.get(cardId));
 
   let activePointer: number | null = null;
 
@@ -47,7 +69,8 @@ export function enableCardDrag(
     event.preventDefault();
     const pointerId = event.pointerId;
     activePointer = pointerId;
-    const origin = positions.get(cardId) || { x: 0, y: 0 };
+    const origin = raiseTile(tile, positions.get(cardId) || { x: 0, y: 0 });
+    positions.set(cardId, origin);
     const start = { x: event.clientX, y: event.clientY };
     tile.classList.add("dragging");
     try {
@@ -65,8 +88,7 @@ export function enableCardDrag(
         y: pointer.clientY,
       });
       positions.set(cardId, next);
-      tile.style.transform = translateCss(next.x, next.y);
-      syncMovedClass(tile, next);
+      applyCardOffset(tile, next);
     };
     const up = (ev: Event) => {
       const pointer = ev as PointerEvent;
