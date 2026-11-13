@@ -396,6 +396,7 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain(".card-tile.moved");
     expect(css).not.toContain(".zone:has(.dragging)");
     expect(css).not.toContain(".zone:has(.moved)");
+    expect(css).not.toContain(".zone:has(.card-tile:hover)");
     const zoneBlock = css.slice(css.indexOf(".zone {"), css.indexOf("}", css.indexOf(".zone {")) + 1);
     expect(zoneBlock).toContain("overflow: visible");
     expect(zoneBlock).not.toMatch(/z-index/);
@@ -441,6 +442,11 @@ describe("embedded HTTP origin", () => {
     expect(ruleBody(".board-spread")).toMatch(/flex-wrap:\s*wrap/);
     expect(ruleBody(".cards")).toMatch(/min-height:\s*7\.55rem/);
     expect(ruleBody(".card-face")).toMatch(/box-sizing:\s*border-box/);
+    expect(ruleBody("#table")).toMatch(/isolation:\s*isolate/);
+    expect(ruleBody(".zone")).not.toMatch(/z-index\s*:/);
+    expect(ruleBody(".zone")).not.toMatch(/transform\s*:/);
+    expect(ruleBody(".board-row")).not.toMatch(/z-index\s*:/);
+    expect(ruleBody(".board-row")).not.toMatch(/transform\s*:/);
   });
 });
 

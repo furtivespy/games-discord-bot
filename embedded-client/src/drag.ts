@@ -51,8 +51,8 @@ function raiseTile(tile: HTMLElement, origin: CardOffset): CardOffset {
 /**
  * Client-only drag: store translate(x, y) per card id. No drop targets, no PATCH.
  * Positions live in the provided map and reset whenever the caller replaces it
- * (snapshot reload or a full page refresh). Each pointerdown bumps the tile's
- * z-index so the last-touched card stays above other rows' cards.
+ * (snapshot reload or a full page refresh). Drag start and drop each bump the
+ * tile's z-index so the last-touched card stays above every other zone.
  */
 export function enableCardDrag(
   tile: HTMLElement,
@@ -100,7 +100,8 @@ export function enableCardDrag(
         // already released or never captured
       }
       tile.classList.remove("dragging");
-      syncMovedClass(tile, positions.get(cardId));
+      const current = positions.get(cardId) || origin;
+      positions.set(cardId, raiseTile(tile, current));
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", up);
       target.removeEventListener("pointercancel", up);

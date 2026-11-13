@@ -232,6 +232,67 @@ describe("visual table layout helpers", () => {
   });
 });
 
+function createFakeTile() {
+  const classSet = new Set();
+  const listeners = new Map();
+  const docListeners = new Map();
+  const ownerDocument = {
+    addEventListener(type, fn) {
+      const list = docListeners.get(type) || [];
+      list.push(fn);
+      docListeners.set(type, list);
+    },
+    removeEventListener(type, fn) {
+      const list = (docListeners.get(type) || []).filter((handler) => handler !== fn);
+      docListeners.set(type, list);
+    },
+    dispatchEvent(event) {
+      for (const handler of docListeners.get(event.type) || []) handler(event);
+      return true;
+    },
+  };
+  const tile = {
+    style: { transform: "", zIndex: "" },
+    classList: {
+      add: (name) => classSet.add(name),
+      remove: (name) => classSet.delete(name),
+      toggle: (name, force) => {
+        if (force === undefined) {
+          if (classSet.has(name)) classSet.delete(name);
+          else classSet.add(name);
+        } else if (force) classSet.add(name);
+        else classSet.delete(name);
+        return classSet.has(name);
+      },
+      contains: (name) => classSet.has(name),
+    },
+    ownerDocument,
+    addEventListener(type, fn) {
+      const list = listeners.get(type) || [];
+      list.push(fn);
+      listeners.set(type, list);
+    },
+    dispatchEvent(event) {
+      for (const handler of listeners.get(event.type) || []) handler(event);
+      return true;
+    },
+    setPointerCapture() {},
+    releasePointerCapture() {},
+  };
+  return tile;
+}
+
+function pointerEvent(type, { pointerId = 1, button = 0, clientX, clientY } = {}) {
+  return {
+    type,
+    pointerId,
+    button,
+    clientX,
+    clientY,
+    preventDefault() {},
+  };
+}
+
 describe("client-only card drag", () => {
   test("stores translate(x, y) from pointer deltas", () => {
     expect(translateCss(12, -4)).toBe("translate(12px, -4px)");
@@ -265,91 +326,59 @@ describe("client-only card drag", () => {
     expect(tile.style.zIndex).toBe(String(first));
   });
 
-  test("pointerdown raises the last-touched card above an earlier moved card", () => {
-    function createTileStub() {
-      const listeners = new Map();
-      const ownerListeners = new Map();
-      const classSet = new Set();
-      const ownerDocument = {
-        addEventListener(type, fn) {
-          const list = ownerListeners.get(type) || [];
-          list.push(fn);
-          ownerListeners.set(type, list);
-        },
-        removeEventListener(type, fn) {
-          ownerListeners.set(
-            type,
-            (ownerListeners.get(type) || []).filter((item) => item !== fn)
-          );
-        },
-        dispatch(type, event) {
-          for (const fn of ownerListeners.get(type) || []) fn(event);
-        },
-      };
-      return {
-        style: {},
-        classList: {
-          add: (name) => classSet.add(name),
-          remove: (name) => classSet.delete(name),
-          toggle: (name, on) => {
-            if (on) classSet.add(name);
-            else classSet.delete(name);
-          },
-        },
-        ownerDocument,
-        addEventListener(type, fn) {
-          const list = listeners.get(type) || [];
-          list.push(fn);
-          listeners.set(type, list);
-        },
-        setPointerCapture() {},
-        releasePointerCapture() {},
-        dispatch(type, event) {
-          for (const fn of listeners.get(type) || []) fn(event);
-        },
-      };
-    }
+  test("raises a card's z-index on drag start and again on drop", () => {
+    const before = nextCardStackOrder();
+    const tile = createFakeTile();
+    enableCardDrag(tile, "board-1", new Map());
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
+    const duringDrag = Number(tile.style.zIndex);
+    expect(duringDrag).toBeGreaterThan(before);
+    expect(tile.classList.contains("dragging")).toBe(true);
 
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 40, clientY: 80 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 40, clientY: 80 })
+    );
+    const afterDrop = Number(tile.style.zIndex);
+    expect(afterDrop).toBeGreaterThan(duringDrag);
+    expect(tile.classList.contains("dragging")).toBe(false);
+    expect(tile.classList.contains("moved")).toBe(true);
+    expect(tile.style.transform).toBe(translateCss(30, 70));
+  });
+
+  test("a later drag raises that card above an earlier drop", () => {
+    const province = createFakeTile();
+    const village = createFakeTile();
+    const market = createFakeTile();
     const positions = new Map();
-    const boardCard = createTileStub();
-    const playCard = createTileStub();
-    enableCardDrag(boardCard, "province", positions);
-    enableCardDrag(playCard, "market", positions);
+    enableCardDrag(province, "board-1", positions);
+    enableCardDrag(village, "play-1", positions);
+    enableCardDrag(market, "play-2", positions);
 
-    boardCard.dispatch("pointerdown", {
-      button: 0,
-      pointerId: 1,
-      clientX: 10,
-      clientY: 10,
-      preventDefault() {},
-    });
-    boardCard.ownerDocument.dispatch("pointermove", {
-      pointerId: 1,
-      clientX: 10,
-      clientY: 80,
-    });
-    boardCard.ownerDocument.dispatch("pointerup", { pointerId: 1 });
+    province.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    province.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 10, clientY: 80 })
+    );
+    province.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 10, clientY: 80 })
+    );
 
-    playCard.dispatch("pointerdown", {
-      button: 0,
-      pointerId: 2,
-      clientX: 20,
-      clientY: 20,
-      preventDefault() {},
-    });
-    playCard.ownerDocument.dispatch("pointermove", {
-      pointerId: 2,
-      clientX: 20,
-      clientY: 90,
-    });
-    playCard.ownerDocument.dispatch("pointerup", { pointerId: 2 });
+    market.dispatchEvent(pointerEvent("pointerdown", { clientX: 20, clientY: 0 }));
+    market.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 20, clientY: 120 })
+    );
+    market.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 20, clientY: 120 })
+    );
 
-    const provinceZ = Number(boardCard.style.zIndex);
-    const marketZ = Number(playCard.style.zIndex);
-    expect(provinceZ).toBeGreaterThan(STACK_ABOVE_HOVER);
+    const provinceZ = Number(province.style.zIndex);
+    const marketZ = Number(market.style.zIndex);
+    expect(provinceZ).toBeGreaterThan(Number(village.style.zIndex || 0));
     expect(marketZ).toBeGreaterThan(provinceZ);
-    expect(positions.get("province").z).toBe(provinceZ);
-    expect(positions.get("market").z).toBe(marketZ);
+    expect(positions.get("board-1").z).toBe(provinceZ);
+    expect(positions.get("play-2").z).toBe(marketZ);
   });
 });
 

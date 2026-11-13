@@ -224,6 +224,9 @@ body {
   padding: 0.9rem 1rem 1.1rem;
   align-content: start;
   overflow: visible;
+  /* Cards from every zone share this stacking context so a raised tile can
+     paint above later DOM zones. Do not put z-index/transform on .zone. */
+  isolation: isolate;
 }
 
 #table[hidden] {
