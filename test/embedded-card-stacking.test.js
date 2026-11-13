@@ -21,6 +21,26 @@ function chromeBin() {
   return "";
 }
 
+function workingChromeBin() {
+  // GitHub's ubuntu runner may resolve a chromium stub that never paints, so
+  // skip in CI. Locally, require `chrome --version` to succeed quickly.
+  if (process.env.CI) return "";
+  const bin = chromeBin();
+  if (!bin) return "";
+  try {
+    const version = spawnSync(bin, ["--version"], {
+      encoding: "utf8",
+      timeout: 2500,
+    });
+    if (version.status !== 0) return "";
+    const text = `${version.stdout || ""}${version.stderr || ""}`;
+    if (!/Chrom(e|ium)/i.test(text)) return "";
+    return bin;
+  } catch {
+    return "";
+  }
+}
+
 function namedTile(id, title) {
   return `<article class="card-tile" data-card-id="${id}" title="${title}"><div class="card-face named-card"><span class="card-name card-name-full">${title}</span></div></article>`;
 }
@@ -161,10 +181,23 @@ try {
 `;
 
 describe("dropped cards stay pickable across zones", () => {
-  const chrome = chromeBin();
+  const chrome = workingChromeBin();
   let server;
   let chromeProc;
   let userDataDir;
+
+  test("table isolates cards; zones do not set z-index", () => {
+    const css = fs
+      .readFileSync(STYLE_PATH, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+    const table = css.match(/#table\s*\{([^}]+)\}/);
+    const zone = css.match(/\.zone\s*\{([^}]+)\}/);
+    expect(table).toBeTruthy();
+    expect(zone).toBeTruthy();
+    expect(table[1]).toMatch(/isolation:\s*isolate/);
+    expect(zone[1]).not.toMatch(/z-index\s*:/);
+    expect(zone[1]).not.toMatch(/transform\s*:/);
+  });
 
   afterEach(() => {
     try {
@@ -230,6 +263,7 @@ describe("dropped cards stay pickable across zones", () => {
         "--no-sandbox",
         "--disable-dev-shm-usage",
         "--hide-scrollbars",
+        "--no-first-run",
         "--window-size=1280,800",
         `--user-data-dir=${userDataDir}`,
         String(server.url),
