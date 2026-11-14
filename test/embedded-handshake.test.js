@@ -15,7 +15,11 @@ const {
   urlMappingsForApiHost,
 } = require("../embedded-client/src/handshake.ts");
 const {
+  STACK_ABOVE_HOVER,
+  applyCardOffset,
+  enableCardDrag,
   isMovedOffset,
+  nextCardStackOrder,
   nextOffset,
   translateCss,
 } = require("../embedded-client/src/drag.ts");
@@ -33,6 +37,17 @@ const {
   isPickerFixture,
   isSnapshotFixture,
 } = require("../embedded-client/src/mockFixtures.ts");
+const {
+  CUSTOM_GAME_LABEL,
+  DEFAULT_CARD_BACK,
+  autoSelectGameId,
+  deckCountLabel,
+  handCountLabel,
+  initialsFromName,
+  statusGameTitle,
+  suitGlyph,
+  visibleDecks,
+} = require("../embedded-client/src/tableLayout.ts");
 
 describe("embedded client handshake URLs", () => {
   test("maps the public API host onto /api so fetch is not raw cross-origin", () => {
@@ -85,6 +100,10 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("liveSelectedChannelId");
     expect(main).toContain("SNAPSHOT_LOADING_MESSAGE");
     expect(main).toContain("Picker option value is the game document key");
+    expect(main).toContain("renderGameStatus");
+    expect(main).toContain("renderOtherPlayers");
+    expect(main).toContain("renderDecks");
+    expect(main).toContain("autoSelectGameId");
     const requestSeq = require("fs").readFileSync(
       require("path").join(__dirname, "..", "embedded-client", "src", "requestSeq.ts"),
       "utf8"
@@ -180,6 +199,100 @@ describe("mock Discord SDK shim", () => {
   });
 });
 
+describe("visual table layout helpers", () => {
+  test("keeps at most two decks and formats Balatro-style counts", () => {
+    expect(visibleDecks([{ name: "a" }, { name: "b" }, { name: "c" }])).toEqual([
+      { name: "a" },
+      { name: "b" },
+    ]);
+    expect(visibleDecks(null)).toEqual([]);
+    expect(deckCountLabel(30, 42)).toBe("30/42");
+    expect(deckCountLabel("?", 42)).toBe("?/42");
+    expect(handCountLabel(1)).toBe("1 card");
+    expect(handCountLabel(4)).toBe("4 cards");
+    expect(handCountLabel("?")).toBe("? cards");
+    expect(DEFAULT_CARD_BACK).toBe("/card-back.svg");
+    expect(
+      require("fs").existsSync(
+        require("path").join(__dirname, "..", "embedded-client", "public", "card-back.svg")
+      )
+    ).toBe(true);
+  });
+
+  test("status title, initials, suits, and mock auto-select", () => {
+    expect(statusGameTitle({ gameName: "Inis", isCustomGame: true })).toBe(
+      `Inis (${CUSTOM_GAME_LABEL}) Status`
+    );
+    expect(initialsFromName("QA Tester")).toBe("QT");
+    expect(suitGlyph("hearts")).toBe("♥");
+    expect(autoSelectGameId("?fixture=several-games&game=newest-thread", true)).toBe(
+      "newest-thread"
+    );
+    expect(autoSelectGameId("?game=newest-thread", false)).toBe("");
+  });
+});
+
+function createFakeTile() {
+  const classSet = new Set();
+  const listeners = new Map();
+  const docListeners = new Map();
+  const ownerDocument = {
+    addEventListener(type, fn) {
+      const list = docListeners.get(type) || [];
+      list.push(fn);
+      docListeners.set(type, list);
+    },
+    removeEventListener(type, fn) {
+      const list = (docListeners.get(type) || []).filter((handler) => handler !== fn);
+      docListeners.set(type, list);
+    },
+    dispatchEvent(event) {
+      for (const handler of docListeners.get(event.type) || []) handler(event);
+      return true;
+    },
+  };
+  const tile = {
+    style: { transform: "", zIndex: "" },
+    classList: {
+      add: (name) => classSet.add(name),
+      remove: (name) => classSet.delete(name),
+      toggle: (name, force) => {
+        if (force === undefined) {
+          if (classSet.has(name)) classSet.delete(name);
+          else classSet.add(name);
+        } else if (force) classSet.add(name);
+        else classSet.delete(name);
+        return classSet.has(name);
+      },
+      contains: (name) => classSet.has(name),
+    },
+    ownerDocument,
+    addEventListener(type, fn) {
+      const list = listeners.get(type) || [];
+      list.push(fn);
+      listeners.set(type, list);
+    },
+    dispatchEvent(event) {
+      for (const handler of listeners.get(event.type) || []) handler(event);
+      return true;
+    },
+    setPointerCapture() {},
+    releasePointerCapture() {},
+  };
+  return tile;
+}
+
+function pointerEvent(type, { pointerId = 1, button = 0, clientX, clientY } = {}) {
+  return {
+    type,
+    pointerId,
+    button,
+    clientX,
+    clientY,
+    preventDefault() {},
+  };
+}
+
 describe("client-only card drag", () => {
   test("stores translate(x, y) from pointer deltas", () => {
     expect(translateCss(12, -4)).toBe("translate(12px, -4px)");
@@ -187,9 +300,85 @@ describe("client-only card drag", () => {
       x: 20,
       y: 23,
     });
+    expect(
+      nextOffset({ x: 10, y: 20, z: 41 }, { x: 5, y: 5 }, { x: 15, y: 8 })
+    ).toEqual({
+      x: 20,
+      y: 23,
+      z: 41,
+    });
     expect(isMovedOffset({ x: 141, y: 126 })).toBe(true);
     expect(isMovedOffset({ x: 0, y: 0 })).toBe(false);
     expect(isMovedOffset(undefined)).toBe(false);
+  });
+
+  test("stack order stays above hover and increases per raise", () => {
+    const first = nextCardStackOrder();
+    const second = nextCardStackOrder();
+    expect(first).toBeGreaterThan(STACK_ABOVE_HOVER);
+    expect(second).toBeGreaterThan(first);
+    const tile = {
+      style: {},
+      classList: { toggle() {} },
+    };
+    applyCardOffset(tile, { x: 8, y: -4, z: first });
+    expect(tile.style.transform).toBe("translate(8px, -4px)");
+    expect(tile.style.zIndex).toBe(String(first));
+  });
+
+  test("raises a card's z-index on drag start and again on drop", () => {
+    const before = nextCardStackOrder();
+    const tile = createFakeTile();
+    enableCardDrag(tile, "board-1", new Map());
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
+    const duringDrag = Number(tile.style.zIndex);
+    expect(duringDrag).toBeGreaterThan(before);
+    expect(tile.classList.contains("dragging")).toBe(true);
+
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 40, clientY: 80 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 40, clientY: 80 })
+    );
+    const afterDrop = Number(tile.style.zIndex);
+    expect(afterDrop).toBeGreaterThan(duringDrag);
+    expect(tile.classList.contains("dragging")).toBe(false);
+    expect(tile.classList.contains("moved")).toBe(true);
+    expect(tile.style.transform).toBe(translateCss(30, 70));
+  });
+
+  test("a later drag raises that card above an earlier drop", () => {
+    const province = createFakeTile();
+    const village = createFakeTile();
+    const market = createFakeTile();
+    const positions = new Map();
+    enableCardDrag(province, "board-1", positions);
+    enableCardDrag(village, "play-1", positions);
+    enableCardDrag(market, "play-2", positions);
+
+    province.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    province.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 10, clientY: 80 })
+    );
+    province.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 10, clientY: 80 })
+    );
+
+    market.dispatchEvent(pointerEvent("pointerdown", { clientX: 20, clientY: 0 }));
+    market.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 20, clientY: 120 })
+    );
+    market.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 20, clientY: 120 })
+    );
+
+    const provinceZ = Number(province.style.zIndex);
+    const marketZ = Number(market.style.zIndex);
+    expect(provinceZ).toBeGreaterThan(Number(village.style.zIndex || 0));
+    expect(marketZ).toBeGreaterThan(provinceZ);
+    expect(positions.get("board-1").z).toBe(provinceZ);
+    expect(positions.get("play-2").z).toBe(marketZ);
   });
 });
 

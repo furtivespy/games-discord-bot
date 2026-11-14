@@ -95,6 +95,8 @@ describe("mock snapshot fixtures", () => {
       "hand-1",
       "hand-2",
       "hand-3",
+      "hand-4",
+      "hand-5",
     ]);
     expect(result.body.playArea.map((card) => card.name)).toEqual([
       "Village",
@@ -106,6 +108,22 @@ describe("mock snapshot fixtures", () => {
       "Estate",
     ]);
     expect(result.body.players).toBeUndefined();
+    expect(result.body.otherPlayers.map((player) => player.name)).toEqual([
+      "Riley",
+      "Sam",
+    ]);
+    expect(result.body.otherPlayers[0].handCount).toBe(1);
+    expect(result.body.otherPlayers[1].handCount).toBe(4);
+    expect(result.body.decks.map((deck) => deck.name)).toEqual(["Main", "Events"]);
+    expect(result.body.decks[0]).toEqual({
+      name: "Main",
+      remaining: 30,
+      total: 42,
+    });
+    expect(JSON.stringify(result.body)).not.toContain("Unused Chaos Deck");
+    expect(result.body.status.players[0].isYou).toBe(true);
+    expect(result.body.status.players[0].tokens.clue).toBe(2);
+    expect(result.body.status.players[1].tokens.clue).toBe("?");
   });
 
   test("never includes another player's hand, draft, or simultaneous cards", () => {
@@ -118,12 +136,15 @@ describe("mock snapshot fixtures", () => {
     const json = JSON.stringify(snapshot);
     expect(json).not.toContain("Other Player Secret");
     expect(json).not.toContain("other-secret-1");
-    expect(json).not.toContain("other-player-2");
     expect(json).not.toContain("Other Play Area");
     expect(json).not.toContain("Draft Only");
     expect(json).not.toContain("Simultaneous Only");
+    expect(json).not.toContain("Sam Secret");
     expect(json).not.toContain(MOCK_ACCESS_TOKEN);
     expect(snapshot.hand.some((card) => card.id === "draft-1")).toBe(false);
+    expect(snapshot.otherPlayers.some((player) => player.userId === "other-player-2")).toBe(
+      true
+    );
   });
 
   test("no-game and not-a-player are errors with no cards", () => {
@@ -156,7 +177,7 @@ describe("mock snapshot fixtures", () => {
     });
     expect(selected.status).toBe(200);
     expect(selected.body.channelId).toBe("newest-thread");
-    expect(selected.body.hand).toHaveLength(3);
+    expect(selected.body.hand).toHaveLength(5);
     expect(
       getMockSnapshot({ fixture: "one-game", channelId: "solo-thread" }).body
         .channelId
@@ -337,7 +358,7 @@ describe("mock embedded HTTP", () => {
       const body = await populated.json();
       expect(body.channelId).toBe("table-9");
       expect(body.guildId).toBe("guild-9");
-      expect(body.hand).toHaveLength(3);
+      expect(body.hand).toHaveLength(5);
       expect(JSON.stringify(body)).not.toContain("Other Player Secret");
 
       const noGame = await fetch(`${url}/api/game/snapshot?fixture=no-game`, {

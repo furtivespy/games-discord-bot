@@ -14,6 +14,7 @@ const {
   isActivePlayerGame,
   listActiveGamesForUser,
   optionalDiscordAccessGuard,
+  MAX_VISIBLE_DECKS,
   snapshotFromGameData,
   snapshotGameForUser,
   userIsPlayer,
@@ -403,6 +404,49 @@ describe("snapshotGameForUser", () => {
         ],
         playArea: [{ id: "play-1", name: "Village", url: null }],
         gameBoard: [{ id: "board-1", name: "Province", url: null }],
+        otherPlayers: [
+          {
+            userId: "other-player",
+            name: "other-player",
+            handCount: 1,
+            avatarUrl: null,
+          },
+        ],
+        decks: [{ name: "Main", remaining: 1, total: 1 }],
+        status: {
+          gameName: "Friday Inis",
+          reverseOrder: false,
+          isCustomGame: false,
+          players: [
+            {
+              userId: "will",
+              name: "will",
+              order: 0,
+              score: "",
+              handCount: 2,
+              playAreaCount: 1,
+              teamName: "",
+              color: null,
+              isYou: true,
+              tokens: {},
+            },
+            {
+              userId: "other-player",
+              name: "other-player",
+              order: 0,
+              score: "",
+              handCount: 1,
+              playAreaCount: 1,
+              teamName: "",
+              color: null,
+              isYou: false,
+              tokens: {},
+            },
+          ],
+          tokens: [],
+          globalPiles: [],
+          history: [],
+        },
       });
       const json = JSON.stringify(result.body);
       expect(json).not.toContain("Other Player Secret");
@@ -412,7 +456,8 @@ describe("snapshotGameForUser", () => {
       expect(json).not.toContain("Simultaneous Only");
       expect(json).not.toContain("Hidden Draw");
       expect(result.body.players).toBeUndefined();
-      expect(result.body.decks).toBeUndefined();
+      expect(result.body.decks).toEqual([{ name: "Main", remaining: 1, total: 1 }]);
+      expect(MAX_VISIBLE_DECKS).toBe(2);
     });
   });
 
@@ -502,6 +547,38 @@ describe("snapshotGameForUser", () => {
     ]);
     expect(result.body.hand.map((card) => card.id)).toEqual(["hand-1", "hand-2"]);
   });
+
+  test("enriches other players from Discord and ignores lookup failures", async () => {
+    const discordClient = {
+      getGameDataV2: async () => snapshotSeed(),
+      guilds: {
+        cache: { get: () => null },
+        fetch: async () => ({
+          members: {
+            cache: { get: () => null },
+            fetch: async (id) => {
+              if (id === "other-player") throw new Error("missing");
+              return {
+                displayName: "WillOnServer",
+                displayAvatarURL: () =>
+                  "https://cdn.discordapp.com/avatars/will/a.png?size=128",
+              };
+            },
+          },
+        }),
+      },
+    };
+    const result = await snapshotGameForUser({
+      discordClient,
+      guildId: "guild-a",
+      channelId: "thread-game",
+      userId: "will",
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.status.players[0].name).toBe("WillOnServer");
+    expect(result.body.otherPlayers[0].name).toBe("other-player");
+    expect(result.body.otherPlayers[0].avatarUrl).toBeNull();
+  });
 });
 
 describe("snapshotFromGameData", () => {
@@ -516,6 +593,122 @@ describe("snapshotFromGameData", () => {
     expect(snapshot.hand).toEqual([]);
     expect(snapshot.playArea).toEqual([]);
     expect(snapshot.gameBoard).toEqual([]);
+    expect(snapshot.otherPlayers).toEqual([]);
+    expect(snapshot.decks).toEqual([]);
+    expect(snapshot.status.players).toEqual([
+      expect.objectContaining({ userId: "will", isYou: true, handCount: 0 }),
+    ]);
+  });
+
+  test("other players expose name and hand count, never their cards", () => {
+    const snapshot = snapshotFromGameData(
+      {
+        name: "Table",
+        players: [
+          {
+            userId: "will",
+            name: "Will",
+            order: 1,
+            hands: { main: [{ id: "mine", name: "Copper" }] },
+          },
+          {
+            userId: "riley",
+            name: "Riley",
+            order: 2,
+            hands: { main: [{ id: "secret-card", name: "Hidden Riley Card" }] },
+            playArea: [{ id: "their-play", name: "Riley Play Card" }],
+          },
+        ],
+        decks: [
+          {
+            name: "Main",
+            allCards: [{ name: "A" }, { name: "B" }],
+            piles: { draw: { cards: [{ name: "Hidden Draw Card" }] } },
+          },
+          { name: "Events", allCards: [1, 2, 3], piles: { draw: { cards: [{}, {}] } } },
+          { name: "Unused Chaos Deck", allCards: [1], piles: { draw: { cards: [{}] } } },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(snapshot.otherPlayers).toEqual([
+      { userId: "riley", name: "Riley", handCount: 1, avatarUrl: null },
+    ]);
+    expect(snapshot.decks.map((deck) => deck.name)).toEqual(["Main", "Events"]);
+    expect(snapshot.decks[0]).toEqual({ name: "Main", remaining: 1, total: 2 });
+    const json = JSON.stringify(snapshot);
+    expect(json).not.toContain("Hidden Riley Card");
+    expect(json).not.toContain("Riley Play Card");
+    expect(json).not.toContain("secret-card");
+    expect(json).not.toContain("Hidden Draw Card");
+    expect(json).not.toContain("Unused Chaos Deck");
+  });
+
+  test("hides hand counts and extra deck cards when hiddenInfo says so", () => {
+    const snapshot = snapshotFromGameData(
+      {
+        name: "Secret Hands",
+        reverseOrder: true,
+        tokens: [{ id: "clue", name: "Clue", isSecret: true, cap: 5 }],
+        players: [
+          {
+            userId: "will",
+            name: "Will",
+            tokens: { clue: 2 },
+            hands: { main: [{ id: "a" }, { id: "b" }] },
+          },
+          {
+            userId: "riley",
+            name: "Riley",
+            tokens: { clue: 3 },
+            hands: { main: [{ id: "c" }] },
+          },
+        ],
+        decks: [
+          {
+            name: "Main",
+            hiddenInfo: "hand",
+            allCards: Array.from({ length: 10 }),
+            piles: { draw: { cards: [{}, {}, {}] } },
+          },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(snapshot.otherPlayers[0].handCount).toBe("?");
+    expect(snapshot.status.players.map((row) => row.handCount)).toEqual(["?", "?"]);
+    expect(snapshot.status.players[0].tokens.clue).toBe(2);
+    expect(snapshot.status.players[1].tokens.clue).toBe("?");
+    expect(snapshot.status.reverseOrder).toBe(true);
+    expect(snapshot.decks[0]).toEqual({ name: "Main", remaining: 3, total: 10 });
+  });
+
+  test("uses Discord display names and avatar URLs when provided", () => {
+    const snapshot = snapshotFromGameData(
+      {
+        name: "Named",
+        players: [
+          { userId: "will", name: "fallback", hands: { main: [] } },
+          { userId: "riley", hands: { main: [{}] } },
+        ],
+      },
+      {
+        channelId: "ch",
+        guildId: "g",
+        userId: "will",
+        playerDisplays: {
+          will: { name: "WillOnServer", avatarUrl: "https://cdn.discordapp.com/avatars/will/a.png" },
+          riley: { name: "RileyOnServer", avatarUrl: "https://cdn.discordapp.com/avatars/riley/a.png" },
+        },
+      }
+    );
+    expect(snapshot.status.players[0].name).toBe("WillOnServer");
+    expect(snapshot.otherPlayers[0]).toEqual({
+      userId: "riley",
+      name: "RileyOnServer",
+      handCount: 1,
+      avatarUrl: "https://cdn.discordapp.com/avatars/riley/a.png",
+    });
   });
 });
 

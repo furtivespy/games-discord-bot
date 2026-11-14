@@ -39,8 +39,9 @@ Open:
 | No games (empty picker) | http://127.0.0.1:3000/?fixture=no-games |
 | Snapshot: no game in this channel | http://127.0.0.1:3000/?fixture=no-game |
 | Snapshot: not a player | http://127.0.0.1:3000/?fixture=not-a-player |
+| Table layout after picking Friday Inis | http://127.0.0.1:3000/?fixture=several-games&game=newest-thread |
 
-The default mock URL and `?fixture=populated` are picker-only until you choose a game. Selecting a game loads that game’s hand, play area, and board (`GET /api/game/snapshot?channelId=<selected>&guildId=<sdk guild id>`). Snapshot URLs `no-game` and `not-a-player` skip the picker and show those errors. `/api/games?fixture=no-game` and `?fixture=not-a-player` return `{ games: [] }` so they stay consistent with `no-games`.
+The default mock URL and `?fixture=populated` are picker-only until you choose a game. Selecting a game loads that game’s status panel, other players, decks, board, play area, and hand (`GET /api/game/snapshot?channelId=<selected>&guildId=<sdk guild id>`). In mock mode, `?game=<channelId>` auto-selects that picker option so screenshots can skip the click. Snapshot URLs `no-game` and `not-a-player` skip the picker and show those errors. `/api/games?fixture=no-game` and `?fixture=not-a-player` return `{ games: [] }` so they stay consistent with `no-games`.
 
 Card art is never loaded straight from the card's URL: Discord's Activity CSP blocks other hosts. The snapshot replaces each card `url` with a signed `imageUrl` (`/api/card-image?u=…&s=…`) and the bot fetches the image server-side. Only URLs the bot signed are served (the key is derived from `CLIENT_SECRET`), private/internal addresses are refused on every redirect hop, and only `image/*` responses up to 10 MB are returned.
 

@@ -379,8 +379,13 @@ describe("embedded HTTP origin", () => {
     expect(html).toContain("You're not in any active games on this server.");
     expect(html).toContain('id="table"');
     expect(html).toContain("Hand");
-    expect(html).toContain("My play area");
-    expect(html).toContain("Game board");
+    expect(html).toContain("Play Area");
+    expect(html).toContain("Game Board");
+    expect(html).toContain('id="side-panel"');
+    expect(html).toContain('id="other-players"');
+    expect(html).toContain('id="game-status"');
+    expect(html).toContain('id="decks"');
+    expect(html).toContain("hand-fan");
     const css = fs.readFileSync(
       path.join(__dirname, "..", "embedded-client", "src", "style.css"),
       "utf8"
@@ -389,9 +394,59 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain("#table[hidden]");
     expect(css).toContain(".card-tile.dragging");
     expect(css).toContain(".card-tile.moved");
-    expect(css).toContain(".zone:has(.dragging)");
-    expect(css).toContain(".zone:has(.moved)");
+    expect(css).not.toContain(".zone:has(.dragging)");
+    expect(css).not.toContain(".zone:has(.moved)");
+    expect(css).not.toContain(".zone:has(.card-tile:hover)");
+    const zoneBlock = css.slice(css.indexOf(".zone {"), css.indexOf("}", css.indexOf(".zone {")) + 1);
+    expect(zoneBlock).toContain("overflow: visible");
+    expect(zoneBlock).not.toMatch(/z-index/);
     expect(css).toContain("z-index: 20");
+    expect(css).toContain(".card-tile:hover .card-face");
+    expect(css).toContain("scale(1.28)");
+    expect(css).toContain(".hand-fan .card-tile + .card-tile");
+  });
+
+  test("card rows are not scroll containers so drag and hover zoom are not clipped", () => {
+    const css = fs
+      .readFileSync(
+        path.join(__dirname, "..", "embedded-client", "src", "style.css"),
+        "utf8"
+      )
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+    const html = fs.readFileSync(
+      path.join(__dirname, "..", "embedded-client", "index.html"),
+      "utf8"
+    );
+    expect(html).toMatch(/class="cards board-spread" id="board-cards"/);
+    expect(html).toMatch(/class="cards board-spread" id="play-area-cards"/);
+    expect(html).toMatch(/class="cards hand-fan" id="hand-cards"/);
+
+    const ruleBody = (selector) => {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const match = css.match(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`));
+      expect(match).toBeTruthy();
+      return match[1];
+    };
+    const overflowIsVisible = (body) => {
+      expect(body).toMatch(/overflow:\s*visible/);
+      expect(body).not.toMatch(/overflow-x:\s*(auto|scroll|hidden)/);
+      expect(body).not.toMatch(/overflow-y:\s*(auto|scroll|hidden)/);
+      expect(body).not.toMatch(/overflow:\s*(auto|scroll|hidden)/);
+    };
+
+    overflowIsVisible(ruleBody("#table"));
+    overflowIsVisible(ruleBody(".zone"));
+    overflowIsVisible(ruleBody(".cards"));
+    overflowIsVisible(ruleBody(".board-spread"));
+    overflowIsVisible(ruleBody(".hand-fan"));
+    expect(ruleBody(".board-spread")).toMatch(/flex-wrap:\s*wrap/);
+    expect(ruleBody(".cards")).toMatch(/min-height:\s*7\.55rem/);
+    expect(ruleBody(".card-face")).toMatch(/box-sizing:\s*border-box/);
+    expect(ruleBody("#table")).toMatch(/isolation:\s*isolate/);
+    expect(ruleBody(".zone")).not.toMatch(/z-index\s*:/);
+    expect(ruleBody(".zone")).not.toMatch(/transform\s*:/);
+    expect(ruleBody(".board-row")).not.toMatch(/z-index\s*:/);
+    expect(ruleBody(".board-row")).not.toMatch(/transform\s*:/);
   });
 });
 
@@ -711,7 +766,7 @@ describe("GET /api/game/snapshot", () => {
         );
         expect(snapshot.status).toBe(200);
         const body = await snapshot.json();
-        expect(body).toEqual({
+        expect(body).toMatchObject({
           gameName: "Friday Inis",
           channelId: "thread-game",
           guildId: "guild-1",
@@ -728,7 +783,18 @@ describe("GET /api/game/snapshot", () => {
           ],
           playArea: [{ id: "play-1", name: "Village" }],
           gameBoard: [{ id: "board-1", name: "Province" }],
+          otherPlayers: [
+            {
+              userId: "other-player",
+              name: "other-player",
+              handCount: 1,
+              avatarUrl: null,
+            },
+          ],
         });
+        expect(body.decks).toEqual([]);
+        expect(body.status.players[0].isYou).toBe(true);
+        expect(body.status.players[1].handCount).toBe(1);
         expect(JSON.stringify(body)).not.toContain("Other Player Secret");
         expect(JSON.stringify(body)).not.toContain("Draft Only");
         expect(JSON.stringify(body)).not.toContain('"url"');

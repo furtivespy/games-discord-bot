@@ -23,6 +23,25 @@ import { enableCardDrag, type CardOffset } from "./drag";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
 import { asCardList, createSnapshotLoader } from "./requestSeq";
+import {
+  asRecordList,
+  autoSelectGameId,
+  DEFAULT_CARD_BACK,
+  deckCountLabel,
+  handCountLabel,
+  initialsFromName,
+  statusGameTitle,
+  suitColorClass,
+  suitGlyph,
+  visibleDecks,
+  type GameStatus,
+  type OtherPlayer,
+  type SnapshotDeck,
+  type StatusHistory,
+  type StatusPile,
+  type StatusPlayer,
+  type StatusToken,
+} from "./tableLayout";
 import "./style.css";
 
 const snapshotLoader = createSnapshotLoader();
@@ -41,6 +60,8 @@ type SnapshotCard = {
   id?: string;
   name?: string;
   imageUrl?: string;
+  suit?: string;
+  value?: string;
 };
 
 type GameSnapshot = {
@@ -50,6 +71,9 @@ type GameSnapshot = {
   hand?: SnapshotCard[];
   playArea?: SnapshotCard[];
   gameBoard?: SnapshotCard[];
+  otherPlayers?: OtherPlayer[];
+  decks?: SnapshotDeck[];
+  status?: GameStatus;
   error?: string;
 };
 
@@ -92,6 +116,10 @@ function setGreeting(text: string) {
   }
 }
 
+function setConnected(connected: boolean) {
+  document.getElementById("app")?.classList.toggle("connected", connected);
+}
+
 function setOrigin(text: string | null) {
   const el = document.getElementById("origin");
   if (!el) return;
@@ -118,16 +146,21 @@ function setSnapshotStatus(text: string | null) {
 
 function setTableVisible(visible: boolean) {
   const table = document.getElementById("table");
-  const main = document.querySelector("main");
   if (table) table.hidden = !visible;
-  main?.classList.toggle("has-table", visible);
+  if (!visible) {
+    const status = document.getElementById("game-status");
+    if (status) {
+      status.hidden = true;
+      status.replaceChildren();
+    }
+    const others = document.getElementById("other-players");
+    if (others) others.hidden = true;
+  }
 }
 
 function setPickerVisible(visible: boolean) {
   const picker = document.getElementById("game-picker");
-  const main = document.querySelector("main");
   if (picker) picker.hidden = !visible;
-  main?.classList.toggle("has-picker", visible);
 }
 
 function setHidden(id: string, hidden: boolean) {
@@ -244,6 +277,13 @@ function showGamesList(
   renderGameOptions(games);
   bindGameSelect(config, accessToken, guildId);
   showSelectedChannel(null);
+  const autoId = autoSelectGameId(window.location.search, config.mock);
+  const select = document.getElementById("game-select") as HTMLSelectElement | null;
+  if (!autoId || !select) return;
+  const match = [...select.options].some((option) => option.value === autoId);
+  if (!match) return;
+  select.value = autoId;
+  select.dispatchEvent(new Event("change"));
 }
 
 async function loadGames(
@@ -307,6 +347,55 @@ function cardImageSrc(config: EmbeddedConfig, imageUrl: unknown): string | null 
   }).toString();
 }
 
+function mappedImageSrc(config: EmbeddedConfig, imageUrl: unknown): string | null {
+  const src = cardImageSrc(config, imageUrl);
+  return src;
+}
+
+function renderCardFace(config: EmbeddedConfig, card: SnapshotCard): HTMLElement {
+  const face = document.createElement("div");
+  const nameValue = card.name;
+  const name =
+    typeof nameValue === "string" && nameValue.trim() ? nameValue.trim() : "Card";
+  const imageSrc = mappedImageSrc(config, card.imageUrl);
+  const glyph = suitGlyph(card.suit);
+  const value =
+    typeof card.value === "string" && card.value.trim() ? card.value.trim() : "";
+  if (imageSrc) {
+    face.className = "card-face has-art";
+    const img = document.createElement("img");
+    img.src = imageSrc;
+    img.alt = name;
+    img.draggable = false;
+    face.append(img);
+    const label = document.createElement("span");
+    label.className = "card-name card-caption";
+    label.textContent = name;
+    face.append(label);
+    return face;
+  }
+  if (glyph || value) {
+    face.className = `card-face ${suitColorClass(glyph)}`.trim();
+    const index = document.createElement("span");
+    index.className = "card-index";
+    index.textContent = value || "";
+    const pip = document.createElement("span");
+    pip.className = "card-pip";
+    pip.textContent = glyph || "◆";
+    const label = document.createElement("span");
+    label.className = "card-name";
+    label.textContent = name;
+    face.append(index, pip, label);
+    return face;
+  }
+  face.className = "card-face named-card";
+  const label = document.createElement("span");
+  label.className = "card-name card-name-full";
+  label.textContent = name;
+  face.append(label);
+  return face;
+}
+
 function renderCards(
   config: EmbeddedConfig,
   containerId: string,
@@ -316,7 +405,7 @@ function renderCards(
   const container = document.getElementById(containerId);
   if (!container) return;
   container.replaceChildren();
-  for (const card of asCardList(cards)) {
+  for (const card of asCardList(cards) as SnapshotCard[]) {
     const tile = document.createElement("article");
     tile.className = "card-tile";
     const idValue = card.id;
@@ -326,24 +415,205 @@ function renderCards(
     const nameValue = card.name;
     const name =
       typeof nameValue === "string" && nameValue.trim() ? nameValue.trim() : "Card";
-    const imageSrc = cardImageSrc(config, card.imageUrl);
-    if (imageSrc) {
-      const img = document.createElement("img");
-      img.src = imageSrc;
-      img.alt = name;
-      img.draggable = false;
-      tile.append(img);
-      const label = document.createElement("span");
-      label.textContent = name;
-      tile.append(label);
-    } else {
-      tile.textContent = name;
-    }
+    tile.title = name;
+    tile.append(renderCardFace(config, card));
     if (cardId) {
       enableCardDrag(tile, cardId, positions);
     }
     container.append(tile);
   }
+}
+
+function renderOtherPlayers(config: EmbeddedConfig, players: OtherPlayer[] | undefined) {
+  const row = document.getElementById("other-players");
+  const list = document.getElementById("other-players-list");
+  if (!row || !list) return;
+  list.replaceChildren();
+  const others = asRecordList<OtherPlayer>(players);
+  if (!others.length) {
+    row.hidden = true;
+    return;
+  }
+  for (const player of others) {
+    const chip = document.createElement("article");
+    chip.className = "player-chip";
+    const name =
+      typeof player.name === "string" && player.name.trim()
+        ? player.name.trim()
+        : "Player";
+    const avatarSrc = mappedImageSrc(config, player.avatarUrl);
+    if (avatarSrc) {
+      const img = document.createElement("img");
+      img.className = "player-avatar";
+      img.src = avatarSrc;
+      img.alt = name;
+      chip.append(img);
+    } else {
+      const initials = document.createElement("div");
+      initials.className = "player-initials";
+      initials.textContent = initialsFromName(name);
+      chip.append(initials);
+    }
+    const nameEl = document.createElement("div");
+    nameEl.className = "player-name";
+    nameEl.textContent = name;
+    const countEl = document.createElement("div");
+    countEl.className = "player-count";
+    countEl.textContent = handCountLabel(player.handCount);
+    chip.append(nameEl, countEl);
+    list.append(chip);
+  }
+  row.hidden = false;
+}
+
+function renderDecks(config: EmbeddedConfig, decks: SnapshotDeck[] | undefined) {
+  const container = document.getElementById("decks");
+  if (!container) return;
+  container.replaceChildren();
+  for (const deck of visibleDecks(asRecordList<SnapshotDeck>(decks))) {
+    const tile = document.createElement("article");
+    tile.className = "deck-tile";
+    const face = document.createElement("div");
+    face.className = "card-face deck-face";
+    const backSrc = mappedImageSrc(config, deck.backImageUrl) || DEFAULT_CARD_BACK;
+    face.style.backgroundImage = `url("${backSrc}")`;
+    const name = document.createElement("span");
+    name.className = "deck-name";
+    name.textContent =
+      typeof deck.name === "string" && deck.name.trim() ? deck.name.trim() : "Deck";
+    const count = document.createElement("span");
+    count.className = "deck-count";
+    count.textContent = deckCountLabel(deck.remaining, deck.total);
+    face.append(name, count);
+    tile.append(face);
+    container.append(tile);
+  }
+}
+
+function appendStatusLines(parent: HTMLElement, lines: string[]) {
+  for (const line of lines) {
+    if (!line) continue;
+    const p = document.createElement("p");
+    p.className = "status-line";
+    p.textContent = line;
+    parent.append(p);
+  }
+}
+
+function renderGameStatus(status: GameStatus | undefined, fallbackName: string) {
+  const root = document.getElementById("game-status");
+  if (!root) return;
+  root.replaceChildren();
+  const data: GameStatus = status && typeof status === "object" ? status : {};
+  if (!data.gameName && fallbackName) data.gameName = fallbackName;
+  const title = document.createElement("h2");
+  title.className = "status-title";
+  title.textContent = statusGameTitle(data);
+  root.append(title);
+  if (data.reverseOrder) {
+    const flag = document.createElement("p");
+    flag.className = "status-flag";
+    flag.textContent = "Turn order reversed";
+    root.append(flag);
+  }
+
+  const players = asRecordList<StatusPlayer>(data.players);
+  if (players.length) {
+    const block = document.createElement("section");
+    block.className = "status-block";
+    const heading = document.createElement("h3");
+    heading.textContent = "Players";
+    block.append(heading);
+    const tokenDefs = asRecordList<StatusToken>(data.tokens);
+    for (const player of players) {
+      const row = document.createElement("div");
+      row.className = `status-player${player.isYou ? " is-you" : ""}`;
+      if (player.color) {
+        row.style.borderLeft = `4px solid ${player.color}`;
+        row.style.paddingLeft = "0.45rem";
+      }
+      const name = document.createElement("div");
+      name.className = "status-player-name";
+      const seat = Number.isFinite(Number(player.order))
+        ? `(${Number(player.order) + 1}) `
+        : "";
+      name.textContent = `${seat}${player.name || "Player"}`;
+      const meta = document.createElement("p");
+      meta.className = "status-player-meta";
+      const bits = [`Score ${player.score || "—"}`];
+      if (player.teamName) bits.push(player.teamName);
+      bits.push(`Hand ${handCountLabel(player.handCount)}`);
+      bits.push(`Play area ${player.playAreaCount ?? 0}`);
+      const tokenBits = tokenDefs
+        .map((token) => {
+          const id = String(token.id || "");
+          const value = player.tokens?.[id];
+          if (value == null) return "";
+          return `${token.name || id} ${value}`;
+        })
+        .filter(Boolean);
+      if (tokenBits.length) bits.push(tokenBits.join(" · "));
+      meta.textContent = bits.join(" · ");
+      row.append(name, meta);
+      block.append(row);
+    }
+    root.append(block);
+  }
+
+  const tokens = asRecordList<StatusToken>(data.tokens);
+  if (tokens.length) {
+    const block = document.createElement("section");
+    block.className = "status-block";
+    const heading = document.createElement("h3");
+    heading.textContent = "Token supply";
+    block.append(heading);
+    appendStatusLines(
+      block,
+      tokens.map((token) => {
+        const cap = token.cap == null ? "N/A" : String(token.cap);
+        const available = token.available == null ? "∞" : token.available;
+        return `${token.name}: Circulation ${token.circulation} · Cap ${cap} · Available ${available}`;
+      })
+    );
+    root.append(block);
+  }
+
+  const piles = asRecordList<StatusPile>(data.globalPiles);
+  if (piles.length) {
+    const block = document.createElement("section");
+    block.className = "status-block";
+    const heading = document.createElement("h3");
+    heading.textContent = "Card piles";
+    block.append(heading);
+    appendStatusLines(
+      block,
+      piles.map((pile) => {
+        const secret = pile.isSecret ? "🔒 " : "";
+        const top = pile.topCardName ? ` · Top: ${pile.topCardName}` : "";
+        return `${secret}${pile.name}: ${pile.count ?? 0} cards${top}`;
+      })
+    );
+    root.append(block);
+  }
+
+  const history = asRecordList<StatusHistory>(data.history);
+  if (history.length) {
+    const block = document.createElement("section");
+    block.className = "status-block";
+    const heading = document.createElement("h3");
+    heading.textContent = "Recent actions";
+    block.append(heading);
+    const list = document.createElement("ul");
+    list.className = "status-history";
+    for (const entry of history) {
+      const item = document.createElement("li");
+      item.textContent = entry.summary || "";
+      list.append(item);
+    }
+    block.append(list);
+    root.append(block);
+  }
+  root.hidden = false;
 }
 
 function snapshotErrorMessage(error: string | undefined, status: number): string {
@@ -419,11 +689,14 @@ async function loadSnapshot(
     return;
   }
 
-  setSnapshotStatus(payload.gameName ? payload.gameName : null);
+  setSnapshotStatus(null);
   const positions = new Map<string, CardOffset>();
-  renderCards(config, "hand-cards", payload.hand, positions);
-  renderCards(config, "play-area-cards", payload.playArea, positions);
+  renderGameStatus(payload.status, payload.gameName || "");
+  renderOtherPlayers(config, payload.otherPlayers);
+  renderDecks(config, payload.decks);
   renderCards(config, "board-cards", payload.gameBoard, positions);
+  renderCards(config, "play-area-cards", payload.playArea, positions);
+  renderCards(config, "hand-cards", payload.hand, positions);
   setTableVisible(true);
 }
 
@@ -518,6 +791,7 @@ async function bootstrap() {
   }
   setGreeting(helloGreeting(displayName));
   setOrigin(originLine(payload.origin_channel_name));
+  setConnected(true);
 
   // discordSdk.guildId is the SDK field (query param guild_id). The game
   // channel/thread id comes from the picker, not discordSdk.channelId.
@@ -535,6 +809,7 @@ async function bootstrap() {
 
 bootstrap().catch((error) => {
   const config = readConfig();
+  setConnected(false);
   if (config.mock) {
     setGreeting("Could not start mock visual mode.");
     return;

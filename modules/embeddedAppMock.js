@@ -1,3 +1,5 @@
+const { snapshotFromGameData } = require("./embeddedGames");
+
 const ENV_NAME = "EMBEDDED_APP_MOCK";
 const TRUTHY = new Set(["1", "true", "yes", "on"]);
 
@@ -96,16 +98,59 @@ function otherPlayerHand() {
 }
 
 function populatedSeed() {
+  const drawCards = Array.from({ length: 30 }, (_, i) =>
+    fixtureCard(`draw-${i + 1}`, `Draw ${i + 1}`)
+  );
+  const eventDraw = Array.from({ length: 8 }, (_, i) =>
+    fixtureCard(`event-draw-${i + 1}`, `Event ${i + 1}`)
+  );
+  const extraDraw = Array.from({ length: 12 }, (_, i) =>
+    fixtureCard(`extra-draw-${i + 1}`, `Unused Chaos ${i + 1}`)
+  );
   return {
     name: "Fixture Game",
+    reverseOrder: false,
+    isCustomGame: false,
+    tokens: [
+      { id: "vp", name: "VP", isSecret: false, cap: 20 },
+      { id: "clue", name: "Clue", isSecret: true, cap: 8 },
+    ],
+    teams: [],
     players: [
       {
         userId: MOCK_USER.id,
+        name: MOCK_USER.global_name,
+        order: 1,
+        score: "12",
+        color: "gold",
+        tokens: { vp: 4, clue: 2 },
         hands: {
           main: [
-            fixtureCard("hand-1", "Copper"),
-            fixtureCard("hand-2", "Silver"),
-            fixtureCard("hand-3", "Gold"),
+            fixtureCard("hand-1", "Ace of Spades", {
+              suit: "spades",
+              value: "A",
+              type: "Spades",
+            }),
+            fixtureCard("hand-2", "King of Hearts", {
+              suit: "hearts",
+              value: "K",
+              type: "Hearts",
+            }),
+            fixtureCard("hand-3", "Queen of Diamonds", {
+              suit: "diamonds",
+              value: "Q",
+              type: "Diamonds",
+            }),
+            fixtureCard("hand-4", "Jack of Clubs", {
+              suit: "clubs",
+              value: "J",
+              type: "Clubs",
+            }),
+            fixtureCard("hand-5", "10 of Spades", {
+              suit: "spades",
+              value: "10",
+              type: "Spades",
+            }),
           ],
           draft: [fixtureCard("draft-1", "Draft Only")],
           simultaneous: [fixtureCard("sim-1", "Simultaneous Only")],
@@ -117,8 +162,30 @@ function populatedSeed() {
       },
       {
         userId: "other-player-2",
+        name: "Riley",
+        order: 2,
+        score: "7",
+        color: "teal",
+        tokens: { vp: 3, clue: 1 },
         hands: { main: otherPlayerHand() },
         playArea: [fixtureCard("other-play-1", "Other Play Area")],
+      },
+      {
+        userId: "other-player-3",
+        name: "Sam",
+        order: 3,
+        score: "4",
+        color: "crimson",
+        tokens: { vp: 1, clue: 0 },
+        hands: {
+          main: [
+            fixtureCard("sam-1", "Sam Secret 1"),
+            fixtureCard("sam-2", "Sam Secret 2"),
+            fixtureCard("sam-3", "Sam Secret 3"),
+            fixtureCard("sam-4", "Sam Secret 4"),
+          ],
+        },
+        playArea: [],
       },
     ],
     gameBoard: [
@@ -126,19 +193,46 @@ function populatedSeed() {
       fixtureCard("board-2", "Duchy"),
       fixtureCard("board-3", "Estate"),
     ],
+    decks: [
+      {
+        name: "Main",
+        hiddenInfo: "visible",
+        allCards: Array.from({ length: 42 }, (_, i) =>
+          fixtureCard(`main-all-${i + 1}`, `Main ${i + 1}`)
+        ),
+        piles: { draw: { cards: drawCards }, discard: { cards: [] } },
+      },
+      {
+        name: "Events",
+        hiddenInfo: "visible",
+        allCards: Array.from({ length: 15 }, (_, i) =>
+          fixtureCard(`event-all-${i + 1}`, `Event All ${i + 1}`)
+        ),
+        piles: { draw: { cards: eventDraw }, discard: { cards: [] } },
+      },
+      {
+        name: "Unused Chaos Deck",
+        hiddenInfo: "visible",
+        allCards: Array.from({ length: 20 }, (_, i) =>
+          fixtureCard(`chaos-all-${i + 1}`, `Chaos ${i + 1}`)
+        ),
+        piles: { draw: { cards: extraDraw }, discard: { cards: [] } },
+      },
+    ],
+    globalPiles: [{ name: "Market Row", cards: [{ name: "Copper" }], isSecret: false }],
+    history: [
+      { summary: "QA Tester drew 2 cards", action: { category: "card" } },
+      { summary: "Riley played Village", action: { category: "card" } },
+    ],
   };
 }
 
 function snapshotFromSeed(seed, { channelId, guildId } = {}) {
-  const me = (seed.players || []).find((player) => player.userId === MOCK_USER.id);
-  return {
-    gameName: seed.name,
+  return snapshotFromGameData(seed, {
     channelId,
     guildId,
-    hand: [...(me?.hands?.main || [])],
-    playArea: [...(me?.playArea || [])],
-    gameBoard: [...(seed.gameBoard || [])],
-  };
+    userId: MOCK_USER.id,
+  });
 }
 
 function sanitizeFixtureName(value) {
