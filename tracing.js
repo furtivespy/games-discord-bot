@@ -31,6 +31,14 @@ if (!apiKey) {
     console.log("[tracing] OTEL_DEBUG_SPANS=true — spans will print to console");
   }
 
+  // From 0.301.0, NodeSDK adds os and serviceinstance detectors unless
+  // OTEL_NODE_RESOURCE_DETECTORS is set. Pin the 0.300 defaults so Honeycomb
+  // resource attributes stay the same (env, process, host — no os.* or
+  // service.instance.id). Operators can still override the env var.
+  if (!process.env.OTEL_NODE_RESOURCE_DETECTORS) {
+    process.env.OTEL_NODE_RESOURCE_DETECTORS = "env,process,host";
+  }
+
   const sdk = new NodeSDK({
     spanProcessors,
     instrumentations: [

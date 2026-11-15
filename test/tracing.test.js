@@ -11,6 +11,9 @@ function childEnv(overrides = {}) {
   if (!Object.prototype.hasOwnProperty.call(overrides, "OTEL_DEBUG_SPANS")) {
     delete env.OTEL_DEBUG_SPANS;
   }
+  if (!Object.prototype.hasOwnProperty.call(overrides, "OTEL_NODE_RESOURCE_DETECTORS")) {
+    delete env.OTEL_NODE_RESOURCE_DETECTORS;
+  }
   return env;
 }
 
@@ -36,7 +39,19 @@ globalThis.fetch = async () => new Response(JSON.stringify({ error: "Unknown API
 });
 `;
 
-describe("OpenTelemetry 0.300 packages", () => {
+describe("OpenTelemetry 0.301 packages", () => {
+  test("resolved versions match FUR-214", () => {
+    expect(require("@opentelemetry/sdk-node/package.json").version).toBe("0.301.2");
+    expect(require("@opentelemetry/exporter-trace-otlp-http/package.json").version).toBe(
+      "0.301.2"
+    );
+    expect(require("@opentelemetry/auto-instrumentations-node/package.json").version).toBe(
+      "0.83.1"
+    );
+    expect(require("@opentelemetry/sdk-trace/package.json").version).toBe("3.1.1");
+    expect(require("@opentelemetry/api/package.json").version).toMatch(/^1\.10\./);
+  });
+
   test("sdk-trace-base is not installed", () => {
     expect(() => require("@opentelemetry/sdk-trace-base")).toThrow();
   });
@@ -52,7 +67,7 @@ describe("OpenTelemetry 0.300 packages", () => {
     expect(typeof BatchSpanProcessor).toBe("function");
   });
 
-  test("BatchSpanProcessor takes the 0.300 { exporter } options object", () => {
+  test("BatchSpanProcessor takes the { exporter } options object", () => {
     const {
       BatchSpanProcessor,
       InMemorySpanExporter,
@@ -113,5 +128,27 @@ setTimeout(() => process.exit(0), 200);
     expect(output).toContain("OTel started");
     expect(output).toContain("fur-159.console-span");
     expect(output).toContain("verification: true");
+  });
+
+  test("keeps 0.300 resource detectors (no os.* or service.instance.id)", async () => {
+    const { output, exitCode } = await runTracingChild(
+      childEnv({
+        HONEYCOMB_API_KEY: "test-key-not-real",
+        OTEL_DEBUG_SPANS: "true",
+      }),
+      `${STUB_HONEYCOMB_FETCH}
+require("./tracing");
+const { trace } = require("@opentelemetry/api");
+const span = trace.getTracer("fur-214-test").startSpan("fur-214.resource-span");
+span.end();
+setTimeout(() => process.exit(0), 200);
+`
+    );
+    expect(exitCode).toBe(0);
+    expect(output).toContain("OTel started");
+    expect(output).toContain("fur-214.resource-span");
+    expect(output).toContain('"process.pid"');
+    expect(output).not.toContain('"os.type"');
+    expect(output).not.toContain('"service.instance.id"');
   });
 });
