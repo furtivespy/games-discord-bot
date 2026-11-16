@@ -33,6 +33,27 @@ jobs:
     uses: ./.github/workflows/_docker-build-push.yml
     with:
       semver_tag: ${{ needs.release.outputs.tag }}
+      # Build the exact commit that landed on master; it is baked in as GIT_SHA.
+      ref: ${{ github.event.pull_request.merge_commit_sha }}
+      git_sha: ${{ github.event.pull_request.merge_commit_sha }}
     secrets:
       REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
       REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+
+  # The host pulls `latest` about every 5 minutes. Wait until the running app
+  # reports this merge (or a newer commit that contains it) at /health.
+  verify-deploy:
+    needs: [release, build-and-push]
+    if: needs.release.outputs.tag != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Wait for the deployed version
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: node scripts/check-deployed-version.js

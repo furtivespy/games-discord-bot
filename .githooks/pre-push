@@ -1,0 +1,3 @@
+#!/bin/sh
+# Enabled by `bun run hooks:install`. Fast static check only; CI runs the rest.
+exec bun run lint

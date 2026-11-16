@@ -228,6 +228,9 @@ function createHarness({
   stubFormatter = true,
   pinThrows = null,
   fetchImpl = null,
+  // Extra members for the fake client (for example getGuildData/setGuildData,
+  // userPreferences, reminders) for commands that need more than game data.
+  clientExtras = {},
 } = {}) {
   if (stubFormatter) {
     stubGameFormatter();
@@ -458,6 +461,7 @@ function createHarness({
       }
     },
   };
+  Object.assign(client, clientExtras);
 
   function seedCollection(collection, data, { serverId = guildId, channel: seedChannel = channelId } = {}) {
     if (store) {

@@ -211,7 +211,9 @@ function attachmentList(message) {
   if (typeof atts.values === "function") return [...atts.values()];
   if (typeof atts.forEach === "function") {
     const out = [];
-    atts.forEach((value) => out.push(value));
+    atts.forEach((value) => {
+      out.push(value);
+    });
     return out;
   }
   return Object.values(atts);

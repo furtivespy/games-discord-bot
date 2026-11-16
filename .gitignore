@@ -70,10 +70,21 @@ data/
 #cursor tools
 .cursor
 
-# local planning docs
-docs/
+# local planning docs (the shared docs below are tracked)
+docs/*
+!docs/adr/
+!docs/feature-map/
+!docs/primitives.md
+!docs/merge-policy.md
+!docs/runbooks/
 
 # Embedded app client
 embedded-client/dist
 embedded-client/node_modules
 embedded-client/.env
+
+# Autopilot audit artifacts
+.autopilot/
+
+# control-gamebot screenshots and logs
+tmp/

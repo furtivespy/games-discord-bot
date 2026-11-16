@@ -1,4 +1,8 @@
-const { describe, expect, test } = require("bun:test");
+const { describe, expect, setDefaultTimeout, test } = require("bun:test");
+
+// Each startup test spawns a fresh Bun process, which can take over the 5s
+// default when the disk cache is cold.
+setDefaultTimeout(30_000);
 const path = require("path");
 
 const ROOT = path.join(__dirname, "..");
@@ -18,7 +22,9 @@ function childEnv(overrides = {}) {
 }
 
 async function runTracingChild(env, source) {
-  const proc = Bun.spawn(["bun", "-e", source], {
+  // --no-env-file: Bun auto-loads ./.env from cwd, which would put a developer's
+  // real HONEYCOMB_API_KEY back into the child after childEnv() removed it.
+  const proc = Bun.spawn(["bun", "--no-env-file", "-e", source], {
     cwd: ROOT,
     env,
     stdout: "pipe",
