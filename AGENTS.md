@@ -1,5 +1,23 @@
 # Agent Guidance
 
+A Discord bot for board and card games (Bun, discord.js, SQLite) with an
+embedded Discord Activity client in `embedded-client/`. Agents open most PRs;
+the owner owns product decisions.
+
+## Verify
+
+`bun run verify` is the one local gate: Biome lint, `bun test`, and the
+embedded-client build. CI runs the same three steps as the `lint` and `test`
+jobs. Run it before you push. `bun run hooks:install` (once per clone) makes
+`git push` run the lint step first.
+
+## Map
+
+- Merging, risk tiers, the QA Status block: [docs/merge-policy.md](docs/merge-policy.md)
+- Shipping a PR: [.agents/skills/ship-pr/SKILL.md](.agents/skills/ship-pr/SKILL.md)
+- Decisions to read before proposing big changes: [docs/adr/](docs/adr/)
+- Rolling back a release: [docs/runbooks/rollback.md](docs/runbooks/rollback.md)
+
 ## Linear
 
 This repo's Linear project is **Game Bot** (team **Furtivespy**, key `FUR`).

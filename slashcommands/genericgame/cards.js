@@ -703,10 +703,11 @@ class Cards extends SlashCommand {
                         case "return":
                             await Rturn.execute(interaction, this.client)
                             break
-                        case "pass":
+                        case "pass": {
                             const Pass = require('../../subcommands/cards/pass')
                             await Pass.execute(interaction, this.client)
                             break
+                        }
                         default:
                             await interaction.reply({ content: "Command not fully written yet :(", flags: MessageFlags.Ephemeral })
                     }

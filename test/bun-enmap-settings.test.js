@@ -6,6 +6,16 @@ const onChange = require("on-change");
 const BunEnmap = require("../modules/BunEnmap.js");
 const GuildConfig = require("../modules/GuildConfig.js");
 
+// Windows refuses to delete a SQLite file that is still open, so every store a
+// test opens is closed before its temp dir is removed.
+const openedStores = [];
+
+function openEnmap(options) {
+  const store = new BunEnmap(options);
+  openedStores.push(store);
+  return store;
+}
+
 function withTempDataDir(run) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bun-enmap-"));
   const previousDataDir = process.env.GAMEBOT_DATA_DIR;
@@ -18,6 +28,7 @@ function withTempDataDir(run) {
     } else {
       process.env.GAMEBOT_DATA_DIR = previousDataDir;
     }
+    for (const store of openedStores.splice(0)) store.db.close();
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 }
@@ -37,7 +48,7 @@ function getSettings(client, guild) {
 describe("BunEnmap cloneLevel deep with on-change Proxies", () => {
   test("set of an on-change Proxy can be get() without DataCloneError", () => {
     withTempDataDir(() => {
-      const settings = new BunEnmap({ name: "settings", cloneLevel: "deep" });
+      const settings = openEnmap({ name: "settings", cloneLevel: "deep" });
       const defaultSettings = watchedDefaults();
 
       expect(() => structuredClone(defaultSettings)).toThrow(
@@ -57,7 +68,7 @@ describe("BunEnmap cloneLevel deep with on-change Proxies", () => {
 
   test("fresh data dir: ready-handler set then getSettings works without restart", () => {
     withTempDataDir(() => {
-      const settings = new BunEnmap({ name: "settings", cloneLevel: "deep" });
+      const settings = openEnmap({ name: "settings", cloneLevel: "deep" });
       const config = { defaultSettings: watchedDefaults() };
       const client = {
         settings,
@@ -82,7 +93,7 @@ describe("BunEnmap cloneLevel deep with on-change Proxies", () => {
 
   test("ensure seeds an on-change Proxy default on a missing key", () => {
     withTempDataDir(() => {
-      const settings = new BunEnmap({ name: "settings", cloneLevel: "deep" });
+      const settings = openEnmap({ name: "settings", cloneLevel: "deep" });
       const defaultSettings = watchedDefaults({
         prefix: "?",
         winner_portraits_enabled: "true",
@@ -96,14 +107,14 @@ describe("BunEnmap cloneLevel deep with on-change Proxies", () => {
 
   test("persisted JSON reloads as a plain object after a new BunEnmap open", () => {
     withTempDataDir(() => {
-      const first = new BunEnmap({ name: "settings", cloneLevel: "deep" });
+      const first = openEnmap({ name: "settings", cloneLevel: "deep" });
       first.set(
         "default",
         watchedDefaults({ prefix: ">>", winner_portraits_enabled: "true" })
       );
       expect(first.get("default").prefix).toBe(">>");
 
-      const second = new BunEnmap({ name: "settings", cloneLevel: "deep" });
+      const second = openEnmap({ name: "settings", cloneLevel: "deep" });
       expect(second.get("default")).toEqual({
         prefix: ">>",
         winner_portraits_enabled: "true",
@@ -114,7 +125,7 @@ describe("BunEnmap cloneLevel deep with on-change Proxies", () => {
 
   test("deep clone on set isolates later mutations of the original object", () => {
     withTempDataDir(() => {
-      const settings = new BunEnmap({ name: "settings", cloneLevel: "deep" });
+      const settings = openEnmap({ name: "settings", cloneLevel: "deep" });
       const original = { prefix: "!" };
       settings.set("default", original);
       original.prefix = "changed";

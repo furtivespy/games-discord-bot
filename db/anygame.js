@@ -172,7 +172,7 @@ class GameDatabase {
             value: value,
             url: image,
             origin: deck,
-            format, format
+            format
         })
     }
 

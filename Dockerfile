@@ -55,4 +55,9 @@ VOLUME /data
 EXPOSE 3000
 ENV DATABASE_URL="file:///data/sqlite.db"
 ENV IS_IN_CONTAINER="true"
+
+# Commit this image was built from; served by GET /health so the release
+# workflow can confirm the deploy. Declared last so it never busts the layer cache.
+ARG GIT_SHA=unknown
+ENV GIT_SHA=$GIT_SHA
 CMD [ "bun", "run", "start" ]
