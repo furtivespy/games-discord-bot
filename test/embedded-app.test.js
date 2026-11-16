@@ -1201,70 +1201,141 @@ describe("POST /api/game/action", () => {
     });
   });
 
-  test("concurrent Draw POSTs with a slow nick lookup each persist a different card", async () => {
+  function cardNames(cards) {
+    return (cards || []).map((card) => card.name);
+  }
+
+  function allCardIds(game) {
+    const ids = [];
+    for (const player of game.players || []) {
+      for (const card of player.hands?.main || []) ids.push(card.id);
+    }
+    for (const deck of game.decks || []) {
+      for (const pile of Object.values(deck.piles || {})) {
+        for (const card of pile.cards || []) ids.push(card.id);
+      }
+    }
+    return ids;
+  }
+
+  function postMatchesHistory(content, entry) {
+    if (entry?.action?.type === GameDB.ACTION_TYPES.DRAW) {
+      return String(content || "").includes(entry.summary);
+    }
+    if (entry?.action?.type === GameDB.ACTION_TYPES.DEAL) {
+      return String(content || "").includes("Dealt out a total of");
+    }
+    return false;
+  }
+
+  function raceClient() {
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-    await withActionApp(
-      {
-        saveDelayMs: 20,
-        clientExtras: {
-          guilds: {
-            cache: { get: () => null },
-            fetch: async () => ({
-              members: {
-                cache: { get: () => null },
-                fetch: async (userId) => {
-                  if (userId === "snowflake-user") await delay(150);
-                  return {
-                    displayName:
-                      userId === "snowflake-user" ? "WillOnServer" : "Riley",
-                  };
-                },
+    return {
+      saveDelayMs: 20,
+      clientExtras: {
+        guilds: {
+          cache: { get: () => null },
+          fetch: async () => ({
+            members: {
+              cache: { get: () => null },
+              fetch: async (userId) => {
+                await delay(150);
+                return {
+                  displayName: userId === "snowflake-user" ? "WillOnServer" : "Riley",
+                };
               },
-            }),
-          },
+            },
+          }),
         },
       },
-      async ({ url, posted, store }) => {
-        const [firstRes, secondRes] = await Promise.all([
-          postAction(url, {
-            action: "draw",
-            deck: "Main",
-            count: 1,
-            requestId: "http-race-aaa",
-          }),
-          postAction(url, {
-            action: "draw",
-            deck: "Main",
-            count: 1,
-            requestId: "http-race-bbb",
-          }),
-        ]);
-        expect(firstRes.status).toBe(200);
-        expect(secondRes.status).toBe(200);
-        const first = await firstRes.json();
-        const second = await secondRes.json();
-        const saved = store.getSpecificGameData("guild-1", GAME_COLLECTION, "thread-game");
-        expect(saved.players[0].hands.main.map((card) => card.name)).toEqual([
-          "Copper",
-          "Ace",
-          "King",
-        ]);
-        expect(saved.decks[0].piles.draw.cards.map((card) => card.name)).toEqual([
-          "Queen",
-          "Jack",
-        ]);
-        expect(
-          new Set([first.hand.at(-1).name, second.hand.at(-1).name])
-        ).toEqual(new Set(["Ace", "King"]));
-        const drawHistory = saved.history
-          .filter((entry) => entry?.action?.type === GameDB.ACTION_TYPES.DRAW)
-          .map((entry) => entry.summary);
-        expect(drawHistory).toEqual([
-          "WillOnServer drew 1 cards from Main",
-          "WillOnServer drew 1 cards from Main",
-        ]);
-        expect(posted.map((payload) => payload.content)).toEqual(drawHistory);
-      }
-    );
+    };
+  }
+
+  test("concurrent Draw POSTs with a slow nick lookup each persist a different card", async () => {
+    await withActionApp(raceClient(), async ({ url, posted, store }) => {
+      const [firstRes, secondRes] = await Promise.all([
+        postAction(url, {
+          action: "draw",
+          deck: "Main",
+          count: 1,
+          requestId: "http-race-aaa",
+        }),
+        postAction(url, {
+          action: "draw",
+          deck: "Main",
+          count: 1,
+          requestId: "http-race-bbb",
+        }),
+      ]);
+      expect(firstRes.status).toBe(200);
+      expect(secondRes.status).toBe(200);
+      const first = await firstRes.json();
+      const second = await secondRes.json();
+      const saved = store.getSpecificGameData("guild-1", GAME_COLLECTION, "thread-game");
+      expect(cardNames(saved.players[0].hands.main)).toEqual(["Copper", "Ace", "King"]);
+      expect(cardNames(saved.decks[0].piles.draw.cards)).toEqual(["Queen", "Jack"]);
+      expect(new Set([first.hand.at(-1).name, second.hand.at(-1).name])).toEqual(
+        new Set(["Ace", "King"])
+      );
+      const ids = allCardIds(saved);
+      expect(new Set(ids).size).toBe(ids.length);
+      const drawHistory = saved.history.filter(
+        (entry) => entry?.action?.type === GameDB.ACTION_TYPES.DRAW
+      );
+      expect(drawHistory.map((entry) => entry.summary)).toEqual([
+        "WillOnServer drew 1 cards from Main",
+        "WillOnServer drew 1 cards from Main",
+      ]);
+      expect(posted).toHaveLength(drawHistory.length);
+      posted.forEach((payload, index) => {
+        expect(postMatchesHistory(payload.content, drawHistory[index])).toBe(true);
+      });
+    });
+  });
+
+  test("concurrent Deal and Draw POSTs both apply in order without duplicating a card", async () => {
+    await withActionApp(raceClient(), async ({ url, posted, store }) => {
+      const [dealRes, drawRes] = await Promise.all([
+        postAction(url, {
+          action: "deal",
+          deck: "Main",
+          count: 1,
+          requestId: "http-deal-aaa",
+        }),
+        postAction(url, {
+          action: "draw",
+          deck: "Main",
+          count: 1,
+          requestId: "http-draw-bbb",
+        }),
+      ]);
+      expect(dealRes.status).toBe(200);
+      expect(drawRes.status).toBe(200);
+      const saved = store.getSpecificGameData("guild-1", GAME_COLLECTION, "thread-game");
+      const will = cardNames(saved.players[0].hands.main);
+      const riley = cardNames(saved.players[1].hands.main);
+      const draw = cardNames(saved.decks[0].piles.draw.cards);
+      const drawThenDeal =
+        will.join() === "Copper,Ace,King" &&
+        riley.join() === "Queen" &&
+        draw.join() === "Jack";
+      const dealThenDraw =
+        will.join() === "Copper,Ace,Queen" &&
+        riley.join() === "King" &&
+        draw.join() === "Jack";
+      expect(drawThenDeal || dealThenDraw).toBe(true);
+      const ids = allCardIds(saved);
+      expect(new Set(ids).size).toBe(ids.length);
+      const history = saved.history.filter((entry) =>
+        [GameDB.ACTION_TYPES.DEAL, GameDB.ACTION_TYPES.DRAW].includes(entry?.action?.type)
+      );
+      expect(history.map((entry) => entry.action.type).sort()).toEqual(
+        [GameDB.ACTION_TYPES.DEAL, GameDB.ACTION_TYPES.DRAW].sort()
+      );
+      expect(posted).toHaveLength(history.length);
+      posted.forEach((payload, index) => {
+        expect(postMatchesHistory(payload.content, history[index])).toBe(true);
+      });
+    });
   });
 });

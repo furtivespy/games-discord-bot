@@ -391,9 +391,9 @@ async function runVisualCardAction({
       ? gameChannelLock
       : defaultGameChannelLock;
 
-  const execute = async () => {
-    const persisted = await lock.run(gid, cid, () =>
-      runVisualCardActionOnce({
+  const execute = () =>
+    lock.run(gid, cid, async () => {
+      const persisted = await runVisualCardActionOnce({
         action,
         deckName,
         count,
@@ -405,20 +405,19 @@ async function runVisualCardAction({
         discordClient,
         gameStore,
         logger,
-      })
-    );
-    if (persisted.status !== 200) return persisted;
-    return finishVisualCardAction({
-      gameData: persisted.gameData,
-      applied: persisted.applied,
-      actor,
-      discordClient,
-      guildId: gid,
-      channelId: cid,
-      userId: uid,
-      logger,
+      });
+      if (persisted.status !== 200) return persisted;
+      return finishVisualCardAction({
+        gameData: persisted.gameData,
+        applied: persisted.applied,
+        actor,
+        discordClient,
+        guildId: gid,
+        channelId: cid,
+        userId: uid,
+        logger,
+      });
     });
-  };
 
   if (idempotency && typeof idempotency.run === "function") {
     return idempotency.run(requestId, uid, gid, cid, execute, {

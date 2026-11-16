@@ -465,6 +465,40 @@ describe("runVisualCardAction", () => {
     ]);
   });
 
+  test("loads an Enmap-only game through getGameDataV2 when sqlite has no row", async () => {
+    const gameData = gameWithDeck();
+    const result = await runVisualCardAction({
+      action: "draw",
+      deckName: "Main",
+      count: 1,
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      gameStore: {
+        getSpecificGameData() {
+          return null;
+        },
+        upsertGameData() {},
+      },
+      discordClient: {
+        user: { id: "bot-1" },
+        channels: { cache: { get: () => null } },
+        async getGameDataV2() {
+          return gameData;
+        },
+        async setGameDataV2(_guildId, _collection, _channelId, data) {
+          Object.assign(gameData, data);
+        },
+      },
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.hand.map((card) => card.name)).toEqual(["Copper", "Ace"]);
+    expect(gameData.players[0].hands.main.map((card) => card.name)).toEqual([
+      "Copper",
+      "Ace",
+    ]);
+  });
+
   test("still returns the updated table if the follow-up snapshot load fails", async () => {
     const gameData = gameWithDeck();
     let loads = 0;
