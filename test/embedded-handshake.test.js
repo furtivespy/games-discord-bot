@@ -5,6 +5,7 @@ const {
   GAMES_EMPTY_MESSAGE,
   GAMES_SELECT_PLACEHOLDER,
   SNAPSHOT_LOADING_MESSAGE,
+  SNAPSHOT_STALE_MESSAGE,
   gamesRequestUrl,
   helloGreeting,
   isDiscordProxyHost,
@@ -97,6 +98,7 @@ describe("embedded client handshake URLs", () => {
   });
 
   test("in-place hello has no origin line; bridge hello includes the channel name", () => {
+    expect(SNAPSHOT_STALE_MESSAGE).toContain("Reopen visual mode");
     expect(helloGreeting("Will")).toBe("Hello, Will");
     expect(originLine(null)).toBeNull();
     expect(originLine("   ")).toBeNull();
@@ -141,6 +143,15 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("createSnapshotPoller");
     expect(main).toContain("versionRequestUrl");
     expect(main).toContain("HISTORY_CHANGED_CLASS");
+    expect(main).toContain("SNAPSHOT_STALE_MESSAGE");
+    expect(main).toContain("pendingSnapshot");
+    expect(main).toContain("scheduleHistoryFlashClear");
+    const embeddedApp = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "modules", "embeddedApp.js"),
+      "utf8"
+    );
+    expect(embeddedApp).toContain("authenticateEmbeddedGameRead");
+    expect(embeddedApp).toContain("resolveDiscordUser");
     expect(main).not.toContain("tabIndex");
     expect(main).toContain("autoSelectGameId");
     const requestSeq = require("fs").readFileSync(

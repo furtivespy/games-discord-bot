@@ -12,6 +12,7 @@ import {
   GAMES_LOADING_MESSAGE,
   GAMES_SELECT_PLACEHOLDER,
   SNAPSHOT_LOADING_MESSAGE,
+  SNAPSHOT_STALE_MESSAGE,
   gamesRequestUrl,
   helloGreeting,
   originLine,
@@ -23,11 +24,17 @@ import {
 } from "./handshake";
 import {
   HISTORY_CHANGED_CLASS,
+  HISTORY_FLASH_MS,
+  captureScrollTop,
+  clearHistoryFlash,
   createSnapshotPoller,
   etagFromVersion,
   historyEntryKey,
   isSnapshotPollBlocked,
   newHistoryKeys,
+  restoreScrollTop,
+  retryAfterMsFromHeader,
+  type VersionPollResult,
 } from "./snapshotPoll";
 import {
   ACTION_COUNT_MAX,
@@ -47,7 +54,7 @@ import {
   visualActionErrorMessage,
   type DeckActionKind,
 } from "./visualActions";
-import { enableCardDrag, type CardOffset } from "./drag";
+import { SNAP_BACK_DURATION_MS, enableCardDrag, type CardOffset } from "./drag";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
 import { asCardList, createSnapshotLoader } from "./requestSeq";
@@ -95,8 +102,12 @@ let actionRequestId: string | null = null;
 let appliedVersion = "";
 let appliedChannelId = "";
 let appliedHistoryKeys: string[] = [];
+let cardPositions = new Map<string, CardOffset>();
+let pendingSnapshot: { config: EmbeddedConfig; payload: GameSnapshot } | null = null;
+let historyFlashTimer: ReturnType<typeof setTimeout> | null = null;
 let snapshotPoller: ReturnType<typeof createSnapshotPoller> | null = null;
 let snapshotPollVisibilityBound = false;
+let snapshotApplyResumeBound = false;
 
 type EmbeddedConfig = {
   clientId: string;
@@ -218,6 +229,7 @@ function setTableVisible(visible: boolean) {
   if (table) table.hidden = !visible;
   if (!visible) {
     stopSnapshotPolling();
+    pendingSnapshot = null;
     resetHistoryHighlightState();
     const status = document.getElementById("game-status");
     if (status) {
@@ -269,6 +281,11 @@ function resetHistoryHighlightState() {
   appliedVersion = "";
   appliedChannelId = "";
   appliedHistoryKeys = [];
+  cardPositions = new Map();
+  if (historyFlashTimer != null) {
+    clearTimeout(historyFlashTimer);
+    historyFlashTimer = null;
+  }
 }
 
 function snapshotPollHidden(): boolean {
@@ -283,11 +300,16 @@ function snapshotPollBlocked(): boolean {
   return isSnapshotPollBlocked(document);
 }
 
-async function fetchSnapshotVersion(): Promise<string | null> {
+function setTableStale(stale: boolean) {
+  document.getElementById("app")?.classList.toggle("is-stale", stale);
+  if (stale) setSnapshotStatus(SNAPSHOT_STALE_MESSAGE);
+}
+
+async function fetchSnapshotVersion(): Promise<VersionPollResult> {
   const session = activeSession;
-  if (!session) return null;
+  if (!session) return { kind: "error" };
   const channelId = liveSelectedChannelId(session.config.channelId);
-  if (!channelId) return null;
+  if (!channelId) return { kind: "error" };
   const headers: Record<string, string> = {
     Authorization: `Bearer ${session.accessToken}`,
   };
@@ -300,16 +322,25 @@ async function fetchSnapshotVersion(): Promise<string | null> {
     }),
     { headers }
   );
-  if (response.status === 304) return appliedVersion || null;
-  if (!response.ok) return null;
+  if (response.status === 304) return { kind: "unchanged" };
+  if (response.status === 401) return { kind: "unauthorized" };
+  if (response.status === 429) {
+    return {
+      kind: "rate_limited",
+      retryAfterMs: retryAfterMsFromHeader(response.headers.get("retry-after")),
+    };
+  }
+  if (!response.ok) return { kind: "error" };
   let payload: { version?: string } = {};
   try {
     payload = (await response.json()) as { version?: string };
   } catch {
-    payload = {};
+    return { kind: "error" };
   }
   const version = typeof payload.version === "string" ? payload.version.trim() : "";
-  return version || null;
+  if (!version) return { kind: "error" };
+  if (version === appliedVersion) return { kind: "unchanged" };
+  return { kind: "changed", version };
 }
 
 async function refreshSnapshotFromPoll(): Promise<boolean> {
@@ -325,12 +356,40 @@ async function refreshSnapshotFromPoll(): Promise<boolean> {
   );
 }
 
-function pollSnapshotWhenUnblocked() {
-  if (typeof window === "undefined") return;
-  window.setTimeout(() => {
-    if (snapshotPollHidden() || snapshotPollBlocked()) return;
-    void snapshotPoller?.pollNow();
-  }, 0);
+function flushDeferredSnapshot() {
+  if (snapshotPollBlocked()) return;
+  const pending = pendingSnapshot;
+  if (pending) {
+    pendingSnapshot = null;
+    applySnapshot(pending.config, pending.payload);
+  }
+  void snapshotPoller?.pollNow();
+}
+
+function bindSnapshotApplyResume() {
+  if (snapshotApplyResumeBound || typeof document === "undefined") return;
+  snapshotApplyResumeBound = true;
+  document.addEventListener(
+    "pointerup",
+    () => {
+      window.setTimeout(() => {
+        flushDeferredSnapshot();
+      }, SNAP_BACK_DURATION_MS + 60);
+    },
+    true
+  );
+  document.addEventListener("pointercancel", () => {
+    window.setTimeout(() => {
+      flushDeferredSnapshot();
+    }, SNAP_BACK_DURATION_MS + 60);
+  });
+  document.addEventListener(
+    "close",
+    () => {
+      flushDeferredSnapshot();
+    },
+    true
+  );
 }
 
 function bindSnapshotPoller() {
@@ -340,14 +399,16 @@ function bindSnapshotPoller() {
     refresh: refreshSnapshotFromPoll,
     isHidden: snapshotPollHidden,
     isBlocked: snapshotPollBlocked,
+    onUnauthorized: () => {
+      setTableStale(true);
+    },
   });
+  bindSnapshotApplyResume();
   if (snapshotPollVisibilityBound || typeof document === "undefined") return;
   snapshotPollVisibilityBound = true;
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") void snapshotPoller?.pollNow();
   });
-  document.addEventListener("pointerup", pollSnapshotWhenUnblocked);
-  document.addEventListener("pointercancel", pollSnapshotWhenUnblocked);
 }
 
 function startSnapshotPolling(version?: string) {
@@ -536,7 +597,7 @@ function bindActionDialog() {
     setActionDialogError(null);
     const { confirm } = actionDialogElements();
     if (confirm && !actionInFlight) confirm.disabled = false;
-    pollSnapshotWhenUnblocked();
+    flushDeferredSnapshot();
   });
   els.form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1023,6 +1084,14 @@ function renderGameStatus(
   root.hidden = false;
 }
 
+function scheduleHistoryFlashClear(root: HTMLElement | null) {
+  if (historyFlashTimer != null) clearTimeout(historyFlashTimer);
+  historyFlashTimer = window.setTimeout(() => {
+    historyFlashTimer = null;
+    clearHistoryFlash(root);
+  }, HISTORY_FLASH_MS);
+}
+
 function snapshotErrorMessage(error: string | undefined, status: number): string {
   if (error === "no_game" || status === 404) {
     return "No game for that channel.";
@@ -1127,6 +1196,12 @@ async function loadSnapshot(
 }
 
 function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot) {
+  if (isSnapshotPollBlocked(document)) {
+    pendingSnapshot = { config, payload };
+    return;
+  }
+  pendingSnapshot = null;
+  setTableStale(false);
   setSnapshotStatus(null);
   if (payload.channelPosted !== false) setActionNotice(null);
   const channelId =
@@ -1137,19 +1212,34 @@ function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot) {
     channelId && channelId === appliedChannelId
       ? newHistoryKeys(appliedHistoryKeys, history)
       : new Set<string>();
+  if (channelId !== appliedChannelId) {
+    cardPositions = new Map();
+  }
   appliedChannelId = channelId;
   appliedHistoryKeys = nextKeys;
   if (typeof payload.version === "string" && payload.version.trim()) {
     appliedVersion = payload.version.trim();
   }
-  const positions = new Map<string, CardOffset>();
+  const sidePanel = document.getElementById("side-panel");
+  const statusRoot = document.getElementById("game-status");
+  const historyList = statusRoot?.querySelector(".status-history");
+  const sideScroll = captureScrollTop(sidePanel);
+  const statusScroll = captureScrollTop(statusRoot);
+  const historyScroll = captureScrollTop(historyList);
   renderGameChannelLink(payload.guildId || config.guildId, payload.channelId);
   renderGameStatus(payload.status, payload.gameName || "", highlightKeys);
   renderOtherPlayers(config, payload.otherPlayers, payload.status?.teams);
   renderDecks(config, payload.decks);
-  renderCards(config, "board-cards", payload.gameBoard, positions);
-  renderCards(config, "play-area-cards", payload.playArea, positions);
-  renderCards(config, "hand-cards", payload.hand, positions);
+  renderCards(config, "board-cards", payload.gameBoard, cardPositions);
+  renderCards(config, "play-area-cards", payload.playArea, cardPositions);
+  renderCards(config, "hand-cards", payload.hand, cardPositions);
+  restoreScrollTop(document.getElementById("side-panel"), sideScroll);
+  restoreScrollTop(document.getElementById("game-status"), statusScroll);
+  restoreScrollTop(
+    document.getElementById("game-status")?.querySelector(".status-history"),
+    historyScroll
+  );
+  scheduleHistoryFlashClear(document.getElementById("game-status"));
   setTableVisible(true);
   startSnapshotPolling(appliedVersion);
 }

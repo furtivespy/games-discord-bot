@@ -1,5 +1,6 @@
 "use strict";
 
+const { createHash } = require("crypto");
 const { ChannelType, PermissionFlagsBits } = require("discord.js");
 const GameDB = require("../db/anygame");
 
@@ -441,34 +442,26 @@ function historySummaries(data) {
     });
 }
 
-function djb2Hex(text) {
-  let hash = 5381;
-  const raw = String(text || "");
-  for (let i = 0; i < raw.length; i += 1) {
-    hash = ((hash << 5) + hash) ^ raw.charCodeAt(i);
-  }
-  return (hash >>> 0).toString(16);
+function opaqueSnapshotHash(value) {
+  return createHash("sha256").update(String(value)).digest("hex");
 }
 
-/** Opaque cheap fingerprint of the viewer snapshot, not hidden other-hands. */
+/**
+ * Opaque fingerprint of the per-viewer snapshot. Hidden hands, secret piles,
+ * and other players' cards are not in the hash, so they cannot leak via ETag.
+ */
 function snapshotVersion(data, ids = {}) {
-  let raw = "";
+  const opts = ids && typeof ids === "object" ? ids : { userId: ids };
   try {
-    raw = JSON.stringify(
-      snapshotFromGameData(data, {
-        channelId: ids.channelId,
-        guildId: ids.guildId,
-        userId: ids.userId,
-      })
-    );
+    const visible = snapshotFromGameData(data, {
+      userId: String(opts.userId || ""),
+      channelId: String(opts.channelId || ""),
+      guildId: String(opts.guildId || ""),
+    });
+    return opaqueSnapshotHash(JSON.stringify(visible));
   } catch {
-    raw = "";
+    return "";
   }
-  const history = Array.isArray(data?.history) ? data.history : [];
-  const last = history.length ? history[history.length - 1] : null;
-  const lastId =
-    last && last.id != null && String(last.id).trim() ? String(last.id).trim() : "";
-  return `${raw.length}|${history.length}|${lastId}|${djb2Hex(raw)}`;
 }
 
 function formatEtag(version) {
@@ -1038,14 +1031,19 @@ async function loadViewerGame({
     return { status: 403, body: { error: "not_a_player" } };
   }
 
+  const version = snapshotVersion(data, {
+    channelId: cid,
+    guildId: gid,
+    userId: uid,
+  });
+  if (!version) {
+    return { status: 500, body: { error: "snapshot_failed" } };
+  }
+
   return {
     status: 200,
     data,
-    version: snapshotVersion(data, {
-      channelId: cid,
-      guildId: gid,
-      userId: uid,
-    }),
+    version,
     guildId: gid,
     channelId: cid,
     userId: uid,

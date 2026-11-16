@@ -702,19 +702,40 @@ describe("versionGameForUser", () => {
     expect(star).toEqual({ status: 304, version: changed.body.version });
   });
 
-  test("fingerprint ignores another player's hidden cards", () => {
+  test("fingerprint ignores another player's hidden cards", async () => {
     const game = snapshotSeed();
     const ids = {
       channelId: "thread-game",
       guildId: "guild-a",
       userId: "will",
     };
-    const first = snapshotVersion(game, ids);
+    const first = await versionGameForUser({
+      discordClient: { getGameDataV2: async () => game },
+      ...ids,
+    });
+    expect(first.status).toBe(200);
+    expect(first.body.version).toMatch(/^[0-9a-f]{64}$/);
+    expect(first.body.version).not.toContain("|");
+    expect(first.body.version).not.toContain("Other Player Secret");
+    expect(snapshotVersion(game, ids)).toBe(first.body.version);
+
     game.players[1].hands.main[0].name = "King";
     game.players[1].hands.main[0].id = "other-secret-swapped";
-    expect(snapshotVersion(game, ids)).toBe(first);
+    const hiddenOnly = await versionGameForUser({
+      discordClient: { getGameDataV2: async () => game },
+      ...ids,
+      ifNoneMatch: formatEtag(first.body.version),
+    });
+    expect(hiddenOnly).toEqual({ status: 304, version: first.body.version });
+
     game.gameBoard.push({ id: "board-2", name: "Duchy" });
-    expect(snapshotVersion(game, ids)).not.toBe(first);
+    const visible = await versionGameForUser({
+      discordClient: { getGameDataV2: async () => game },
+      ...ids,
+      ifNoneMatch: formatEtag(first.body.version),
+    });
+    expect(visible.status).toBe(200);
+    expect(visible.body.version).not.toBe(first.body.version);
   });
 });
 

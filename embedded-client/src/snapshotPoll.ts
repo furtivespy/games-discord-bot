@@ -1,5 +1,8 @@
 export const SNAPSHOT_POLL_INTERVAL_MS = 2500;
+export const SNAPSHOT_POLL_MAX_BACKOFF_MS = 30_000;
+export const SNAPSHOT_POLL_MAX_RETRY_AFTER_MS = 60_000;
 export const HISTORY_CHANGED_CLASS = "is-changed";
+export const HISTORY_FLASH_MS = 1400;
 
 export type HistoryEntryLike = {
   id?: string | number;
@@ -7,9 +10,35 @@ export type HistoryEntryLike = {
   summary?: string;
 };
 
+export type VersionPollResult =
+  | { kind: "unchanged" }
+  | { kind: "changed"; version: string }
+  | { kind: "unauthorized" }
+  | { kind: "rate_limited"; retryAfterMs: number }
+  | { kind: "error" };
+
 export function etagFromVersion(version: string): string {
   const raw = String(version || "");
   return `"${raw.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+export function retryAfterMsFromHeader(
+  header: string | null | undefined,
+  fallbackMs: number = SNAPSHOT_POLL_INTERVAL_MS
+): number {
+  const seconds = Number(header);
+  if (!Number.isFinite(seconds) || seconds < 0) return fallbackMs;
+  return Math.min(Math.ceil(seconds * 1000), SNAPSHOT_POLL_MAX_RETRY_AFTER_MS);
+}
+
+export function pollBackoffMs(
+  errors: number,
+  intervalMs: number = SNAPSHOT_POLL_INTERVAL_MS,
+  maxMs: number = SNAPSHOT_POLL_MAX_BACKOFF_MS
+): number {
+  const steps = Math.max(1, Number(errors) || 1);
+  const delay = intervalMs * 2 ** steps;
+  return Math.min(maxMs, Math.max(intervalMs, delay));
 }
 
 export function historyEntryKey(entry: HistoryEntryLike | null | undefined): string {
@@ -38,6 +67,26 @@ export function newHistoryKeys(
   return fresh;
 }
 
+export function captureScrollTop(el: { scrollTop?: number } | null | undefined): number {
+  const top = el?.scrollTop;
+  return typeof top === "number" && Number.isFinite(top) ? top : 0;
+}
+
+export function restoreScrollTop(
+  el: { scrollTop?: number } | null | undefined,
+  top: number
+): void {
+  if (!el || typeof top !== "number" || !Number.isFinite(top)) return;
+  el.scrollTop = top;
+}
+
+export function clearHistoryFlash(root: ParentNode | null | undefined): void {
+  if (!root?.querySelectorAll) return;
+  root.querySelectorAll(`.${HISTORY_CHANGED_CLASS}`).forEach((item) => {
+    item.classList.remove(HISTORY_CHANGED_CLASS);
+  });
+}
+
 /** Skip applying a polled snapshot while the user is mid-gesture or in a dialog. */
 export function isSnapshotPollBlocked(doc: Document | null | undefined): boolean {
   if (!doc?.querySelector) return false;
@@ -48,17 +97,19 @@ export function isSnapshotPollBlocked(doc: Document | null | undefined): boolean
 
 export type SnapshotPollerOptions = {
   intervalMs?: number;
-  fetchVersion: () => Promise<string | null>;
-  /** Return false when the table was not updated so the next tick retries. */
-  refresh: () => Promise<boolean | void>;
+  maxBackoffMs?: number;
+  fetchVersion: () => Promise<VersionPollResult>;
+  refresh: () => Promise<boolean>;
   isHidden: () => boolean;
   isBlocked: () => boolean;
+  onUnauthorized?: () => void;
   setTimeoutFn?: (fn: () => void, ms: number) => unknown;
   clearTimeoutFn?: (id: unknown) => void;
 };
 
 export function createSnapshotPoller(opts: SnapshotPollerOptions) {
   const interval = opts.intervalMs ?? SNAPSHOT_POLL_INTERVAL_MS;
+  const maxBackoff = opts.maxBackoffMs ?? SNAPSHOT_POLL_MAX_BACKOFF_MS;
   const schedule = opts.setTimeoutFn ?? ((fn, ms) => setTimeout(fn, ms));
   const cancel = opts.clearTimeoutFn ?? ((id) => clearTimeout(id as ReturnType<typeof setTimeout>));
   let timer: unknown = null;
@@ -66,11 +117,23 @@ export function createSnapshotPoller(opts: SnapshotPollerOptions) {
   let inFlight = false;
   let stopped = true;
   let generation = 0;
+  let errorCount = 0;
+  let delay = interval;
 
   function clearTimer() {
     if (timer == null) return;
     cancel(timer);
     timer = null;
+  }
+
+  function resetDelay() {
+    errorCount = 0;
+    delay = interval;
+  }
+
+  function noteError(nextDelay = pollBackoffMs(errorCount + 1, interval, maxBackoff)) {
+    errorCount += 1;
+    delay = nextDelay;
   }
 
   async function tick() {
@@ -79,15 +142,38 @@ export function createSnapshotPoller(opts: SnapshotPollerOptions) {
     inFlight = true;
     const gen = generation;
     try {
-      const version = await opts.fetchVersion();
+      const result = await opts.fetchVersion();
       if (stopped || gen !== generation) return;
-      if (!version || version === knownVersion) return;
+      if (result.kind === "unauthorized") {
+        opts.onUnauthorized?.();
+        stopped = true;
+        generation += 1;
+        inFlight = false;
+        clearTimer();
+        return;
+      }
+      if (result.kind === "rate_limited") {
+        noteError(Math.max(interval, result.retryAfterMs || interval));
+        return;
+      }
+      if (result.kind === "error") {
+        noteError();
+        return;
+      }
+      resetDelay();
+      if (result.kind === "unchanged") return;
+      if (!result.version || result.version === knownVersion) return;
       if (opts.isHidden() || opts.isBlocked()) return;
       const applied = await opts.refresh();
       if (stopped || gen !== generation) return;
-      if (applied !== false) knownVersion = version;
+      if (applied) {
+        knownVersion = result.version;
+      } else {
+        noteError();
+      }
     } catch {
-      // Keep the last painted table; the next tick retries.
+      if (stopped || gen !== generation) return;
+      noteError();
     } finally {
       if (gen === generation) inFlight = false;
     }
@@ -98,12 +184,13 @@ export function createSnapshotPoller(opts: SnapshotPollerOptions) {
     if (stopped) return;
     timer = schedule(() => {
       void tick().finally(arm);
-    }, interval);
+    }, delay);
   }
 
   return {
     start(version?: string) {
       if (typeof version === "string" && version) knownVersion = version;
+      resetDelay();
       if (!stopped) return;
       stopped = false;
       generation += 1;
@@ -123,6 +210,7 @@ export function createSnapshotPoller(opts: SnapshotPollerOptions) {
     },
     async pollNow() {
       await tick();
+      if (!stopped) arm();
     },
   };
 }
