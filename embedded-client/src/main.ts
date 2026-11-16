@@ -28,9 +28,11 @@ import {
   autoSelectGameId,
   DEFAULT_CARD_BACK,
   deckCountLabel,
+  groupPlayersByTeam,
   handCountLabel,
   initialsFromName,
-  statusGameTitle,
+  statusPlayerScoreLabel,
+  statusPlayerSeatName,
   suitColorClass,
   suitGlyph,
   visibleDecks,
@@ -40,6 +42,7 @@ import {
   type StatusHistory,
   type StatusPile,
   type StatusPlayer,
+  type StatusTeam,
   type StatusToken,
 } from "./tableLayout";
 import "./style.css";
@@ -424,44 +427,80 @@ function renderCards(
   }
 }
 
-function renderOtherPlayers(config: EmbeddedConfig, players: OtherPlayer[] | undefined) {
+function appendPlayerChip(
+  config: EmbeddedConfig,
+  parent: HTMLElement,
+  player: OtherPlayer
+) {
+  const chip = document.createElement("article");
+  chip.className = "player-chip";
+  const name =
+    typeof player.name === "string" && player.name.trim()
+      ? player.name.trim()
+      : "Player";
+  const avatarSrc = mappedImageSrc(config, player.avatarUrl);
+  if (avatarSrc) {
+    const img = document.createElement("img");
+    img.className = "player-avatar";
+    img.src = avatarSrc;
+    img.alt = name;
+    chip.append(img);
+  } else {
+    const initials = document.createElement("div");
+    initials.className = "player-initials";
+    initials.textContent = initialsFromName(name);
+    chip.append(initials);
+  }
+  const nameEl = document.createElement("div");
+  nameEl.className = "player-name";
+  nameEl.textContent = name;
+  const countEl = document.createElement("div");
+  countEl.className = "player-count";
+  countEl.textContent = handCountLabel(player.handCount);
+  chip.append(nameEl, countEl);
+  parent.append(chip);
+}
+
+function renderOtherPlayers(
+  config: EmbeddedConfig,
+  players: OtherPlayer[] | undefined,
+  teams?: StatusTeam[]
+) {
   const row = document.getElementById("other-players");
   const list = document.getElementById("other-players-list");
   if (!row || !list) return;
   list.replaceChildren();
   const others = asRecordList<OtherPlayer>(players);
   if (!others.length) {
+    list.classList.remove("has-teams");
     row.hidden = true;
     return;
   }
-  for (const player of others) {
-    const chip = document.createElement("article");
-    chip.className = "player-chip";
-    const name =
-      typeof player.name === "string" && player.name.trim()
-        ? player.name.trim()
-        : "Player";
-    const avatarSrc = mappedImageSrc(config, player.avatarUrl);
-    if (avatarSrc) {
-      const img = document.createElement("img");
-      img.className = "player-avatar";
-      img.src = avatarSrc;
-      img.alt = name;
-      chip.append(img);
-    } else {
-      const initials = document.createElement("div");
-      initials.className = "player-initials";
-      initials.textContent = initialsFromName(name);
-      chip.append(initials);
+  const groups = groupPlayersByTeam(others, teams);
+  if (!groups) {
+    list.classList.remove("has-teams");
+    for (const player of others) {
+      appendPlayerChip(config, list, player);
     }
-    const nameEl = document.createElement("div");
-    nameEl.className = "player-name";
-    nameEl.textContent = name;
-    const countEl = document.createElement("div");
-    countEl.className = "player-count";
-    countEl.textContent = handCountLabel(player.handCount);
-    chip.append(nameEl, countEl);
-    list.append(chip);
+  } else {
+    list.classList.add("has-teams");
+    for (const group of groups) {
+      const block = document.createElement("section");
+      block.className = `player-team-group${group.unassigned ? " is-unassigned" : ""}`;
+      if (group.color) {
+        block.style.borderColor = group.color;
+      }
+      const label = document.createElement("h3");
+      label.className = "player-team-label";
+      label.textContent = group.label;
+      const members = document.createElement("div");
+      members.className = "player-team-members";
+      for (const player of group.players) {
+        appendPlayerChip(config, members, player);
+      }
+      block.append(label, members);
+      list.append(block);
+    }
   }
   row.hidden = false;
 }
@@ -506,10 +545,6 @@ function renderGameStatus(status: GameStatus | undefined, fallbackName: string) 
   root.replaceChildren();
   const data: GameStatus = status && typeof status === "object" ? status : {};
   if (!data.gameName && fallbackName) data.gameName = fallbackName;
-  const title = document.createElement("h2");
-  title.className = "status-title";
-  title.textContent = statusGameTitle(data);
-  root.append(title);
   if (data.reverseOrder) {
     const flag = document.createElement("p");
     flag.className = "status-flag";
@@ -524,7 +559,6 @@ function renderGameStatus(status: GameStatus | undefined, fallbackName: string) 
     const heading = document.createElement("h3");
     heading.textContent = "Players";
     block.append(heading);
-    const tokenDefs = asRecordList<StatusToken>(data.tokens);
     for (const player of players) {
       const row = document.createElement("div");
       row.className = `status-player${player.isYou ? " is-you" : ""}`;
@@ -534,27 +568,11 @@ function renderGameStatus(status: GameStatus | undefined, fallbackName: string) 
       }
       const name = document.createElement("div");
       name.className = "status-player-name";
-      const seat = Number.isFinite(Number(player.order))
-        ? `(${Number(player.order) + 1}) `
-        : "";
-      name.textContent = `${seat}${player.name || "Player"}`;
-      const meta = document.createElement("p");
-      meta.className = "status-player-meta";
-      const bits = [`Score ${player.score || "—"}`];
-      if (player.teamName) bits.push(player.teamName);
-      bits.push(`Hand ${handCountLabel(player.handCount)}`);
-      bits.push(`Play area ${player.playAreaCount ?? 0}`);
-      const tokenBits = tokenDefs
-        .map((token) => {
-          const id = String(token.id || "");
-          const value = player.tokens?.[id];
-          if (value == null) return "";
-          return `${token.name || id} ${value}`;
-        })
-        .filter(Boolean);
-      if (tokenBits.length) bits.push(tokenBits.join(" · "));
-      meta.textContent = bits.join(" · ");
-      row.append(name, meta);
+      name.textContent = statusPlayerSeatName(player);
+      const score = document.createElement("p");
+      score.className = "status-player-score";
+      score.textContent = statusPlayerScoreLabel(player);
+      row.append(name, score);
       block.append(row);
     }
     root.append(block);
@@ -692,7 +710,7 @@ async function loadSnapshot(
   setSnapshotStatus(null);
   const positions = new Map<string, CardOffset>();
   renderGameStatus(payload.status, payload.gameName || "");
-  renderOtherPlayers(config, payload.otherPlayers);
+  renderOtherPlayers(config, payload.otherPlayers, payload.status?.teams);
   renderDecks(config, payload.decks);
   renderCards(config, "board-cards", payload.gameBoard, positions);
   renderCards(config, "play-area-cards", payload.playArea, positions);

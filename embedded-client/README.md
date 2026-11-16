@@ -36,6 +36,7 @@ Open:
 | -- | -- |
 | Several games (newest first; default) | http://127.0.0.1:3000/ or `?fixture=several-games` or `?fixture=populated` |
 | Single game | http://127.0.0.1:3000/?fixture=one-game |
+| Team game (6 players, 🦀🦀 vs 💪🐟) | http://127.0.0.1:3000/?fixture=team-game&game=team-thread |
 | No games (empty picker) | http://127.0.0.1:3000/?fixture=no-games |
 | Snapshot: no game in this channel | http://127.0.0.1:3000/?fixture=no-game |
 | Snapshot: not a player | http://127.0.0.1:3000/?fixture=not-a-player |

@@ -1,6 +1,6 @@
 export const MAX_VISIBLE_DECKS = 2;
 export const DEFAULT_CARD_BACK = "/card-back.svg";
-export const CUSTOM_GAME_LABEL = "Custom game";
+export const UNASSIGNED_TEAM_LABEL = "No team";
 
 export type SnapshotDeck = {
   name?: string;
@@ -15,6 +15,8 @@ export type OtherPlayer = {
   name?: string;
   handCount?: number | string;
   avatarUrl?: string | null;
+  teamId?: string;
+  teamName?: string;
 };
 
 export type StatusPlayer = {
@@ -51,14 +53,28 @@ export type StatusHistory = {
   category?: string;
 };
 
+export type StatusTeam = {
+  id?: string;
+  name?: string;
+  color?: string | null;
+};
+
 export type GameStatus = {
   gameName?: string;
   reverseOrder?: boolean;
   isCustomGame?: boolean;
   players?: StatusPlayer[];
+  teams?: StatusTeam[];
   tokens?: StatusToken[];
   globalPiles?: StatusPile[];
   history?: StatusHistory[];
+};
+
+export type PlayerTeamGroup = {
+  label: string;
+  unassigned: boolean;
+  color: string | null;
+  players: OtherPlayer[];
 };
 
 export function visibleDecks<T>(decks: T[] | undefined | null): T[] {
@@ -111,13 +127,122 @@ export function suitColorClass(glyph: string | null): string {
   return "";
 }
 
-export function statusGameTitle(status: GameStatus | null | undefined): string {
+export function statusPlayerSeatName(
+  player: StatusPlayer | null | undefined
+): string {
+  const seat = Number.isFinite(Number(player?.order))
+    ? `(${Number(player?.order) + 1}) `
+    : "";
   const name =
-    typeof status?.gameName === "string" && status.gameName.trim()
-      ? status.gameName.trim()
-      : "Game";
-  const label = status?.isCustomGame ? `${name} (${CUSTOM_GAME_LABEL})` : name;
-  return `${label} Status`;
+    typeof player?.name === "string" && player.name.trim()
+      ? player.name.trim()
+      : "Player";
+  return `${seat}${name}`;
+}
+
+export function statusPlayerScoreLabel(
+  player: StatusPlayer | null | undefined
+): string {
+  if (player?.score == null) return "—";
+  const text = String(player.score).trim();
+  return text || "—";
+}
+
+function trimmedTeamName(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function teamIdOf(value: unknown): string {
+  if (value == null) return "";
+  const id = String(value).trim();
+  return id;
+}
+
+function playerHasTeam(player: OtherPlayer): boolean {
+  return Boolean(teamIdOf(player.teamId) || trimmedTeamName(player.teamName));
+}
+
+export function groupPlayersByTeam(
+  players: OtherPlayer[] | null | undefined,
+  teams?: StatusTeam[] | null
+): PlayerTeamGroup[] | null {
+  const list = asRecordList<OtherPlayer>(players);
+  if (!list.length) return null;
+  const roster = asRecordList<StatusTeam>(teams)
+    .map((team) => ({
+      id: teamIdOf(team.id),
+      name: trimmedTeamName(team.name),
+      color:
+        typeof team.color === "string" && team.color.trim()
+          ? team.color.trim()
+          : null,
+    }))
+    .filter((team) => team.id || team.name);
+  if (!list.some(playerHasTeam)) return null;
+
+  const remaining = [...list];
+  const takeMatching = (predicate: (player: OtherPlayer) => boolean) => {
+    const matched: OtherPlayer[] = [];
+    const leftover: OtherPlayer[] = [];
+    for (const player of remaining) {
+      (predicate(player) ? matched : leftover).push(player);
+    }
+    remaining.length = 0;
+    remaining.push(...leftover);
+    return matched;
+  };
+
+  const groups: PlayerTeamGroup[] = [];
+  for (const team of roster) {
+    const members = takeMatching((player) => {
+      const id = teamIdOf(player.teamId);
+      if (team.id && id) return id === team.id;
+      if (!team.id && team.name) {
+        return !id && trimmedTeamName(player.teamName) === team.name;
+      }
+      return false;
+    });
+    if (!members.length) continue;
+    groups.push({
+      label: team.name || "Team",
+      unassigned: false,
+      color: team.color,
+      players: members,
+    });
+  }
+
+  const extras = new Map<string, PlayerTeamGroup>();
+  const unassigned: OtherPlayer[] = [];
+  for (const player of remaining) {
+    const id = teamIdOf(player.teamId);
+    const name = trimmedTeamName(player.teamName);
+    if (!id && !name) {
+      unassigned.push(player);
+      continue;
+    }
+    const key = id ? `id:${id}` : `name:${name}`;
+    const existing = extras.get(key);
+    if (existing) {
+      existing.players.push(player);
+      continue;
+    }
+    extras.set(key, {
+      label: name || "Team",
+      unassigned: false,
+      color: null,
+      players: [player],
+    });
+  }
+  groups.push(...extras.values());
+  if (unassigned.length) {
+    groups.push({
+      label: UNASSIGNED_TEAM_LABEL,
+      unassigned: true,
+      color: null,
+      players: unassigned,
+    });
+  }
+  return groups;
 }
 
 export function asRecordList<T extends object>(value: unknown): T[] {

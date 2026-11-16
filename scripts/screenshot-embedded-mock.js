@@ -13,6 +13,7 @@ const FIXTURES = [
   { name: "one-game", query: "fixture=one-game" },
   { name: "no-games", query: "fixture=no-games" },
   { name: "table", query: "fixture=several-games&game=newest-thread" },
+  { name: "team-game", query: "fixture=team-game&game=team-thread" },
 ];
 const DEFAULT_PORT = Number(process.env.PORT || 3000);
 const OUT_DIR = path.resolve(
