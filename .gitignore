@@ -68,13 +68,15 @@ config.json
 data/
 
 #cursor tools
-.cursor
+.cursor/*
+!.cursor/environment.json
 
 # local planning docs (the shared docs below are tracked)
 docs/*
 !docs/adr/
 !docs/feature-map/
 !docs/primitives.md
+!docs/cleanup-automations.md
 !docs/merge-policy.md
 !docs/runbooks/
 
