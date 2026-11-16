@@ -271,6 +271,24 @@ function injectEmbeddedConfig(html, config) {
   return html.replace("</head>", `<script>${snippet}</script></head>`);
 }
 
+// The Docker build writes the commit it was built from to this file. A file
+// (not an env var or label) because container updaters such as freshdock
+// recreate a container by copying the old container's config, which includes
+// the previous image's baked-in ENV and would pin /health to a stale SHA.
+const DEFAULT_GIT_SHA_FILE = path.resolve(__dirname, "..", "GIT_SHA");
+
+// The file wins over env so a stale GIT_SHA copied into a recreated container
+// cannot shadow the image's own value. Env covers local runs without the file.
+function readBuildSha({ gitShaFile = DEFAULT_GIT_SHA_FILE, env = process.env } = {}) {
+  try {
+    const fromFile = fs.readFileSync(gitShaFile, "utf8").trim();
+    if (fromFile) return fromFile;
+  } catch {
+    // No file: running outside a Docker image build.
+  }
+  return env.GIT_SHA || "unknown";
+}
+
 function createEmbeddedApp({
   clientId,
   clientSecret,
@@ -293,6 +311,7 @@ function createEmbeddedApp({
   imageProxyKey,
   imageFetchImpl = fetch,
   imageLookup,
+  gitShaFile = DEFAULT_GIT_SHA_FILE,
 } = {}) {
   const mockEnabled = allowEmbeddedAppMock(mock, env);
   const cardImageKey = imageProxyKey || deriveImageProxyKey(clientSecret);
@@ -315,11 +334,12 @@ function createEmbeddedApp({
   app.use(express.json({ limit: "8kb" }));
 
   // Deploy check: the release workflow polls this until `sha` matches the
-  // commit it just built (GIT_SHA is baked into the image). Registered before
-  // the SPA fallback below, which would otherwise answer /health with index.html.
+  // commit it just built (baked into the image). Registered before the SPA
+  // fallback below, which would otherwise answer /health with index.html.
+  const buildSha = readBuildSha({ gitShaFile, env });
   app.get("/health", (req, res) => {
     res.set("Cache-Control", "no-store");
-    res.json({ status: "ok", sha: env.GIT_SHA || "unknown" });
+    res.json({ status: "ok", sha: buildSha });
   });
 
   async function exchangeToken(req, res) {

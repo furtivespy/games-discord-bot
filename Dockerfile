@@ -58,6 +58,9 @@ ENV IS_IN_CONTAINER="true"
 
 # Commit this image was built from; served by GET /health so the release
 # workflow can confirm the deploy. Declared last so it never busts the layer cache.
+# Written to a file, not ENV: container updaters (freshdock, Portainer) recreate
+# a container by copying the old container's env, which would carry the previous
+# image's GIT_SHA forward and override this one.
 ARG GIT_SHA=unknown
-ENV GIT_SHA=$GIT_SHA
+RUN printf '%s' "$GIT_SHA" > /app/GIT_SHA
 CMD [ "bun", "run", "start" ]
