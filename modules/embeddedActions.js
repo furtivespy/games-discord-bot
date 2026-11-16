@@ -12,6 +12,7 @@ const {
 const {
   GAME_COLLECTION,
   isMissingGame,
+  resolveGetGameData,
   resolvePlayerDisplays,
   snapshotFromGameData,
   userIsPlayer,
@@ -234,21 +235,32 @@ function applyVisualCardAction(gameData, { action, deckName, count, actor, userI
   return { ok: true, content: result.content };
 }
 
-function loadGameDocument({ getGameData, discordClient, gameStore, guildId, channelId }) {
-  if (typeof getGameData === "function") {
-    return getGameData(guildId, GAME_COLLECTION, channelId);
+/**
+ * Serialize load → mutate → save for one game document. Two Deal/Draw POSTs
+ * with different requestIds must not both load the same snapshot.
+ */
+function createGameChannelLock() {
+  const tails = new Map();
+
+  function run(guildId, channelId, fn) {
+    const key = `${guildId}:${channelId}`;
+    const previous = tails.get(key) || Promise.resolve();
+    const next = previous.catch(() => {}).then(fn);
+    const idle = next.then(
+      () => {},
+      () => {}
+    );
+    tails.set(key, idle);
+    idle.then(() => {
+      if (tails.get(key) === idle) tails.delete(key);
+    });
+    return next;
   }
-  // Prefer the synchronous SQLite store so load → mutate → save does not
-  // yield. discordClient.getGameDataV2 is async and would reopen the race
-  // that resolvePlayerDisplays used to create between load and save.
-  if (typeof gameStore?.getSpecificGameData === "function") {
-    return gameStore.getSpecificGameData(guildId, GAME_COLLECTION, channelId);
-  }
-  if (typeof discordClient?.getGameDataV2 === "function") {
-    return discordClient.getGameDataV2(guildId, GAME_COLLECTION, channelId);
-  }
-  return undefined;
+
+  return { run };
 }
+
+const defaultGameChannelLock = createGameChannelLock();
 
 async function enrichActorDisplayName(actor, { discordClient, guildId, userId }) {
   try {
@@ -358,6 +370,7 @@ async function runVisualCardAction({
   logger,
   requestId,
   idempotency,
+  gameChannelLock,
 } = {}) {
   const gid = String(guildId || "").trim();
   const cid = String(channelId || "").trim();
@@ -373,20 +386,39 @@ async function runVisualCardAction({
     userId: uid,
   });
 
-  const execute = () =>
-    runVisualCardActionOnce({
-      action,
-      deckName,
-      count,
+  const lock =
+    gameChannelLock && typeof gameChannelLock.run === "function"
+      ? gameChannelLock
+      : defaultGameChannelLock;
+
+  const execute = async () => {
+    const persisted = await lock.run(gid, cid, () =>
+      runVisualCardActionOnce({
+        action,
+        deckName,
+        count,
+        actor,
+        guildId: gid,
+        channelId: cid,
+        userId: uid,
+        getGameData,
+        discordClient,
+        gameStore,
+        logger,
+      })
+    );
+    if (persisted.status !== 200) return persisted;
+    return finishVisualCardAction({
+      gameData: persisted.gameData,
+      applied: persisted.applied,
       actor,
+      discordClient,
       guildId: gid,
       channelId: cid,
       userId: uid,
-      getGameData,
-      discordClient,
-      gameStore,
       logger,
     });
+  };
 
   if (idempotency && typeof idempotency.run === "function") {
     return idempotency.run(requestId, uid, gid, cid, execute, {
@@ -411,28 +443,20 @@ async function runVisualCardActionOnce({
   gameStore,
   logger,
 }) {
+  const loader = resolveGetGameData({ getGameData, discordClient, gameStore });
+  if (!loader) {
+    return errorBody("no_game", 404);
+  }
+
   let gameData = null;
   try {
-    gameData = loadGameDocument({
-      getGameData,
-      discordClient,
-      gameStore,
-      guildId,
-      channelId,
-    });
-    if (gameData && typeof gameData.then === "function") {
-      gameData = await gameData;
-    }
+    gameData = await loader(guildId, GAME_COLLECTION, channelId);
   } catch (err) {
     logger?.log?.(
       `Failed to load game for visual-mode action: ${err.message || err}`,
       "error"
     );
     return errorBody("action_failed", 500);
-  }
-
-  if (gameData === undefined) {
-    return errorBody("no_game", 404);
   }
 
   if (isMissingGame(gameData)) {
@@ -473,6 +497,19 @@ async function runVisualCardActionOnce({
     return errorBody("action_failed", 500);
   }
 
+  return { status: 200, gameData, applied };
+}
+
+async function finishVisualCardAction({
+  gameData,
+  applied,
+  actor,
+  discordClient,
+  guildId,
+  channelId,
+  userId,
+  logger,
+}) {
   let channelPosted = false;
   try {
     channelPosted = Boolean(
@@ -517,6 +554,7 @@ module.exports = {
   actorFromDiscordUser,
   applyVisualCardAction,
   createActionIdempotencyCache,
+  createGameChannelLock,
   parseVisualActionBody,
   parseVisualActionRequestId,
   postCommandToGameChannel,

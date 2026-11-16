@@ -329,21 +329,10 @@ describe("runVisualCardAction", () => {
     expect(store.get("guild-1:game:thread-game").players[0].hands.main).toHaveLength(2);
   });
 
-  test("concurrent draws with a slow nick lookup each persist a different card", async () => {
-    const rows = new Map();
-    rows.set("guild-1:game:race-thread", JSON.parse(JSON.stringify(gameWithDeck())));
-    const gameStore = {
-      getSpecificGameData(guildId, collection, channelId) {
-        const data = rows.get(`${guildId}:${collection}:${channelId}`);
-        return data ? JSON.parse(JSON.stringify(data)) : null;
-      },
-      upsertGameData(guildId, collection, channelId, data) {
-        rows.set(
-          `${guildId}:${collection}:${channelId}`,
-          JSON.parse(JSON.stringify(data))
-        );
-      },
-    };
+  function concurrentActionClient() {
+    const stored = JSON.parse(JSON.stringify(gameWithDeck()));
+    const store = new Map();
+    store.set("guild-1:game:race-thread", stored);
     const posted = [];
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const discordClient = {
@@ -379,12 +368,22 @@ describe("runVisualCardAction", () => {
         }),
       },
       async getGameDataV2(guildId, collection, channelId) {
-        return gameStore.getSpecificGameData(guildId, collection, channelId);
+        const data = store.get(`${guildId}:${collection}:${channelId}`);
+        return data ? JSON.parse(JSON.stringify(data)) : null;
       },
       async setGameDataV2(guildId, collection, channelId, data) {
-        gameStore.upsertGameData(guildId, collection, channelId, data);
+        await delay(20);
+        store.set(
+          `${guildId}:${collection}:${channelId}`,
+          JSON.parse(JSON.stringify(data))
+        );
       },
     };
+    return { posted, store, discordClient };
+  }
+
+  test("concurrent draws with a slow nick lookup each persist a different card", async () => {
+    const { posted, store, discordClient } = concurrentActionClient();
     const draw = {
       action: "draw",
       deckName: "Main",
@@ -393,7 +392,6 @@ describe("runVisualCardAction", () => {
       guildId: "guild-1",
       channelId: "race-thread",
       discordClient,
-      gameStore,
     };
     const [first, second] = await Promise.all([
       runVisualCardAction({ ...draw, requestId: "race-request-aaa" }),
@@ -401,7 +399,7 @@ describe("runVisualCardAction", () => {
     ]);
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
-    const saved = gameStore.getSpecificGameData("guild-1", "game", "race-thread");
+    const saved = store.get("guild-1:game:race-thread");
     expect(saved.players[0].hands.main.map((card) => card.name)).toEqual([
       "Copper",
       "Ace",
@@ -424,6 +422,47 @@ describe("runVisualCardAction", () => {
       "WillOnServer drew 1 cards from Main",
     ]);
     expect(posted.map((payload) => payload.content)).toEqual(drawHistory);
+  });
+
+  test("concurrent deals with a slow nick lookup each persist a different pair", async () => {
+    const { posted, store, discordClient } = concurrentActionClient();
+    const deal = {
+      action: "deal",
+      deckName: "Main",
+      count: 1,
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "race-thread",
+      discordClient,
+    };
+    const [first, second] = await Promise.all([
+      runVisualCardAction({ ...deal, requestId: "race-deal-aaa" }),
+      runVisualCardAction({ ...deal, requestId: "race-deal-bbb" }),
+    ]);
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    const saved = store.get("guild-1:game:race-thread");
+    expect(saved.players[0].hands.main.map((card) => card.name)).toEqual([
+      "Copper",
+      "Ace",
+      "Queen",
+    ]);
+    expect(saved.players[1].hands.main.map((card) => card.name)).toEqual([
+      "King",
+      "Jack",
+    ]);
+    expect(saved.decks[0].piles.draw.cards).toEqual([]);
+    const dealHistory = saved.history
+      .filter((entry) => entry?.action?.type === GameDB.ACTION_TYPES.DEAL)
+      .map((entry) => entry.summary);
+    expect(dealHistory).toEqual([
+      "WillOnServer dealt 2 cards from Main to all players",
+      "WillOnServer dealt 2 cards from Main to all players",
+    ]);
+    expect(posted.map((payload) => payload.content)).toEqual([
+      "Dealt out a total of 2 cards from Main.",
+      "Dealt out a total of 2 cards from Main.",
+    ]);
   });
 
   test("still returns the updated table if the follow-up snapshot load fails", async () => {

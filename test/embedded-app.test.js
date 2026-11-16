@@ -947,7 +947,15 @@ describe("POST /api/game/action", () => {
   }
 
   async function withActionApp(
-    { game = actionGame(), send, botToken = "bot-token", access = {}, meBody } = {},
+    {
+      game = actionGame(),
+      send,
+      botToken = "bot-token",
+      access = {},
+      meBody,
+      clientExtras = {},
+      saveDelayMs = 0,
+    } = {},
     run
   ) {
     Formatter.createGameStatusReply = async (_gameData, _guild, _clientUserId, options = {}) => ({
@@ -962,10 +970,11 @@ describe("POST /api/game/action", () => {
         const channel = {
           id: "thread-game",
           guild: { id: "guild-1" },
+          messages: { fetch: async () => null },
           send: async (payload) => {
             if (typeof send === "function") return send(payload, posted);
             posted.push(payload);
-            return { id: "msg-1" };
+            return { id: `msg-${posted.length}` };
           },
         };
         const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-action-http-"));
@@ -988,8 +997,12 @@ describe("POST /api/game/action", () => {
             getGameDataV2: async (guildId, collection, channelId) =>
               store.getSpecificGameData(guildId, collection, channelId),
             setGameDataV2: async (guildId, collection, channelId, data) => {
+              if (saveDelayMs) {
+                await new Promise((resolve) => setTimeout(resolve, saveDelayMs));
+              }
               store.upsertGameData(guildId, collection, channelId, data);
             },
+            ...clientExtras,
           },
           fetchImpl: withDiscordAccess(
             mockDiscordFetch({
@@ -1186,5 +1199,72 @@ describe("POST /api/game/action", () => {
       const saved = store.getSpecificGameData("guild-1", GAME_COLLECTION, "thread-game");
       expect(saved.players[0].hands.main).toHaveLength(1);
     });
+  });
+
+  test("concurrent Draw POSTs with a slow nick lookup each persist a different card", async () => {
+    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    await withActionApp(
+      {
+        saveDelayMs: 20,
+        clientExtras: {
+          guilds: {
+            cache: { get: () => null },
+            fetch: async () => ({
+              members: {
+                cache: { get: () => null },
+                fetch: async (userId) => {
+                  if (userId === "snowflake-user") await delay(150);
+                  return {
+                    displayName:
+                      userId === "snowflake-user" ? "WillOnServer" : "Riley",
+                  };
+                },
+              },
+            }),
+          },
+        },
+      },
+      async ({ url, posted, store }) => {
+        const [firstRes, secondRes] = await Promise.all([
+          postAction(url, {
+            action: "draw",
+            deck: "Main",
+            count: 1,
+            requestId: "http-race-aaa",
+          }),
+          postAction(url, {
+            action: "draw",
+            deck: "Main",
+            count: 1,
+            requestId: "http-race-bbb",
+          }),
+        ]);
+        expect(firstRes.status).toBe(200);
+        expect(secondRes.status).toBe(200);
+        const first = await firstRes.json();
+        const second = await secondRes.json();
+        const saved = store.getSpecificGameData("guild-1", GAME_COLLECTION, "thread-game");
+        expect(saved.players[0].hands.main.map((card) => card.name)).toEqual([
+          "Copper",
+          "Ace",
+          "King",
+        ]);
+        expect(saved.decks[0].piles.draw.cards.map((card) => card.name)).toEqual([
+          "Queen",
+          "Jack",
+        ]);
+        expect(
+          new Set([first.hand.at(-1).name, second.hand.at(-1).name])
+        ).toEqual(new Set(["Ace", "King"]));
+        const drawHistory = saved.history
+          .filter((entry) => entry?.action?.type === GameDB.ACTION_TYPES.DRAW)
+          .map((entry) => entry.summary);
+        expect(drawHistory).toEqual([
+          "WillOnServer drew 1 cards from Main",
+          "WillOnServer drew 1 cards from Main",
+        ]);
+        expect(posted.map((payload) => payload.content)).toEqual(drawHistory);
+      }
+    );
   });
 });
