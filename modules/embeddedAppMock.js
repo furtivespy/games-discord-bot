@@ -1,4 +1,9 @@
 const { snapshotFromGameData } = require("./embeddedGames");
+const {
+  applyVisualCardAction,
+  createActionIdempotencyCache,
+  visualActionErrorMessage,
+} = require("./embeddedActions");
 
 const ENV_NAME = "EMBEDDED_APP_MOCK";
 const TRUTHY = new Set(["1", "true", "yes", "on"]);
@@ -353,24 +358,125 @@ function getMockGames({ fixture } = {}) {
 }
 
 function getMockSnapshot({ fixture, channelId, guildId } = {}) {
-  const name = sanitizeFixtureName(fixture);
-  if (!name) {
-    return { status: 400, body: { error: "unknown_fixture" } };
-  }
-  if (name === "no-game") {
-    return { status: 404, body: { error: "no_game" } };
-  }
-  if (name === "not-a-player") {
-    return { status: 403, body: { error: "not_a_player" } };
-  }
-  const seed = name === "team-game" ? teamGameSeed() : populatedSeed();
+  return createMockGameSession().getSnapshot({ fixture, channelId, guildId });
+}
+
+function mockActor() {
   return {
-    status: 200,
-    body: snapshotFromSeed(seed, {
-      channelId: channelId || DEFAULT_MOCK_CHANNEL_ID,
-      guildId: guildId || DEFAULT_MOCK_GUILD_ID,
-    }),
+    id: MOCK_USER.id,
+    username: MOCK_USER.username,
+    displayName: MOCK_USER.global_name || MOCK_USER.username,
   };
+}
+
+function createMockGameSession() {
+  const games = new Map();
+  const idempotency = createActionIdempotencyCache();
+
+  function stateKey(name, channelId, guildId) {
+    return `${name}:${channelId}:${guildId}`;
+  }
+
+  function loadSeed(name) {
+    return name === "team-game" ? teamGameSeed() : populatedSeed();
+  }
+
+  function getGame(name, channelId, guildId) {
+    const key = stateKey(name, channelId, guildId);
+    if (!games.has(key)) {
+      games.set(key, loadSeed(name));
+    }
+    return games.get(key);
+  }
+
+  function getSnapshot({ fixture, channelId, guildId } = {}) {
+    const name = sanitizeFixtureName(fixture);
+    if (!name) {
+      return { status: 400, body: { error: "unknown_fixture" } };
+    }
+    if (name === "no-game") {
+      return { status: 404, body: { error: "no_game" } };
+    }
+    if (name === "not-a-player") {
+      return { status: 403, body: { error: "not_a_player" } };
+    }
+    const cid = channelId || DEFAULT_MOCK_CHANNEL_ID;
+    const gid = guildId || DEFAULT_MOCK_GUILD_ID;
+    const seed = getGame(name, cid, gid);
+    return {
+      status: 200,
+      body: snapshotFromSeed(seed, {
+        channelId: cid,
+        guildId: gid,
+      }),
+    };
+  }
+
+  function applyAction({
+    fixture,
+    channelId,
+    guildId,
+    action,
+    deckName,
+    count,
+    requestId,
+  } = {}) {
+    const name = sanitizeFixtureName(fixture);
+    if (!name) {
+      return { status: 400, body: { error: "unknown_fixture" } };
+    }
+    if (name === "no-game") {
+      return {
+        status: 404,
+        body: { error: "no_game", message: visualActionErrorMessage("no_game") },
+      };
+    }
+    if (name === "not-a-player") {
+      return {
+        status: 403,
+        body: {
+          error: "not_a_player",
+          message: visualActionErrorMessage("not_a_player"),
+        },
+      };
+    }
+    const cid = channelId || DEFAULT_MOCK_CHANNEL_ID;
+    const gid = guildId || DEFAULT_MOCK_GUILD_ID;
+    const run = () => {
+      const gameData = getGame(name, cid, gid);
+      const applied = applyVisualCardAction(gameData, {
+        action,
+        deckName,
+        count,
+        actor: mockActor(),
+        userId: MOCK_USER.id,
+      });
+      if (!applied.ok) {
+        return {
+          status: applied.status,
+          body: {
+            error: applied.error,
+            message: applied.content || visualActionErrorMessage(applied.error),
+          },
+        };
+      }
+      return {
+        status: 200,
+        body: {
+          ...snapshotFromSeed(gameData, { channelId: cid, guildId: gid }),
+          message: applied.content,
+          channelPosted: true,
+        },
+      };
+    };
+    return idempotency.run(requestId, MOCK_USER.id, gid, cid, run, {
+      action,
+      deckName,
+      count,
+    });
+  }
+
+  return { getSnapshot, applyAction };
 }
 
 function mockUserTokenBody({ originChannelName } = {}) {
@@ -429,6 +535,7 @@ module.exports = {
   TEAM_GAME_CHANNEL_NAME,
   TEAM_GAME_FIXTURE,
   allowEmbeddedAppMock,
+  createMockGameSession,
   getMockGames,
   getMockSnapshot,
   handleMockTokenExchange,

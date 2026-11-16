@@ -4,7 +4,7 @@ const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
-const Shuffle = require(`./shuffle`)
+const CardMoves = require('../../modules/cardMoves')
 
 class DrawMulti {
     async execute(interaction, client) {
@@ -24,17 +24,15 @@ class DrawMulti {
         }
 
         const cardCount = interaction.options.getInteger('count')
-        let dealCount = 0
         const deckResult = GameHelper.resolveDeckOption(gameData, interaction.options.getString('deck'))
         if (await GameHelper.replyIfUnspecifiedDeck(interaction, deckResult)) {
             return
         }
         const deck = deckResult.deck
-
         if (!deck || deck.piles.draw.cards.length < 1){
             await interaction.editReply({ content: "No cards in draw pile"})
             return
-        } 
+        }
 
         let player = find(gameData.players, {userId: interaction.user.id})
         if (!player){
@@ -53,53 +51,27 @@ class DrawMulti {
 
             player = find(gameData.players, {userId: interaction.user.id})
         }
-        let wasShuffled = ""
 
-        dealLoop:
-        for (let i = 0; i < cardCount; i++) {
-            if (deck.piles.draw.cards.length < 1){
-                wasShuffled = "\n**The deck was shuffled**"
-                Shuffle.DoShuffle(deck)
-            } 
-
-            if (deck.piles.draw.cards.length < 1){
-                break dealLoop
-            }
-            const theCard = deck.piles.draw.cards.shift()
-            player.hands.main.push(theCard)
-            dealCount++
-        }
-        
-        // Record this action in game history
-        if (dealCount > 0) {
-            try {
-                const actorDisplayName = interaction.member?.displayName || interaction.user.username
-                const shuffleNote = wasShuffled ? " (deck was shuffled)" : ""
-                
-                GameHelper.recordMove(
-                    gameData,
-                    interaction.user,
-                    GameDB.ACTION_CATEGORIES.CARD,
-                    GameDB.ACTION_TYPES.DRAW,
-                    `${actorDisplayName} drew ${dealCount} cards from ${deck.name}${shuffleNote}`,
-                    {
-                        cardCount: dealCount,
-                        deckName: deck.name,
-                        source: "draw pile",
-                        wasShuffled: wasShuffled.length > 0
-                    },
-                    actorDisplayName
-                )
-            } catch (error) {
-                console.warn('Failed to record multi-card draw in history:', error)
-            }
+        const result = CardMoves.drawMultiple(gameData, {
+            deck,
+            count: cardCount,
+            player,
+            actor: {
+                id: interaction.user.id,
+                username: interaction.user.username,
+                displayName: interaction.member?.displayName || interaction.user.username,
+            },
+        })
+        if (!result.ok) {
+            await interaction.editReply({ content: result.content })
+            return
         }
         
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
         
         const [, handInfo] = await Promise.all([
             GameStatusHelper.sendGameStatus(interaction, client, gameData,
-              { content: `${interaction.member.displayName} drew ${dealCount} cards from ${deck.name}${wasShuffled}` }
+              { content: result.content }
             ),
             Formatter.playerSecretHandAndImages(gameData, player)
         ]);

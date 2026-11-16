@@ -9,16 +9,24 @@ const {
   MOCK_ACCESS_TOKEN,
   allowEmbeddedAppMock,
   getMockGames,
-  getMockSnapshot,
   handleMockTokenExchange,
   isEmbeddedAppMockEnabled,
   isEmbeddedAppMockRequested,
   resolveMockRuntimeConfig,
+  createMockGameSession,
 } = require("./embeddedAppMock");
 const {
+  createActionIdempotencyCache,
+  parseVisualActionBody,
+  runVisualCardAction,
+  visualActionErrorMessage,
+} = require("./embeddedActions");
+const {
   channelNameFromDiscordClient,
+  createDiscordLookupCache,
   listActiveGamesForUser,
   optionalDiscordAccessGuard,
+  requiredDiscordAccessGuard,
   snapshotGameForUser,
 } = require("./embeddedGames");
 const {
@@ -298,6 +306,9 @@ function createEmbeddedApp({
       : DEFAULT_MOCK_CHANNEL_NAME;
   const resolvedClientId =
     sanitizeClientId(clientId) || (mockEnabled ? DEFAULT_MOCK_CLIENT_ID : clientId);
+  const mockSession = mockEnabled ? createMockGameSession() : null;
+  const actionIdempotency = createActionIdempotencyCache();
+  const discordLookupCache = createDiscordLookupCache();
 
   const app = express();
   app.disable("x-powered-by");
@@ -406,7 +417,7 @@ function createEmbeddedApp({
         res.status(401).json({ error: "unauthorized" });
         return;
       }
-      const result = getMockSnapshot({
+      const result = mockSession.getSnapshot({
         fixture: firstQueryValue(req.query?.fixture),
         channelId: requestedChannelId || resolvedMockChannelId,
         guildId: requestedGuildId || resolvedMockGuildId,
@@ -464,6 +475,111 @@ function createEmbeddedApp({
   }
 
   app.get(["/api/game/snapshot", "/.proxy/api/game/snapshot"], sendGameSnapshot);
+
+  async function sendGameAction(req, res) {
+    const accessToken = bearerTokenFromHeader(req.get("authorization"));
+    const parsed = parseVisualActionBody(req.body || {});
+    if (parsed.error) {
+      res.status(parsed.status).json({
+        error: parsed.error,
+        message: parsed.message || visualActionErrorMessage(parsed.error),
+      });
+      return;
+    }
+    const requestedChannelId = sanitizeHostChannelId(req.body?.channelId);
+    const requestedGuildId = sanitizeHostChannelId(req.body?.guildId);
+    if (mockEnabled) {
+      if (accessToken !== MOCK_ACCESS_TOKEN) {
+        res.status(401).json({
+          error: "unauthorized",
+          message: visualActionErrorMessage("unauthorized"),
+        });
+        return;
+      }
+      const result = await mockSession.applyAction({
+        fixture: req.body?.fixture || firstQueryValue(req.query?.fixture),
+        channelId: requestedChannelId || resolvedMockChannelId,
+        guildId: requestedGuildId || resolvedMockGuildId,
+        action: parsed.action,
+        deckName: parsed.deckName,
+        count: parsed.count,
+        requestId: parsed.requestId,
+      });
+      sendSnapshotResult(res, result);
+      return;
+    }
+    if (!accessToken) {
+      res.status(401).json({
+        error: "unauthorized",
+        message: visualActionErrorMessage("unauthorized"),
+      });
+      return;
+    }
+    let user = null;
+    try {
+      user = await fetchDiscordUser(accessToken, fetchImpl);
+    } catch (err) {
+      logger?.log?.(
+        `Discord users/@me lookup failed: ${err.message || err}`,
+        "warn"
+      );
+    }
+    if (!user?.id) {
+      res.status(401).json({
+        error: "unauthorized",
+        message: visualActionErrorMessage("unauthorized"),
+      });
+      return;
+    }
+    if (!requestedGuildId) {
+      res.status(400).json({
+        error: "missing_guild",
+        message: visualActionErrorMessage("missing_guild"),
+      });
+      return;
+    }
+    if (!requestedChannelId) {
+      res.status(400).json({
+        error: "missing_channel",
+        message: visualActionErrorMessage("missing_channel"),
+      });
+      return;
+    }
+    const guard = await requiredDiscordAccessGuard({
+      fetchImpl,
+      botToken,
+      discordClient,
+      guildId: requestedGuildId,
+      channelId: requestedChannelId,
+      userId: user.id,
+      lookupCache: discordLookupCache,
+    });
+    if (!guard.ok) {
+      res.status(guard.status).json({
+        ...guard.body,
+        message: visualActionErrorMessage(guard.body?.error),
+      });
+      return;
+    }
+    const result = await runVisualCardAction({
+      action: parsed.action,
+      deckName: parsed.deckName,
+      count: parsed.count,
+      user,
+      member: guard.member,
+      guildId: requestedGuildId,
+      channelId: requestedChannelId,
+      getGameData,
+      discordClient,
+      gameStore,
+      logger,
+      requestId: parsed.requestId,
+      idempotency: actionIdempotency,
+    });
+    sendSnapshotResult(res, result);
+  }
+
+  app.post(["/api/game/action", "/.proxy/api/game/action"], sendGameAction);
 
   app.get(
     [CARD_IMAGE_PATH, `/.proxy${CARD_IMAGE_PATH}`],

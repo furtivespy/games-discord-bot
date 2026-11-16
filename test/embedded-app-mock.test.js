@@ -440,6 +440,91 @@ describe("mock embedded HTTP", () => {
     }
   });
 
+  test("POST /api/game/action deals and draws against the mock table and keeps the snapshot", async () => {
+    const staticDir = makeStaticDir();
+    const app = createEmbeddedApp({
+      mock: true,
+      mockChannelId: "newest-thread",
+      mockGuildId: "mock-guild",
+      env: DEV_ENV,
+      staticDir,
+    });
+    const { server, url } = await listen(app);
+    const auth = {
+      Authorization: `Bearer ${MOCK_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    };
+
+    try {
+      const before = await fetch(
+        `${url}/api/game/snapshot?fixture=several-games&channelId=newest-thread&guildId=mock-guild`,
+        { headers: { Authorization: `Bearer ${MOCK_ACCESS_TOKEN}` } }
+      );
+      const beforeBody = await before.json();
+      const handBefore = beforeBody.hand.length;
+      const remainingBefore = Number(beforeBody.decks[0].remaining);
+
+      const unauthorized = await fetch(`${url}/api/game/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "draw",
+          deck: "Main",
+          count: 2,
+          channelId: "newest-thread",
+          guildId: "mock-guild",
+          fixture: "several-games",
+        }),
+      });
+      expect(unauthorized.status).toBe(401);
+
+      const drawn = await fetch(`${url}/api/game/action`, {
+        method: "POST",
+        headers: auth,
+        body: JSON.stringify({
+          action: "draw",
+          deck: "Main",
+          count: 2,
+          channelId: "newest-thread",
+          guildId: "mock-guild",
+          fixture: "several-games",
+        }),
+      });
+      expect(drawn.status).toBe(200);
+      const drawnBody = await drawn.json();
+      expect(drawnBody.hand).toHaveLength(handBefore + 2);
+      expect(drawnBody.channelPosted).toBe(true);
+      expect(drawnBody.status.history.at(-1).summary).toContain("drew 2 cards from Main");
+      expect(Number(drawnBody.decks[0].remaining)).toBe(remainingBefore - 2);
+
+      const snapshot = await fetch(
+        `${url}/api/game/snapshot?fixture=several-games&channelId=newest-thread&guildId=mock-guild`,
+        { headers: { Authorization: `Bearer ${MOCK_ACCESS_TOKEN}` } }
+      );
+      expect((await snapshot.json()).hand).toHaveLength(handBefore + 2);
+
+      const dealt = await fetch(`${url}/.proxy/api/game/action`, {
+        method: "POST",
+        headers: auth,
+        body: JSON.stringify({
+          action: "deal",
+          deck: "Main",
+          count: 1,
+          channelId: "newest-thread",
+          guildId: "mock-guild",
+          fixture: "several-games",
+        }),
+      });
+      expect(dealt.status).toBe(200);
+      const dealtBody = await dealt.json();
+      expect(dealtBody.message).toContain("Dealt out a total of");
+      expect(dealtBody.status.history.at(-1).summary).toContain("dealt");
+    } finally {
+      server.close();
+      fs.rmSync(staticDir, { recursive: true, force: true });
+    }
+  });
+
   test("injects mock config into the page and uses a dummy client id when missing", async () => {
     const staticDir = makeStaticDir();
     const app = createEmbeddedApp({

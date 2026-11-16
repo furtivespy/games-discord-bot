@@ -4,6 +4,7 @@ import {
   patchUrlMappings,
 } from "@discord/embedded-app-sdk";
 import {
+  actionRequestUrl,
   cardImageRequestUrl,
   firstNonEmptyName,
   GAMES_EMPTY_MESSAGE,
@@ -19,6 +20,24 @@ import {
   tokenRequestUrl,
   urlMappingsForApiHost,
 } from "./handshake";
+import {
+  ACTION_COUNT_MAX,
+  ACTION_COUNT_MIN,
+  ACTION_ERROR_MESSAGES,
+  CHANNEL_POST_FAILED_NOTICE,
+  DEFAULT_ACTION_COUNT,
+  GAME_CHANNEL_LINK_LABEL,
+  actionDialogCopy,
+  deckActionFromDataset,
+  gameChannelUrl,
+  newActionRequestId,
+  parseActionCount,
+  shouldUseOpenExternalLink,
+  tryOpenExternalLink,
+  visualActionBody,
+  visualActionErrorMessage,
+  type DeckActionKind,
+} from "./visualActions";
 import { enableCardDrag, type CardOffset } from "./drag";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
@@ -29,7 +48,6 @@ import {
   DEFAULT_CARD_BACK,
   deckActionsFor,
   deckCountLabel,
-  onDeckActionClick,
   groupPlayersByTeam,
   handCountLabel,
   initialsFromName,
@@ -52,6 +70,19 @@ import "./style.css";
 const snapshotLoader = createSnapshotLoader();
 // patchUrlMappings only rewrites fetch/XHR/WebSocket, not <img src>.
 let activeUrlMappings: ReturnType<typeof urlMappingsForApiHost> = [];
+let activeSession: {
+  config: EmbeddedConfig;
+  accessToken: string;
+  guildId: string;
+  discordSdk?: {
+    commands?: {
+      openExternalLink?: (args: { url: string }) => Promise<unknown>;
+    };
+  };
+} | null = null;
+let actionDialogBound = false;
+let actionInFlight = false;
+let actionRequestId: string | null = null;
 
 type EmbeddedConfig = {
   clientId: string;
@@ -80,6 +111,7 @@ type GameSnapshot = {
   decks?: SnapshotDeck[];
   status?: GameStatus;
   error?: string;
+  channelPosted?: boolean;
 };
 
 type PickerGame = {
@@ -149,6 +181,23 @@ function setSnapshotStatus(text: string | null) {
   el.hidden = true;
 }
 
+function setActionNotice(text: string | null) {
+  const el = document.getElementById("action-notice");
+  if (!el) return;
+  const value = typeof text === "string" ? text.trim() : "";
+  el.textContent = value;
+  el.hidden = !value;
+}
+
+function setDeckActionsLocked(locked: boolean) {
+  actionInFlight = locked;
+  document.querySelectorAll<HTMLButtonElement>("button.deck-action").forEach((button) => {
+    button.disabled = locked;
+  });
+  const { confirm } = actionDialogElements();
+  if (confirm) confirm.disabled = locked;
+}
+
 function setTableVisible(visible: boolean) {
   const table = document.getElementById("table");
   if (table) table.hidden = !visible;
@@ -160,6 +209,8 @@ function setTableVisible(visible: boolean) {
     }
     const others = document.getElementById("other-players");
     if (others) others.hidden = true;
+    renderGameChannelLink(null, null);
+    setActionNotice(null);
   }
 }
 
@@ -206,6 +257,194 @@ function showSelectedChannel(name: string | null) {
   }
   el.textContent = text;
   el.hidden = false;
+}
+
+function renderGameChannelLink(guildId: unknown, channelId: unknown) {
+  const el = document.getElementById("game-channel-link");
+  if (!el) return;
+  const href = gameChannelUrl(guildId, channelId);
+  if (!href) {
+    el.replaceChildren();
+    el.hidden = true;
+    return;
+  }
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.target = "_blank";
+  anchor.rel = "noreferrer";
+  anchor.textContent = GAME_CHANNEL_LINK_LABEL;
+  const openExternal = activeSession?.discordSdk?.commands?.openExternalLink;
+  if (shouldUseOpenExternalLink(Boolean(activeSession?.config.mock), openExternal)) {
+    const openLink = openExternal as (args: { url: string }) => Promise<unknown>;
+    anchor.addEventListener("click", (event) => {
+      event.preventDefault();
+      void tryOpenExternalLink(href, openLink).then((status) => {
+        if (status === "failed") {
+          window.open(href, "_blank", "noopener,noreferrer");
+        }
+      });
+    });
+  }
+  el.replaceChildren(anchor);
+  el.hidden = false;
+}
+
+function actionDialogElements() {
+  return {
+    dialog: document.getElementById("action-dialog") as HTMLDialogElement | null,
+    title: document.getElementById("action-dialog-title"),
+    label: document.getElementById("action-count-label"),
+    input: document.getElementById("action-count") as HTMLInputElement | null,
+    confirm: document.getElementById("action-confirm") as HTMLButtonElement | null,
+    cancel: document.getElementById("action-cancel") as HTMLButtonElement | null,
+    error: document.getElementById("action-dialog-error"),
+    form: document.getElementById("action-form") as HTMLFormElement | null,
+  };
+}
+
+function setActionDialogError(message: string | null) {
+  const { error } = actionDialogElements();
+  if (!error) return;
+  const text = typeof message === "string" ? message.trim() : "";
+  error.textContent = text;
+  error.hidden = !text;
+}
+
+function closeActionDialog() {
+  const { dialog, confirm } = actionDialogElements();
+  if (confirm && !actionInFlight) confirm.disabled = false;
+  setActionDialogError(null);
+  dialog?.close?.();
+}
+
+function openActionDialog(kind: DeckActionKind, deckName: string) {
+  if (actionInFlight) return;
+  const els = actionDialogElements();
+  if (!els.dialog || !els.input || !els.form) return;
+  const copy = actionDialogCopy(kind);
+  if (els.title) els.title.textContent = copy.title;
+  if (els.label) els.label.textContent = copy.label;
+  if (els.confirm) {
+    els.confirm.textContent = copy.confirm;
+    els.confirm.disabled = actionInFlight;
+  }
+  els.dialog.dataset.action = kind;
+  els.dialog.dataset.deckName = deckName;
+  els.input.min = String(ACTION_COUNT_MIN);
+  els.input.max = String(ACTION_COUNT_MAX);
+  els.input.value = String(DEFAULT_ACTION_COUNT);
+  setActionDialogError(null);
+  if (typeof els.dialog.showModal === "function") {
+    if (!els.dialog.open) els.dialog.showModal();
+  } else {
+    els.dialog.setAttribute("open", "");
+  }
+  els.input.focus();
+  els.input.select?.();
+}
+
+async function submitDeckAction(kind: DeckActionKind, deckName: string, count: number) {
+  const session = activeSession;
+  if (!session) {
+    setActionDialogError("Could not reach the game.");
+    return;
+  }
+  if (actionInFlight) return;
+  const channelId = liveSelectedChannelId(session.config.channelId);
+  const guildId = session.guildId || session.config.guildId;
+  actionRequestId = newActionRequestId();
+  setDeckActionsLocked(true);
+  setActionDialogError(null);
+  try {
+    const response = await fetch(
+      actionRequestUrl(session.config.apiHost, window.location.protocol),
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(
+          visualActionBody({
+            action: kind,
+            deck: deckName,
+            count,
+            channelId,
+            guildId,
+            requestId: actionRequestId,
+            fixture: session.config.mock ? readFixture() : undefined,
+          })
+        ),
+      }
+    );
+    let payload: GameSnapshot & {
+      message?: string;
+      error?: string;
+      channelPosted?: boolean;
+    } = {};
+    try {
+      payload = (await response.json()) as GameSnapshot & {
+        message?: string;
+        error?: string;
+        channelPosted?: boolean;
+      };
+    } catch {
+      payload = {};
+    }
+    if (!response.ok) {
+      setActionDialogError(visualActionErrorMessage(payload.error, payload.message));
+      return;
+    }
+    closeActionDialog();
+    applySnapshot(session.config, payload);
+    setActionNotice(payload.channelPosted === false ? CHANNEL_POST_FAILED_NOTICE : null);
+  } catch {
+    setActionDialogError(visualActionErrorMessage("action_failed"));
+  } finally {
+    actionRequestId = null;
+    setDeckActionsLocked(false);
+  }
+}
+
+function bindActionDialog() {
+  if (actionDialogBound) return;
+  const els = actionDialogElements();
+  if (!els.form || !els.dialog) return;
+  actionDialogBound = true;
+  els.cancel?.addEventListener("click", () => {
+    closeActionDialog();
+  });
+  els.dialog.addEventListener("close", () => {
+    setActionDialogError(null);
+    const { confirm } = actionDialogElements();
+    if (confirm && !actionInFlight) confirm.disabled = false;
+  });
+  els.form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (actionInFlight) return;
+    const kind = String(els.dialog?.dataset.action || "") as DeckActionKind;
+    const deckName = String(els.dialog?.dataset.deckName || "").trim();
+    const count = parseActionCount(els.input?.value);
+    if ((kind !== "deal" && kind !== "draw") || !deckName) {
+      setActionDialogError("Could not run that action.");
+      return;
+    }
+    if (count == null) {
+      setActionDialogError(ACTION_ERROR_MESSAGES.invalid_count);
+      return;
+    }
+    void submitDeckAction(kind, deckName, count);
+  });
+}
+
+function onDeckActionButtonClick(event: Event) {
+  event.preventDefault();
+  if (actionInFlight) return;
+  const target = event.currentTarget as HTMLElement | null;
+  const parsed = deckActionFromDataset(target?.dataset);
+  target?.blur?.();
+  if (!parsed) return;
+  openActionDialog(parsed.action, parsed.deckName);
 }
 
 function bindGameSelect(
@@ -511,13 +750,17 @@ function renderOtherPlayers(
 function renderDeckActions(deck: SnapshotDeck): HTMLDivElement {
   const actions = document.createElement("div");
   actions.className = "deck-actions";
+  const deckName =
+    typeof deck.name === "string" && deck.name.trim() ? deck.name.trim() : "Deck";
   for (const action of deckActionsFor(deck)) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "deck-action";
     button.dataset.deckAction = action.id;
+    button.dataset.deckName = deckName;
     button.textContent = action.label;
-    button.addEventListener("click", onDeckActionClick);
+    button.disabled = actionInFlight;
+    button.addEventListener("click", onDeckActionButtonClick);
     actions.append(button);
   }
   return actions;
@@ -725,8 +968,14 @@ async function loadSnapshot(
     return;
   }
 
+  applySnapshot(config, payload);
+}
+
+function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot) {
   setSnapshotStatus(null);
+  if (payload.channelPosted !== false) setActionNotice(null);
   const positions = new Map<string, CardOffset>();
+  renderGameChannelLink(payload.guildId || config.guildId, payload.channelId);
   renderGameStatus(payload.status, payload.gameName || "");
   renderOtherPlayers(config, payload.otherPlayers, payload.status?.teams);
   renderDecks(config, payload.decks);
@@ -828,10 +1077,12 @@ async function bootstrap() {
   setGreeting(helloGreeting(displayName));
   setOrigin(originLine(payload.origin_channel_name));
   setConnected(true);
+  bindActionDialog();
 
   // discordSdk.guildId is the SDK field (query param guild_id). The game
   // channel/thread id comes from the picker, not discordSdk.channelId.
   const guildId = String(discordSdk.guildId || config.guildId || "").trim();
+  activeSession = { config, accessToken, guildId, discordSdk };
   const fixture = readFixture();
   if (config.mock && isSnapshotFixture(fixture) && !isPickerFixture(fixture)) {
     await loadSnapshot(config, accessToken, {

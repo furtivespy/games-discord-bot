@@ -23,6 +23,8 @@
           <p id="games-empty" hidden>You're not in any active games on this server.</p>
         </section>
         <p id="snapshot-status" hidden></p>
+        <p id="action-notice" hidden></p>
+        <p id="game-channel-link" hidden></p>
         <section id="game-status" hidden></section>
       </aside>
       <div id="table" hidden>
@@ -50,6 +52,26 @@
         </section>
       </div>
     </div>
+    <dialog id="action-dialog">
+      <form id="action-form" method="dialog">
+        <h2 id="action-dialog-title">Deal cards</h2>
+        <label id="action-count-label" for="action-count">Cards to deal each player</label>
+        <input
+          id="action-count"
+          name="count"
+          type="number"
+          min="1"
+          max="1000"
+          value="1"
+          required
+        />
+        <p id="action-dialog-error" hidden></p>
+        <div class="action-dialog-buttons">
+          <button type="submit" id="action-confirm">Deal</button>
+          <button type="button" id="action-cancel">Cancel</button>
+        </div>
+      </form>
+    </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

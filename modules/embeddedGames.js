@@ -1,5 +1,6 @@
 "use strict";
 
+const { ChannelType, PermissionFlagsBits } = require("discord.js");
 const GameDB = require("../db/anygame");
 
 const GAME_COLLECTION = GameDB.ACTION_CATEGORIES.GAME;
@@ -610,6 +611,338 @@ async function optionalDiscordAccessGuard({
   return { ok: true };
 }
 
+const THREAD_CHANNEL_TYPES = new Set([
+  ChannelType.AnnouncementThread,
+  ChannelType.PublicThread,
+  ChannelType.PrivateThread,
+]);
+
+function accessDenied(error, status = 403) {
+  return { ok: false, status, body: { error } };
+}
+
+const DISCORD_LOOKUP_TTL_MS = 45_000;
+const DISCORD_LOOKUP_CACHE_MAX = 256;
+const CHEAP_RETRY_AFTER_MS = 1_000;
+
+function asPermissionBits(value) {
+  try {
+    return BigInt(value ?? 0);
+  } catch {
+    return 0n;
+  }
+}
+
+function hasPermission(bits, flag) {
+  return (bits & flag) === flag;
+}
+
+async function readJsonBody(res) {
+  if (res == null || typeof res.json !== "function") return null;
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function headerValue(headers, name) {
+  if (!headers) return null;
+  if (typeof headers.get === "function") return headers.get(name);
+  const lower = name.toLowerCase();
+  if (headers[name] != null) return headers[name];
+  if (headers[lower] != null) return headers[lower];
+  for (const key of Object.keys(headers)) {
+    if (String(key).toLowerCase() === lower) return headers[key];
+  }
+  return null;
+}
+
+function retryAfterMs(result) {
+  const rawHeader = headerValue(result?.headers, "retry-after");
+  if (rawHeader != null && String(rawHeader).trim() !== "") {
+    const seconds = Number(rawHeader);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.ceil(seconds * 1000);
+    }
+  }
+  const fromBody = Number(result?.body?.retry_after);
+  if (Number.isFinite(fromBody) && fromBody >= 0) {
+    return Math.ceil(fromBody * 1000);
+  }
+  return null;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function createDiscordLookupCache({
+  ttlMs = DISCORD_LOOKUP_TTL_MS,
+  maxSize = DISCORD_LOOKUP_CACHE_MAX,
+} = {}) {
+  const entries = new Map();
+  const inflight = new Map();
+
+  function get(key) {
+    const entry = entries.get(key);
+    if (!entry) return undefined;
+    if (entry.expiresAt <= Date.now()) {
+      entries.delete(key);
+      return undefined;
+    }
+    return entry.value;
+  }
+
+  function set(key, value) {
+    if (entries.size >= maxSize && !entries.has(key)) {
+      const oldest = entries.keys().next().value;
+      if (oldest != null) entries.delete(oldest);
+    }
+    entries.set(key, { value, expiresAt: Date.now() + ttlMs });
+  }
+
+  return { get, set, inflight, size: () => entries.size };
+}
+
+async function discordBotGet({
+  fetchFn,
+  headers,
+  path,
+  cache,
+  wait = sleep,
+} = {}) {
+  const url = `${DISCORD_API_BASE}${path}`;
+  const cached = cache?.get?.(path);
+  if (cached) return cached;
+  if (cache?.inflight?.has?.(path)) return cache.inflight.get(path);
+
+  async function requestOnce() {
+    try {
+      const res = await fetchFn(url, { headers });
+      if (res == null) return { status: 0, body: null, headers: null };
+      return {
+        status: res.status,
+        body: await readJsonBody(res),
+        headers: res.headers || null,
+      };
+    } catch {
+      return { status: 0, body: null, headers: null };
+    }
+  }
+
+  const load = (async () => {
+    let result = await requestOnce();
+    if (result.status === 429) {
+      const delayMs = retryAfterMs(result);
+      if (delayMs != null && delayMs <= CHEAP_RETRY_AFTER_MS) {
+        await wait(delayMs);
+        result = await requestOnce();
+      }
+    }
+    if (cache && (result.status === 200 || result.status === 404)) {
+      cache.set(path, { status: result.status, body: result.body });
+    }
+    return result;
+  })();
+
+  if (cache?.inflight) {
+    cache.inflight.set(path, load);
+    try {
+      return await load;
+    } finally {
+      cache.inflight.delete(path);
+    }
+  }
+  return load;
+}
+
+function denyFromLookup(result) {
+  if (!result || result.status === 0) return accessDenied("access_unverified");
+  if (result.status === 429) return accessDenied("try_again");
+  return null;
+}
+
+function applyPermissionOverwrites(bits, overwrites, memberId, roleIds, guildId) {
+  const list = Array.isArray(overwrites) ? overwrites : [];
+  const roleSet = new Set((roleIds || []).map(String));
+  const everyone = list.find((ow) => String(ow?.id) === String(guildId));
+  if (everyone) {
+    bits &= ~asPermissionBits(everyone.deny);
+    bits |= asPermissionBits(everyone.allow);
+  }
+  let allow = 0n;
+  let deny = 0n;
+  for (const ow of list) {
+    const id = String(ow?.id || "");
+    if (!id || id === String(guildId) || id === String(memberId)) continue;
+    if (!roleSet.has(id)) continue;
+    deny |= asPermissionBits(ow.deny);
+    allow |= asPermissionBits(ow.allow);
+  }
+  bits &= ~deny;
+  bits |= allow;
+  const memberOverwrite = list.find((ow) => String(ow?.id) === String(memberId));
+  if (memberOverwrite) {
+    bits &= ~asPermissionBits(memberOverwrite.deny);
+    bits |= asPermissionBits(memberOverwrite.allow);
+  }
+  return bits;
+}
+
+function memberChannelPermissions({
+  member,
+  channel,
+  parent,
+  roles,
+  guildId,
+  ownerId,
+} = {}) {
+  const uid = String(member?.user?.id || member?.id || "");
+  if (uid && uid === String(ownerId || "")) {
+    return ~0n;
+  }
+  const roleList = Array.isArray(roles) ? roles : [];
+  const everyone = roleList.find((role) => String(role?.id) === String(guildId));
+  let bits = asPermissionBits(everyone?.permissions);
+  const memberRoles = Array.isArray(member?.roles) ? member.roles.map(String) : [];
+  for (const role of roleList) {
+    if (memberRoles.includes(String(role?.id))) {
+      bits |= asPermissionBits(role.permissions);
+    }
+  }
+  if (hasPermission(bits, PermissionFlagsBits.Administrator)) {
+    return ~0n;
+  }
+  const overwriteChannel = parent || channel;
+  return applyPermissionOverwrites(
+    bits,
+    overwriteChannel?.permission_overwrites,
+    uid,
+    memberRoles,
+    guildId
+  );
+}
+
+/**
+ * Mutating visual-mode actions fail closed: the user must be a guild member
+ * who can view the channel/thread, and the channel must belong to that guild.
+ * Missing bot token, Discord errors, or incomplete replies are denials.
+ */
+async function requiredDiscordAccessGuard({
+  fetchImpl,
+  botToken,
+  discordClient,
+  guildId,
+  channelId,
+  userId,
+  lookupCache,
+  wait,
+} = {}) {
+  const token = String(botToken || discordClient?.token || "").trim();
+  const gid = String(guildId || "").trim();
+  const uid = String(userId || "").trim();
+  const cid = String(channelId || "").trim();
+  if (!token) return accessDenied("access_unverified");
+  if (!gid || !uid || !cid) return accessDenied("access_unverified");
+
+  const fetchFn = fetchImpl || fetch;
+  const headers = { Authorization: `Bot ${token}` };
+
+  async function botGet(path) {
+    return discordBotGet({
+      fetchFn,
+      headers,
+      path,
+      cache: lookupCache,
+      wait,
+    });
+  }
+
+  const memberRes = await botGet(
+    `/guilds/${encodeURIComponent(gid)}/members/${encodeURIComponent(uid)}`
+  );
+  const memberDenied = denyFromLookup(memberRes);
+  if (memberDenied) return memberDenied;
+  if (memberRes.status === 404) return accessDenied("not_a_guild_member");
+  if (memberRes.status !== 200) return accessDenied("access_unverified");
+  const member = memberRes.body;
+  if (!member || typeof member !== "object") return accessDenied("access_unverified");
+
+  const channelRes = await botGet(`/channels/${encodeURIComponent(cid)}`);
+  const channelDenied = denyFromLookup(channelRes);
+  if (channelDenied) return channelDenied;
+  if (channelRes.status !== 200) return accessDenied("access_unverified");
+  const channel = channelRes.body;
+  if (!channel || typeof channel !== "object") return accessDenied("access_unverified");
+
+  const isThread = THREAD_CHANNEL_TYPES.has(channel.type);
+  let parent = null;
+  if (isThread && channel.parent_id) {
+    const parentRes = await botGet(
+      `/channels/${encodeURIComponent(String(channel.parent_id))}`
+    );
+    const parentDenied = denyFromLookup(parentRes);
+    if (parentDenied) return parentDenied;
+    if (parentRes.status !== 200) return accessDenied("access_unverified");
+    parent = parentRes.body;
+    if (!parent || typeof parent !== "object") return accessDenied("access_unverified");
+  }
+
+  const channelGuildId = String(
+    channel.guild_id || parent?.guild_id || ""
+  ).trim();
+  if (!channelGuildId || channelGuildId !== gid) {
+    return accessDenied("channel_mismatch");
+  }
+
+  const rolesRes = await botGet(`/guilds/${encodeURIComponent(gid)}/roles`);
+  const rolesDenied = denyFromLookup(rolesRes);
+  if (rolesDenied) return rolesDenied;
+  if (rolesRes.status !== 200) return accessDenied("access_unverified");
+  const roles = rolesRes.body;
+  if (!Array.isArray(roles)) return accessDenied("access_unverified");
+
+  const guildRes = await botGet(`/guilds/${encodeURIComponent(gid)}`);
+  const guildDenied = denyFromLookup(guildRes);
+  if (guildDenied) return guildDenied;
+  if (guildRes.status !== 200) return accessDenied("access_unverified");
+  const guild = guildRes.body;
+  if (!guild || typeof guild !== "object") return accessDenied("access_unverified");
+
+  const permissions = memberChannelPermissions({
+    member,
+    channel,
+    parent,
+    roles,
+    guildId: gid,
+    ownerId: guild.owner_id,
+  });
+  if (!hasPermission(permissions, PermissionFlagsBits.ViewChannel)) {
+    return accessDenied("forbidden");
+  }
+
+  if (channel.type === ChannelType.PrivateThread) {
+    const canManageThreads = hasPermission(
+      permissions,
+      PermissionFlagsBits.ManageThreads
+    );
+    const threadMemberRes = await botGet(
+      `/channels/${encodeURIComponent(cid)}/thread-members/${encodeURIComponent(uid)}`
+    );
+    const threadDenied = denyFromLookup(threadMemberRes);
+    if (threadDenied) return threadDenied;
+    if (threadMemberRes.status === 404 && !canManageThreads) {
+      return accessDenied("forbidden");
+    }
+    if (threadMemberRes.status !== 200 && threadMemberRes.status !== 404) {
+      return accessDenied("access_unverified");
+    }
+  }
+
+  return { ok: true, member };
+}
+
 async function snapshotGameForUser({
   getGameData,
   discordClient,
@@ -670,8 +1003,10 @@ async function snapshotGameForUser({
 }
 
 module.exports = {
+  CHEAP_RETRY_AFTER_MS,
   DISCORD_API_BASE,
   DISCORD_EPOCH_MS,
+  DISCORD_LOOKUP_TTL_MS,
   GAME_COLLECTION,
   HISTORY_KEEP_LIMIT,
   MAX_VISIBLE_DECKS,
@@ -679,13 +1014,16 @@ module.exports = {
   channelNameFromDiscordClient,
   copyCards,
   createdAtMs,
+  createDiscordLookupCache,
   deckSummaries,
   discordSnowflakeMs,
   filterAndSortActiveGames,
   isActivePlayerGame,
   isMissingGame,
   listActiveGamesForUser,
+  memberChannelPermissions,
   optionalDiscordAccessGuard,
+  requiredDiscordAccessGuard,
   parseTimestampMs,
   publicHandCount,
   resolveGetGameData,

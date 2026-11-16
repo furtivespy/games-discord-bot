@@ -13,7 +13,10 @@ const {
   filterAndSortActiveGames,
   isActivePlayerGame,
   listActiveGamesForUser,
+  createDiscordLookupCache,
+  memberChannelPermissions,
   optionalDiscordAccessGuard,
+  requiredDiscordAccessGuard,
   MAX_VISIBLE_DECKS,
   snapshotFromGameData,
   snapshotGameForUser,
@@ -826,5 +829,510 @@ describe("optionalDiscordAccessGuard", () => {
     });
     expect(result).toEqual({ ok: true });
     expect(called).toBe(false);
+  });
+});
+
+describe("requiredDiscordAccessGuard", () => {
+  const { withDiscordAccess } = require("./helpers/discordAccess");
+  const { PermissionFlagsBits } = require("discord.js");
+
+  test("allows a guild member who can view a channel in that guild", async () => {
+    const allowed = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "table-1",
+      userId: "will",
+      fetchImpl: withDiscordAccess(async () => {
+        throw new Error("unexpected");
+      }, {
+        guildId: "guild-a",
+        channelId: "table-1",
+        userId: "will",
+        memberNick: "WillNick",
+      }),
+    });
+    expect(allowed.ok).toBe(true);
+    expect(allowed.member.nick).toBe("WillNick");
+  });
+
+  test("404 member is not_a_guild_member; missing token and Discord errors fail closed", async () => {
+    const denied = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "table-1",
+      userId: "will",
+      fetchImpl: withDiscordAccess(async () => {
+        throw new Error("unexpected");
+      }, {
+        guildId: "guild-a",
+        channelId: "table-1",
+        userId: "will",
+        memberStatus: 404,
+      }),
+    });
+    expect(denied).toEqual({
+      ok: false,
+      status: 403,
+      body: { error: "not_a_guild_member" },
+    });
+
+    const noToken = await requiredDiscordAccessGuard({
+      guildId: "guild-a",
+      channelId: "table-1",
+      userId: "will",
+      fetchImpl: async () => {
+        throw new Error("should not run");
+      },
+    });
+    expect(noToken).toEqual({
+      ok: false,
+      status: 403,
+      body: { error: "access_unverified" },
+    });
+
+    const discordDown = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "table-1",
+      userId: "will",
+      fetchImpl: async () => {
+        throw new Error("network");
+      },
+    });
+    expect(discordDown).toEqual({
+      ok: false,
+      status: 403,
+      body: { error: "access_unverified" },
+    });
+  });
+
+  test("rejects a channel from another guild and a view-channel deny overwrite", async () => {
+    const mismatch = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "table-1",
+      userId: "will",
+      fetchImpl: withDiscordAccess(async () => {
+        throw new Error("unexpected");
+      }, {
+        guildId: "guild-a",
+        channelId: "table-1",
+        userId: "will",
+        channelGuildId: "guild-b",
+      }),
+    });
+    expect(mismatch).toEqual({
+      ok: false,
+      status: 403,
+      body: { error: "channel_mismatch" },
+    });
+
+    const hidden = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "table-1",
+      userId: "will",
+      fetchImpl: withDiscordAccess(async () => {
+        throw new Error("unexpected");
+      }, {
+        guildId: "guild-a",
+        channelId: "table-1",
+        userId: "will",
+        overwrites: [
+          {
+            id: "will",
+            deny: String(PermissionFlagsBits.ViewChannel),
+            allow: "0",
+          },
+        ],
+      }),
+    });
+    expect(hidden).toEqual({
+      ok: false,
+      status: 403,
+      body: { error: "forbidden" },
+    });
+  });
+
+  test("Administrator and guild owner bypass channel overwrites", async () => {
+    const hiddenEveryone = [
+      {
+        id: "guild-a",
+        deny: String(PermissionFlagsBits.ViewChannel),
+        allow: "0",
+      },
+    ];
+    const admin = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "table-1",
+      userId: "will",
+      fetchImpl: withDiscordAccess(async () => {
+        throw new Error("unexpected");
+      }, {
+        guildId: "guild-a",
+        channelId: "table-1",
+        userId: "will",
+        everyonePermissions: "0",
+        memberRoles: ["admin-role"],
+        extraRoles: [
+          {
+            id: "admin-role",
+            permissions: String(PermissionFlagsBits.Administrator),
+          },
+        ],
+        overwrites: hiddenEveryone,
+      }),
+    });
+    expect(admin.ok).toBe(true);
+
+    const owner = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "table-1",
+      userId: "will",
+      fetchImpl: withDiscordAccess(async () => {
+        throw new Error("unexpected");
+      }, {
+        guildId: "guild-a",
+        channelId: "table-1",
+        userId: "will",
+        everyonePermissions: "0",
+        ownerId: "will",
+        overwrites: hiddenEveryone,
+      }),
+    });
+    expect(owner.ok).toBe(true);
+  });
+
+  test("role and member overwrites deny or allow ViewChannel", async () => {
+    const roleDeny = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "table-1",
+      userId: "will",
+      fetchImpl: withDiscordAccess(async () => {
+        throw new Error("unexpected");
+      }, {
+        guildId: "guild-a",
+        channelId: "table-1",
+        userId: "will",
+        memberRoles: ["hidden-role"],
+        extraRoles: [{ id: "hidden-role", permissions: "0" }],
+        overwrites: [
+          {
+            id: "hidden-role",
+            deny: String(PermissionFlagsBits.ViewChannel),
+            allow: "0",
+          },
+        ],
+      }),
+    });
+    expect(roleDeny).toEqual({
+      ok: false,
+      status: 403,
+      body: { error: "forbidden" },
+    });
+
+    const roleAllow = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "table-1",
+      userId: "will",
+      fetchImpl: withDiscordAccess(async () => {
+        throw new Error("unexpected");
+      }, {
+        guildId: "guild-a",
+        channelId: "table-1",
+        userId: "will",
+        everyonePermissions: "0",
+        memberRoles: ["see-role"],
+        extraRoles: [{ id: "see-role", permissions: "0" }],
+        overwrites: [
+          {
+            id: "see-role",
+            deny: "0",
+            allow: String(PermissionFlagsBits.ViewChannel),
+          },
+        ],
+      }),
+    });
+    expect(roleAllow.ok).toBe(true);
+
+    const memberAllow = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "table-1",
+      userId: "will",
+      fetchImpl: withDiscordAccess(async () => {
+        throw new Error("unexpected");
+      }, {
+        guildId: "guild-a",
+        channelId: "table-1",
+        userId: "will",
+        everyonePermissions: "0",
+        overwrites: [
+          {
+            id: "guild-a",
+            deny: String(PermissionFlagsBits.ViewChannel),
+            allow: "0",
+          },
+          {
+            id: "will",
+            deny: "0",
+            allow: String(PermissionFlagsBits.ViewChannel),
+          },
+        ],
+      }),
+    });
+    expect(memberAllow.ok).toBe(true);
+  });
+
+  test("public threads use parent channel permissions", async () => {
+    const { ChannelType } = require("discord.js");
+    const allowed = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "public-thread",
+      userId: "will",
+      fetchImpl: withDiscordAccess(async () => {
+        throw new Error("unexpected");
+      }, {
+        guildId: "guild-a",
+        channelId: "public-thread",
+        userId: "will",
+        channelType: ChannelType.PublicThread,
+        parentId: "parent-channel",
+      }),
+    });
+    expect(allowed.ok).toBe(true);
+
+    const hiddenParent = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "public-thread",
+      userId: "will",
+      fetchImpl: withDiscordAccess(async () => {
+        throw new Error("unexpected");
+      }, {
+        guildId: "guild-a",
+        channelId: "public-thread",
+        userId: "will",
+        channelType: ChannelType.PublicThread,
+        parentId: "parent-channel",
+        parentOverwrites: [
+          {
+            id: "will",
+            deny: String(PermissionFlagsBits.ViewChannel),
+            allow: "0",
+          },
+        ],
+      }),
+    });
+    expect(hiddenParent).toEqual({
+      ok: false,
+      status: 403,
+      body: { error: "forbidden" },
+    });
+  });
+
+  test("private threads require membership or MANAGE_THREADS", async () => {
+    const { ChannelType } = require("discord.js");
+    const member = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "private-thread",
+      userId: "will",
+      fetchImpl: withDiscordAccess(async () => {
+        throw new Error("unexpected");
+      }, {
+        guildId: "guild-a",
+        channelId: "private-thread",
+        userId: "will",
+        channelType: ChannelType.PrivateThread,
+        parentId: "parent-channel",
+        threadMemberStatus: 200,
+      }),
+    });
+    expect(member.ok).toBe(true);
+
+    const outsider = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "private-thread",
+      userId: "will",
+      fetchImpl: withDiscordAccess(async () => {
+        throw new Error("unexpected");
+      }, {
+        guildId: "guild-a",
+        channelId: "private-thread",
+        userId: "will",
+        channelType: ChannelType.PrivateThread,
+        parentId: "parent-channel",
+        threadMemberStatus: 404,
+      }),
+    });
+    expect(outsider).toEqual({
+      ok: false,
+      status: 403,
+      body: { error: "forbidden" },
+    });
+
+    const manager = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "private-thread",
+      userId: "will",
+      fetchImpl: withDiscordAccess(async () => {
+        throw new Error("unexpected");
+      }, {
+        guildId: "guild-a",
+        channelId: "private-thread",
+        userId: "will",
+        channelType: ChannelType.PrivateThread,
+        parentId: "parent-channel",
+        threadMemberStatus: 404,
+        memberRoles: ["mod-role"],
+        extraRoles: [
+          {
+            id: "mod-role",
+            permissions: String(PermissionFlagsBits.ManageThreads),
+          },
+        ],
+      }),
+    });
+    expect(manager.ok).toBe(true);
+  });
+
+  test("caches Discord lookups and retries a cheap 429 once", async () => {
+    const cache = createDiscordLookupCache({ ttlMs: 60_000 });
+    const calls = [];
+    const fetchImpl = withDiscordAccess(
+      async () => {
+        throw new Error("unexpected");
+      },
+      {
+        guildId: "guild-a",
+        channelId: "table-1",
+        userId: "will",
+        calls,
+      }
+    );
+    const first = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "table-1",
+      userId: "will",
+      fetchImpl,
+      lookupCache: cache,
+    });
+    const second = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-a",
+      channelId: "table-1",
+      userId: "will",
+      fetchImpl,
+      lookupCache: cache,
+    });
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect(calls).toHaveLength(4);
+
+    const waited = [];
+    let memberHits = 0;
+    const rateLimited = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-b",
+      channelId: "table-2",
+      userId: "will",
+      wait: async (ms) => {
+        waited.push(ms);
+      },
+      fetchImpl: async (url) => {
+        if (String(url).includes("/members/")) {
+          memberHits += 1;
+          if (memberHits === 1) {
+            return {
+              status: 429,
+              headers: { get: (name) => (name === "retry-after" ? "0" : null) },
+              json: async () => ({ retry_after: 0 }),
+            };
+          }
+        }
+        return withDiscordAccess(
+          async () => {
+            throw new Error("unexpected");
+          },
+          {
+            guildId: "guild-b",
+            channelId: "table-2",
+            userId: "will",
+          }
+        )(url);
+      },
+    });
+    expect(rateLimited.ok).toBe(true);
+    expect(memberHits).toBe(2);
+    expect(waited).toEqual([0]);
+
+    const expensiveWaits = [];
+    const stillLimited = await requiredDiscordAccessGuard({
+      botToken: "bot-token",
+      guildId: "guild-c",
+      channelId: "table-3",
+      userId: "will",
+      wait: async (ms) => {
+        expensiveWaits.push(ms);
+      },
+      fetchImpl: async () => ({
+        status: 429,
+        headers: { get: (name) => (name === "retry-after" ? "5" : null) },
+        json: async () => ({ retry_after: 5 }),
+      }),
+    });
+    expect(stillLimited).toEqual({
+      ok: false,
+      status: 403,
+      body: { error: "try_again" },
+    });
+    expect(expensiveWaits).toEqual([]);
+  });
+});
+
+describe("memberChannelPermissions", () => {
+  const { PermissionFlagsBits } = require("discord.js");
+  const VIEW = PermissionFlagsBits.ViewChannel;
+
+  test("Administrator-only and owner bits include ViewChannel past a deny overwrite", () => {
+    const hiddenEveryone = [
+      {
+        id: "guild-a",
+        deny: String(VIEW),
+        allow: "0",
+      },
+    ];
+    const adminBits = memberChannelPermissions({
+      member: { user: { id: "will" }, roles: ["admin-role"] },
+      channel: { permission_overwrites: hiddenEveryone },
+      roles: [
+        { id: "guild-a", permissions: "0" },
+        {
+          id: "admin-role",
+          permissions: String(PermissionFlagsBits.Administrator),
+        },
+      ],
+      guildId: "guild-a",
+      ownerId: "someone-else",
+    });
+    expect((adminBits & VIEW) === VIEW).toBe(true);
+
+    const ownerBits = memberChannelPermissions({
+      member: { user: { id: "will" }, roles: [] },
+      channel: { permission_overwrites: hiddenEveryone },
+      roles: [{ id: "guild-a", permissions: "0" }],
+      guildId: "guild-a",
+      ownerId: "will",
+    });
+    expect((ownerBits & VIEW) === VIEW).toBe(true);
   });
 });

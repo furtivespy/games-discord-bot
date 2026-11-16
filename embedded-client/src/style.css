@@ -222,6 +222,95 @@ body {
   color: #eee3c5;
 }
 
+#action-notice {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #ffd7a1;
+}
+
+#game-channel-link {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+#game-channel-link a {
+  color: #f3d98c;
+  font-weight: 700;
+}
+
+#action-dialog {
+  width: min(18rem, calc(100% - 2rem));
+  padding: 1rem 1.05rem 1.05rem;
+  border: 1px solid #6d5a2c;
+  border-radius: 12px;
+  background: #1b1711;
+  color: var(--ink);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+}
+
+#action-dialog::backdrop {
+  background: rgba(8, 14, 12, 0.55);
+}
+
+#action-dialog h2 {
+  margin: 0 0 0.65rem;
+  font-size: 0.95rem;
+  color: #f3d98c;
+}
+
+#action-count-label {
+  display: block;
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+#action-count {
+  width: 100%;
+  box-sizing: border-box;
+  background: #120e0a;
+  color: var(--ink);
+  border: 1px solid #6d5a2c;
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+  font: inherit;
+  font-size: 1rem;
+}
+
+#action-dialog-error {
+  margin: 0.45rem 0 0;
+  font-size: 0.78rem;
+  color: #ffb4a2;
+}
+
+.action-dialog-buttons {
+  display: flex;
+  gap: 0.45rem;
+  justify-content: flex-end;
+  margin-top: 0.8rem;
+}
+
+.action-dialog-buttons button {
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.35rem 0.7rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+
+#action-confirm {
+  border: 1px solid #e6c35c;
+  background: #5a1420;
+  color: #f8e7a1;
+}
+
+#action-cancel {
+  border: 1px solid #5c4a24;
+  background: transparent;
+  color: var(--muted);
+}
+
 #table {
   min-width: 0;
   display: grid;
@@ -375,14 +464,14 @@ body {
   flex-wrap: wrap;
   gap: 0.4rem;
   overflow: visible;
-  padding: 1.6rem 0.4rem 0.75rem;
+  padding: 5.6rem 0.4rem 0.75rem;
 }
 
 .hand-fan {
   flex-wrap: nowrap;
   justify-content: center;
   gap: 0;
-  padding: 2.4rem 2.2rem 0.35rem 0.4rem;
+  padding: 5.6rem 2.2rem 0.35rem 0.4rem;
   overflow: visible;
 }
 
@@ -453,7 +542,7 @@ body {
 }
 
 .card-face.has-art {
-  grid-template-rows: 1fr auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   padding: 0.2rem;
   background: #1b1b1f;
   color: var(--ink);
@@ -468,8 +557,8 @@ body {
 }
 
 .card-tile:hover .card-face {
-  transform: translateY(-18px) scale(1.28);
-  box-shadow: 0 18px 28px rgba(0, 0, 0, 0.45);
+  transform: translateY(-26px) scale(1.48);
+  box-shadow: 0 22px 34px rgba(0, 0, 0, 0.5);
 }
 
 .card-tile.dragging:hover .card-face,
@@ -516,6 +605,11 @@ body {
 .deck-action:focus-visible {
   background: rgba(48, 28, 12, 0.94);
   border-color: #f3d98c;
+}
+
+.deck-action:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .card-index,
@@ -581,14 +675,15 @@ body {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
   border-radius: 0.4rem;
   pointer-events: none;
 }
 
 .card-face.has-art img {
-  height: auto;
-  max-height: 5.6rem;
+  min-height: 0;
+  max-height: none;
 }
 
 @media (max-width: 820px) {
