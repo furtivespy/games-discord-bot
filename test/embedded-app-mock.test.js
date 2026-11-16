@@ -17,12 +17,16 @@ const {
   MOCK_USER,
   ONE_GAME_FIXTURE,
   SEVERAL_GAMES_FIXTURE,
+  TEAM_GAME_CHANNEL_ID,
+  TEAM_GAME_CHANNEL_NAME,
+  TEAM_GAME_FIXTURE,
   getMockGames,
   getMockSnapshot,
   isEmbeddedAppMockEnabled,
   otherPlayerHand,
   populatedSeed,
   snapshotFromSeed,
+  teamGameSeed,
 } = require("../modules/embeddedAppMock");
 
 const DEV_ENV = { NODE_ENV: "test" };
@@ -124,6 +128,43 @@ describe("mock snapshot fixtures", () => {
     expect(result.body.status.players[0].isYou).toBe(true);
     expect(result.body.status.players[0].tokens.clue).toBe(2);
     expect(result.body.status.players[1].tokens.clue).toBe("?");
+    expect(result.body.status.teams).toEqual([]);
+    expect(result.body.otherPlayers.every((player) => player.teamName === "")).toBe(true);
+  });
+
+  test("team-game fixture has six players on 🦀🦀 vs 💪🐟", () => {
+    const result = getMockSnapshot({ fixture: "team-game" });
+    expect(result.status).toBe(200);
+    expect(result.body.gameName).toBe(TEAM_GAME_CHANNEL_NAME);
+    expect(result.body.status.teams.map((team) => team.name)).toEqual(["🦀🦀", "💪🐟"]);
+    expect(result.body.status.players).toHaveLength(6);
+    expect(result.body.status.players[0]).toMatchObject({
+      name: "QA Tester",
+      isYou: true,
+      teamName: "🦀🦀",
+    });
+    expect(result.body.otherPlayers.map((player) => [player.name, player.teamName])).toEqual([
+      ["Riley", "🦀🦀"],
+      ["Sam", "🦀🦀"],
+      ["Alex", "💪🐟"],
+      ["Jordan", "💪🐟"],
+      ["Casey", "💪🐟"],
+    ]);
+    expect(JSON.stringify(result.body)).not.toContain("Alex Secret");
+    expect(JSON.stringify(result.body)).not.toContain("Jordan Secret");
+    expect(teamGameSeed().players).toHaveLength(6);
+  });
+
+  test("several-games can load the team table by channel id", () => {
+    const result = getMockSnapshot({
+      fixture: "several-games",
+      channelId: TEAM_GAME_CHANNEL_ID,
+      guildId: "mock-guild",
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.channelId).toBe(TEAM_GAME_CHANNEL_ID);
+    expect(result.body.gameName).toBe(TEAM_GAME_CHANNEL_NAME);
+    expect(result.body.status.teams).toHaveLength(2);
   });
 
   test("never includes another player's hand, draft, or simultaneous cards", () => {
@@ -197,6 +238,7 @@ describe("mock game list fixtures", () => {
       "Friday Inis",
       "Thursday Root",
       "Monday Poker",
+      TEAM_GAME_CHANNEL_NAME,
     ]);
     expect(several.body.games[0]).toEqual(SEVERAL_GAMES_FIXTURE[0]);
     expect(JSON.stringify(several.body)).not.toMatch(/hand|playArea|gameBoard|isdeleted/);
@@ -225,6 +267,10 @@ describe("mock game list fixtures", () => {
     expect(getMockGames({ fixture: "unknown-list" })).toEqual({
       status: 400,
       body: { error: "unknown_fixture" },
+    });
+    expect(getMockGames({ fixture: "team-game" })).toEqual({
+      status: 200,
+      body: { games: [...TEAM_GAME_FIXTURE] },
     });
   });
 });
@@ -298,8 +344,16 @@ describe("mock embedded HTTP", () => {
       });
       expect(several.status).toBe(200);
       expect((await several.json()).games.map((game) => game.channelName)).toEqual(
-        ["Friday Inis", "Thursday Root", "Monday Poker"]
+        ["Friday Inis", "Thursday Root", "Monday Poker", TEAM_GAME_CHANNEL_NAME]
       );
+
+      const teamList = await fetch(`${url}/api/games?fixture=team-game`, {
+        headers: { Authorization: `Bearer ${MOCK_ACCESS_TOKEN}` },
+      });
+      expect(teamList.status).toBe(200);
+      expect(await teamList.json()).toEqual({
+        games: [{ channelId: TEAM_GAME_CHANNEL_ID, channelName: TEAM_GAME_CHANNEL_NAME }],
+      });
 
       const one = await fetch(`${url}/.proxy/api/games?fixture=one-game`, {
         headers: { Authorization: `Bearer ${MOCK_ACCESS_TOKEN}` },
@@ -320,7 +374,7 @@ describe("mock embedded HTTP", () => {
       });
       expect(omitted.status).toBe(200);
       expect((await omitted.json()).games.map((game) => game.channelName)).toEqual(
-        ["Friday Inis", "Thursday Root", "Monday Poker"]
+        ["Friday Inis", "Thursday Root", "Monday Poker", TEAM_GAME_CHANNEL_NAME]
       );
 
       const noGame = await fetch(`${url}/api/games?fixture=no-game`, {
@@ -382,6 +436,15 @@ describe("mock embedded HTTP", () => {
         channelId: "newest-thread",
         guildId: "g-query",
         gameName: "Fixture Game",
+      });
+
+      const teamGame = await fetch(
+        `${url}/api/game/snapshot?fixture=team-game&channelId=${TEAM_GAME_CHANNEL_ID}`,
+        { headers: auth }
+      );
+      expect(await teamGame.json()).toMatchObject({
+        channelId: TEAM_GAME_CHANNEL_ID,
+        gameName: TEAM_GAME_CHANNEL_NAME,
       });
     } finally {
       server.close();

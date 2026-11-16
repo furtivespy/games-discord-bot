@@ -225,6 +225,31 @@ function displayForPlayer(player, displays) {
   return { name, avatarUrl };
 }
 
+function teamForPlayer(data, player) {
+  if (!Array.isArray(data?.teams) || !player?.teamId) return null;
+  return data.teams.find((row) => row && row.id === player.teamId) || null;
+}
+
+function teamNameForPlayer(data, player) {
+  const team = teamForPlayer(data, player);
+  return team && typeof team.name === "string" ? team.name : "";
+}
+
+function teamRoster(data) {
+  if (!Array.isArray(data?.teams)) return [];
+  return data.teams
+    .filter((team) => team && typeof team === "object" && !Array.isArray(team))
+    .map((team) => ({
+      id: team.id == null ? "" : String(team.id),
+      name: typeof team.name === "string" ? team.name.trim() : "",
+      color:
+        typeof team.color === "string" && team.color.trim()
+          ? team.color.trim()
+          : null,
+    }))
+    .filter((team) => team.name);
+}
+
 function otherPlayersSummary(data, userId, displays) {
   const uid = String(userId || "");
   return sortedPlayers(data)
@@ -236,6 +261,7 @@ function otherPlayersSummary(data, userId, displays) {
         name,
         handCount: publicHandCount(data, player),
         avatarUrl,
+        teamName: teamNameForPlayer(data, player),
       };
     });
 }
@@ -304,10 +330,6 @@ function playerStatusRow(data, player, viewerId, displays) {
       tokens[String(token.id)] = tokenValueForPlayer(token, player, viewerId);
     }
   }
-  const team =
-    Array.isArray(data?.teams) && player?.teamId
-      ? data.teams.find((row) => row && row.id === player.teamId)
-      : null;
   return {
     userId: id,
     name,
@@ -315,7 +337,7 @@ function playerStatusRow(data, player, viewerId, displays) {
     score: player?.score == null ? "" : String(player.score),
     handCount: publicHandCount(data, player),
     playAreaCount: Array.isArray(player?.playArea) ? player.playArea.length : 0,
-    teamName: team && typeof team.name === "string" ? team.name : "",
+    teamName: teamNameForPlayer(data, player),
     color: typeof player?.color === "string" && player.color.trim() ? player.color : null,
     isYou: id === String(viewerId || ""),
     tokens,
@@ -405,6 +427,7 @@ function statusSummary(data, userId, displays) {
     players: sortedPlayers(data).map((player) =>
       playerStatusRow(data, player, userId, displays)
     ),
+    teams: teamRoster(data),
     tokens: tokenSupply(data),
     globalPiles: globalPileSummaries(data),
     history: historySummaries(data),

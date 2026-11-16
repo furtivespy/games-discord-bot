@@ -11,6 +11,7 @@ export const DEFAULT_MOCK_GUILD_ID = "mock-guild";
 
 export const SNAPSHOT_FIXTURES = [
   "populated",
+  "team-game",
   "no-game",
   "not-a-player",
 ] as const;
@@ -19,6 +20,7 @@ export const GAME_LIST_FIXTURES = [
   "several-games",
   "one-game",
   "no-games",
+  "team-game",
 ] as const;
 
 export type SnapshotFixture = (typeof SNAPSHOT_FIXTURES)[number];

@@ -404,6 +404,10 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain(".card-tile:hover .card-face");
     expect(css).toContain("scale(1.28)");
     expect(css).toContain(".hand-fan .card-tile + .card-tile");
+    expect(css).toContain(".player-team-group");
+    expect(css).toContain(".status-player-score");
+    expect(css).not.toContain(".status-title");
+    expect(css).not.toContain(".status-player-meta");
   });
 
   test("card rows are not scroll containers so drag and hover zoom are not clipped", () => {
@@ -789,6 +793,7 @@ describe("GET /api/game/snapshot", () => {
               name: "other-player",
               handCount: 1,
               avatarUrl: null,
+              teamName: "",
             },
           ],
         });

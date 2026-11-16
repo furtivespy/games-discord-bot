@@ -12,6 +12,7 @@ const MOCK_OAUTH_CODE = "mock-oauth-code";
 
 const MOCK_FIXTURE_NAMES = Object.freeze([
   "populated",
+  "team-game",
   "no-game",
   "not-a-player",
 ]);
@@ -20,6 +21,7 @@ const GAME_LIST_FIXTURE_NAMES = Object.freeze([
   "several-games",
   "one-game",
   "no-games",
+  "team-game",
 ]);
 
 const GAME_LIST_FIXTURE_ALIASES = Object.freeze({
@@ -27,6 +29,11 @@ const GAME_LIST_FIXTURE_ALIASES = Object.freeze({
   "no-game": "no-games",
   "not-a-player": "no-games",
 });
+
+const TEAM_GAME_CHANNEL_ID = "team-thread";
+const TEAM_GAME_CHANNEL_NAME = "Game 🎲 time";
+const TEAM_CRAB_ID = "team-crab";
+const TEAM_FISH_ID = "team-fish";
 
 // Newest first: Friday Inis is the most recently created game.
 const SEVERAL_GAMES_FIXTURE = Object.freeze([
@@ -42,12 +49,23 @@ const SEVERAL_GAMES_FIXTURE = Object.freeze([
     channelId: "oldest-channel",
     channelName: "Monday Poker",
   }),
+  Object.freeze({
+    channelId: TEAM_GAME_CHANNEL_ID,
+    channelName: TEAM_GAME_CHANNEL_NAME,
+  }),
 ]);
 
 const ONE_GAME_FIXTURE = Object.freeze([
   Object.freeze({
     channelId: "solo-thread",
     channelName: "Solo Table",
+  }),
+]);
+
+const TEAM_GAME_FIXTURE = Object.freeze([
+  Object.freeze({
+    channelId: TEAM_GAME_CHANNEL_ID,
+    channelName: TEAM_GAME_CHANNEL_NAME,
   }),
 ]);
 
@@ -120,7 +138,7 @@ function populatedSeed() {
       {
         userId: MOCK_USER.id,
         name: MOCK_USER.global_name,
-        order: 1,
+        order: 0,
         score: "12",
         color: "gold",
         tokens: { vp: 4, clue: 2 },
@@ -163,7 +181,7 @@ function populatedSeed() {
       {
         userId: "other-player-2",
         name: "Riley",
-        order: 2,
+        order: 1,
         score: "7",
         color: "teal",
         tokens: { vp: 3, clue: 1 },
@@ -173,7 +191,7 @@ function populatedSeed() {
       {
         userId: "other-player-3",
         name: "Sam",
-        order: 3,
+        order: 2,
         score: "4",
         color: "crimson",
         tokens: { vp: 1, clue: 0 },
@@ -227,6 +245,67 @@ function populatedSeed() {
   };
 }
 
+function teamGameSeed() {
+  const seed = populatedSeed();
+  seed.name = TEAM_GAME_CHANNEL_NAME;
+  seed.teams = [
+    { id: TEAM_CRAB_ID, name: "🦀🦀", color: null },
+    { id: TEAM_FISH_ID, name: "💪🐟", color: null },
+  ];
+  seed.players[0].order = 0;
+  seed.players[0].teamId = TEAM_CRAB_ID;
+  seed.players[1].order = 1;
+  seed.players[1].teamId = TEAM_CRAB_ID;
+  seed.players[2].order = 2;
+  seed.players[2].teamId = TEAM_CRAB_ID;
+  seed.players.push(
+    {
+      userId: "other-player-4",
+      name: "Alex",
+      order: 3,
+      score: "9",
+      color: "navy",
+      teamId: TEAM_FISH_ID,
+      tokens: { vp: 2, clue: 1 },
+      hands: { main: [fixtureCard("alex-1", "Alex Secret")] },
+      playArea: [],
+    },
+    {
+      userId: "other-player-5",
+      name: "Jordan",
+      order: 4,
+      score: "6",
+      color: "olive",
+      teamId: TEAM_FISH_ID,
+      tokens: { vp: 1, clue: 0 },
+      hands: {
+        main: [
+          fixtureCard("jordan-1", "Jordan Secret 1"),
+          fixtureCard("jordan-2", "Jordan Secret 2"),
+        ],
+      },
+      playArea: [fixtureCard("jordan-play-1", "Jordan Play Area")],
+    },
+    {
+      userId: "other-player-6",
+      name: "Casey",
+      order: 5,
+      score: "3",
+      color: "purple",
+      teamId: TEAM_FISH_ID,
+      tokens: { vp: 0, clue: 1 },
+      hands: { main: [] },
+      playArea: [],
+    }
+  );
+  seed.history = [
+    { summary: "QA Tester drew 2 cards", action: { category: "card" } },
+    { summary: "Riley played Village", action: { category: "card" } },
+    { summary: "Alex scored 2 VP", action: { category: "token" } },
+  ];
+  return seed;
+}
+
 function snapshotFromSeed(seed, { channelId, guildId } = {}) {
   return snapshotFromGameData(seed, {
     channelId,
@@ -242,6 +321,10 @@ function sanitizeFixtureName(value) {
   if (name === "several-games" || name === "one-game") return "populated";
   if (name === "no-games") return "no-game";
   return null;
+}
+
+function isTeamGameChannel(channelId) {
+  return String(channelId || "").trim() === TEAM_GAME_CHANNEL_ID;
 }
 
 function sanitizeGamesFixtureName(value) {
@@ -265,6 +348,12 @@ function getMockGames({ fixture } = {}) {
       body: { games: ONE_GAME_FIXTURE.map((game) => ({ ...game })) },
     };
   }
+  if (name === "team-game") {
+    return {
+      status: 200,
+      body: { games: TEAM_GAME_FIXTURE.map((game) => ({ ...game })) },
+    };
+  }
   return {
     status: 200,
     body: { games: SEVERAL_GAMES_FIXTURE.map((game) => ({ ...game })) },
@@ -282,9 +371,13 @@ function getMockSnapshot({ fixture, channelId, guildId } = {}) {
   if (name === "not-a-player") {
     return { status: 403, body: { error: "not_a_player" } };
   }
+  const seed =
+    name === "team-game" || isTeamGameChannel(channelId)
+      ? teamGameSeed()
+      : populatedSeed();
   return {
     status: 200,
-    body: snapshotFromSeed(populatedSeed(), {
+    body: snapshotFromSeed(seed, {
       channelId: channelId || DEFAULT_MOCK_CHANNEL_ID,
       guildId: guildId || DEFAULT_MOCK_GUILD_ID,
     }),
@@ -341,6 +434,11 @@ module.exports = {
   MOCK_USER,
   ONE_GAME_FIXTURE,
   SEVERAL_GAMES_FIXTURE,
+  TEAM_CRAB_ID,
+  TEAM_FISH_ID,
+  TEAM_GAME_CHANNEL_ID,
+  TEAM_GAME_CHANNEL_NAME,
+  TEAM_GAME_FIXTURE,
   allowEmbeddedAppMock,
   getMockGames,
   getMockSnapshot,
@@ -352,6 +450,7 @@ module.exports = {
   otherPlayerHand,
   populatedSeed,
   resolveMockRuntimeConfig,
+  teamGameSeed,
   sanitizeFixtureName,
   sanitizeGamesFixtureName,
   snapshotFromSeed,

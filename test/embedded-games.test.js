@@ -410,6 +410,7 @@ describe("snapshotGameForUser", () => {
             name: "other-player",
             handCount: 1,
             avatarUrl: null,
+            teamName: "",
           },
         ],
         decks: [{ name: "Main", remaining: 1, total: 1 }],
@@ -443,6 +444,7 @@ describe("snapshotGameForUser", () => {
               tokens: {},
             },
           ],
+          teams: [],
           tokens: [],
           globalPiles: [],
           history: [],
@@ -632,7 +634,13 @@ describe("snapshotFromGameData", () => {
       { channelId: "ch", guildId: "g", userId: "will" }
     );
     expect(snapshot.otherPlayers).toEqual([
-      { userId: "riley", name: "Riley", handCount: 1, avatarUrl: null },
+      {
+        userId: "riley",
+        name: "Riley",
+        handCount: 1,
+        avatarUrl: null,
+        teamName: "",
+      },
     ]);
     expect(snapshot.decks.map((deck) => deck.name)).toEqual(["Main", "Events"]);
     expect(snapshot.decks[0]).toEqual({ name: "Main", remaining: 1, total: 2 });
@@ -708,7 +716,42 @@ describe("snapshotFromGameData", () => {
       name: "RileyOnServer",
       handCount: 1,
       avatarUrl: "https://cdn.discordapp.com/avatars/riley/a.png",
+      teamName: "",
     });
+  });
+
+  test("exposes roster team names on other players and status", () => {
+    const snapshot = snapshotFromGameData(
+      {
+        name: "Game time",
+        teams: [
+          { id: "crab", name: "🦀🦀", color: null },
+          { id: "fish", name: "💪🐟", color: "navy" },
+        ],
+        players: [
+          { userId: "will", name: "Will", order: 0, teamId: "crab", hands: { main: [] } },
+          { userId: "riley", name: "Riley", order: 1, teamId: "crab", hands: { main: [{}] } },
+          { userId: "alex", name: "Alex", order: 2, teamId: "fish", hands: { main: [{}] } },
+          { userId: "solo", name: "Solo", order: 3, hands: { main: [{}] } },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(snapshot.status.teams).toEqual([
+      { id: "crab", name: "🦀🦀", color: null },
+      { id: "fish", name: "💪🐟", color: "navy" },
+    ]);
+    expect(snapshot.status.players.map((row) => [row.name, row.teamName])).toEqual([
+      ["Will", "🦀🦀"],
+      ["Riley", "🦀🦀"],
+      ["Alex", "💪🐟"],
+      ["Solo", ""],
+    ]);
+    expect(snapshot.otherPlayers.map((row) => [row.name, row.teamName])).toEqual([
+      ["Riley", "🦀🦀"],
+      ["Alex", "💪🐟"],
+      ["Solo", ""],
+    ]);
   });
 });
 

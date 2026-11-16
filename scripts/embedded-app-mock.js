@@ -30,6 +30,9 @@ console.log(
   `  several-games:  http://127.0.0.1:${port}/?fixture=several-games`
 );
 console.log(`  one-game:       http://127.0.0.1:${port}/?fixture=one-game`);
+console.log(
+  `  team-game:      http://127.0.0.1:${port}/?fixture=team-game&game=team-thread`
+);
 console.log(`  no-games:       http://127.0.0.1:${port}/?fixture=no-games`);
 console.log(`  no-game:        http://127.0.0.1:${port}/?fixture=no-game`);
 console.log(

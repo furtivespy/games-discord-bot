@@ -38,13 +38,15 @@ const {
   isSnapshotFixture,
 } = require("../embedded-client/src/mockFixtures.ts");
 const {
-  CUSTOM_GAME_LABEL,
   DEFAULT_CARD_BACK,
+  UNASSIGNED_TEAM_LABEL,
   autoSelectGameId,
   deckCountLabel,
+  groupPlayersByTeam,
   handCountLabel,
   initialsFromName,
-  statusGameTitle,
+  statusPlayerScoreLabel,
+  statusPlayerSeatName,
   suitGlyph,
   visibleDecks,
 } = require("../embedded-client/src/tableLayout.ts");
@@ -169,11 +171,13 @@ describe("embedded client handshake URLs", () => {
     expect(isPickerFixture("one-game")).toBe(true);
     expect(isPickerFixture("no-games")).toBe(true);
     expect(isPickerFixture("populated")).toBe(true);
+    expect(isPickerFixture("team-game")).toBe(true);
     expect(isPickerFixture("no-game")).toBe(false);
     expect(isPickerFixture("not-a-player")).toBe(false);
     expect(isSnapshotFixture("no-game")).toBe(true);
     expect(isSnapshotFixture("not-a-player")).toBe(true);
     expect(isSnapshotFixture("populated")).toBe(true);
+    expect(isSnapshotFixture("team-game")).toBe(true);
     expect(isSnapshotFixture("several-games")).toBe(false);
   });
 });
@@ -219,16 +223,58 @@ describe("visual table layout helpers", () => {
     ).toBe(true);
   });
 
-  test("status title, initials, suits, and mock auto-select", () => {
-    expect(statusGameTitle({ gameName: "Inis", isCustomGame: true })).toBe(
-      `Inis (${CUSTOM_GAME_LABEL}) Status`
-    );
+  test("compact sidebar player lines, initials, suits, and mock auto-select", () => {
+    expect(statusPlayerSeatName({ name: "QA Tester", order: 0 })).toBe("(1) QA Tester");
+    expect(statusPlayerScoreLabel({ score: "12" })).toBe("12");
+    expect(statusPlayerScoreLabel({ score: "" })).toBe("—");
     expect(initialsFromName("QA Tester")).toBe("QT");
     expect(suitGlyph("hearts")).toBe("♥");
     expect(autoSelectGameId("?fixture=several-games&game=newest-thread", true)).toBe(
       "newest-thread"
     );
     expect(autoSelectGameId("?game=newest-thread", false)).toBe("");
+    const main = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "embedded-client", "src", "main.ts"),
+      "utf8"
+    );
+    expect(main).not.toContain("statusGameTitle");
+    expect(main).not.toContain("status-title");
+    expect(main).not.toContain("status-player-meta");
+    expect(main).toContain("statusPlayerSeatName");
+    expect(main).toContain("groupPlayersByTeam");
+  });
+
+  test("groups board players by roster team and keeps a flat row without teams", () => {
+    const players = [
+      { name: "Riley", teamName: "🦀🦀" },
+      { name: "Alex", teamName: "💪🐟" },
+      { name: "Sam", teamName: "🦀🦀" },
+      { name: "Solo", teamName: "" },
+    ];
+    expect(groupPlayersByTeam(players, [])).toEqual([
+      { label: "🦀🦀", unassigned: false, color: null, players: [players[0], players[2]] },
+      { label: "💪🐟", unassigned: false, color: null, players: [players[1]] },
+      { label: UNASSIGNED_TEAM_LABEL, unassigned: true, color: null, players: [players[3]] },
+    ]);
+    expect(
+      groupPlayersByTeam(players, [
+        { id: "fish", name: "💪🐟", color: "navy" },
+        { id: "crab", name: "🦀🦀" },
+      ])
+    ).toEqual([
+      { label: "💪🐟", unassigned: false, color: "navy", players: [players[1]] },
+      { label: "🦀🦀", unassigned: false, color: null, players: [players[0], players[2]] },
+      { label: UNASSIGNED_TEAM_LABEL, unassigned: true, color: null, players: [players[3]] },
+    ]);
+    expect(
+      groupPlayersByTeam(
+        [
+          { name: "Riley", teamName: "" },
+          { name: "Alex" },
+        ],
+        []
+      )
+    ).toBeNull();
   });
 });
 

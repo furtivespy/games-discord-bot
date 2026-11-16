@@ -145,14 +145,6 @@ body {
   display: none;
 }
 
-.status-title {
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 800;
-  color: #f3d98c;
-  letter-spacing: 0.01em;
-}
-
 .status-flag {
   display: inline-block;
   margin: 0;
@@ -182,9 +174,11 @@ body {
 }
 
 .status-player {
-  display: grid;
-  gap: 0.15rem;
-  padding: 0.4rem 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.28rem 0;
   border-bottom: 1px solid rgba(201, 162, 39, 0.18);
 }
 
@@ -195,6 +189,10 @@ body {
 
 .status-player-name {
   font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .status-player.is-you .status-player-name::after {
@@ -203,7 +201,14 @@ body {
   color: var(--muted);
 }
 
-.status-player-meta,
+.status-player-score {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #eee3c5;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .status-line {
   margin: 0;
   font-size: 0.82rem;
@@ -249,6 +254,41 @@ body {
 }
 
 .players-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  align-items: flex-end;
+}
+
+.players-rail.has-teams {
+  align-items: stretch;
+  gap: 0.7rem;
+}
+
+.player-team-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 0.65rem 0.55rem;
+  border: 1px solid rgba(201, 227, 210, 0.32);
+  border-radius: 12px;
+  background: rgba(8, 22, 18, 0.42);
+}
+
+.player-team-group.is-unassigned {
+  border-style: dashed;
+  background: rgba(8, 22, 18, 0.22);
+}
+
+.player-team-label {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #f3d98c;
+}
+
+.player-team-members {
   display: flex;
   flex-wrap: wrap;
   gap: 0.85rem;
