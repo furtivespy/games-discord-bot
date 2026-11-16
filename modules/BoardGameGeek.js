@@ -42,10 +42,17 @@ class BoardGameGeek {
     value: "bgg-unavailable",
   });
 
+  // Discord autocomplete expires around 3s. Abort before that so the
+  // unavailable fallback can still be sent instead of "Loading options failed".
+  static SEARCH_TIMEOUT_MS = 2500;
+
   static async Search(query, bggToken) {
     const resp = await fetch(
       `https://api.geekdo.com/xmlapi2/search.cgi?type=boardgame&query=${encodeURIComponent(query)}`,
-      { headers: { 'Authorization': `Bearer ${bggToken}` } }
+      {
+        headers: { 'Authorization': `Bearer ${bggToken}` },
+        signal: AbortSignal.timeout(this.SEARCH_TIMEOUT_MS),
+      }
     );
     const text = await resp.text();
     if (!resp.ok) {
