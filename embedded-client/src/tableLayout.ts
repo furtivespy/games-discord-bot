@@ -25,6 +25,13 @@ export function deckActionsFor(_deck: SnapshotDeck | undefined | null): DeckActi
   return DEFAULT_DECK_ACTIONS;
 }
 
+/** Placeholder: click is UI-only until a later ticket wires Deal/Draw. */
+export function onDeckActionClick(event: Event): void {
+  event.preventDefault();
+  const target = event.currentTarget as { blur?: () => void } | null;
+  target?.blur?.();
+}
+
 export type OtherPlayer = {
   userId?: string;
   name?: string;

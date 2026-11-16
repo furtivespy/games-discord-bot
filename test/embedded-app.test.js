@@ -406,7 +406,8 @@ describe("embedded HTTP origin", () => {
     expect(css).not.toContain(".deck-tile:hover .card-face");
     expect(css).toContain("scale(1.28)");
     expect(css).toContain(".deck-tile:hover .deck-actions");
-    expect(css).not.toContain(".deck-tile:focus-within .deck-actions");
+    expect(css).toContain(".deck-tile:has(:focus-visible) .deck-actions");
+    expect(css).not.toContain(".deck-tile:focus-within");
     expect(css).toContain(".deck-action");
     expect(css).toContain(".hand-fan .card-tile + .card-tile");
     expect(css).toContain(".player-team-group");

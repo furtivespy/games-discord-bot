@@ -29,6 +29,7 @@ import {
   DEFAULT_CARD_BACK,
   deckActionsFor,
   deckCountLabel,
+  onDeckActionClick,
   groupPlayersByTeam,
   handCountLabel,
   initialsFromName,
@@ -515,13 +516,8 @@ function renderDeckActions(deck: SnapshotDeck): HTMLDivElement {
     button.type = "button";
     button.className = "deck-action";
     button.dataset.deckAction = action.id;
-    button.tabIndex = -1;
     button.textContent = action.label;
-    // Placeholder: click is UI-only until a later ticket wires Deal/Draw.
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      button.blur();
-    });
+    button.addEventListener("click", onDeckActionClick);
     actions.append(button);
   }
   return actions;

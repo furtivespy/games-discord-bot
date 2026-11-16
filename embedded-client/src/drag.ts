@@ -29,7 +29,7 @@ export type CardDropHooks = {
 /** Above `.card-tile:hover { z-index: 30 }` so a dragged card stays grabbable. */
 export const STACK_ABOVE_HOVER = 40;
 
-/** Keep in sync with `.card-tile.snapping { transition-duration }` in style.css. */
+/** Snap-back animation length. Applied as `.snapping` inline duration. */
 export const SNAP_BACK_DURATION_MS = 220;
 
 let stackSeq = STACK_ABOVE_HOVER;
@@ -90,24 +90,18 @@ function forceReflow(tile: HTMLElement) {
   }
 }
 
-function transitionDurationMs(tile: HTMLElement): number {
-  const view = tile.ownerDocument?.defaultView;
-  if (!view?.getComputedStyle) return 0;
-  try {
-    const raw = view.getComputedStyle(tile).transitionDuration || "0s";
-    const first = raw.split(",")[0]?.trim() || "0s";
-    const value = Number.parseFloat(first);
-    if (!Number.isFinite(value) || value <= 0) return 0;
-    return first.endsWith("ms") ? value : value * 1000;
-  } catch {
-    return 0;
-  }
+function canAnimateSnap(tile: HTMLElement): boolean {
+  // Fake tiles in unit tests have no layout engine; skip the CSS transition
+  // there so existing assertions can stay synchronous. Real documents always
+  // animate using SNAP_BACK_DURATION_MS.
+  return Boolean(tile.ownerDocument?.defaultView?.getComputedStyle);
 }
 
 function clearDragClasses(tile: HTMLElement) {
   tile.classList.remove("dragging");
   tile.classList.remove("snapping");
   tile.classList.remove("moved");
+  tile.style.transitionDuration = "";
 }
 
 type PendingSnap = { abort: () => void };
@@ -136,34 +130,36 @@ export function snapCardBack(
 ) {
   abortPendingSnap(tile);
   tile.classList.remove("dragging");
-  tile.classList.add("snapping");
-  forceReflow(tile);
-  positions.set(cardId, copyOffset(rest));
-  applyCardOffset(tile, rest);
-
-  const duration = transitionDurationMs(tile);
   const finish = () => {
     clearDragClasses(tile);
     applyCardOffset(tile, rest);
   };
-  if (duration <= 0) {
+  positions.set(cardId, copyOffset(rest));
+  if (!canAnimateSnap(tile)) {
     finish();
     return;
   }
 
+  tile.classList.add("snapping");
+  tile.style.transitionDuration = `${SNAP_BACK_DURATION_MS}ms`;
+  forceReflow(tile);
+  applyCardOffset(tile, rest);
+
   let settled = false;
-  const onEnd = (event: Event) => {
+  function onEnd(event: Event) {
     const property = (event as TransitionEvent).propertyName;
     if (property && property !== "transform") return;
     settle();
-  };
-  const settle = () => {
+  }
+  function settle() {
     if (settled) return;
     settled = true;
     pendingSnaps.delete(tile);
     tile.removeEventListener("transitionend", onEnd);
+    if (tile.isConnected === false) return;
+    if (tile.classList.contains("dragging")) return;
     finish();
-  };
+  }
   const timer = setTimeout(settle, SNAP_BACK_DURATION_MS + 50);
   pendingSnaps.set(tile, {
     abort: () => {
@@ -172,6 +168,7 @@ export function snapCardBack(
       clearTimeout(timer);
       tile.removeEventListener("transitionend", onEnd);
       tile.classList.remove("snapping");
+      tile.style.transitionDuration = "";
     },
   });
   tile.addEventListener("transitionend", onEnd);
@@ -224,19 +221,10 @@ export function enableCardDrag(
     }
 
     const eventTarget: EventTarget = tile.ownerDocument ?? tile;
-    const move = (ev: Event) => {
-      const pointer = ev as PointerEvent;
-      if (pointer.pointerId !== pointerId) return;
-      const next = nextOffset(origin, start, {
-        x: pointer.clientX,
-        y: pointer.clientY,
-      });
-      positions.set(cardId, next);
-      applyCardOffset(tile, next);
-    };
-    const up = (ev: Event) => {
-      const pointer = ev as PointerEvent;
-      if (pointer.pointerId !== pointerId) return;
+    let detached = false;
+    function detachDragListeners() {
+      if (detached) return;
+      detached = true;
       activePointer = null;
       try {
         tile.releasePointerCapture(pointerId);
@@ -246,6 +234,26 @@ export function enableCardDrag(
       eventTarget.removeEventListener("pointermove", move);
       eventTarget.removeEventListener("pointerup", up);
       eventTarget.removeEventListener("pointercancel", up);
+    }
+    function move(ev: Event) {
+      const pointer = ev as PointerEvent;
+      if (pointer.pointerId !== pointerId) return;
+      if (tile.isConnected === false) {
+        detachDragListeners();
+        return;
+      }
+      const next = nextOffset(origin, start, {
+        x: pointer.clientX,
+        y: pointer.clientY,
+      });
+      positions.set(cardId, next);
+      applyCardOffset(tile, next);
+    }
+    function up(ev: Event) {
+      const pointer = ev as PointerEvent;
+      if (pointer.pointerId !== pointerId) return;
+      detachDragListeners();
+      if (tile.isConnected === false) return;
 
       const ctx: DropContext = {
         cardId,
@@ -259,7 +267,7 @@ export function enableCardDrag(
         return;
       }
       snapCardBack(tile, cardId, positions, rest);
-    };
+    }
     eventTarget.addEventListener("pointermove", move);
     eventTarget.addEventListener("pointerup", up);
     eventTarget.addEventListener("pointercancel", up);

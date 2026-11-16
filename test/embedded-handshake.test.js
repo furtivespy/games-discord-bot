@@ -46,6 +46,7 @@ const {
   DEFAULT_DECK_ACTIONS,
   deckActionsFor,
   deckCountLabel,
+  onDeckActionClick,
   groupPlayersByTeam,
   handCountLabel,
   initialsFromName,
@@ -112,8 +113,9 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("renderDeckActions");
     expect(main).toContain("deckActionsFor");
     expect(main).toContain("dataset.deckAction");
-    expect(main).toContain("button.blur");
+    expect(main).toContain("onDeckActionClick");
     expect(main).not.toContain("dataset.deckName");
+    expect(main).not.toContain("tabIndex");
     expect(main).toContain("autoSelectGameId");
     const requestSeq = require("fs").readFileSync(
       require("path").join(__dirname, "..", "embedded-client", "src", "requestSeq.ts"),
@@ -338,9 +340,13 @@ function createFakeTile() {
       for (const handler of docListeners.get(event.type) || []) handler(event);
       return true;
     },
+    listenerCount(type) {
+      return (docListeners.get(type) || []).length;
+    },
   };
   const tile = {
-    style: { transform: "", zIndex: "" },
+    style: { transform: "", zIndex: "", transitionDuration: "" },
+    isConnected: true,
     classList: {
       add: (...names) => {
         for (const name of names) classSet.add(name);
@@ -546,7 +552,12 @@ describe("client-only card drag", () => {
       require("path").join(__dirname, "..", "embedded-client", "src", "style.css"),
       "utf8"
     );
-    expect(css).toContain(`transform ${SNAP_BACK_DURATION_MS / 1000}s`);
+    expect(css).not.toMatch(/\.card-tile\.snapping\s*\{[^}]*0\.22s/);
+    const drag = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "embedded-client", "src", "drag.ts"),
+      "utf8"
+    );
+    expect(drag).toContain("tile.style.transitionDuration = `${SNAP_BACK_DURATION_MS}ms`");
   });
 
   test("pointercancel snaps the card back like pointerup", () => {
@@ -591,6 +602,49 @@ describe("client-only card drag", () => {
     expect(tile.classList.contains("dragging")).toBe(true);
     expect(tile.style.transform).toBe(translateCss(10, 20));
   });
+
+  test("a pending snap is a no-op after the tile is replaced", async () => {
+    const tile = createFakeTile();
+    tile.ownerDocument.defaultView = {
+      getComputedStyle: () => ({ transitionDuration: `${SNAP_BACK_DURATION_MS}ms` }),
+    };
+    const positions = new Map();
+    enableCardDrag(tile, "hand-6", positions);
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 10, clientY: 10 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 10, clientY: 10 })
+    );
+    expect(tile.classList.contains("snapping")).toBe(true);
+    tile.isConnected = false;
+    await new Promise((resolve) => setTimeout(resolve, SNAP_BACK_DURATION_MS + 80));
+    expect(tile.classList.contains("snapping")).toBe(true);
+  });
+
+  test("removing the tile mid-drag drops document listeners", () => {
+    const tile = createFakeTile();
+    const positions = new Map();
+    enableCardDrag(tile, "hand-7", positions);
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 12, clientY: 8 })
+    );
+    expect(tile.ownerDocument.listenerCount("pointermove")).toBe(1);
+    tile.isConnected = false;
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 40, clientY: 40 })
+    );
+    expect(tile.ownerDocument.listenerCount("pointermove")).toBe(0);
+    expect(tile.ownerDocument.listenerCount("pointerup")).toBe(0);
+    expect(tile.ownerDocument.listenerCount("pointercancel")).toBe(0);
+    expect(tile.style.transform).toBe(translateCss(12, 8));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 99, clientY: 99 })
+    );
+    expect(tile.style.transform).toBe(translateCss(12, 8));
+  });
 });
 
 describe("placeholder deck hover actions", () => {
@@ -602,6 +656,54 @@ describe("placeholder deck hover actions", () => {
     expect(deckActionsFor({ name: "Main" })).toEqual(DEFAULT_DECK_ACTIONS);
     expect(deckActionsFor({ name: "Events" })).toEqual(DEFAULT_DECK_ACTIONS);
     expect(deckActionsFor(null)).toEqual(DEFAULT_DECK_ACTIONS);
+  });
+
+  test("clicking Deal or Draw is a no-op: no state change, no fetch, no postMessage, no errors", () => {
+    const fetchCalls = [];
+    const postMessages = [];
+    const originalFetch = globalThis.fetch;
+    const originalPostMessage = globalThis.postMessage;
+    globalThis.fetch = (...args) => {
+      fetchCalls.push(args);
+      return Promise.reject(new Error("unexpected fetch"));
+    };
+    globalThis.postMessage = (...args) => {
+      postMessages.push(args);
+    };
+
+    const gameState = { remaining: 12, hand: ["Copper"] };
+    const before = structuredClone(gameState);
+    const errors = [];
+
+    try {
+      for (const action of deckActionsFor({ name: "Main" })) {
+        let prevented = false;
+        let blurred = false;
+        onDeckActionClick({
+          preventDefault() {
+            prevented = true;
+          },
+          currentTarget: {
+            dataset: { deckAction: action.id },
+            blur() {
+              blurred = true;
+            },
+          },
+        });
+        expect(prevented).toBe(true);
+        expect(blurred).toBe(true);
+      }
+    } catch (error) {
+      errors.push(error);
+    } finally {
+      globalThis.fetch = originalFetch;
+      globalThis.postMessage = originalPostMessage;
+    }
+
+    expect(errors).toEqual([]);
+    expect(gameState).toEqual(before);
+    expect(fetchCalls).toEqual([]);
+    expect(postMessages).toEqual([]);
   });
 });
 

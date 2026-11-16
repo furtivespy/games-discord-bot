@@ -416,8 +416,8 @@ body {
 }
 
 .card-tile.snapping {
-  /* Keep in sync with SNAP_BACK_DURATION_MS in drag.ts. */
-  transition: transform 0.22s ease-out;
+  transition-property: transform;
+  transition-timing-function: ease-out;
 }
 
 .card-tile.dragging {
@@ -429,8 +429,9 @@ body {
   z-index: 30;
 }
 
-/* Raise the hovered deck so Deal/Draw sit above a sibling deck. Do not zoom. */
-.deck-tile:hover {
+/* Raise the hovered (or keyboard-focused) deck so Deal/Draw sit above a sibling. Do not zoom. */
+.deck-tile:hover,
+.deck-tile:has(:focus-visible) {
   z-index: 30;
 }
 
@@ -490,7 +491,8 @@ body {
   z-index: 2;
 }
 
-.deck-tile:hover .deck-actions {
+.deck-tile:hover .deck-actions,
+.deck-tile:has(:focus-visible) .deck-actions {
   opacity: 1;
   pointer-events: auto;
 }
