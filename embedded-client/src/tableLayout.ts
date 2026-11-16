@@ -64,6 +64,8 @@ export type StatusPile = {
 };
 
 export type StatusHistory = {
+  id?: string;
+  timestamp?: string;
   summary?: string;
   category?: string;
 };

@@ -49,6 +49,30 @@ export function snapshotRequestUrl(
   );
 }
 
+export function versionRequestUrl(
+  apiHost: string,
+  protocol: string,
+  query: {
+    fixture?: string | null;
+    channelId?: string | null;
+    guildId?: string | null;
+  } = {}
+): string {
+  const params = new URLSearchParams();
+  const fixture = String(query.fixture || "").trim();
+  const channelId = String(query.channelId || "").trim();
+  const guildId = String(query.guildId || "").trim();
+  if (fixture) params.set("fixture", fixture);
+  if (channelId) params.set("channelId", channelId);
+  if (guildId) params.set("guildId", guildId);
+  const qs = params.toString();
+  return apiUrl(
+    apiHost,
+    protocol,
+    `/api/game/version${qs ? `?${qs}` : ""}`
+  );
+}
+
 export const CARD_IMAGE_PATH = "/api/card-image";
 
 /** Only bot-signed proxy paths; raw external URLs are blocked by Discord's CSP. */

@@ -834,6 +834,21 @@ describe("GET /api/game/snapshot", () => {
         );
         expect(proxied.status).toBe(200);
         expect((await proxied.json()).channelId).toBe("thread-game");
+        expect(typeof body.version).toBe("string");
+        expect(body.version.length).toBeGreaterThan(0);
+        expect(snapshot.headers.get("etag")).toBe(`"${body.version}"`);
+        expect(snapshot.headers.get("cache-control")).toBe("no-store");
+
+        const cached = await fetch(
+          `${url}/api/game/snapshot?guildId=guild-1&channelId=thread-game`,
+          {
+            headers: {
+              Authorization: `Bearer ${SECRET_TOKEN}`,
+              "If-None-Match": snapshot.headers.get("etag"),
+            },
+          }
+        );
+        expect(cached.status).toBe(304);
       } finally {
         server.close();
         fs.rmSync(staticDir, { recursive: true, force: true });
@@ -877,6 +892,93 @@ describe("GET /api/game/snapshot", () => {
         const body = await response.json();
         expect(body).toEqual({ error: "not_a_player" });
         expect(JSON.stringify(body)).not.toMatch(/Copper|Village|Province|Other Player Secret/);
+      } finally {
+        server.close();
+        fs.rmSync(staticDir, { recursive: true, force: true });
+      }
+    });
+  });
+});
+
+describe("GET /api/game/version", () => {
+  async function withStore(run) {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-ver-"));
+    const previous = process.env.GAMEBOT_DATA_DIR;
+    process.env.GAMEBOT_DATA_DIR = dataDir;
+    const store = new GameStore();
+    try {
+      return await run(store);
+    } finally {
+      try {
+        store.db.close();
+      } catch {}
+      if (previous === undefined) delete process.env.GAMEBOT_DATA_DIR;
+      else process.env.GAMEBOT_DATA_DIR = previous;
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  }
+
+  test("is a cheap version check that 304s until the game document changes", async () => {
+    await withStore(async (store) => {
+      const game = {
+        isdeleted: false,
+        name: "Friday Inis",
+        players: [{ userId: "snowflake-user", hands: { main: [] } }],
+        gameBoard: [{ id: "board-1", name: "Province" }],
+      };
+      store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", game);
+      const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-ver-http-"));
+      fs.writeFileSync(
+        path.join(staticDir, "index.html"),
+        `<!doctype html><html><head></head><body></body></html>`
+      );
+      const app = createEmbeddedApp({
+        clientId: "client-123",
+        clientSecret: "server-secret",
+        staticDir,
+        gameStore: store,
+        fetchImpl: mockDiscordFetch({
+          meBody: {
+            id: "snowflake-user",
+            username: "willsullivan",
+            global_name: "Will",
+          },
+        }),
+      });
+      const { server, url } = await listen(app);
+      const auth = { Authorization: `Bearer ${SECRET_TOKEN}` };
+      try {
+        expect(
+          (await fetch(`${url}/api/game/version?guildId=guild-1&channelId=thread-game`))
+            .status
+        ).toBe(401);
+
+        const first = await fetch(
+          `${url}/api/game/version?guildId=guild-1&channelId=thread-game`,
+          { headers: auth }
+        );
+        expect(first.status).toBe(200);
+        const firstBody = await first.json();
+        expect(firstBody.version).toEqual(expect.any(String));
+        expect(first.headers.get("etag")).toBe(`"${firstBody.version}"`);
+        expect(first.headers.get("cache-control")).toBe("no-store");
+
+        const cached = await fetch(
+          `${url}/.proxy/api/game/version?guildId=guild-1&channelId=thread-game`,
+          { headers: { ...auth, "If-None-Match": first.headers.get("etag") } }
+        );
+        expect(cached.status).toBe(304);
+
+        game.gameBoard.push({ id: "board-2", name: "Duchy" });
+        store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", game);
+
+        const changed = await fetch(
+          `${url}/api/game/version?guildId=guild-1&channelId=thread-game`,
+          { headers: { ...auth, "If-None-Match": first.headers.get("etag") } }
+        );
+        expect(changed.status).toBe(200);
+        const changedBody = await changed.json();
+        expect(changedBody.version).not.toBe(firstBody.version);
       } finally {
         server.close();
         fs.rmSync(staticDir, { recursive: true, force: true });

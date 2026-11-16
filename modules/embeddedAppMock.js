@@ -1,4 +1,4 @@
-const { snapshotFromGameData } = require("./embeddedGames");
+const { snapshotFromGameData, snapshotVersion } = require("./embeddedGames");
 const {
   applyVisualCardAction,
   createActionIdempotencyCache,
@@ -403,12 +403,27 @@ function createMockGameSession() {
     const cid = channelId || DEFAULT_MOCK_CHANNEL_ID;
     const gid = guildId || DEFAULT_MOCK_GUILD_ID;
     const seed = getGame(name, cid, gid);
+    const version = snapshotVersion(seed);
     return {
       status: 200,
-      body: snapshotFromSeed(seed, {
-        channelId: cid,
-        guildId: gid,
-      }),
+      version,
+      body: {
+        ...snapshotFromSeed(seed, {
+          channelId: cid,
+          guildId: gid,
+        }),
+        version,
+      },
+    };
+  }
+
+  function getVersion({ fixture, channelId, guildId } = {}) {
+    const snapshot = getSnapshot({ fixture, channelId, guildId });
+    if (snapshot.status !== 200) return snapshot;
+    return {
+      status: 200,
+      version: snapshot.version,
+      body: { version: snapshot.version },
     };
   }
 
@@ -460,10 +475,13 @@ function createMockGameSession() {
           },
         };
       }
+      const version = snapshotVersion(gameData);
       return {
         status: 200,
+        version,
         body: {
           ...snapshotFromSeed(gameData, { channelId: cid, guildId: gid }),
+          version,
           message: applied.content,
           channelPosted: true,
         },
@@ -476,7 +494,7 @@ function createMockGameSession() {
     });
   }
 
-  return { getSnapshot, applyAction };
+  return { getSnapshot, getVersion, applyAction };
 }
 
 function mockUserTokenBody({ originChannelName } = {}) {

@@ -25,9 +25,12 @@ const {
   channelNameFromDiscordClient,
   createDiscordLookupCache,
   listActiveGamesForUser,
+  etagMatches,
+  formatEtag,
   optionalDiscordAccessGuard,
   requiredDiscordAccessGuard,
   snapshotGameForUser,
+  versionGameForUser,
 } = require("./embeddedGames");
 const {
   CARD_IMAGE_PATH,
@@ -396,12 +399,33 @@ function createEmbeddedApp({
 
   app.get(["/api/games", "/.proxy/api/games"], sendActiveGames);
 
-  function sendSnapshotResult(res, result) {
+  function sendVersionedResult(
+    res,
+    result,
+    { proxyImages = false, ifNoneMatch } = {}
+  ) {
+    const version = result.version || result.body?.version;
+    if (result.status === 200 && etagMatches(ifNoneMatch, version)) {
+      result = { status: 304, version };
+    }
+    res.set("Cache-Control", "no-store");
+    if (version) res.set("ETag", formatEtag(version));
+    if (result.status === 304) {
+      res.status(304).end();
+      return;
+    }
     const body =
-      result.status === 200
+      proxyImages && result.status === 200
         ? proxySnapshotImages(result.body, cardImageKey)
         : result.body;
     res.status(result.status).json(body);
+  }
+
+  function sendSnapshotResult(res, result, req) {
+    sendVersionedResult(res, result, {
+      proxyImages: true,
+      ifNoneMatch: req?.get?.("if-none-match"),
+    });
   }
 
   async function sendGameSnapshot(req, res) {
@@ -422,7 +446,7 @@ function createEmbeddedApp({
         channelId: requestedChannelId || resolvedMockChannelId,
         guildId: requestedGuildId || resolvedMockGuildId,
       });
-      sendSnapshotResult(res, result);
+      sendSnapshotResult(res, result, req);
       return;
     }
     if (!accessToken) {
@@ -470,11 +494,73 @@ function createEmbeddedApp({
       channelId: requestedChannelId,
       userId: user.id,
       logger,
+      ifNoneMatch: req.get("if-none-match"),
     });
-    sendSnapshotResult(res, result);
+    sendSnapshotResult(res, result, req);
   }
 
   app.get(["/api/game/snapshot", "/.proxy/api/game/snapshot"], sendGameSnapshot);
+
+  async function sendGameVersion(req, res) {
+    const accessToken = bearerTokenFromHeader(req.get("authorization"));
+    const requestedChannelId = sanitizeHostChannelId(
+      firstQueryValue(req.query?.channelId)
+    );
+    const requestedGuildId = sanitizeHostChannelId(
+      firstQueryValue(req.query?.guildId)
+    );
+    if (mockEnabled) {
+      if (accessToken !== MOCK_ACCESS_TOKEN) {
+        res.status(401).json({ error: "unauthorized" });
+        return;
+      }
+      const result = mockSession.getVersion({
+        fixture: firstQueryValue(req.query?.fixture),
+        channelId: requestedChannelId || resolvedMockChannelId,
+        guildId: requestedGuildId || resolvedMockGuildId,
+      });
+      sendVersionedResult(res, result, { ifNoneMatch: req.get("if-none-match") });
+      return;
+    }
+    if (!accessToken) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    let user = null;
+    try {
+      user = await fetchDiscordUser(accessToken, fetchImpl);
+    } catch (err) {
+      logger?.log?.(
+        `Discord users/@me lookup failed: ${err.message || err}`,
+        "warn"
+      );
+    }
+    if (!user?.id) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    if (!requestedGuildId) {
+      res.status(400).json({ error: "missing_guild" });
+      return;
+    }
+    if (!requestedChannelId) {
+      res.status(400).json({ error: "missing_channel" });
+      return;
+    }
+    const result = await versionGameForUser({
+      getGameData,
+      discordClient,
+      gameStore,
+      guildId: requestedGuildId,
+      channelId: requestedChannelId,
+      userId: user.id,
+      logger,
+      ifNoneMatch: req.get("if-none-match"),
+    });
+    sendVersionedResult(res, result, { ifNoneMatch: req.get("if-none-match") });
+  }
+
+  app.get(["/api/game/version", "/.proxy/api/game/version"], sendGameVersion);
 
   async function sendGameAction(req, res) {
     const accessToken = bearerTokenFromHeader(req.get("authorization"));
@@ -505,7 +591,7 @@ function createEmbeddedApp({
         count: parsed.count,
         requestId: parsed.requestId,
       });
-      sendSnapshotResult(res, result);
+      sendSnapshotResult(res, result, req);
       return;
     }
     if (!accessToken) {
@@ -576,7 +662,7 @@ function createEmbeddedApp({
       requestId: parsed.requestId,
       idempotency: actionIdempotency,
     });
-    sendSnapshotResult(res, result);
+    sendSnapshotResult(res, result, req);
   }
 
   app.post(["/api/game/action", "/.proxy/api/game/action"], sendGameAction);

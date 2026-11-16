@@ -19,7 +19,16 @@ import {
   snapshotRequestUrl,
   tokenRequestUrl,
   urlMappingsForApiHost,
+  versionRequestUrl,
 } from "./handshake";
+import {
+  HISTORY_CHANGED_CLASS,
+  createSnapshotPoller,
+  etagFromVersion,
+  historyEntryKey,
+  isSnapshotPollBlocked,
+  newHistoryKeys,
+} from "./snapshotPoll";
 import {
   ACTION_COUNT_MAX,
   ACTION_COUNT_MIN,
@@ -83,6 +92,11 @@ let activeSession: {
 let actionDialogBound = false;
 let actionInFlight = false;
 let actionRequestId: string | null = null;
+let appliedVersion = "";
+let appliedChannelId = "";
+let appliedHistoryKeys: string[] = [];
+let snapshotPoller: ReturnType<typeof createSnapshotPoller> | null = null;
+let snapshotPollVisibilityBound = false;
 
 type EmbeddedConfig = {
   clientId: string;
@@ -112,6 +126,7 @@ type GameSnapshot = {
   status?: GameStatus;
   error?: string;
   channelPosted?: boolean;
+  version?: string;
 };
 
 type PickerGame = {
@@ -202,6 +217,8 @@ function setTableVisible(visible: boolean) {
   const table = document.getElementById("table");
   if (table) table.hidden = !visible;
   if (!visible) {
+    stopSnapshotPolling();
+    resetHistoryHighlightState();
     const status = document.getElementById("game-status");
     if (status) {
       status.hidden = true;
@@ -244,6 +261,97 @@ function liveSelectedChannelId(requestedChannelId: string): string {
 
 function cancelSnapshotLoad() {
   snapshotLoader.clear();
+  stopSnapshotPolling();
+  resetHistoryHighlightState();
+}
+
+function resetHistoryHighlightState() {
+  appliedVersion = "";
+  appliedChannelId = "";
+  appliedHistoryKeys = [];
+}
+
+function snapshotPollHidden(): boolean {
+  if (typeof document === "undefined") return true;
+  if (document.visibilityState === "hidden") return true;
+  return Boolean(document.getElementById("table")?.hidden);
+}
+
+function snapshotPollBlocked(): boolean {
+  if (actionInFlight) return true;
+  if (snapshotLoader.isInFlight()) return true;
+  return isSnapshotPollBlocked(document);
+}
+
+async function fetchSnapshotVersion(): Promise<string | null> {
+  const session = activeSession;
+  if (!session) return null;
+  const channelId = liveSelectedChannelId(session.config.channelId);
+  if (!channelId) return null;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${session.accessToken}`,
+  };
+  if (appliedVersion) headers["If-None-Match"] = etagFromVersion(appliedVersion);
+  const response = await fetch(
+    versionRequestUrl(session.config.apiHost, window.location.protocol, {
+      fixture: session.config.mock ? readFixture() : undefined,
+      channelId,
+      guildId: session.guildId || session.config.guildId,
+    }),
+    { headers }
+  );
+  if (response.status === 304) return appliedVersion || null;
+  if (!response.ok) return null;
+  let payload: { version?: string } = {};
+  try {
+    payload = (await response.json()) as { version?: string };
+  } catch {
+    payload = {};
+  }
+  const version = typeof payload.version === "string" ? payload.version.trim() : "";
+  return version || null;
+}
+
+async function refreshSnapshotFromPoll(): Promise<void> {
+  const session = activeSession;
+  if (!session) return;
+  const channelId = liveSelectedChannelId(session.config.channelId);
+  if (!channelId) return;
+  await loadSnapshot(
+    session.config,
+    session.accessToken,
+    { channelId, guildId: session.guildId || session.config.guildId },
+    { silent: true }
+  );
+}
+
+function bindSnapshotPoller() {
+  if (snapshotPoller) return;
+  snapshotPoller = createSnapshotPoller({
+    fetchVersion: fetchSnapshotVersion,
+    refresh: refreshSnapshotFromPoll,
+    isHidden: snapshotPollHidden,
+    isBlocked: snapshotPollBlocked,
+  });
+  if (snapshotPollVisibilityBound || typeof document === "undefined") return;
+  snapshotPollVisibilityBound = true;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void snapshotPoller?.pollNow();
+  });
+}
+
+function startSnapshotPolling(version?: string) {
+  bindSnapshotPoller();
+  if (typeof version === "string" && version) {
+    snapshotPoller?.setVersion(version);
+  } else if (appliedVersion) {
+    snapshotPoller?.setVersion(appliedVersion);
+  }
+  snapshotPoller?.start(version || appliedVersion);
+}
+
+function stopSnapshotPolling() {
+  snapshotPoller?.stop();
 }
 
 function showSelectedChannel(name: string | null) {
@@ -800,7 +908,11 @@ function appendStatusLines(parent: HTMLElement, lines: string[]) {
   }
 }
 
-function renderGameStatus(status: GameStatus | undefined, fallbackName: string) {
+function renderGameStatus(
+  status: GameStatus | undefined,
+  fallbackName: string,
+  highlightKeys: Set<string> = new Set()
+) {
   const root = document.getElementById("game-status");
   if (!root) return;
   root.replaceChildren();
@@ -886,6 +998,11 @@ function renderGameStatus(status: GameStatus | undefined, fallbackName: string) 
     list.className = "status-history";
     for (const entry of history) {
       const item = document.createElement("li");
+      const key = historyEntryKey(entry);
+      if (key) item.dataset.historyKey = key;
+      if (key && highlightKeys.has(key)) {
+        item.className = HISTORY_CHANGED_CLASS;
+      }
       item.textContent = entry.summary || "";
       list.append(item);
     }
@@ -908,11 +1025,19 @@ function snapshotErrorMessage(error: string | undefined, status: number): string
 async function loadSnapshot(
   config: EmbeddedConfig,
   accessToken: string,
-  ids: { channelId: string; guildId: string }
+  ids: { channelId: string; guildId: string },
+  options: { silent?: boolean } = {}
 ) {
+  const silent = Boolean(options.silent);
   const outcome = await snapshotLoader.load(
     ids.channelId,
     async (signal) => {
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${accessToken}`,
+      };
+      if (silent && appliedVersion) {
+        headers["If-None-Match"] = etagFromVersion(appliedVersion);
+      }
       const response = await fetch(
         snapshotRequestUrl(config.apiHost, window.location.protocol, {
           fixture: config.mock ? readFixture() : undefined,
@@ -920,10 +1045,17 @@ async function loadSnapshot(
           guildId: ids.guildId,
         }),
         {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers,
           signal,
         }
       );
+      if (response.status === 304) {
+        return {
+          ok: true,
+          status: 304,
+          payload: { channelId: ids.channelId },
+        };
+      }
       let payload: GameSnapshot = {};
       try {
         payload = (await response.json()) as GameSnapshot;
@@ -945,8 +1077,14 @@ async function loadSnapshot(
   }
 
   if (outcome.status === "failed") {
-    setTableVisible(false);
-    setSnapshotStatus(snapshotErrorMessage(undefined, 0));
+    if (!silent) {
+      setTableVisible(false);
+      setSnapshotStatus(snapshotErrorMessage(undefined, 0));
+    }
+    return;
+  }
+
+  if (outcome.result.status === 304) {
     return;
   }
 
@@ -963,8 +1101,10 @@ async function loadSnapshot(
   }
 
   if (outcome.status === "error") {
-    setTableVisible(false);
-    setSnapshotStatus(snapshotErrorMessage(payload.error, outcome.result.status));
+    if (!silent) {
+      setTableVisible(false);
+      setSnapshotStatus(snapshotErrorMessage(payload.error, outcome.result.status));
+    }
     return;
   }
 
@@ -974,15 +1114,29 @@ async function loadSnapshot(
 function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot) {
   setSnapshotStatus(null);
   if (payload.channelPosted !== false) setActionNotice(null);
+  const channelId =
+    typeof payload.channelId === "string" ? payload.channelId.trim() : "";
+  const history = asRecordList<StatusHistory>(payload.status?.history);
+  const nextKeys = history.map((entry) => historyEntryKey(entry)).filter(Boolean);
+  const highlightKeys =
+    channelId && channelId === appliedChannelId
+      ? newHistoryKeys(appliedHistoryKeys, history)
+      : new Set<string>();
+  appliedChannelId = channelId;
+  appliedHistoryKeys = nextKeys;
+  if (typeof payload.version === "string" && payload.version.trim()) {
+    appliedVersion = payload.version.trim();
+  }
   const positions = new Map<string, CardOffset>();
   renderGameChannelLink(payload.guildId || config.guildId, payload.channelId);
-  renderGameStatus(payload.status, payload.gameName || "");
+  renderGameStatus(payload.status, payload.gameName || "", highlightKeys);
   renderOtherPlayers(config, payload.otherPlayers, payload.status?.teams);
   renderDecks(config, payload.decks);
   renderCards(config, "board-cards", payload.gameBoard, positions);
   renderCards(config, "play-area-cards", payload.playArea, positions);
   renderCards(config, "hand-cards", payload.hand, positions);
   setTableVisible(true);
+  startSnapshotPolling(appliedVersion);
 }
 
 function createSdk(config: EmbeddedConfig) {

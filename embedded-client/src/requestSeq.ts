@@ -97,8 +97,12 @@ export function createSnapshotLoader() {
     controller = ac;
     const liveSelected = () =>
       getSelectedChannelId ? getSelectedChannelId() : selectedChannelId;
+    const release = () => {
+      if (controller === ac) controller = null;
+    };
     try {
       const result = await fetchSnapshot(ac.signal);
+      release();
       if (
         !shouldApplySnapshot({
           isCurrent: seq.isCurrent(requestId),
@@ -112,6 +116,7 @@ export function createSnapshotLoader() {
       if (!result.ok) return { status: "error", result };
       return { status: "applied", result };
     } catch (err) {
+      release();
       if (isAbortError(err)) return { status: "aborted" };
       if (
         !shouldApplySnapshot({
@@ -126,5 +131,9 @@ export function createSnapshotLoader() {
     }
   }
 
-  return { load, clear, abortInFlight };
+  function isInFlight() {
+    return controller != null;
+  }
+
+  return { load, clear, abortInFlight, isInFlight };
 }

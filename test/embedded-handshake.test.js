@@ -14,6 +14,7 @@ const {
   snapshotRequestUrl,
   tokenRequestUrl,
   urlMappingsForApiHost,
+  versionRequestUrl,
 } = require("../embedded-client/src/handshake.ts");
 const {
   ACTION_COUNT_MAX,
@@ -137,6 +138,9 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("actionRequestUrl");
     expect(main).toContain("applySnapshot");
     expect(main).toContain("renderGameChannelLink");
+    expect(main).toContain("createSnapshotPoller");
+    expect(main).toContain("versionRequestUrl");
+    expect(main).toContain("HISTORY_CHANGED_CLASS");
     expect(main).not.toContain("tabIndex");
     expect(main).toContain("autoSelectGameId");
     const requestSeq = require("fs").readFileSync(
@@ -165,6 +169,24 @@ describe("embedded client handshake URLs", () => {
       })
     ).toBe(
       "https://gamebot.example.com/api/game/snapshot?fixture=populated&channelId=ch-1&guildId=g-1"
+    );
+  });
+
+  test("version URL is same-origin inside Discord and carries fixture query params", () => {
+    expect(versionRequestUrl("", "https:")).toBe("/api/game/version");
+    expect(
+      versionRequestUrl("123.discordsays.com", "https:", {
+        fixture: "populated",
+      })
+    ).toBe("/api/game/version?fixture=populated");
+    expect(
+      versionRequestUrl("gamebot.example.com", "https:", {
+        fixture: "populated",
+        channelId: "ch-1",
+        guildId: "g-1",
+      })
+    ).toBe(
+      "https://gamebot.example.com/api/game/version?fixture=populated&channelId=ch-1&guildId=g-1"
     );
   });
 
@@ -847,6 +869,7 @@ describe("deck hover Deal and Draw", () => {
     expect(css).not.toContain("scale(1.28)");
     expect(css).toMatch(/\.card-tile img[\s\S]*object-fit:\s*contain/);
     expect(css).toMatch(/\.hand-fan\s*\{[^}]*padding:\s*5\.6rem/);
+    expect(css).toContain("history-changed-flash");
     expect(css).not.toContain(".deck-tile:hover .card-face");
     expect(visualActionErrorMessage("not_a_player")).toBe(
       "You're not a player in this game."

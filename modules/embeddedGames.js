@@ -425,10 +425,54 @@ function historySummaries(data) {
         entry.summary.trim()
     )
     .slice(-STATUS_HISTORY_LIMIT)
-    .map((entry) => ({
-      summary: entry.summary.trim(),
-      category: typeof entry.action?.category === "string" ? entry.action.category : "",
-    }));
+    .map((entry) => {
+      const row = {
+        summary: entry.summary.trim(),
+        category:
+          typeof entry.action?.category === "string" ? entry.action.category : "",
+      };
+      if (typeof entry.id === "string" && entry.id.trim()) {
+        row.id = entry.id.trim();
+      }
+      if (typeof entry.timestamp === "string" && entry.timestamp.trim()) {
+        row.timestamp = entry.timestamp.trim();
+      }
+      return row;
+    });
+}
+
+function djb2Hex(text) {
+  let hash = 5381;
+  const raw = String(text || "");
+  for (let i = 0; i < raw.length; i += 1) {
+    hash = ((hash << 5) + hash) ^ raw.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+/** Opaque cheap fingerprint of game JSON. Poll this before a full snapshot. */
+function snapshotVersion(data) {
+  const raw = JSON.stringify(data ?? null);
+  const history = Array.isArray(data?.history) ? data.history : [];
+  const last = history.length ? history[history.length - 1] : null;
+  const lastId =
+    last && typeof last.id === "string" && last.id.trim() ? last.id.trim() : "";
+  return `${raw.length}|${history.length}|${lastId}|${djb2Hex(raw)}`;
+}
+
+function formatEtag(version) {
+  const raw = String(version || "");
+  return `"${raw.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function etagMatches(header, version) {
+  if (!version) return false;
+  const expected = formatEtag(version);
+  const tags = String(header || "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return tags.includes(expected) || tags.includes(`W/${expected}`);
 }
 
 function statusSummary(data, userId, displays) {
@@ -943,7 +987,7 @@ async function requiredDiscordAccessGuard({
   return { ok: true, member };
 }
 
-async function snapshotGameForUser({
+async function loadViewerGame({
   getGameData,
   discordClient,
   gameStore,
@@ -982,23 +1026,63 @@ async function snapshotGameForUser({
     return { status: 403, body: { error: "not_a_player" } };
   }
 
-  const userIds = Array.isArray(data.players)
-    ? data.players.map((player) => String(player?.userId || "")).filter(Boolean)
+  return {
+    status: 200,
+    data,
+    version: snapshotVersion(data),
+    guildId: gid,
+    channelId: cid,
+    userId: uid,
+  };
+}
+
+async function versionGameForUser({ ifNoneMatch, ...opts } = {}) {
+  const loaded = await loadViewerGame(opts);
+  if (loaded.status !== 200) {
+    return { status: loaded.status, body: loaded.body };
+  }
+  if (etagMatches(ifNoneMatch, loaded.version)) {
+    return { status: 304, version: loaded.version };
+  }
+  return {
+    status: 200,
+    version: loaded.version,
+    body: { version: loaded.version },
+  };
+}
+
+async function snapshotGameForUser({ ifNoneMatch, ...opts } = {}) {
+  const loaded = await loadViewerGame(opts);
+  if (loaded.status !== 200) {
+    return { status: loaded.status, body: loaded.body };
+  }
+  if (etagMatches(ifNoneMatch, loaded.version)) {
+    return { status: 304, version: loaded.version };
+  }
+
+  const userIds = Array.isArray(loaded.data.players)
+    ? loaded.data.players
+        .map((player) => String(player?.userId || ""))
+        .filter(Boolean)
     : [];
   const playerDisplays = await resolvePlayerDisplays({
-    discordClient,
-    guildId: gid,
+    discordClient: opts.discordClient,
+    guildId: loaded.guildId,
     userIds,
   });
 
   return {
     status: 200,
-    body: snapshotFromGameData(data, {
-      channelId: cid,
-      guildId: gid,
-      userId: uid,
-      playerDisplays,
-    }),
+    version: loaded.version,
+    body: {
+      ...snapshotFromGameData(loaded.data, {
+        channelId: loaded.channelId,
+        guildId: loaded.guildId,
+        userId: loaded.userId,
+        playerDisplays,
+      }),
+      version: loaded.version,
+    },
   };
 }
 
@@ -1030,5 +1114,9 @@ module.exports = {
   resolvePlayerDisplays,
   snapshotFromGameData,
   snapshotGameForUser,
+  snapshotVersion,
+  etagMatches,
+  formatEtag,
   userIsPlayer,
+  versionGameForUser,
 };

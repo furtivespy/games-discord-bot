@@ -222,6 +222,32 @@ body {
   color: #eee3c5;
 }
 
+.status-history li {
+  padding: 0.12rem 0.35rem;
+  margin: 0 0 0.15rem -0.35rem;
+  border-radius: 0.28rem;
+}
+
+.status-history li.is-changed {
+  animation: history-changed-flash 1.4s ease-out;
+}
+
+@keyframes history-changed-flash {
+  from {
+    background-color: rgba(250, 220, 90, 0.72);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-history li.is-changed {
+    animation: none;
+    background-color: rgba(250, 220, 90, 0.28);
+  }
+}
+
 #action-notice {
   margin: 0;
   font-size: 0.82rem;
