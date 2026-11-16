@@ -10,6 +10,7 @@
     "lint:warnings": "biome lint --max-diagnostics=none --reporter=summary .",
     "verify": "bun run lint && bun test && bun run build:client",
     "hooks:install": "git config core.hooksPath .githooks",
+    "control": "bun --no-env-file --preload ./test/helpers/preload.js scripts/control-gamebot.js",
     "start": "bun DiscordBot.js",
     "build:client": "cd embedded-client && bun install && bun run build",
     "build-start": "bun run build:client && bun run start",
