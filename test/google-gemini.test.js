@@ -219,6 +219,42 @@ describe("Gemini models and extraction", () => {
     expect(capturedSignal?.aborted).toBe(true);
   });
 
+  test("suggestGameEmoji throws when thinking eats the token budget", async () => {
+    const gemini = createGeminiAI(fakeClient());
+    gemini.AI2 = {
+      models: {
+        generateContent: async () => ({
+          candidates: [
+            {
+              finishReason: "MAX_TOKENS",
+              content: { parts: [] },
+            },
+          ],
+        }),
+      },
+    };
+    await expect(gemini.suggestGameEmoji("Brass")).rejects.toThrow(
+      "Gemini emoji selection truncated (MAX_TOKENS)"
+    );
+  });
+
+  test("suggestGameEmoji still returns an emoji when MAX_TOKENS includes text", async () => {
+    const gemini = createGeminiAI(fakeClient());
+    gemini.AI2 = {
+      models: {
+        generateContent: async () => ({
+          candidates: [
+            {
+              finishReason: "MAX_TOKENS",
+              content: { parts: [{ text: "🏭" }] },
+            },
+          ],
+        }),
+      },
+    };
+    expect(await gemini.suggestGameEmoji("Brass")).toBe("🏭");
+  });
+
   test("suggestGameEmoji throws on a blocked SAFETY response", async () => {
     const gemini = createGeminiAI(fakeClient());
     gemini.AI2 = {

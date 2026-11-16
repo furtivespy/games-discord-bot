@@ -64,10 +64,30 @@ function resolveEmojiTimeoutMs(client) {
   return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_EMOJI_TIMEOUT_MS;
 }
 
+function summarizeGeminiError(error) {
+  if (!(error instanceof Error)) return String(error || "unknown");
+  const message = error.message || String(error);
+  const jsonStart = message.indexOf("{");
+  if (jsonStart < 0) return message || "unknown";
+  let parsed = null;
+  try {
+    parsed = JSON.parse(message.slice(jsonStart));
+  } catch (_) {
+    return message;
+  }
+  const payload = parsed?.error && typeof parsed.error === "object" ? parsed.error : parsed;
+  const code = error.status ?? error.code ?? payload?.code;
+  const status = payload?.status || error.statusText;
+  const bits = [status, code].filter((value) => value != null && value !== "");
+  return bits.length
+    ? `Gemini request failed (${bits.join(" ")})`
+    : "Gemini request failed";
+}
+
 function logGeminiSkip(client, prefix, reason) {
   const message =
     reason instanceof Error
-      ? reason.message || String(reason)
+      ? summarizeGeminiError(reason)
       : String(reason || "unknown");
   const line = `${prefix} ${message}`;
   if (typeof client?.logger?.warn === "function") {
@@ -89,6 +109,7 @@ function geminiCandidateState(result) {
   return {
     promptFeedback,
     candidate,
+    finishReason: finish,
     promptBlockReason: promptFeedback?.blockReason
       ? String(promptFeedback.blockReason)
       : null,
@@ -469,13 +490,16 @@ class GeminiAI {
       "Gemini emoji selection timed out",
       controller
     );
-    const { promptBlockReason, finishBlockReason } =
-      geminiCandidateState(response);
-    const blocked = promptBlockReason || finishBlockReason;
+    const state = geminiCandidateState(response);
+    const blocked = state.promptBlockReason || state.finishBlockReason;
     if (blocked) {
       throw new Error(`Gemini emoji selection blocked (${blocked})`);
     }
-    return extractCandidateText(response);
+    const text = extractCandidateText(response);
+    if (!text && state.finishReason === "MAX_TOKENS") {
+      throw new Error("Gemini emoji selection truncated (MAX_TOKENS)");
+    }
+    return text;
   }
 
 }
@@ -486,6 +510,7 @@ module.exports = {
   extractCandidateText,
   geminiCandidateState,
   logGeminiSkip,
+  summarizeGeminiError,
   resolveImageModel,
   resolveImageTimeoutMs,
   resolveEmojiTimeoutMs,

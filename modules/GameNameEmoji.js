@@ -1,12 +1,12 @@
 const GoogleGemini = require("./GoogleGemini");
 
 const DISCORD_CHANNEL_NAME_MAX = 100;
-const DISCORD_CUSTOM_EMOJI_RE = /<a?:\w+:\d+>/g;
-const SHORTCODE_RE = /:[a-zA-Z0-9_+-]+:/g;
+const DISCORD_CUSTOM_EMOJI_RE = /<a?:\w+:\d+>/;
+const SHORTCODE_RE = /:[a-zA-Z0-9_+-]+:/;
 const KEYCAP_RE = /^[\d#*]\uFE0F?\u20E3$/u;
 const FLAG_RE = /^\p{Regional_Indicator}{2}$/u;
 const DIGIT_VS16_RE = /^[\d#*]\uFE0F$/u;
-const WRAPPER_RE = /^[\s"'`.,;:!?()[\]{}]+$/;
+const WRAPPER_RE = /^[\s"'`*_~|#.,;:!?()[\]{}]+$/;
 
 function graphemes(text) {
   if (typeof text !== "string" || !text) return [];
@@ -50,14 +50,17 @@ function extractUnicodeEmoji(text) {
   if (typeof text !== "string") return null;
   const trimmed = text.trim();
   if (!trimmed) return null;
-  const stripped = trimmed
-    .replace(DISCORD_CUSTOM_EMOJI_RE, " ")
-    .replace(SHORTCODE_RE, " ");
-  for (const segment of graphemes(stripped)) {
-    if (!segment.trim() || WRAPPER_RE.test(segment)) continue;
-    if (isUnicodeEmoji(segment)) return segment;
+  if (DISCORD_CUSTOM_EMOJI_RE.test(trimmed) || SHORTCODE_RE.test(trimmed)) {
+    return null;
   }
-  return null;
+  let found = null;
+  for (const segment of graphemes(trimmed)) {
+    if (!segment.trim() || WRAPPER_RE.test(segment)) continue;
+    if (!isUnicodeEmoji(segment)) return null;
+    if (found) return null;
+    found = segment;
+  }
+  return found;
 }
 
 function startsWithUnicodeEmoji(text) {

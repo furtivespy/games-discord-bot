@@ -46,30 +46,25 @@ describe("GameNameEmoji extraction", () => {
     expect(GameNameEmoji.extractUnicodeEmoji("👨‍👩‍👧‍👦")).toBe("👨‍👩‍👧‍👦");
   });
 
-  test("strips surrounding text and extracts the first emoji", () => {
-    expect(GameNameEmoji.extractUnicodeEmoji("🚂 Brass")).toBe("🚂");
+  test("allows a single emoji wrapped in whitespace, quotes, or markdown", () => {
     expect(GameNameEmoji.extractUnicodeEmoji('"🐦"')).toBe("🐦");
-    expect(GameNameEmoji.extractUnicodeEmoji("Use 🎲 for this game.")).toBe("🎲");
+    expect(GameNameEmoji.extractUnicodeEmoji("`🚂`")).toBe("🚂");
+    expect(GameNameEmoji.extractUnicodeEmoji("**🎲**")).toBe("🎲");
   });
 
-  test("takes the first valid unicode emoji when mixed with a shortcode or custom emoji", () => {
-    expect(GameNameEmoji.extractUnicodeEmoji("🚂 :train:")).toBe("🚂");
-    expect(GameNameEmoji.extractUnicodeEmoji(":smile: 🚂")).toBe("🚂");
-    expect(GameNameEmoji.extractUnicodeEmoji("🚂 <:brass:123456789012345678>")).toBe(
-      "🚂"
-    );
-    expect(
-      GameNameEmoji.extractUnicodeEmoji("<a:spin:123456789012345678> 🐦")
-    ).toBe("🐦");
-  });
-
-  test("rejects text, shortcodes, and Discord custom emojis", () => {
+  test("rejects extra words, several emoji, shortcodes, and Discord custom emojis", () => {
     expect(GameNameEmoji.extractUnicodeEmoji("")).toBeNull();
     expect(GameNameEmoji.extractUnicodeEmoji("train")).toBeNull();
+    expect(GameNameEmoji.extractUnicodeEmoji("🚂 Brass")).toBeNull();
+    expect(GameNameEmoji.extractUnicodeEmoji("Use 🎲 for this game.")).toBeNull();
+    expect(GameNameEmoji.extractUnicodeEmoji("🚂🐦")).toBeNull();
     expect(GameNameEmoji.extractUnicodeEmoji(":train:")).toBeNull();
     expect(GameNameEmoji.extractUnicodeEmoji(":+1:")).toBeNull();
+    expect(GameNameEmoji.extractUnicodeEmoji("🚂 :train:")).toBeNull();
+    expect(GameNameEmoji.extractUnicodeEmoji(":smile: 🚂")).toBeNull();
     expect(GameNameEmoji.extractUnicodeEmoji("<:brass:123456789012345678>")).toBeNull();
     expect(GameNameEmoji.extractUnicodeEmoji("<a:spin:123456789012345678>")).toBeNull();
+    expect(GameNameEmoji.extractUnicodeEmoji("🚂 <:brass:123456789012345678>")).toBeNull();
     expect(GameNameEmoji.extractUnicodeEmoji("use :train: please")).toBeNull();
   });
 
@@ -192,18 +187,13 @@ describe("GameNameEmoji.chooseForGame", () => {
     expect(await GameNameEmoji.chooseForGame(fakeClient(), "Brass")).toBe("🚂");
   });
 
-  test("extracts an emoji from a chatty model reply", async () => {
+  test("falls back when the model returns extra words or several emoji", async () => {
+    const client = fakeClient();
     stubGeminiGenerateContent(async () => ({
       candidates: [{ content: { parts: [{ text: "A train: 🚂" }] } }],
     }));
-    expect(await GameNameEmoji.chooseForGame(fakeClient(), "Brass")).toBe("🚂");
-  });
-
-  test("extracts a unicode emoji from a mixed shortcode reply", async () => {
-    stubGeminiGenerateContent(async () => ({
-      candidates: [{ content: { parts: [{ text: "🚂 :train:" }] } }],
-    }));
-    expect(await GameNameEmoji.chooseForGame(fakeClient(), "Brass")).toBe("🚂");
+    expect(await GameNameEmoji.chooseForGame(client, "Brass")).toBeNull();
+    expect(client.warnings[0]).toBe("Game name emoji skipped: invalid model output");
   });
 
   test("falls back when the model returns text or a custom emoji", async () => {
@@ -213,6 +203,35 @@ describe("GameNameEmoji.chooseForGame", () => {
     }));
     expect(await GameNameEmoji.chooseForGame(client, "Brass")).toBeNull();
     expect(client.warnings[0]).toBe("Game name emoji skipped: invalid model output");
+  });
+
+  test("falls back when Gemini returns MAX_TOKENS with no emoji text", async () => {
+    const client = fakeClient();
+    stubGeminiGenerateContent(async () => ({
+      candidates: [
+        {
+          finishReason: "MAX_TOKENS",
+          content: { parts: [{ thought: true }] },
+        },
+      ],
+    }));
+    expect(await GameNameEmoji.chooseForGame(client, "Brass")).toBeNull();
+    expect(client.warnings[0]).toContain("truncated (MAX_TOKENS)");
+  });
+
+  test("does not log Google error JSON for an invalid API key", async () => {
+    const client = fakeClient();
+    stubGeminiGenerateContent(async () => {
+      throw new Error(
+        '{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT"}}'
+      );
+    });
+    expect(await GameNameEmoji.chooseForGame(client, "Brass")).toBeNull();
+    expect(client.warnings[0]).toBe(
+      "Game name emoji skipped: Gemini request failed (INVALID_ARGUMENT 400)"
+    );
+    expect(client.warnings.join("\n")).not.toContain("API key not valid");
+    expect(client.warnings.join("\n")).not.toContain('"error"');
   });
 
   test("falls back on a blocked SAFETY response without logging raw output", async () => {
