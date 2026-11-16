@@ -13,6 +13,8 @@ const SEARCH_XML = fs.readFileSync(
 );
 const CLOUDFLARE_403_HTML = `<!DOCTYPE html><html><body>Cloudflare</body></html>`;
 const originalFetch = globalThis.fetch;
+const originalSearchTimeoutMs = BoardGameGeek.SEARCH_TIMEOUT_MS;
+const originalAbortTimeout = AbortSignal.timeout;
 
 const GAME_AUTOCOMPLETE_SUBCOMMANDS = [
   "newgame",
@@ -55,8 +57,24 @@ function fakeAutocompleteInteraction(query, { logger } = {}) {
   return { interaction, responded, logs };
 }
 
+function hangUntilAborted(_url, init) {
+  expect(init?.signal).toBeInstanceOf(AbortSignal);
+  return new Promise((_, reject) => {
+    const abort = () => {
+      reject(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
+    };
+    if (init.signal.aborted) {
+      abort();
+      return;
+    }
+    init.signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  BoardGameGeek.SEARCH_TIMEOUT_MS = originalSearchTimeoutMs;
+  AbortSignal.timeout = originalAbortTimeout;
 });
 
 describe("BGG XML autocomplete", () => {
@@ -73,11 +91,40 @@ describe("BGG XML autocomplete", () => {
     );
   });
 
+  test("Search rejects when the abort timeout fires", async () => {
+    BoardGameGeek.SEARCH_TIMEOUT_MS = 25;
+    globalThis.fetch = hangUntilAborted;
+    await expect(BoardGameGeek.Search("catan", "test-token")).rejects.toMatchObject({
+      name: "TimeoutError",
+    });
+  });
+
+  test("Search aborts fetch after SEARCH_TIMEOUT_MS", async () => {
+    const seen = [];
+    AbortSignal.timeout = (ms) => {
+      seen.push(ms);
+      return originalAbortTimeout.call(AbortSignal, ms);
+    };
+    globalThis.fetch = async (url, init) => {
+      expect(String(url)).toContain("api.geekdo.com/xmlapi2/search");
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      expect(init.signal.aborted).toBe(false);
+      return new Response(SEARCH_XML, {
+        status: 200,
+        headers: { "content-type": "text/xml" },
+      });
+    };
+    await BoardGameGeek.Search("catan", "test-bgg-token");
+    expect(seen).toEqual([2500]);
+    expect(BoardGameGeek.SEARCH_TIMEOUT_MS).toBe(2500);
+  });
+
   test("respondAutocomplete returns XML search choices", async () => {
     globalThis.fetch = async (url, init) => {
       expect(String(url)).not.toContain("boardgamegeek.com/search");
       expect(String(url)).toContain("api.geekdo.com/xmlapi2/search");
       expect(init?.headers?.Authorization).toBe("Bearer test-bgg-token");
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
       return new Response(SEARCH_XML, {
         status: 200,
         headers: { "content-type": "text/xml" },
@@ -114,6 +161,17 @@ describe("BGG XML autocomplete", () => {
     const { interaction, responded } = fakeAutocompleteInteraction("catan");
     await BoardGameGeek.respondAutocomplete(interaction, "test-token");
     expect(responded).toEqual([[BoardGameGeek.SEARCH_UNAVAILABLE_CHOICE]]);
+  });
+
+  test("respondAutocomplete returns a user-facing choice when search times out", async () => {
+    BoardGameGeek.SEARCH_TIMEOUT_MS = 25;
+    globalThis.fetch = hangUntilAborted;
+    const { interaction, responded, logs } = fakeAutocompleteInteraction("catan");
+    await BoardGameGeek.respondAutocomplete(interaction, "test-token");
+    expect(responded).toEqual([[BoardGameGeek.SEARCH_UNAVAILABLE_CHOICE]]);
+    expect(responded[0][0].name).toContain("unavailable");
+    expect(logs[0][1]).toBe("error");
+    expect(logs[0][0].name).toBe("TimeoutError");
   });
 
   test("respondAutocomplete returns no choices for an empty query", async () => {
