@@ -22,6 +22,7 @@ const {
   snapshotGameForUser,
   snapshotVersion,
   formatEtag,
+  etagMatches,
   userIsPlayer,
   versionGameForUser,
 } = require("../modules/embeddedGames");
@@ -661,7 +662,13 @@ describe("versionGameForUser", () => {
       userId: "will",
     });
     expect(first.status).toBe(200);
-    expect(first.body).toEqual({ version: snapshotVersion(game) });
+    expect(first.body).toEqual({
+      version: snapshotVersion(game, {
+        channelId: "thread-game",
+        guildId: "guild-a",
+        userId: "will",
+      }),
+    });
     expect(memberFetches).toBe(0);
 
     const cached = await versionGameForUser({
@@ -684,6 +691,41 @@ describe("versionGameForUser", () => {
     });
     expect(changed.status).toBe(200);
     expect(changed.body.version).not.toBe(first.body.version);
+
+    const star = await versionGameForUser({
+      discordClient,
+      guildId: "guild-a",
+      channelId: "thread-game",
+      userId: "will",
+      ifNoneMatch: "*",
+    });
+    expect(star).toEqual({ status: 304, version: changed.body.version });
+  });
+
+  test("fingerprint ignores another player's hidden cards", () => {
+    const game = snapshotSeed();
+    const ids = {
+      channelId: "thread-game",
+      guildId: "guild-a",
+      userId: "will",
+    };
+    const first = snapshotVersion(game, ids);
+    game.players[1].hands.main[0].name = "King";
+    game.players[1].hands.main[0].id = "other-secret-swapped";
+    expect(snapshotVersion(game, ids)).toBe(first);
+    game.gameBoard.push({ id: "board-2", name: "Duchy" });
+    expect(snapshotVersion(game, ids)).not.toBe(first);
+  });
+});
+
+describe("etagMatches", () => {
+  test("matches the formatted tag, weak tags, and *", () => {
+    const version = "abc|1";
+    expect(etagMatches(formatEtag(version), version)).toBe(true);
+    expect(etagMatches(`W/${formatEtag(version)}`, version)).toBe(true);
+    expect(etagMatches("*", version)).toBe(true);
+    expect(etagMatches('"other"', version)).toBe(false);
+    expect(etagMatches("*", "")).toBe(false);
   });
 });
 
@@ -872,6 +914,12 @@ describe("snapshotFromGameData", () => {
             summary: "Will dealt 1 cards from Main",
             action: { category: "card" },
           },
+          {
+            id: 7,
+            timestamp: "2026-11-16T21:01:00.000Z",
+            summary: "Riley played Village",
+            action: { category: "card" },
+          },
         ],
       },
       { channelId: "ch", guildId: "g", userId: "will" }
@@ -881,6 +929,12 @@ describe("snapshotFromGameData", () => {
         id: "hist-1",
         timestamp: "2026-11-16T21:00:00.000Z",
         summary: "Will dealt 1 cards from Main",
+        category: "card",
+      },
+      {
+        id: "7",
+        timestamp: "2026-11-16T21:01:00.000Z",
+        summary: "Riley played Village",
         category: "card",
       },
     ]);

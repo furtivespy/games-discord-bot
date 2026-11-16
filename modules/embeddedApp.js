@@ -313,6 +313,16 @@ function createEmbeddedApp({
   const actionIdempotency = createActionIdempotencyCache();
   const discordLookupCache = createDiscordLookupCache();
 
+  async function fetchViewerUser(accessToken) {
+    const token = String(accessToken || "");
+    const cacheKey = `discord-me:${token}`;
+    const cached = discordLookupCache.get(cacheKey);
+    if (cached) return cached;
+    const user = await fetchDiscordUser(token, fetchImpl);
+    if (user?.id) discordLookupCache.set(cacheKey, user);
+    return user;
+  }
+
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "8kb" }));
@@ -455,7 +465,7 @@ function createEmbeddedApp({
     }
     let user = null;
     try {
-      user = await fetchDiscordUser(accessToken, fetchImpl);
+      user = await fetchViewerUser(accessToken);
     } catch (err) {
       logger?.log?.(
         `Discord users/@me lookup failed: ${err.message || err}`,
@@ -528,7 +538,7 @@ function createEmbeddedApp({
     }
     let user = null;
     try {
-      user = await fetchDiscordUser(accessToken, fetchImpl);
+      user = await fetchViewerUser(accessToken);
     } catch (err) {
       logger?.log?.(
         `Discord users/@me lookup failed: ${err.message || err}`,
@@ -545,6 +555,18 @@ function createEmbeddedApp({
     }
     if (!requestedChannelId) {
       res.status(400).json({ error: "missing_channel" });
+      return;
+    }
+    const guard = await optionalDiscordAccessGuard({
+      fetchImpl,
+      botToken,
+      discordClient,
+      guildId: requestedGuildId,
+      channelId: requestedChannelId,
+      userId: user.id,
+    });
+    if (!guard.ok) {
+      res.status(guard.status).json(guard.body);
       return;
     }
     const result = await versionGameForUser({

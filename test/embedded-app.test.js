@@ -19,7 +19,7 @@ const {
 const VisualLaunch = require("../modules/visualLaunch");
 const GameStore = require("../db/gameStore");
 const GameDB = require("../db/anygame");
-const { GAME_COLLECTION } = require("../modules/embeddedGames");
+const { DISCORD_API_BASE, GAME_COLLECTION } = require("../modules/embeddedGames");
 const {
   cardImagePath,
   deriveImageProxyKey,
@@ -932,12 +932,14 @@ describe("GET /api/game/version", () => {
         path.join(staticDir, "index.html"),
         `<!doctype html><html><head></head><body></body></html>`
       );
+      const fetchCalls = [];
       const app = createEmbeddedApp({
         clientId: "client-123",
         clientSecret: "server-secret",
         staticDir,
         gameStore: store,
         fetchImpl: mockDiscordFetch({
+          calls: fetchCalls,
           meBody: {
             id: "snowflake-user",
             username: "willsullivan",
@@ -969,6 +971,15 @@ describe("GET /api/game/version", () => {
         );
         expect(cached.status).toBe(304);
 
+        const again = await fetch(
+          `${url}/api/game/version?guildId=guild-1&channelId=thread-game`,
+          { headers: auth }
+        );
+        expect(again.status).toBe(200);
+        expect(
+          fetchCalls.filter((call) => call.url === DISCORD_ME_URL)
+        ).toHaveLength(1);
+
         game.gameBoard.push({ id: "board-2", name: "Duchy" });
         store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", game);
 
@@ -979,6 +990,57 @@ describe("GET /api/game/version", () => {
         expect(changed.status).toBe(200);
         const changedBody = await changed.json();
         expect(changedBody.version).not.toBe(firstBody.version);
+      } finally {
+        server.close();
+        fs.rmSync(staticDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  test("guild non-member gets 403 without revealing whether a game exists", async () => {
+    await withStore(async (store) => {
+      store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", {
+        isdeleted: false,
+        name: "Friday Inis",
+        players: [{ userId: "someone-else", hands: { main: [] } }],
+        gameBoard: [{ id: "board-1", name: "Province" }],
+      });
+      const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-ver-403-"));
+      fs.writeFileSync(
+        path.join(staticDir, "index.html"),
+        `<!doctype html><html><head></head><body></body></html>`
+      );
+      const app = createEmbeddedApp({
+        clientId: "client-123",
+        clientSecret: "server-secret",
+        staticDir,
+        gameStore: store,
+        botToken: "bot-token",
+        fetchImpl: async (url) => {
+          if (String(url) === DISCORD_ME_URL) {
+            return jsonResponse(200, {
+              id: "snowflake-user",
+              username: "willsullivan",
+              global_name: "Will",
+            });
+          }
+          if (
+            String(url) ===
+            `${DISCORD_API_BASE}/guilds/guild-1/members/snowflake-user`
+          ) {
+            return jsonResponse(404, { message: "Unknown Member" });
+          }
+          throw new Error(`unexpected fetch ${url}`);
+        },
+      });
+      const { server, url } = await listen(app);
+      try {
+        const response = await fetch(
+          `${url}/api/game/version?guildId=guild-1&channelId=missing-thread`,
+          { headers: { Authorization: `Bearer ${SECRET_TOKEN}` } }
+        );
+        expect(response.status).toBe(403);
+        expect(await response.json()).toEqual({ error: "not_a_player" });
       } finally {
         server.close();
         fs.rmSync(staticDir, { recursive: true, force: true });

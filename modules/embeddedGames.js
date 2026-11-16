@@ -431,8 +431,8 @@ function historySummaries(data) {
         category:
           typeof entry.action?.category === "string" ? entry.action.category : "",
       };
-      if (typeof entry.id === "string" && entry.id.trim()) {
-        row.id = entry.id.trim();
+      if (entry.id != null && String(entry.id).trim()) {
+        row.id = String(entry.id).trim();
       }
       if (typeof entry.timestamp === "string" && entry.timestamp.trim()) {
         row.timestamp = entry.timestamp.trim();
@@ -450,13 +450,24 @@ function djb2Hex(text) {
   return (hash >>> 0).toString(16);
 }
 
-/** Opaque cheap fingerprint of game JSON. Poll this before a full snapshot. */
-function snapshotVersion(data) {
-  const raw = JSON.stringify(data ?? null);
+/** Opaque cheap fingerprint of the viewer snapshot, not hidden other-hands. */
+function snapshotVersion(data, ids = {}) {
+  let raw = "";
+  try {
+    raw = JSON.stringify(
+      snapshotFromGameData(data, {
+        channelId: ids.channelId,
+        guildId: ids.guildId,
+        userId: ids.userId,
+      })
+    );
+  } catch {
+    raw = "";
+  }
   const history = Array.isArray(data?.history) ? data.history : [];
   const last = history.length ? history[history.length - 1] : null;
   const lastId =
-    last && typeof last.id === "string" && last.id.trim() ? last.id.trim() : "";
+    last && last.id != null && String(last.id).trim() ? String(last.id).trim() : "";
   return `${raw.length}|${history.length}|${lastId}|${djb2Hex(raw)}`;
 }
 
@@ -472,6 +483,7 @@ function etagMatches(header, version) {
     .split(",")
     .map((part) => part.trim())
     .filter(Boolean);
+  if (tags.includes("*")) return true;
   return tags.includes(expected) || tags.includes(`W/${expected}`);
 }
 
@@ -1029,7 +1041,11 @@ async function loadViewerGame({
   return {
     status: 200,
     data,
-    version: snapshotVersion(data),
+    version: snapshotVersion(data, {
+      channelId: cid,
+      guildId: gid,
+      userId: uid,
+    }),
     guildId: gid,
     channelId: cid,
     userId: uid,

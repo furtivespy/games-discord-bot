@@ -403,7 +403,11 @@ function createMockGameSession() {
     const cid = channelId || DEFAULT_MOCK_CHANNEL_ID;
     const gid = guildId || DEFAULT_MOCK_GUILD_ID;
     const seed = getGame(name, cid, gid);
-    const version = snapshotVersion(seed);
+    const version = snapshotVersion(seed, {
+      channelId: cid,
+      guildId: gid,
+      userId: MOCK_USER.id,
+    });
     return {
       status: 200,
       version,
@@ -475,7 +479,11 @@ function createMockGameSession() {
           },
         };
       }
-      const version = snapshotVersion(gameData);
+      const version = snapshotVersion(gameData, {
+        channelId: cid,
+        guildId: gid,
+        userId: MOCK_USER.id,
+      });
       return {
         status: 200,
         version,

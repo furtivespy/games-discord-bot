@@ -25,14 +25,17 @@ export function tokenRequestUrl(apiHost: string, protocol: string): string {
   return apiUrl(apiHost, protocol, "/api/token");
 }
 
-export function snapshotRequestUrl(
+type GameQuery = {
+  fixture?: string | null;
+  channelId?: string | null;
+  guildId?: string | null;
+};
+
+function gameRequestUrl(
   apiHost: string,
   protocol: string,
-  query: {
-    fixture?: string | null;
-    channelId?: string | null;
-    guildId?: string | null;
-  } = {}
+  path: string,
+  query: GameQuery = {}
 ): string {
   const params = new URLSearchParams();
   const fixture = String(query.fixture || "").trim();
@@ -42,35 +45,23 @@ export function snapshotRequestUrl(
   if (channelId) params.set("channelId", channelId);
   if (guildId) params.set("guildId", guildId);
   const qs = params.toString();
-  return apiUrl(
-    apiHost,
-    protocol,
-    `/api/game/snapshot${qs ? `?${qs}` : ""}`
-  );
+  return apiUrl(apiHost, protocol, `${path}${qs ? `?${qs}` : ""}`);
+}
+
+export function snapshotRequestUrl(
+  apiHost: string,
+  protocol: string,
+  query: GameQuery = {}
+): string {
+  return gameRequestUrl(apiHost, protocol, "/api/game/snapshot", query);
 }
 
 export function versionRequestUrl(
   apiHost: string,
   protocol: string,
-  query: {
-    fixture?: string | null;
-    channelId?: string | null;
-    guildId?: string | null;
-  } = {}
+  query: GameQuery = {}
 ): string {
-  const params = new URLSearchParams();
-  const fixture = String(query.fixture || "").trim();
-  const channelId = String(query.channelId || "").trim();
-  const guildId = String(query.guildId || "").trim();
-  if (fixture) params.set("fixture", fixture);
-  if (channelId) params.set("channelId", channelId);
-  if (guildId) params.set("guildId", guildId);
-  const qs = params.toString();
-  return apiUrl(
-    apiHost,
-    protocol,
-    `/api/game/version${qs ? `?${qs}` : ""}`
-  );
+  return gameRequestUrl(apiHost, protocol, "/api/game/version", query);
 }
 
 export const CARD_IMAGE_PATH = "/api/card-image";

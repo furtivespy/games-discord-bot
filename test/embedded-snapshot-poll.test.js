@@ -23,6 +23,7 @@ function fakeDoc(hits) {
 describe("history change keys", () => {
   test("prefers stable ids over summary text", () => {
     expect(historyEntryKey({ id: "abc", summary: "Drew 1" })).toBe("id:abc");
+    expect(historyEntryKey({ id: 42, summary: "Drew 1" })).toBe("id:42");
     expect(
       historyEntryKey({ timestamp: "2026-11-16T21:00:00.000Z", summary: "Drew 1" })
     ).toBe("row:2026-11-16T21:00:00.000Z|Drew 1");
@@ -49,7 +50,6 @@ describe("isSnapshotPollBlocked", () => {
       isSnapshotPollBlocked(fakeDoc([".card-tile.dragging, .card-tile.snapping"]))
     ).toBe(true);
     expect(isSnapshotPollBlocked(fakeDoc(["dialog[open]"]))).toBe(true);
-    expect(isSnapshotPollBlocked(fakeDoc(["[data-zoom-modal]"]))).toBe(true);
   });
 });
 
@@ -144,6 +144,31 @@ describe("createSnapshotPoller", () => {
     expect(SNAPSHOT_POLL_INTERVAL_MS).toBe(2500);
     expect(etagFromVersion("a|b")).toBe('"a|b"');
   });
+
+  test("keeps the known version until a refresh succeeds", async () => {
+    let refreshOk = false;
+    const refreshes = [];
+    const poller = createSnapshotPoller({
+      fetchVersion: async () => "v2",
+      refresh: async () => {
+        refreshes.push("go");
+        return refreshOk;
+      },
+      isHidden: () => false,
+      isBlocked: () => false,
+      ...idleTimers(),
+    });
+    poller.start("v1");
+    await poller.pollNow();
+    expect(refreshes).toEqual(["go"]);
+    expect(poller.peekVersion()).toBe("v1");
+
+    refreshOk = true;
+    await poller.pollNow();
+    expect(refreshes).toEqual(["go", "go"]);
+    expect(poller.peekVersion()).toBe("v2");
+    poller.stop();
+  });
 });
 
 describe("snapshot loader in-flight flag", () => {
@@ -175,6 +200,10 @@ describe("history flash CSS", () => {
     );
     expect(css).toContain(".status-history li.is-changed");
     expect(css).toContain("history-changed-flash");
-    expect(css).toContain("prefers-reduced-motion");
+    const reduced = css.match(
+      /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.status-history li\.is-changed \{([^}]+)\}/
+    );
+    expect(reduced?.[1]).toContain("animation: none");
+    expect(reduced?.[1]).not.toContain("background-color");
   });
 });

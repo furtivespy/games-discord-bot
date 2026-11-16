@@ -312,17 +312,25 @@ async function fetchSnapshotVersion(): Promise<string | null> {
   return version || null;
 }
 
-async function refreshSnapshotFromPoll(): Promise<void> {
+async function refreshSnapshotFromPoll(): Promise<boolean> {
   const session = activeSession;
-  if (!session) return;
+  if (!session) return false;
   const channelId = liveSelectedChannelId(session.config.channelId);
-  if (!channelId) return;
-  await loadSnapshot(
+  if (!channelId) return false;
+  return loadSnapshot(
     session.config,
     session.accessToken,
     { channelId, guildId: session.guildId || session.config.guildId },
     { silent: true }
   );
+}
+
+function pollSnapshotWhenUnblocked() {
+  if (typeof window === "undefined") return;
+  window.setTimeout(() => {
+    if (snapshotPollHidden() || snapshotPollBlocked()) return;
+    void snapshotPoller?.pollNow();
+  }, 0);
 }
 
 function bindSnapshotPoller() {
@@ -338,6 +346,8 @@ function bindSnapshotPoller() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") void snapshotPoller?.pollNow();
   });
+  document.addEventListener("pointerup", pollSnapshotWhenUnblocked);
+  document.addEventListener("pointercancel", pollSnapshotWhenUnblocked);
 }
 
 function startSnapshotPolling(version?: string) {
@@ -526,6 +536,7 @@ function bindActionDialog() {
     setActionDialogError(null);
     const { confirm } = actionDialogElements();
     if (confirm && !actionInFlight) confirm.disabled = false;
+    pollSnapshotWhenUnblocked();
   });
   els.form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1027,7 +1038,7 @@ async function loadSnapshot(
   accessToken: string,
   ids: { channelId: string; guildId: string },
   options: { silent?: boolean } = {}
-) {
+): Promise<boolean> {
   const silent = Boolean(options.silent);
   const outcome = await snapshotLoader.load(
     ids.channelId,
@@ -1073,7 +1084,7 @@ async function loadSnapshot(
     outcome.status === "stale" ||
     outcome.status === "cleared"
   ) {
-    return;
+    return false;
   }
 
   if (outcome.status === "failed") {
@@ -1081,34 +1092,38 @@ async function loadSnapshot(
       setTableVisible(false);
       setSnapshotStatus(snapshotErrorMessage(undefined, 0));
     }
-    return;
+    return false;
   }
 
   if (outcome.result.status === 304) {
-    return;
+    return true;
   }
 
   const payload = outcome.result.payload as GameSnapshot;
   if (liveSelectedChannelId(ids.channelId) !== ids.channelId) {
-    return;
+    return false;
   }
   if (
     typeof payload.channelId === "string" &&
     payload.channelId.trim() &&
     payload.channelId !== ids.channelId
   ) {
-    return;
+    return false;
   }
 
   if (outcome.status === "error") {
-    if (!silent) {
+    const gone =
+      outcome.result.status === 404 || outcome.result.status === 403;
+    if (!silent || gone) {
       setTableVisible(false);
       setSnapshotStatus(snapshotErrorMessage(payload.error, outcome.result.status));
+      stopSnapshotPolling();
     }
-    return;
+    return false;
   }
 
   applySnapshot(config, payload);
+  return true;
 }
 
 function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot) {

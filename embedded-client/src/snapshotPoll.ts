@@ -2,7 +2,7 @@ export const SNAPSHOT_POLL_INTERVAL_MS = 2500;
 export const HISTORY_CHANGED_CLASS = "is-changed";
 
 export type HistoryEntryLike = {
-  id?: string;
+  id?: string | number;
   timestamp?: string;
   summary?: string;
 };
@@ -14,7 +14,7 @@ export function etagFromVersion(version: string): string {
 
 export function historyEntryKey(entry: HistoryEntryLike | null | undefined): string {
   if (!entry || typeof entry !== "object") return "";
-  const id = typeof entry.id === "string" ? entry.id.trim() : "";
+  const id = entry.id == null ? "" : String(entry.id).trim();
   if (id) return `id:${id}`;
   const ts = typeof entry.timestamp === "string" ? entry.timestamp.trim() : "";
   const summary = typeof entry.summary === "string" ? entry.summary.trim() : "";
@@ -38,24 +38,19 @@ export function newHistoryKeys(
   return fresh;
 }
 
-/**
- * Skip applying a polled snapshot while the user is mid-gesture.
- * Deal/Draw uses <dialog>; a later card-zoom modal should too (or data-zoom-modal).
- */
+/** Skip applying a polled snapshot while the user is mid-gesture or in a dialog. */
 export function isSnapshotPollBlocked(doc: Document | null | undefined): boolean {
   if (!doc?.querySelector) return false;
   if (doc.querySelector(".card-tile.dragging, .card-tile.snapping")) return true;
   if (doc.querySelector("dialog[open]")) return true;
-  if (doc.querySelector("[data-zoom-modal]")) return true;
-  const zoom = doc.querySelector(".card-zoom-modal");
-  if (zoom && !(zoom as HTMLElement).hidden) return true;
   return false;
 }
 
 export type SnapshotPollerOptions = {
   intervalMs?: number;
   fetchVersion: () => Promise<string | null>;
-  refresh: () => Promise<void>;
+  /** Return false when the table was not updated so the next tick retries. */
+  refresh: () => Promise<boolean | void>;
   isHidden: () => boolean;
   isBlocked: () => boolean;
   setTimeoutFn?: (fn: () => void, ms: number) => unknown;
@@ -88,13 +83,13 @@ export function createSnapshotPoller(opts: SnapshotPollerOptions) {
       if (stopped || gen !== generation) return;
       if (!version || version === knownVersion) return;
       if (opts.isHidden() || opts.isBlocked()) return;
-      await opts.refresh();
+      const applied = await opts.refresh();
       if (stopped || gen !== generation) return;
-      knownVersion = version;
+      if (applied !== false) knownVersion = version;
     } catch {
       // Keep the last painted table; the next tick retries.
     } finally {
-      inFlight = false;
+      if (gen === generation) inFlight = false;
     }
   }
 
@@ -112,12 +107,12 @@ export function createSnapshotPoller(opts: SnapshotPollerOptions) {
       if (!stopped) return;
       stopped = false;
       generation += 1;
+      inFlight = false;
       arm();
     },
     stop() {
       stopped = true;
       generation += 1;
-      inFlight = false;
       clearTimer();
     },
     setVersion(version: string) {
