@@ -143,29 +143,18 @@ describe("mock snapshot fixtures", () => {
       isYou: true,
       teamName: "🦀🦀",
     });
-    expect(result.body.otherPlayers.map((player) => [player.name, player.teamName])).toEqual([
-      ["Riley", "🦀🦀"],
-      ["Sam", "🦀🦀"],
-      ["Alex", "💪🐟"],
-      ["Jordan", "💪🐟"],
-      ["Casey", "💪🐟"],
+    expect(result.body.otherPlayers.map((player) => [player.name, player.teamId, player.teamName])).toEqual([
+      ["Riley", "team-crab", "🦀🦀"],
+      ["Sam", "team-crab", "🦀🦀"],
+      ["Alex", "team-fish", "💪🐟"],
+      ["Jordan", "team-fish", "💪🐟"],
+      ["Casey", "team-fish", "💪🐟"],
     ]);
     expect(JSON.stringify(result.body)).not.toContain("Alex Secret");
     expect(JSON.stringify(result.body)).not.toContain("Jordan Secret");
     expect(teamGameSeed().players).toHaveLength(6);
   });
 
-  test("several-games can load the team table by channel id", () => {
-    const result = getMockSnapshot({
-      fixture: "several-games",
-      channelId: TEAM_GAME_CHANNEL_ID,
-      guildId: "mock-guild",
-    });
-    expect(result.status).toBe(200);
-    expect(result.body.channelId).toBe(TEAM_GAME_CHANNEL_ID);
-    expect(result.body.gameName).toBe(TEAM_GAME_CHANNEL_NAME);
-    expect(result.body.status.teams).toHaveLength(2);
-  });
 
   test("never includes another player's hand, draft, or simultaneous cards", () => {
     const seed = populatedSeed();
@@ -238,7 +227,6 @@ describe("mock game list fixtures", () => {
       "Friday Inis",
       "Thursday Root",
       "Monday Poker",
-      TEAM_GAME_CHANNEL_NAME,
     ]);
     expect(several.body.games[0]).toEqual(SEVERAL_GAMES_FIXTURE[0]);
     expect(JSON.stringify(several.body)).not.toMatch(/hand|playArea|gameBoard|isdeleted/);
@@ -344,7 +332,7 @@ describe("mock embedded HTTP", () => {
       });
       expect(several.status).toBe(200);
       expect((await several.json()).games.map((game) => game.channelName)).toEqual(
-        ["Friday Inis", "Thursday Root", "Monday Poker", TEAM_GAME_CHANNEL_NAME]
+        ["Friday Inis", "Thursday Root", "Monday Poker"]
       );
 
       const teamList = await fetch(`${url}/api/games?fixture=team-game`, {
@@ -374,7 +362,7 @@ describe("mock embedded HTTP", () => {
       });
       expect(omitted.status).toBe(200);
       expect((await omitted.json()).games.map((game) => game.channelName)).toEqual(
-        ["Friday Inis", "Thursday Root", "Monday Poker", TEAM_GAME_CHANNEL_NAME]
+        ["Friday Inis", "Thursday Root", "Monday Poker"]
       );
 
       const noGame = await fetch(`${url}/api/games?fixture=no-game`, {

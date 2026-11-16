@@ -246,9 +246,9 @@ describe("visual table layout helpers", () => {
 
   test("groups board players by roster team and keeps a flat row without teams", () => {
     const players = [
-      { name: "Riley", teamName: "🦀🦀" },
-      { name: "Alex", teamName: "💪🐟" },
-      { name: "Sam", teamName: "🦀🦀" },
+      { name: "Riley", teamId: "crab", teamName: "🦀🦀" },
+      { name: "Alex", teamId: "fish", teamName: "💪🐟" },
+      { name: "Sam", teamId: "crab", teamName: "🦀🦀" },
       { name: "Solo", teamName: "" },
     ];
     expect(groupPlayersByTeam(players, [])).toEqual([
@@ -275,6 +275,39 @@ describe("visual table layout helpers", () => {
         []
       )
     ).toBeNull();
+    expect(groupPlayersByTeam([{ name: "Riley" }, { name: "Alex" }], [{}])).toBeNull();
+    expect(
+      groupPlayersByTeam(
+        [{ name: "Riley" }, { name: "Alex" }],
+        [{ id: "empty", name: "🦀🦀" }]
+      )
+    ).toBeNull();
+    const twins = [
+      { name: "A", teamId: "1", teamName: "Red" },
+      { name: "B", teamId: "2", teamName: "Red" },
+    ];
+    expect(
+      groupPlayersByTeam(twins, [
+        { id: "1", name: "Red" },
+        { id: "2", name: "Red" },
+      ])
+    ).toEqual([
+      { label: "Red", unassigned: false, color: null, players: [twins[0]] },
+      { label: "Red", unassigned: false, color: null, players: [twins[1]] },
+    ]);
+    expect(
+      groupPlayersByTeam(
+        [{ name: "Riley", teamId: 7, teamName: "🦀🦀" }],
+        [{ id: "7", name: "🦀🦀" }]
+      )
+    ).toEqual([
+      {
+        label: "🦀🦀",
+        unassigned: false,
+        color: null,
+        players: [{ name: "Riley", teamId: 7, teamName: "🦀🦀" }],
+      },
+    ]);
   });
 });
 

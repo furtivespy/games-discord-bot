@@ -15,6 +15,7 @@ export type OtherPlayer = {
   name?: string;
   handCount?: number | string;
   avatarUrl?: string | null;
+  teamId?: string;
   teamName?: string;
 };
 
@@ -151,6 +152,16 @@ function trimmedTeamName(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function teamIdOf(value: unknown): string {
+  if (value == null) return "";
+  const id = String(value).trim();
+  return id;
+}
+
+function playerHasTeam(player: OtherPlayer): boolean {
+  return Boolean(teamIdOf(player.teamId) || trimmedTeamName(player.teamName));
+}
+
 export function groupPlayersByTeam(
   players: OtherPlayer[] | null | undefined,
   teams?: StatusTeam[] | null
@@ -159,15 +170,15 @@ export function groupPlayersByTeam(
   if (!list.length) return null;
   const roster = asRecordList<StatusTeam>(teams)
     .map((team) => ({
+      id: teamIdOf(team.id),
       name: trimmedTeamName(team.name),
       color:
         typeof team.color === "string" && team.color.trim()
           ? team.color.trim()
           : null,
     }))
-    .filter((team) => team.name);
-  const hasNamedPlayer = list.some((player) => trimmedTeamName(player.teamName));
-  if (!roster.length && !hasNamedPlayer) return null;
+    .filter((team) => team.id || team.name);
+  if (!list.some(playerHasTeam)) return null;
 
   const remaining = [...list];
   const takeMatching = (predicate: (player: OtherPlayer) => boolean) => {
@@ -183,38 +194,46 @@ export function groupPlayersByTeam(
 
   const groups: PlayerTeamGroup[] = [];
   for (const team of roster) {
-    const members = takeMatching(
-      (player) => trimmedTeamName(player.teamName) === team.name
-    );
+    const members = takeMatching((player) => {
+      const id = teamIdOf(player.teamId);
+      if (team.id && id) return id === team.id;
+      if (!team.id && team.name) {
+        return !id && trimmedTeamName(player.teamName) === team.name;
+      }
+      return false;
+    });
     if (!members.length) continue;
     groups.push({
-      label: team.name,
+      label: team.name || "Team",
       unassigned: false,
       color: team.color,
       players: members,
     });
   }
 
-  const extras = new Map<string, OtherPlayer[]>();
+  const extras = new Map<string, PlayerTeamGroup>();
   const unassigned: OtherPlayer[] = [];
   for (const player of remaining) {
+    const id = teamIdOf(player.teamId);
     const name = trimmedTeamName(player.teamName);
-    if (!name) {
+    if (!id && !name) {
       unassigned.push(player);
       continue;
     }
-    const bucket = extras.get(name) || [];
-    bucket.push(player);
-    extras.set(name, bucket);
-  }
-  for (const [label, members] of extras) {
-    groups.push({
-      label,
+    const key = id ? `id:${id}` : `name:${name}`;
+    const existing = extras.get(key);
+    if (existing) {
+      existing.players.push(player);
+      continue;
+    }
+    extras.set(key, {
+      label: name || "Team",
       unassigned: false,
       color: null,
-      players: members,
+      players: [player],
     });
   }
+  groups.push(...extras.values());
   if (unassigned.length) {
     groups.push({
       label: UNASSIGNED_TEAM_LABEL,

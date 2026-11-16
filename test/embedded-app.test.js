@@ -793,6 +793,7 @@ describe("GET /api/game/snapshot", () => {
               name: "other-player",
               handCount: 1,
               avatarUrl: null,
+              teamId: "",
               teamName: "",
             },
           ],

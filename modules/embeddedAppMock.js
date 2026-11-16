@@ -49,10 +49,6 @@ const SEVERAL_GAMES_FIXTURE = Object.freeze([
     channelId: "oldest-channel",
     channelName: "Monday Poker",
   }),
-  Object.freeze({
-    channelId: TEAM_GAME_CHANNEL_ID,
-    channelName: TEAM_GAME_CHANNEL_NAME,
-  }),
 ]);
 
 const ONE_GAME_FIXTURE = Object.freeze([
@@ -323,10 +319,6 @@ function sanitizeFixtureName(value) {
   return null;
 }
 
-function isTeamGameChannel(channelId) {
-  return String(channelId || "").trim() === TEAM_GAME_CHANNEL_ID;
-}
-
 function sanitizeGamesFixtureName(value) {
   const name = String(value || "").trim().toLowerCase();
   if (!name) return "several-games";
@@ -371,10 +363,7 @@ function getMockSnapshot({ fixture, channelId, guildId } = {}) {
   if (name === "not-a-player") {
     return { status: 403, body: { error: "not_a_player" } };
   }
-  const seed =
-    name === "team-game" || isTeamGameChannel(channelId)
-      ? teamGameSeed()
-      : populatedSeed();
+  const seed = name === "team-game" ? teamGameSeed() : populatedSeed();
   return {
     status: 200,
     body: snapshotFromSeed(seed, {

@@ -410,6 +410,7 @@ describe("snapshotGameForUser", () => {
             name: "other-player",
             handCount: 1,
             avatarUrl: null,
+            teamId: "",
             teamName: "",
           },
         ],
@@ -639,6 +640,7 @@ describe("snapshotFromGameData", () => {
         name: "Riley",
         handCount: 1,
         avatarUrl: null,
+        teamId: "",
         teamName: "",
       },
     ]);
@@ -716,6 +718,7 @@ describe("snapshotFromGameData", () => {
       name: "RileyOnServer",
       handCount: 1,
       avatarUrl: "https://cdn.discordapp.com/avatars/riley/a.png",
+      teamId: "",
       teamName: "",
     });
   });
@@ -747,11 +750,30 @@ describe("snapshotFromGameData", () => {
       ["Alex", "💪🐟"],
       ["Solo", ""],
     ]);
-    expect(snapshot.otherPlayers.map((row) => [row.name, row.teamName])).toEqual([
-      ["Riley", "🦀🦀"],
-      ["Alex", "💪🐟"],
-      ["Solo", ""],
+    expect(snapshot.otherPlayers.map((row) => [row.name, row.teamId, row.teamName])).toEqual([
+      ["Riley", "crab", "🦀🦀"],
+      ["Alex", "fish", "💪🐟"],
+      ["Solo", "", ""],
     ]);
+  });
+
+  test("matches player teamId to roster id after stringifying", () => {
+    const snapshot = snapshotFromGameData(
+      {
+        name: "Ids",
+        teams: [{ id: "7", name: "🦀🦀" }],
+        players: [
+          { userId: "will", name: "Will", teamId: 7, hands: { main: [] } },
+          { userId: "riley", name: "Riley", teamId: 7, hands: { main: [{}] } },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(snapshot.otherPlayers[0]).toMatchObject({
+      name: "Riley",
+      teamId: "7",
+      teamName: "🦀🦀",
+    });
   });
 });
 

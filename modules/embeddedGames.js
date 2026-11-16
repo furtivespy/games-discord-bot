@@ -226,13 +226,23 @@ function displayForPlayer(player, displays) {
 }
 
 function teamForPlayer(data, player) {
-  if (!Array.isArray(data?.teams) || !player?.teamId) return null;
-  return data.teams.find((row) => row && row.id === player.teamId) || null;
+  if (!Array.isArray(data?.teams) || player?.teamId == null || player.teamId === "") {
+    return null;
+  }
+  const id = String(player.teamId);
+  return data.teams.find((row) => row && String(row.id) === id) || null;
 }
 
 function teamNameForPlayer(data, player) {
   const team = teamForPlayer(data, player);
   return team && typeof team.name === "string" ? team.name : "";
+}
+
+function teamIdForPlayer(data, player) {
+  const team = teamForPlayer(data, player);
+  if (team?.id != null && String(team.id)) return String(team.id);
+  if (player?.teamId == null || player.teamId === "") return "";
+  return String(player.teamId);
 }
 
 function teamRoster(data) {
@@ -261,6 +271,7 @@ function otherPlayersSummary(data, userId, displays) {
         name,
         handCount: publicHandCount(data, player),
         avatarUrl,
+        teamId: teamIdForPlayer(data, player),
         teamName: teamNameForPlayer(data, player),
       };
     });
