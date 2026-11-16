@@ -369,6 +369,8 @@ function createThreadEnv({
   failGameSave = false,
   failThreadCreate = false,
   failThreadCreateTimes = 0,
+  failThreadCreateError = "Invalid Form Body",
+  failThreadCreateCode = null,
   failCreatePostTimes = 0,
   failGatherSaves = 0,
   parentType = ChannelType.GuildText,
@@ -429,7 +431,9 @@ function createThreadEnv({
         created.push(opts);
         if (threadCreateFailuresLeft > 0) {
           threadCreateFailuresLeft--;
-          throw new Error("Invalid Form Body");
+          const error = new Error(failThreadCreateError);
+          if (failThreadCreateCode != null) error.code = failThreadCreateCode;
+          throw error;
         }
         if (opts?.name) thread.name = opts.name;
         return thread;
@@ -1415,6 +1419,53 @@ describe("GatherStartGame start flow", () => {
         String(r.content || "").includes("couldn't create a thread")
       )
     ).toBe(true);
+  });
+
+  test("does not retry thread create on a permissions error", async () => {
+    const env = createThreadEnv({
+      gather,
+      failThreadCreateTimes: 1,
+      failThreadCreateError: "Missing Permissions",
+      failThreadCreateCode: 50013,
+    });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+    await runStart(interaction, env.client, gather, {
+      chooseGameEmoji: async () => "🚂",
+    });
+    expect(env.created).toHaveLength(1);
+    expect(env.created[0].name).toBe("🚂 Wingspan");
+    expect(
+      replies.some((r) =>
+        String(r.content || "").includes("couldn't create a thread")
+      )
+    ).toBe(true);
+  });
+
+  test("abandonThread rename stays within 100 well-formed characters", async () => {
+    const renamed = [];
+    const thread = {
+      name: `${"A".repeat(90)}😀`,
+      delete: async () => {
+        throw new Error("Missing Permissions");
+      },
+      setName: async (name) => {
+        renamed.push(name);
+        thread.name = name;
+      },
+    };
+    await GatherStartGame.abandonThread(thread, { logger: { log() {} } });
+    expect(renamed).toHaveLength(1);
+    expect(renamed[0].isWellFormed()).toBe(true);
+    expect(renamed[0].length).toBeLessThanOrEqual(100);
+    expect(renamed[0].startsWith("[failed] ")).toBe(true);
+    expect(renamed[0].endsWith("\uD83D")).toBe(false);
   });
 
   test("Start does not double-prefix a game name that already starts with an emoji", async () => {

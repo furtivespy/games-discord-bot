@@ -149,6 +149,15 @@ describe("GameNameEmoji.formatChannelName", () => {
     expect(result.length).toBe(99);
     expect(result).toBe("A".repeat(99));
   });
+
+  test("drops an unpaired surrogate even when the string is already 100 units", () => {
+    const ill = `${"A".repeat(99)}\uD83D`;
+    expect(ill.length).toBe(100);
+    expect(ill.isWellFormed()).toBe(false);
+    const result = GameNameEmoji.formatChannelName(ill, null);
+    expect(result.isWellFormed()).toBe(true);
+    expect(result).toBe("A".repeat(99));
+  });
 });
 
 describe("GameNameEmoji.chooseForGame", () => {

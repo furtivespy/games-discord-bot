@@ -501,6 +501,12 @@ class GatherStartGame {
     );
   }
 
+  static isInvalidThreadNameError(error) {
+    const code = error?.code ?? error?.rawError?.code;
+    if (Number(code) === 50035) return true;
+    return /invalid form body/i.test(String(error?.message || ""));
+  }
+
   static async createPlayThread(parent, gather, threadName) {
     const forumLike = this.isForumLikeParent(parent);
     const plainName = this.threadNameFromGame(
@@ -513,6 +519,7 @@ class GatherStartGame {
       return await tryCreate(threadName);
     } catch (error) {
       const canRetry =
+        this.isInvalidThreadNameError(error) &&
         typeof threadName === "string" &&
         threadName !== plainName &&
         GameNameEmoji.isValidChannelName(plainName);
@@ -696,7 +703,11 @@ class GatherStartGame {
       log(error, "error");
     }
     try {
-      const failedName = `[failed] ${thread.name}`.slice(0, 100);
+      const failedName =
+        GameNameEmoji.truncateToUtf16Limit(
+          `[failed] ${thread.name || "Game"}`,
+          GameNameEmoji.DISCORD_CHANNEL_NAME_MAX
+        ) || "failed";
       await thread.setName(failedName);
     } catch (error) {
       log(error, "error");

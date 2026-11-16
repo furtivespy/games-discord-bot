@@ -76,9 +76,9 @@ function isWellFormedString(text) {
 function truncateToUtf16Limit(text, maxUnits) {
   const value = String(text || "");
   if (maxUnits <= 0) return "";
-  if (value.length <= maxUnits) return value;
   let out = "";
   for (const segment of graphemes(value)) {
+    if (!isWellFormedString(segment)) continue;
     if (out.length + segment.length > maxUnits) break;
     out += segment;
   }
@@ -96,7 +96,8 @@ function isValidChannelName(name) {
 
 function formatChannelName(gameName, emoji) {
   const sanitized = sanitizeGameName(gameName);
-  const cleaned = truncateToUtf16Limit(sanitized, DISCORD_CHANNEL_NAME_MAX);
+  const cleaned =
+    truncateToUtf16Limit(sanitized, DISCORD_CHANNEL_NAME_MAX) || "Game";
   if (!emoji || !isSingleUnicodeEmoji(emoji) || startsWithUnicodeEmoji(cleaned)) {
     return cleaned;
   }
@@ -131,7 +132,6 @@ module.exports = {
   extractUnicodeEmoji,
   startsWithUnicodeEmoji,
   sanitizeGameName,
-  truncateToLength: truncateToUtf16Limit,
   truncateToUtf16Limit,
   isValidChannelName,
   formatChannelName,
