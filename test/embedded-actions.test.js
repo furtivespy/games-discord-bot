@@ -383,6 +383,80 @@ describe("runVisualCardAction", () => {
     expect(second.body.hand).toEqual(first.body.hand);
     expect(posted).toHaveLength(1);
   });
+
+  test("the same requestId still runs when action, deck, or count differs", async () => {
+    const { posted, discordClient } = clientForGame(gameWithDeck());
+    const cache = createActionIdempotencyCache();
+    const draw = await runVisualCardAction({
+      action: "draw",
+      deckName: "Main",
+      count: 1,
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+      requestId: "same-request-id-01",
+      idempotency: cache,
+    });
+    const deal = await runVisualCardAction({
+      action: "deal",
+      deckName: "Main",
+      count: 1,
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+      requestId: "same-request-id-01",
+      idempotency: cache,
+    });
+    expect(draw.status).toBe(200);
+    expect(deal.status).toBe(200);
+    expect(posted).toHaveLength(2);
+    expect(deal.body.message).toContain("Dealt out");
+  });
+
+  test("the in-memory requestId map drops the oldest entry at the size cap", async () => {
+    const cache = createActionIdempotencyCache({ maxSize: 1, ttlMs: 60_000 });
+    const firstClient = clientForGame(gameWithDeck());
+    await runVisualCardAction({
+      action: "draw",
+      deckName: "Main",
+      count: 1,
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient: firstClient.discordClient,
+      requestId: "first-request-01",
+      idempotency: cache,
+    });
+    expect(cache.size()).toBe(1);
+    const secondClient = clientForGame(gameWithDeck());
+    await runVisualCardAction({
+      action: "draw",
+      deckName: "Main",
+      count: 1,
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient: secondClient.discordClient,
+      requestId: "second-request-01",
+      idempotency: cache,
+    });
+    expect(cache.size()).toBe(1);
+    const replayFirst = await runVisualCardAction({
+      action: "draw",
+      deckName: "Main",
+      count: 1,
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient: firstClient.discordClient,
+      requestId: "first-request-01",
+      idempotency: cache,
+    });
+    expect(firstClient.posted).toHaveLength(2);
+    expect(replayFirst.status).toBe(200);
+  });
 });
 
 describe("visualActionErrorMessage", () => {
@@ -391,6 +465,10 @@ describe("visualActionErrorMessage", () => {
     expect(visualActionErrorMessage("not_a_player")).toBe(
       "You're not a player in this game."
     );
+    expect(visualActionErrorMessage("not_a_guild_member")).toBe(
+      "You're not a member of this server."
+    );
+    expect(visualActionErrorMessage("try_again")).toContain("Try again");
     expect(visualActionErrorMessage("no_cards_to_deal")).toBe("No cards to deal.");
   });
 });

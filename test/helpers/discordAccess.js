@@ -20,9 +20,12 @@ function discordAccessStub({
   parentId = "parent-channel",
   parentStatus = 200,
   parentGuildId = channelGuildId,
+  parentOverwrites,
   rolesStatus = 200,
   guildStatus = 200,
   everyonePermissions = String(PermissionFlagsBits.ViewChannel),
+  extraRoles = [],
+  ownerId = "owner-1",
   memberNick = "TableWill",
   memberRoles = [],
   overwrites = [],
@@ -59,16 +62,17 @@ function discordAccessStub({
         id: parentId,
         type: ChannelType.GuildText,
         guild_id: parentGuildId,
-        permission_overwrites: overwrites,
+        permission_overwrites: parentOverwrites ?? overwrites,
       });
     }
     if (u === `${DISCORD_API_BASE}/guilds/${guildId}/roles`) {
       return jsonResponse(rolesStatus, [
         { id: guildId, permissions: everyonePermissions },
+        ...extraRoles,
       ]);
     }
     if (u === `${DISCORD_API_BASE}/guilds/${guildId}`) {
-      return jsonResponse(guildStatus, { id: guildId, owner_id: "owner-1" });
+      return jsonResponse(guildStatus, { id: guildId, owner_id: ownerId });
     }
     return null;
   };

@@ -3,6 +3,7 @@ const {
   ACTION_COUNT_MAX,
   ACTION_COUNT_MIN,
   DEFAULT_ACTION_COUNT,
+  INVALID_COUNT_MESSAGE,
   parseActionCount,
 } = require("../modules/actionCount");
 const visualActions = require("../embedded-client/src/visualActions.ts");
@@ -22,5 +23,11 @@ describe("shared action count parser", () => {
     expect(visualActions.ACTION_COUNT_MAX).toBe(ACTION_COUNT_MAX);
     expect(visualActions.parseActionCount(3)).toBe(parseActionCount(3));
     expect(visualActions.parseActionCount(1001)).toBeNull();
+    expect(INVALID_COUNT_MESSAGE).toBe(
+      `Enter a whole number from ${ACTION_COUNT_MIN} to ${ACTION_COUNT_MAX}.`
+    );
+    expect(visualActions.ACTION_ERROR_MESSAGES.invalid_count).toBe(
+      INVALID_COUNT_MESSAGE
+    );
   });
 });

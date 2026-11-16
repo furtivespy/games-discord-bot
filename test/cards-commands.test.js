@@ -558,7 +558,7 @@ describe("/cards command handlers", () => {
     );
   });
 
-  test("deck deal rejects a count outside the shared parser range", async () => {
+  test("deck deal does not apply the visual-mode 1-1000 count clamp", async () => {
     await withHarness(
       {
         gameData: gameWithDeck(),
@@ -571,7 +571,7 @@ describe("/cards command handlers", () => {
       },
       async (harness) => {
         await runCards(harness);
-        expect(harness.lastContent()).toContain("whole number of cards");
+        expect(harness.lastContent()).toContain("Dealt out a total of 0 cards");
         const saved = await harness.getSavedGame();
         expect(saved.players[0].hands.main).toEqual([]);
       }

@@ -469,7 +469,11 @@ function createMockGameSession() {
         },
       };
     };
-    return idempotency.run(requestId, MOCK_USER.id, gid, cid, run);
+    return idempotency.run(requestId, MOCK_USER.id, gid, cid, run, {
+      action,
+      deckName,
+      count,
+    });
   }
 
   return { getSnapshot, applyAction };

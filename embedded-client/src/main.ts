@@ -23,6 +23,7 @@ import {
 import {
   ACTION_COUNT_MAX,
   ACTION_COUNT_MIN,
+  ACTION_ERROR_MESSAGES,
   CHANNEL_POST_FAILED_NOTICE,
   DEFAULT_ACTION_COUNT,
   GAME_CHANNEL_LINK_LABEL,
@@ -429,9 +430,7 @@ function bindActionDialog() {
       return;
     }
     if (count == null) {
-      setActionDialogError(
-        `Enter a number from ${ACTION_COUNT_MIN} to ${ACTION_COUNT_MAX}.`
-      );
+      setActionDialogError(ACTION_ERROR_MESSAGES.invalid_count);
       return;
     }
     void submitDeckAction(kind, deckName, count);

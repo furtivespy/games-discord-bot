@@ -1,30 +1,16 @@
-export const ACTION_COUNT_MIN = 1;
-export const ACTION_COUNT_MAX = 1000;
-export const DEFAULT_ACTION_COUNT = 1;
+import shared from "../../modules/visualActionShared.json";
+
+export const ACTION_COUNT_MIN = shared.ACTION_COUNT_MIN;
+export const ACTION_COUNT_MAX = shared.ACTION_COUNT_MAX;
+export const DEFAULT_ACTION_COUNT = shared.DEFAULT_ACTION_COUNT;
 export const GAME_CHANNEL_LINK_LABEL = "Open Discord channel";
 export const CHANNEL_POST_FAILED_NOTICE =
   "The table updated, but Discord didn't get the channel message.";
 
 export type DeckActionKind = "deal" | "draw";
 
-export const ACTION_ERROR_MESSAGES: Record<string, string> = {
-  access_unverified: "Could not verify access to that channel.",
-  action_failed: "Could not run that action.",
-  channel_mismatch: "That game doesn't belong to this server.",
-  forbidden: "You don't have access to that channel.",
-  invalid_action: "Deal and Draw are the only visual actions.",
-  invalid_count: `Enter a whole number from ${ACTION_COUNT_MIN} to ${ACTION_COUNT_MAX}.`,
-  missing_channel: "Could not find the channel for this game.",
-  missing_deck: "Pick a deck first.",
-  missing_guild: "Could not find the server for this game.",
-  no_cards_in_draw: "No cards in draw pile",
-  no_cards_to_deal: "No cards to deal.",
-  no_game: "No game for that channel.",
-  not_a_player: "You're not a player in this game.",
-  unauthorized: "Could not sign in to run that action.",
-  unknown_deck: "Unknown deck.",
-  unspecified_deck: "Specify a deck — this game has more than one.",
-};
+export const ACTION_ERROR_MESSAGES: Record<string, string> =
+  shared.ACTION_ERROR_MESSAGES;
 
 export function gameChannelUrl(
   guildId: unknown,

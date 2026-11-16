@@ -23,6 +23,7 @@ const {
 } = require("./embeddedActions");
 const {
   channelNameFromDiscordClient,
+  createDiscordLookupCache,
   listActiveGamesForUser,
   optionalDiscordAccessGuard,
   requiredDiscordAccessGuard,
@@ -307,6 +308,7 @@ function createEmbeddedApp({
     sanitizeClientId(clientId) || (mockEnabled ? DEFAULT_MOCK_CLIENT_ID : clientId);
   const mockSession = mockEnabled ? createMockGameSession() : null;
   const actionIdempotency = createActionIdempotencyCache();
+  const discordLookupCache = createDiscordLookupCache();
 
   const app = express();
   app.disable("x-powered-by");
@@ -490,7 +492,7 @@ function createEmbeddedApp({
       if (accessToken !== MOCK_ACCESS_TOKEN) {
         res.status(401).json({
           error: "unauthorized",
-          message: "Could not sign in to run that action.",
+          message: visualActionErrorMessage("unauthorized"),
         });
         return;
       }
@@ -509,7 +511,7 @@ function createEmbeddedApp({
     if (!accessToken) {
       res.status(401).json({
         error: "unauthorized",
-        message: "Could not sign in to run that action.",
+        message: visualActionErrorMessage("unauthorized"),
       });
       return;
     }
@@ -525,21 +527,21 @@ function createEmbeddedApp({
     if (!user?.id) {
       res.status(401).json({
         error: "unauthorized",
-        message: "Could not sign in to run that action.",
+        message: visualActionErrorMessage("unauthorized"),
       });
       return;
     }
     if (!requestedGuildId) {
       res.status(400).json({
         error: "missing_guild",
-        message: "Could not find the server for this game.",
+        message: visualActionErrorMessage("missing_guild"),
       });
       return;
     }
     if (!requestedChannelId) {
       res.status(400).json({
         error: "missing_channel",
-        message: "Could not find the channel for this game.",
+        message: visualActionErrorMessage("missing_channel"),
       });
       return;
     }
@@ -550,6 +552,7 @@ function createEmbeddedApp({
       guildId: requestedGuildId,
       channelId: requestedChannelId,
       userId: user.id,
+      lookupCache: discordLookupCache,
     });
     if (!guard.ok) {
       res.status(guard.status).json({

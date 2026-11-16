@@ -621,12 +621,20 @@ function accessDenied(error, status = 403) {
   return { ok: false, status, body: { error } };
 }
 
+const DISCORD_LOOKUP_TTL_MS = 45_000;
+const DISCORD_LOOKUP_CACHE_MAX = 256;
+const CHEAP_RETRY_AFTER_MS = 1_000;
+
 function asPermissionBits(value) {
   try {
     return BigInt(value ?? 0);
   } catch {
     return 0n;
   }
+}
+
+function hasPermission(bits, flag) {
+  return (bits & flag) === flag;
 }
 
 async function readJsonBody(res) {
@@ -636,6 +644,123 @@ async function readJsonBody(res) {
   } catch {
     return null;
   }
+}
+
+function headerValue(headers, name) {
+  if (!headers) return null;
+  if (typeof headers.get === "function") return headers.get(name);
+  const lower = name.toLowerCase();
+  if (headers[name] != null) return headers[name];
+  if (headers[lower] != null) return headers[lower];
+  for (const key of Object.keys(headers)) {
+    if (String(key).toLowerCase() === lower) return headers[key];
+  }
+  return null;
+}
+
+function retryAfterMs(result) {
+  const rawHeader = headerValue(result?.headers, "retry-after");
+  if (rawHeader != null && String(rawHeader).trim() !== "") {
+    const seconds = Number(rawHeader);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.ceil(seconds * 1000);
+    }
+  }
+  const fromBody = Number(result?.body?.retry_after);
+  if (Number.isFinite(fromBody) && fromBody >= 0) {
+    return Math.ceil(fromBody * 1000);
+  }
+  return null;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function createDiscordLookupCache({
+  ttlMs = DISCORD_LOOKUP_TTL_MS,
+  maxSize = DISCORD_LOOKUP_CACHE_MAX,
+} = {}) {
+  const entries = new Map();
+  const inflight = new Map();
+
+  function get(key) {
+    const entry = entries.get(key);
+    if (!entry) return undefined;
+    if (entry.expiresAt <= Date.now()) {
+      entries.delete(key);
+      return undefined;
+    }
+    return entry.value;
+  }
+
+  function set(key, value) {
+    if (entries.size >= maxSize && !entries.has(key)) {
+      const oldest = entries.keys().next().value;
+      if (oldest != null) entries.delete(oldest);
+    }
+    entries.set(key, { value, expiresAt: Date.now() + ttlMs });
+  }
+
+  return { get, set, inflight, size: () => entries.size };
+}
+
+async function discordBotGet({
+  fetchFn,
+  headers,
+  path,
+  cache,
+  wait = sleep,
+} = {}) {
+  const url = `${DISCORD_API_BASE}${path}`;
+  const cached = cache?.get?.(path);
+  if (cached) return cached;
+  if (cache?.inflight?.has?.(path)) return cache.inflight.get(path);
+
+  async function requestOnce() {
+    try {
+      const res = await fetchFn(url, { headers });
+      if (res == null) return { status: 0, body: null, headers: null };
+      return {
+        status: res.status,
+        body: await readJsonBody(res),
+        headers: res.headers || null,
+      };
+    } catch {
+      return { status: 0, body: null, headers: null };
+    }
+  }
+
+  const load = (async () => {
+    let result = await requestOnce();
+    if (result.status === 429) {
+      const delayMs = retryAfterMs(result);
+      if (delayMs != null && delayMs <= CHEAP_RETRY_AFTER_MS) {
+        await wait(delayMs);
+        result = await requestOnce();
+      }
+    }
+    if (cache && (result.status === 200 || result.status === 404)) {
+      cache.set(path, { status: result.status, body: result.body });
+    }
+    return result;
+  })();
+
+  if (cache?.inflight) {
+    cache.inflight.set(path, load);
+    try {
+      return await load;
+    } finally {
+      cache.inflight.delete(path);
+    }
+  }
+  return load;
+}
+
+function denyFromLookup(result) {
+  if (!result || result.status === 0) return accessDenied("access_unverified");
+  if (result.status === 429) return accessDenied("try_again");
+  return null;
 }
 
 function applyPermissionOverwrites(bits, overwrites, memberId, roleIds, guildId) {
@@ -686,8 +811,8 @@ function memberChannelPermissions({
       bits |= asPermissionBits(role.permissions);
     }
   }
-  if ((bits & PermissionFlagsBits.Administrator) === PermissionFlagsBits.Administrator) {
-    return bits;
+  if (hasPermission(bits, PermissionFlagsBits.Administrator)) {
+    return ~0n;
   }
   const overwriteChannel = parent || channel;
   return applyPermissionOverwrites(
@@ -711,6 +836,8 @@ async function requiredDiscordAccessGuard({
   guildId,
   channelId,
   userId,
+  lookupCache,
+  wait,
 } = {}) {
   const token = String(botToken || discordClient?.token || "").trim();
   const gid = String(guildId || "").trim();
@@ -723,25 +850,30 @@ async function requiredDiscordAccessGuard({
   const headers = { Authorization: `Bot ${token}` };
 
   async function botGet(path) {
-    try {
-      return await fetchFn(`${DISCORD_API_BASE}${path}`, { headers });
-    } catch {
-      return null;
-    }
+    return discordBotGet({
+      fetchFn,
+      headers,
+      path,
+      cache: lookupCache,
+      wait,
+    });
   }
 
   const memberRes = await botGet(
     `/guilds/${encodeURIComponent(gid)}/members/${encodeURIComponent(uid)}`
   );
-  if (!memberRes) return accessDenied("access_unverified");
-  if (memberRes.status === 404) return accessDenied("not_a_player");
+  const memberDenied = denyFromLookup(memberRes);
+  if (memberDenied) return memberDenied;
+  if (memberRes.status === 404) return accessDenied("not_a_guild_member");
   if (memberRes.status !== 200) return accessDenied("access_unverified");
-  const member = await readJsonBody(memberRes);
+  const member = memberRes.body;
   if (!member || typeof member !== "object") return accessDenied("access_unverified");
 
   const channelRes = await botGet(`/channels/${encodeURIComponent(cid)}`);
-  if (!channelRes || channelRes.status !== 200) return accessDenied("access_unverified");
-  const channel = await readJsonBody(channelRes);
+  const channelDenied = denyFromLookup(channelRes);
+  if (channelDenied) return channelDenied;
+  if (channelRes.status !== 200) return accessDenied("access_unverified");
+  const channel = channelRes.body;
   if (!channel || typeof channel !== "object") return accessDenied("access_unverified");
 
   const isThread = THREAD_CHANNEL_TYPES.has(channel.type);
@@ -750,8 +882,10 @@ async function requiredDiscordAccessGuard({
     const parentRes = await botGet(
       `/channels/${encodeURIComponent(String(channel.parent_id))}`
     );
-    if (!parentRes || parentRes.status !== 200) return accessDenied("access_unverified");
-    parent = await readJsonBody(parentRes);
+    const parentDenied = denyFromLookup(parentRes);
+    if (parentDenied) return parentDenied;
+    if (parentRes.status !== 200) return accessDenied("access_unverified");
+    parent = parentRes.body;
     if (!parent || typeof parent !== "object") return accessDenied("access_unverified");
   }
 
@@ -763,13 +897,17 @@ async function requiredDiscordAccessGuard({
   }
 
   const rolesRes = await botGet(`/guilds/${encodeURIComponent(gid)}/roles`);
-  if (!rolesRes || rolesRes.status !== 200) return accessDenied("access_unverified");
-  const roles = await readJsonBody(rolesRes);
+  const rolesDenied = denyFromLookup(rolesRes);
+  if (rolesDenied) return rolesDenied;
+  if (rolesRes.status !== 200) return accessDenied("access_unverified");
+  const roles = rolesRes.body;
   if (!Array.isArray(roles)) return accessDenied("access_unverified");
 
   const guildRes = await botGet(`/guilds/${encodeURIComponent(gid)}`);
-  if (!guildRes || guildRes.status !== 200) return accessDenied("access_unverified");
-  const guild = await readJsonBody(guildRes);
+  const guildDenied = denyFromLookup(guildRes);
+  if (guildDenied) return guildDenied;
+  if (guildRes.status !== 200) return accessDenied("access_unverified");
+  const guild = guildRes.body;
   if (!guild || typeof guild !== "object") return accessDenied("access_unverified");
 
   const permissions = memberChannelPermissions({
@@ -780,18 +918,20 @@ async function requiredDiscordAccessGuard({
     guildId: gid,
     ownerId: guild.owner_id,
   });
-  if ((permissions & PermissionFlagsBits.ViewChannel) !== PermissionFlagsBits.ViewChannel) {
+  if (!hasPermission(permissions, PermissionFlagsBits.ViewChannel)) {
     return accessDenied("forbidden");
   }
 
   if (channel.type === ChannelType.PrivateThread) {
-    const canManageThreads =
-      (permissions & PermissionFlagsBits.ManageThreads) ===
-      PermissionFlagsBits.ManageThreads;
+    const canManageThreads = hasPermission(
+      permissions,
+      PermissionFlagsBits.ManageThreads
+    );
     const threadMemberRes = await botGet(
       `/channels/${encodeURIComponent(cid)}/thread-members/${encodeURIComponent(uid)}`
     );
-    if (!threadMemberRes) return accessDenied("access_unverified");
+    const threadDenied = denyFromLookup(threadMemberRes);
+    if (threadDenied) return threadDenied;
     if (threadMemberRes.status === 404 && !canManageThreads) {
       return accessDenied("forbidden");
     }
@@ -863,8 +1003,10 @@ async function snapshotGameForUser({
 }
 
 module.exports = {
+  CHEAP_RETRY_AFTER_MS,
   DISCORD_API_BASE,
   DISCORD_EPOCH_MS,
+  DISCORD_LOOKUP_TTL_MS,
   GAME_COLLECTION,
   HISTORY_KEEP_LIMIT,
   MAX_VISIBLE_DECKS,
@@ -872,12 +1014,14 @@ module.exports = {
   channelNameFromDiscordClient,
   copyCards,
   createdAtMs,
+  createDiscordLookupCache,
   deckSummaries,
   discordSnowflakeMs,
   filterAndSortActiveGames,
   isActivePlayerGame,
   isMissingGame,
   listActiveGamesForUser,
+  memberChannelPermissions,
   optionalDiscordAccessGuard,
   requiredDiscordAccessGuard,
   parseTimestampMs,

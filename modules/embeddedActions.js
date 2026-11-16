@@ -5,11 +5,10 @@ const GameDB = require("../db/anygame");
 const GameHelper = require("./GlobalGameHelper");
 const GameStatusHelper = require("./GameStatusHelper");
 const CardMoves = require("./cardMoves");
+const { parseActionCount } = require("./actionCount");
 const {
-  ACTION_COUNT_MAX,
-  ACTION_COUNT_MIN,
-  parseActionCount,
-} = require("./actionCount");
+  ACTION_ERROR_MESSAGES: SHARED_ACTION_ERROR_MESSAGES,
+} = require("./visualActionShared.json");
 const {
   GAME_COLLECTION,
   isMissingGame,
@@ -21,22 +20,9 @@ const {
 
 const VISUAL_ACTIONS = new Set(["deal", "draw"]);
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
+const ACTION_IDEMPOTENCY_MAX = 500;
 const ACTION_ERROR_MESSAGES = Object.freeze({
-  access_unverified: "Could not verify access to that channel.",
-  action_failed: "Could not run that action.",
-  channel_mismatch: "That game doesn't belong to this server.",
-  forbidden: "You don't have access to that channel.",
-  invalid_action: "That action isn't available.",
-  invalid_count: `Enter a whole number from ${ACTION_COUNT_MIN} to ${ACTION_COUNT_MAX}.`,
-  missing_channel: "Missing channel.",
-  missing_deck: "Choose a deck first.",
-  missing_guild: "Missing server.",
-  no_cards_in_draw: "No cards in draw pile",
-  no_cards_to_deal: "No cards to deal.",
-  no_game: "No game for that channel.",
-  not_a_player: "You're not a player in this game.",
-  unauthorized: "Could not confirm your Discord account.",
-  unknown_deck: "Unknown deck.",
+  ...SHARED_ACTION_ERROR_MESSAGES,
   unspecified_deck: GameHelper.SPECIFY_DECK_MESSAGE,
 });
 
@@ -82,12 +68,16 @@ function parseVisualActionBody(body = {}) {
     return {
       error: "invalid_action",
       status: 400,
-      message: "Deal and Draw are the only visual actions.",
+      message: ACTION_ERROR_MESSAGES.invalid_action,
     };
   }
   const deckName = typeof body.deck === "string" ? body.deck.trim() : "";
   if (!deckName) {
-    return { error: "missing_deck", status: 400, message: "Pick a deck first." };
+    return {
+      error: "missing_deck",
+      status: 400,
+      message: ACTION_ERROR_MESSAGES.missing_deck,
+    };
   }
   const count = parseActionCount(body.count);
   if (count == null) {
@@ -245,18 +235,38 @@ function applyVisualCardAction(gameData, { action, deckName, count, actor, userI
   return { ok: true, content: result.content };
 }
 
-function createActionIdempotencyCache({ ttlMs = 5 * 60 * 1000 } = {}) {
+/**
+ * Per-process in-memory TTL map. A second instance still runs the same
+ * requestId. The key includes action, deck, and count so a reused id for a
+ * different Deal/Draw is not swallowed.
+ */
+function createActionIdempotencyCache({
+  ttlMs = 5 * 60 * 1000,
+  maxSize = ACTION_IDEMPOTENCY_MAX,
+} = {}) {
   const completed = new Map();
   const inflight = new Map();
 
-  function cacheKey(userId, guildId, channelId, requestId) {
-    return `${userId}:${guildId}:${channelId}:${requestId}`;
+  function cacheKey(userId, guildId, channelId, requestId, action, deckName, count) {
+    return `${userId}:${guildId}:${channelId}:${requestId}:${action}:${deckName}:${count}`;
   }
 
-  async function run(requestId, userId, guildId, channelId, fn) {
+  function remember(key, result) {
+    if (completed.size >= maxSize && !completed.has(key)) {
+      const oldest = completed.keys().next().value;
+      if (oldest != null) completed.delete(oldest);
+    }
+    completed.set(key, result);
+    setTimeout(() => completed.delete(key), ttlMs).unref?.();
+  }
+
+  async function run(requestId, userId, guildId, channelId, fn, actionParts = {}) {
     const id = parseVisualActionRequestId(requestId);
     if (!id) return fn();
-    const key = cacheKey(userId, guildId, channelId, id);
+    const action = String(actionParts.action || "");
+    const deckName = String(actionParts.deckName || "");
+    const count = String(actionParts.count ?? "");
+    const key = cacheKey(userId, guildId, channelId, id, action, deckName, count);
     const cached = completed.get(key);
     if (cached) return cached;
     if (inflight.has(key)) return inflight.get(key);
@@ -265,8 +275,7 @@ function createActionIdempotencyCache({ ttlMs = 5 * 60 * 1000 } = {}) {
       .then((result) => {
         inflight.delete(key);
         if (result?.status === 200) {
-          completed.set(key, result);
-          setTimeout(() => completed.delete(key), ttlMs).unref?.();
+          remember(key, result);
         }
         return result;
       })
@@ -278,7 +287,7 @@ function createActionIdempotencyCache({ ttlMs = 5 * 60 * 1000 } = {}) {
     return promise;
   }
 
-  return { run };
+  return { run, size: () => completed.size };
 }
 
 async function snapshotFromCurrentGame({
@@ -343,7 +352,11 @@ async function runVisualCardAction({
     });
 
   if (idempotency && typeof idempotency.run === "function") {
-    return idempotency.run(requestId, uid, gid, cid, execute);
+    return idempotency.run(requestId, uid, gid, cid, execute, {
+      action,
+      deckName,
+      count,
+    });
   }
   return execute();
 }
@@ -470,6 +483,7 @@ async function runVisualCardActionOnce({
 
 module.exports = {
   ACTION_ERROR_MESSAGES,
+  ACTION_IDEMPOTENCY_MAX,
   actorFromDiscordUser,
   applyVisualCardAction,
   createActionIdempotencyCache,

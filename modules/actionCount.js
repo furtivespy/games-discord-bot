@@ -1,8 +1,11 @@
 "use strict";
 
-const ACTION_COUNT_MIN = 1;
-const ACTION_COUNT_MAX = 1000;
-const DEFAULT_ACTION_COUNT = 1;
+const shared = require("./visualActionShared.json");
+
+const ACTION_COUNT_MIN = shared.ACTION_COUNT_MIN;
+const ACTION_COUNT_MAX = shared.ACTION_COUNT_MAX;
+const DEFAULT_ACTION_COUNT = shared.DEFAULT_ACTION_COUNT;
+const INVALID_COUNT_MESSAGE = shared.ACTION_ERROR_MESSAGES.invalid_count;
 
 function parseActionCount(value) {
   const n = typeof value === "number" ? value : Number(String(value ?? "").trim());
@@ -16,5 +19,6 @@ module.exports = {
   ACTION_COUNT_MAX,
   ACTION_COUNT_MIN,
   DEFAULT_ACTION_COUNT,
+  INVALID_COUNT_MESSAGE,
   parseActionCount,
 };

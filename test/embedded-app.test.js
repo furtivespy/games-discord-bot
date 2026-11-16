@@ -1083,13 +1083,13 @@ describe("POST /api/game/action", () => {
     });
   });
 
-  test("403 not_a_player when the user is not a guild member", async () => {
+  test("403 not_a_guild_member when the user is not a guild member", async () => {
     await withActionApp({ access: { memberStatus: 404 } }, async ({ url }) => {
       const res = await postAction(url, { action: "draw", deck: "Main", count: 1 });
       expect(res.status).toBe(403);
       expect(await res.json()).toMatchObject({
-        error: "not_a_player",
-        message: "You're not a player in this game.",
+        error: "not_a_guild_member",
+        message: "You're not a member of this server.",
       });
     });
   });
@@ -1143,6 +1143,17 @@ describe("POST /api/game/action", () => {
       const res = await postAction(url, { action: "deal", deck: "Main", count: 1 });
       expect(res.status).toBe(403);
       expect(await res.json()).toMatchObject({ error: "access_unverified" });
+    });
+  });
+
+  test("Discord 429 fails closed with try_again", async () => {
+    await withActionApp({ access: { memberStatus: 429 } }, async ({ url }) => {
+      const res = await postAction(url, { action: "deal", deck: "Main", count: 1 });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({
+        error: "try_again",
+        message: expect.stringContaining("Try again"),
+      });
     });
   });
 

@@ -851,6 +851,9 @@ describe("deck hover Deal and Draw", () => {
     expect(visualActionErrorMessage("not_a_player")).toBe(
       "You're not a player in this game."
     );
+    expect(visualActionErrorMessage("not_a_guild_member")).toBe(
+      "You're not a member of this server."
+    );
     expect(visualActionErrorMessage("invalid_count")).toBe(
       `Enter a whole number from ${ACTION_COUNT_MIN} to ${ACTION_COUNT_MAX}.`
     );
