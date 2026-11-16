@@ -90,7 +90,7 @@ Open a Who's interested? panel for a BGG title or custom playtest.
 
 - Source: `slashcommands/info/lfg.js`
 - Permission: User
-- Tests: `test/bgg-autocomplete.test.js`, `test/gather-interest.test.js`, `test/slash-command-contracts.test.js`
+- Tests: `test/bgg-autocomplete.test.js`, `test/game-name-emoji.test.js`, `test/gather-interest.test.js`, `test/gather-start-game.test.js`, `test/slash-command-contracts.test.js`
 
 ## /migrate
 

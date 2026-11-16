@@ -15,6 +15,28 @@ const SOURCE_LINK_RE = /\[[^\]]*\]\(<[^>]*>\)/g;
 const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-lite-image";
 const DEFAULT_GEMINI_RULES_MODEL = "gemini-3.8-flash";
 const DEFAULT_IMAGE_TIMEOUT_MS = 45_000;
+const DEFAULT_EMOJI_TIMEOUT_MS = 8_000;
+const DEFAULT_EMOJI_MAX_OUTPUT_TOKENS = 256;
+const GAME_EMOJI_SYSTEM_INSTRUCTION =
+  "You pick one standard Unicode emoji that represents a board or card game. Reply with that emoji only. Never use Discord custom emojis or :shortcode: names.";
+const TEXT_SAFETY_SETTINGS = [
+  {
+    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+    threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+  },
+];
 const BLOCKED_FINISH_REASONS = new Set([
   "SAFETY",
   "IMAGE_SAFETY",
@@ -37,14 +59,106 @@ function resolveImageTimeoutMs(client) {
   return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_IMAGE_TIMEOUT_MS;
 }
 
-function withTimeout(promise, ms, message = "Gemini image generation timed out") {
+function resolveEmojiTimeoutMs(client) {
+  const raw = Number(client?.config?.geminiEmojiTimeoutMs);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_EMOJI_TIMEOUT_MS;
+}
+
+function summarizeGeminiError(error) {
+  if (!(error instanceof Error)) return String(error || "unknown");
+  const message = error.message || String(error);
+  const jsonStart = message.indexOf("{");
+  if (jsonStart < 0) return message || "unknown";
+  let parsed = null;
+  try {
+    parsed = JSON.parse(message.slice(jsonStart));
+  } catch (_) {
+    return message;
+  }
+  const payload = parsed?.error && typeof parsed.error === "object" ? parsed.error : parsed;
+  const code = error.status ?? error.code ?? payload?.code;
+  const status = payload?.status || error.statusText;
+  const bits = [status, code].filter((value) => value != null && value !== "");
+  return bits.length
+    ? `Gemini request failed (${bits.join(" ")})`
+    : "Gemini request failed";
+}
+
+function logGeminiSkip(client, prefix, reason) {
+  const message =
+    reason instanceof Error
+      ? summarizeGeminiError(reason)
+      : String(reason || "unknown");
+  const line = `${prefix} ${message}`;
+  if (typeof client?.logger?.warn === "function") {
+    client.logger.warn(line);
+  } else if (typeof client?.logger?.log === "function") {
+    client.logger.log(line, "warn");
+  } else {
+    console.warn(line);
+  }
+}
+
+function geminiCandidateState(result) {
+  const promptFeedback =
+    result?.promptFeedback || result?.response?.promptFeedback;
+  const candidate = firstCandidate(result);
+  const finish = candidate
+    ? String(candidate.finishReason || "").toUpperCase()
+    : "";
+  return {
+    promptFeedback,
+    candidate,
+    finishReason: finish,
+    promptBlockReason: promptFeedback?.blockReason
+      ? String(promptFeedback.blockReason)
+      : null,
+    finishBlockReason: BLOCKED_FINISH_REASONS.has(finish) ? finish : null,
+  };
+}
+
+function extractCandidateText(result) {
+  const { promptBlockReason, finishBlockReason, candidate } =
+    geminiCandidateState(result);
+  if (promptBlockReason || finishBlockReason || !candidate) return "";
+  const parts = candidate.content?.parts;
+  if (!Array.isArray(parts)) return "";
+  return parts
+    .filter((part) => part && typeof part.text === "string")
+    .map((part) => part.text)
+    .join("")
+    .trim();
+}
+
+function gameEmojiPrompt(gameName) {
+  const name =
+    String(gameName || "this game").replace(/[\r\n]+/g, " ").trim() ||
+    "this game";
+  return `Select one standard Unicode emoji that best represents the board or card game named: ${name}
+
+Reply with that single emoji only. Do not use Discord custom emojis. Do not include words, quotes, or explanation.`;
+}
+
+function withTimeout(
+  promise,
+  ms,
+  message = "Gemini image generation timed out",
+  abortController = null
+) {
   let timer;
   const work = Promise.resolve(promise);
   // Keep a handler on the original work so a late generateContent rejection
   // after the timeout wins Promise.race is never unhandled.
   work.catch(() => {});
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), ms);
+    timer = setTimeout(() => {
+      try {
+        abortController?.abort();
+      } catch (_) {
+        // Aborting is best-effort; the timeout error still wins the race.
+      }
+      reject(new Error(message));
+    }, ms);
   });
   return Promise.race([work, timeout]).finally(() => {
     clearTimeout(timer);
@@ -179,24 +293,22 @@ function combineDiscordChunks(chunks, limit = DISCORD_CONTENT_MAX) {
 }
 
 function extractInlineImage(result, logger) {
-  const promptFeedback =
-    result?.promptFeedback || result?.response?.promptFeedback;
-  if (promptFeedback?.blockReason) {
+  const { promptBlockReason, finishBlockReason, candidate } =
+    geminiCandidateState(result);
+  if (promptBlockReason) {
     logger?.warn?.(
-      `GeminiAI: image prompt blocked (${promptFeedback.blockReason}).`
+      `GeminiAI: image prompt blocked (${promptBlockReason}).`
     );
     return null;
   }
 
-  const candidate = firstCandidate(result);
   if (!candidate) {
     logger?.warn?.("GeminiAI: no image candidate in API response.");
     return null;
   }
 
-  const finish = String(candidate.finishReason || "").toUpperCase();
-  if (BLOCKED_FINISH_REASONS.has(finish)) {
-    logger?.warn?.(`GeminiAI: image generation blocked (${finish}).`);
+  if (finishBlockReason) {
+    logger?.warn?.(`GeminiAI: image generation blocked (${finishBlockReason}).`);
     return null;
   }
 
@@ -255,24 +367,7 @@ class GeminiAI {
               googleSearch: {}
             }            
           ],
-          safetySettings: [
-            {
-              category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-              threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            },
-            {
-              category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-              threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            },
-            {
-              category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-              threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            },
-            {
-              category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-              threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            },
-          ],
+          safetySettings: TEXT_SAFETY_SETTINGS,
           systemInstruction: this.getSystemInstructions(gameData)
          }
     })
@@ -377,13 +472,48 @@ class GeminiAI {
     return extractInlineImage(response, this.client?.logger);
   }
 
+  async suggestGameEmoji(gameName, { timeoutMs, abortController } = {}) {
+    const controller = abortController || new AbortController();
+    const response = await withTimeout(
+      this.AI2.models.generateContent({
+        model: DEFAULT_GEMINI_RULES_MODEL,
+        contents: gameEmojiPrompt(gameName),
+        config: {
+          maxOutputTokens: DEFAULT_EMOJI_MAX_OUTPUT_TOKENS,
+          thinkingConfig: { thinkingLevel: "LOW" },
+          safetySettings: TEXT_SAFETY_SETTINGS,
+          systemInstruction: GAME_EMOJI_SYSTEM_INSTRUCTION,
+          abortSignal: controller.signal,
+        },
+      }),
+      timeoutMs || resolveEmojiTimeoutMs(this.client),
+      "Gemini emoji selection timed out",
+      controller
+    );
+    const state = geminiCandidateState(response);
+    const blocked = state.promptBlockReason || state.finishBlockReason;
+    if (blocked) {
+      throw new Error(`Gemini emoji selection blocked (${blocked})`);
+    }
+    const text = extractCandidateText(response);
+    if (!text && state.finishReason === "MAX_TOKENS") {
+      throw new Error("Gemini emoji selection truncated (MAX_TOKENS)");
+    }
+    return text;
+  }
+
 }
 
 module.exports = {
   createGeminiAI,
   extractInlineImage,
+  extractCandidateText,
+  geminiCandidateState,
+  logGeminiSkip,
+  summarizeGeminiError,
   resolveImageModel,
   resolveImageTimeoutMs,
+  resolveEmojiTimeoutMs,
   withTimeout,
   splitDiscordContent,
   combineDiscordChunks,
@@ -391,4 +521,6 @@ module.exports = {
   DEFAULT_GEMINI_IMAGE_MODEL,
   DEFAULT_GEMINI_RULES_MODEL,
   DEFAULT_IMAGE_TIMEOUT_MS,
-}
+  DEFAULT_EMOJI_TIMEOUT_MS,
+  DEFAULT_EMOJI_MAX_OUTPUT_TOKENS,
+};

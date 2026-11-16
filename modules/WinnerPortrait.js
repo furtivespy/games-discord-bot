@@ -1,6 +1,6 @@
 const { AttachmentBuilder } = require("discord.js");
 const GuildConfig = require("./GuildConfig");
-const { createGeminiAI } = require("./GoogleGemini");
+const { createGeminiAI, logGeminiSkip } = require("./GoogleGemini");
 
 const MAX_WINNERS = 4;
 const PORTRAIT_FILENAME = "winner-portrait.png";
@@ -11,18 +11,7 @@ const PORTRAIT_UNAVAILABLE_NOTICE =
 const WINNER_PORTRAIT_PROMPT = `Create a playful, SFW royal portrait from the attached Discord avatar image(s). Keep each person or avatar recognizable as the same character. If more than one avatar is attached, compose one shared group portrait of all of them together. Crown them and add regal flair such as a throne, cape, confetti, or a trophy, themed to the board game "{{gameName}}". They are the undisputed royalty of that game. Use gender-neutral wording and imagery (royalty). Do not include any text, letters, numbers, captions, titles, or watermarks in the image.`;
 
 function logPortraitSkip(client, reason) {
-  const message =
-    reason instanceof Error
-      ? reason.message || String(reason)
-      : String(reason || "unknown");
-  const line = `Winner portrait skipped: ${message}`;
-  if (typeof client?.logger?.warn === "function") {
-    client.logger.warn(line);
-  } else if (typeof client?.logger?.log === "function") {
-    client.logger.log(line, "warn");
-  } else {
-    console.warn(line);
-  }
+  logGeminiSkip(client, "Winner portrait skipped:", reason);
 }
 
 async function notifyPortraitUnavailable(client, interaction) {

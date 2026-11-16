@@ -81,8 +81,8 @@ Help topics built from `modules/helpCatalog`.
 
 Looking-for-group post for a game, with BGG autocomplete and an interest button.
 
-- Seed: none. Uses BoardGameGeek and `modules/GatherInterest`.
-- Reach: `test/gather-interest.test.js` covers the interest flow; use `withBggStub` for game lookups. Button clicks are not simulated by `execute`.
+- Seed: none. Uses BoardGameGeek and `modules/GatherInterest`. Start game prefixes the play thread with a Gemini-chosen unicode emoji (`modules/GameNameEmoji`); missing key, timeout, blocked, truncated thinking output, or invalid output leaves the name unprefixed. Prefixed names truncate on grapheme boundaries; a failed prefixed create retries once with the plain name. The emoji call uses `maxOutputTokens` 256 and `thinkingLevel` LOW so `gemini-3.8-flash` can return a glyph after thinking.
+- Reach: `test/gather-interest.test.js` covers the interest flow; use `withBggStub` for game lookups. Button clicks are not simulated by `execute`. Thread naming is covered by `test/gather-start-game.test.js` and `test/game-name-emoji.test.js`.
 
 ## /migrate
 
