@@ -2,6 +2,7 @@ const { describe, expect, test, beforeEach } = require("bun:test");
 const { ChannelType, MessageFlags } = require("discord.js");
 const GatherInterest = require("../modules/GatherInterest");
 const GatherStartGame = require("../modules/GatherStartGame");
+// slashcommands/info/lfg.js — Start game creates the play thread.
 
 function sampleGame(overrides = {}) {
   return {
@@ -353,6 +354,12 @@ describe("GatherStartGame warnings and create post", () => {
     const name = GatherStartGame.threadNameFromGame(`${"A".repeat(120)}\nB`);
     expect(name.length).toBe(100);
     expect(name).not.toContain("\n");
+  });
+
+  test("thread names can take an emoji prefix without exceeding 100 characters", () => {
+    const name = GatherStartGame.threadNameFromGame("A".repeat(100), "🚂");
+    expect(name.length).toBe(100);
+    expect(name.startsWith("🚂 ")).toBe(true);
   });
 });
 
@@ -1187,5 +1194,83 @@ describe("GatherStartGame start flow", () => {
     );
     expect(picker).toContain("**My Prototype v3**");
     expect(picker).not.toContain("BGG player count");
+  });
+
+  test("Start prefixes the thread name with a Gemini-chosen emoji", async () => {
+    const env = createThreadEnv({ gather });
+    env.client.config = { geminiKey: "test-key" };
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+    await runStart(interaction, env.client, gather, {
+      chooseGameEmoji: async () => "🚂",
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+    expect(env.created[0].name).toBe("🚂 Wingspan");
+    const game = await env.client.getGameDataV2(gather.guildId, "game", "thread-1");
+    expect(game.name).toBe("🚂 Wingspan");
+    expect(env.threadSends[1].payload.content).toContain("**Wingspan** is on the table.");
+  });
+
+  test("Start still creates the thread when emoji selection fails", async () => {
+    const env = createThreadEnv({ gather });
+    env.client.config = { geminiKey: "test-key" };
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+    await runStart(interaction, env.client, gather, {
+      chooseGameEmoji: async () => {
+        throw new Error("Gemini emoji selection timed out");
+      },
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+    expect(env.created[0].name).toBe("Wingspan");
+    const started = replies.find((r) =>
+      String(r.content || "").includes("Game started")
+    );
+    expect(started).toBeTruthy();
+  });
+
+  test("Start does not double-prefix a game name that already starts with an emoji", async () => {
+    gather.game.name = "🚂 Brass";
+    const env = createThreadEnv({ gather });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+    await runStart(interaction, env.client, gather, {
+      chooseGameEmoji: async () => "🐦",
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+    expect(env.created[0].name).toBe("🚂 Brass");
   });
 });

@@ -15,6 +15,27 @@ const SOURCE_LINK_RE = /\[[^\]]*\]\(<[^>]*>\)/g;
 const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-lite-image";
 const DEFAULT_GEMINI_RULES_MODEL = "gemini-3.8-flash";
 const DEFAULT_IMAGE_TIMEOUT_MS = 45_000;
+const DEFAULT_EMOJI_TIMEOUT_MS = 8_000;
+const GAME_EMOJI_SYSTEM_INSTRUCTION =
+  "You pick one standard Unicode emoji that represents a board or card game. Reply with that emoji only. Never use Discord custom emojis or :shortcode: names.";
+const TEXT_SAFETY_SETTINGS = [
+  {
+    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+    threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+  },
+];
 const BLOCKED_FINISH_REASONS = new Set([
   "SAFETY",
   "IMAGE_SAFETY",
@@ -35,6 +56,35 @@ function resolveImageModel(client) {
 function resolveImageTimeoutMs(client) {
   const raw = Number(client?.config?.geminiImageTimeoutMs);
   return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_IMAGE_TIMEOUT_MS;
+}
+
+function resolveEmojiTimeoutMs(client) {
+  const raw = Number(client?.config?.geminiEmojiTimeoutMs);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_EMOJI_TIMEOUT_MS;
+}
+
+function extractCandidateText(result) {
+  const promptFeedback =
+    result?.promptFeedback || result?.response?.promptFeedback;
+  if (promptFeedback?.blockReason) return "";
+  const candidate = firstCandidate(result);
+  if (!candidate) return "";
+  const finish = String(candidate.finishReason || "").toUpperCase();
+  if (BLOCKED_FINISH_REASONS.has(finish)) return "";
+  const parts = candidate.content?.parts;
+  if (!Array.isArray(parts)) return "";
+  return parts
+    .filter((part) => part && typeof part.text === "string")
+    .map((part) => part.text)
+    .join("")
+    .trim();
+}
+
+function gameEmojiPrompt(gameName) {
+  const name = String(gameName || "this game").trim() || "this game";
+  return `Select one standard Unicode emoji that best represents the board or card game named: ${name}
+
+Reply with that single emoji only. Do not use Discord custom emojis. Do not include words, quotes, or explanation.`;
 }
 
 function withTimeout(promise, ms, message = "Gemini image generation timed out") {
@@ -255,24 +305,7 @@ class GeminiAI {
               googleSearch: {}
             }            
           ],
-          safetySettings: [
-            {
-              category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-              threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            },
-            {
-              category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-              threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            },
-            {
-              category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-              threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            },
-            {
-              category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-              threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            },
-          ],
+          safetySettings: TEXT_SAFETY_SETTINGS,
           systemInstruction: this.getSystemInstructions(gameData)
          }
     })
@@ -377,13 +410,32 @@ class GeminiAI {
     return extractInlineImage(response, this.client?.logger);
   }
 
+  async suggestGameEmoji(gameName, { timeoutMs } = {}) {
+    const response = await withTimeout(
+      this.AI2.models.generateContent({
+        model: DEFAULT_GEMINI_RULES_MODEL,
+        contents: gameEmojiPrompt(gameName),
+        config: {
+          maxOutputTokens: 32,
+          safetySettings: TEXT_SAFETY_SETTINGS,
+          systemInstruction: GAME_EMOJI_SYSTEM_INSTRUCTION,
+        },
+      }),
+      timeoutMs || resolveEmojiTimeoutMs(this.client),
+      "Gemini emoji selection timed out"
+    );
+    return extractCandidateText(response);
+  }
+
 }
 
 module.exports = {
   createGeminiAI,
   extractInlineImage,
+  extractCandidateText,
   resolveImageModel,
   resolveImageTimeoutMs,
+  resolveEmojiTimeoutMs,
   withTimeout,
   splitDiscordContent,
   combineDiscordChunks,
@@ -391,4 +443,5 @@ module.exports = {
   DEFAULT_GEMINI_IMAGE_MODEL,
   DEFAULT_GEMINI_RULES_MODEL,
   DEFAULT_IMAGE_TIMEOUT_MS,
+  DEFAULT_EMOJI_TIMEOUT_MS,
 }

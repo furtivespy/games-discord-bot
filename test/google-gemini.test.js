@@ -3,12 +3,15 @@ const { HarmCategory, HarmBlockThreshold, Modality } = require("@google/genai");
 const {
   createGeminiAI,
   extractInlineImage,
+  extractCandidateText,
   resolveImageModel,
+  resolveEmojiTimeoutMs,
   splitDiscordContent,
   combineDiscordChunks,
   DISCORD_CONTENT_MAX,
   DEFAULT_GEMINI_IMAGE_MODEL,
   DEFAULT_GEMINI_RULES_MODEL,
+  DEFAULT_EMOJI_TIMEOUT_MS,
 } = require("../modules/GoogleGemini");
 
 const PNG_BYTES = Buffer.from("fake-png-bytes");
@@ -55,6 +58,11 @@ describe("Gemini models and extraction", () => {
     expect(DEFAULT_GEMINI_RULES_MODEL).toBe("gemini-3.8-flash");
     expect(DEFAULT_GEMINI_IMAGE_MODEL).not.toContain("2.5");
     expect(DEFAULT_GEMINI_RULES_MODEL).not.toContain("2.5");
+    expect(DEFAULT_EMOJI_TIMEOUT_MS).toBe(8_000);
+    expect(resolveEmojiTimeoutMs({ config: {} })).toBe(DEFAULT_EMOJI_TIMEOUT_MS);
+    expect(
+      resolveEmojiTimeoutMs({ config: { geminiEmojiTimeoutMs: 1500 } })
+    ).toBe(1500);
   });
 
   test("uses the configured image model name instead of a hardcoded one", () => {
@@ -148,6 +156,62 @@ describe("Gemini models and extraction", () => {
       Modality.IMAGE,
     ]);
     expect(result.buffer.equals(PNG_BYTES)).toBe(true);
+  });
+
+  test("suggestGameEmoji uses gemini-3.8-flash with no search tools", async () => {
+    const gemini = createGeminiAI(fakeClient());
+    let captured = null;
+    gemini.AI2 = {
+      models: {
+        generateContent: async (params) => {
+          captured = params;
+          return {
+            candidates: [{ content: { parts: [{ text: "🚂" }] } }],
+          };
+        },
+      },
+    };
+
+    const text = await gemini.suggestGameEmoji("Brass");
+
+    expect(text).toBe("🚂");
+    expect(captured.model).toBe(DEFAULT_GEMINI_RULES_MODEL);
+    expect(captured.contents).toContain("Brass");
+    expect(captured.config.tools).toBeUndefined();
+    expect(captured.config.maxOutputTokens).toBe(32);
+    expect(captured.config.systemInstruction).toContain("Unicode emoji");
+    expect(captured.config.safetySettings).toEqual(
+      expect.arrayContaining([
+        {
+          category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+          threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+        },
+      ])
+    );
+  });
+
+  test("suggestGameEmoji times out instead of hanging", async () => {
+    const gemini = createGeminiAI(fakeClient({ geminiEmojiTimeoutMs: 20 }));
+    gemini.AI2 = {
+      models: {
+        generateContent: () => new Promise(() => {}),
+      },
+    };
+    await expect(gemini.suggestGameEmoji("Brass")).rejects.toThrow(
+      "Gemini emoji selection timed out"
+    );
+  });
+
+  test("extractCandidateText returns empty on a blocked or empty response", () => {
+    expect(extractCandidateText({})).toBe("");
+    expect(
+      extractCandidateText({ promptFeedback: { blockReason: "SAFETY" } })
+    ).toBe("");
+    expect(
+      extractCandidateText({
+        candidates: [{ finishReason: "SAFETY", content: { parts: [{ text: "🚂" }] } }],
+      })
+    ).toBe("");
   });
 
   test("safety blocks and missing images return null instead of throwing", () => {
@@ -454,5 +518,28 @@ describe("@google/genai serialized generateContent", () => {
     expect(JSON.stringify(body.contents)).toContain("royalty portrait");
     expect(JSON.stringify(body.contents)).toContain("avatar-base64");
     expect(result.buffer.equals(PNG_BYTES)).toBe(true);
+  });
+
+  test("suggestGameEmoji POSTs v1beta with the rules model and no tools", async () => {
+    const calls = captureGeminiFetch({
+      candidates: [{ content: { parts: [{ text: "🚂" }] } }],
+    });
+
+    const gemini = createGeminiAI(fakeClient());
+    const text = await gemini.suggestGameEmoji("Brass");
+
+    expect(text).toBe("🚂");
+    expect(calls).toHaveLength(1);
+    const { href, method, body } = calls[0];
+    const url = new URL(href);
+    expect(method).toBe("POST");
+    expect(url.pathname).toContain("/v1beta/");
+    expect(url.pathname).not.toContain("/v1/");
+    expect(url.pathname).toContain(
+      `models/${DEFAULT_GEMINI_RULES_MODEL}:generateContent`
+    );
+    expect(body.tools).toBeUndefined();
+    expect(JSON.stringify(body.systemInstruction)).toContain("Unicode emoji");
+    expect(JSON.stringify(body.contents)).toContain("Brass");
   });
 });

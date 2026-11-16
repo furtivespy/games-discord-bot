@@ -11,14 +11,26 @@ const {
 const { cloneDeep, shuffle } = require("lodash");
 const GatherInterest = require("./GatherInterest");
 const GameIdentity = require("./GameIdentity");
+const GameNameEmoji = require("./GameNameEmoji");
 const GuildConfig = require("./GuildConfig");
 
 class GatherStartGame {
   static SELECT_TIMEOUT_MS = 120000;
 
-  static threadNameFromGame(name) {
-    const cleaned = String(name || "Game").replace(/[\r\n]+/g, " ").trim() || "Game";
-    return cleaned.slice(0, 100);
+  static threadNameFromGame(name, emoji = null) {
+    return GameNameEmoji.formatChannelName(name, emoji);
+  }
+
+  static async resolveThreadName(client, gather, deps = {}) {
+    const gameName = GatherInterest.gameDisplayName(gather);
+    let emoji = null;
+    try {
+      const choose = deps.chooseGameEmoji || GameNameEmoji.chooseForGame;
+      emoji = await choose(client, gameName);
+    } catch (error) {
+      GameNameEmoji.logSkip(client, error);
+    }
+    return this.threadNameFromGame(gameName, emoji);
   }
 
   static jumpUrl(guildId, channelId, messageId = null) {
@@ -263,10 +275,10 @@ class GatherStartGame {
     return null;
   }
 
-  static buildThreadCreateOptions(gather, parent) {
+  static buildThreadCreateOptions(gather, parent, threadName) {
     const gameName = GatherInterest.gameDisplayName(gather);
     const options = {
-      name: this.threadNameFromGame(gameName),
+      name: threadName || this.threadNameFromGame(gameName),
       autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
       reason: `Game Bot: start from /lfg (${gameName})`,
     };
@@ -581,9 +593,10 @@ class GatherStartGame {
 
     let thread;
     const forumLike = this.isForumLikeParent(parent);
+    const threadName = await this.resolveThreadName(client, gather, deps);
     try {
       thread = await parent.threads.create(
-        this.buildThreadCreateOptions(gather, parent)
+        this.buildThreadCreateOptions(gather, parent, threadName)
       );
     } catch (error) {
       console.error("Failed to create game thread for LFG start.", error);
