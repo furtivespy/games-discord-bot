@@ -1,11 +1,12 @@
 const GoogleGemini = require("./GoogleGemini");
 
 const DISCORD_CHANNEL_NAME_MAX = 100;
-const DISCORD_CUSTOM_EMOJI_RE = /<a?:\w+:\d+>/;
-const SHORTCODE_RE = /:[a-zA-Z0-9_+-]+:/;
+const DISCORD_CUSTOM_EMOJI_RE = /<a?:\w+:\d+>/g;
+const SHORTCODE_RE = /:[a-zA-Z0-9_+-]+:/g;
 const KEYCAP_RE = /^[\d#*]\uFE0F?\u20E3$/u;
 const FLAG_RE = /^\p{Regional_Indicator}{2}$/u;
 const DIGIT_VS16_RE = /^[\d#*]\uFE0F$/u;
+const WRAPPER_RE = /^[\s"'`.,;:!?()[\]{}]+$/;
 
 function logSkip(client, reason) {
   const message =
@@ -27,6 +28,13 @@ function hasGeminiKey(client) {
   return typeof key === "string" && key.trim().length > 0;
 }
 
+function graphemes(text) {
+  if (typeof text !== "string" || !text) return [];
+  return [...new Intl.Segmenter("en", { granularity: "grapheme" }).segment(text)].map(
+    (part) => part.segment
+  );
+}
+
 function isUnicodeEmoji(grapheme) {
   if (typeof grapheme !== "string" || grapheme.length === 0) return false;
   if (KEYCAP_RE.test(grapheme) || FLAG_RE.test(grapheme)) return true;
@@ -36,10 +44,14 @@ function isUnicodeEmoji(grapheme) {
   return /\p{Emoji}/u.test(grapheme) && grapheme.includes("\uFE0F");
 }
 
+function isSingleUnicodeEmoji(text) {
+  if (typeof text !== "string") return false;
+  const parts = graphemes(text.trim());
+  return parts.length === 1 && isUnicodeEmoji(parts[0]);
+}
+
 function firstNonWhitespaceGrapheme(text) {
-  if (typeof text !== "string" || !text) return "";
-  const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
-  for (const { segment } of segmenter.segment(text)) {
+  for (const segment of graphemes(text)) {
     if (segment.trim()) return segment;
   }
   return "";
@@ -49,13 +61,11 @@ function extractUnicodeEmoji(text) {
   if (typeof text !== "string") return null;
   const trimmed = text.trim();
   if (!trimmed) return null;
-  if (DISCORD_CUSTOM_EMOJI_RE.test(trimmed) || SHORTCODE_RE.test(trimmed)) {
-    return null;
-  }
-  const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
-  for (const { segment } of segmenter.segment(trimmed)) {
-    if (!segment.trim()) continue;
-    if (/^[\s"'`.,;:!?()[\]{}]+$/.test(segment)) continue;
+  const stripped = trimmed
+    .replace(DISCORD_CUSTOM_EMOJI_RE, " ")
+    .replace(SHORTCODE_RE, " ");
+  for (const segment of graphemes(stripped)) {
+    if (!segment.trim() || WRAPPER_RE.test(segment)) continue;
     if (isUnicodeEmoji(segment)) return segment;
   }
   return null;
@@ -69,15 +79,29 @@ function sanitizeGameName(name) {
   return String(name || "Game").replace(/[\r\n]+/g, " ").trim() || "Game";
 }
 
+function truncateToLength(text, max) {
+  if (typeof text !== "string" || max <= 0) return "";
+  if (text.length <= max) return text;
+  let end = 0;
+  for (const segment of graphemes(text)) {
+    if (end + segment.length > max) break;
+    end += segment.length;
+  }
+  return text.slice(0, end);
+}
+
 function formatChannelName(gameName, emoji) {
-  const cleaned = sanitizeGameName(gameName).slice(0, DISCORD_CHANNEL_NAME_MAX);
-  if (!emoji || !isUnicodeEmoji(emoji) || startsWithUnicodeEmoji(cleaned)) {
+  const cleaned = truncateToLength(
+    sanitizeGameName(gameName),
+    DISCORD_CHANNEL_NAME_MAX
+  );
+  if (!emoji || !isSingleUnicodeEmoji(emoji) || startsWithUnicodeEmoji(cleaned)) {
     return cleaned;
   }
   const prefix = `${emoji} `;
   const remaining = DISCORD_CHANNEL_NAME_MAX - prefix.length;
   if (remaining <= 0) return cleaned;
-  return `${prefix}${sanitizeGameName(gameName).slice(0, remaining)}`;
+  return `${prefix}${truncateToLength(sanitizeGameName(gameName), remaining)}`;
 }
 
 async function chooseForGame(client, gameName) {
@@ -87,7 +111,8 @@ async function chooseForGame(client, gameName) {
     const raw = await gemini.suggestGameEmoji(gameName);
     const emoji = extractUnicodeEmoji(raw);
     if (!emoji) {
-      logSkip(client, `invalid model output: ${JSON.stringify(raw)}`);
+      const preview = String(raw ?? "").slice(0, 80);
+      logSkip(client, `invalid model output: ${JSON.stringify(preview)}`);
       return null;
     }
     return emoji;
@@ -101,9 +126,11 @@ module.exports = {
   DISCORD_CHANNEL_NAME_MAX,
   hasGeminiKey,
   isUnicodeEmoji,
+  isSingleUnicodeEmoji,
   extractUnicodeEmoji,
   startsWithUnicodeEmoji,
   sanitizeGameName,
+  truncateToLength,
   formatChannelName,
   chooseForGame,
   logSkip,

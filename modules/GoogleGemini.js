@@ -81,7 +81,8 @@ function extractCandidateText(result) {
 }
 
 function gameEmojiPrompt(gameName) {
-  const name = String(gameName || "this game").trim() || "this game";
+  const name =
+    String(gameName || "this game").replace(/[\r\n]+/g, " ").trim() || "this game";
   return `Select one standard Unicode emoji that best represents the board or card game named: ${name}
 
 Reply with that single emoji only. Do not use Discord custom emojis. Do not include words, quotes, or explanation.`;

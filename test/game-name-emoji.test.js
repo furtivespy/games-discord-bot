@@ -28,12 +28,23 @@ describe("GameNameEmoji extraction", () => {
     expect(GameNameEmoji.extractUnicodeEmoji(" 🐦\n")).toBe("🐦");
     expect(GameNameEmoji.extractUnicodeEmoji("❤️")).toBe("❤️");
     expect(GameNameEmoji.extractUnicodeEmoji("🇺🇸")).toBe("🇺🇸");
+    expect(GameNameEmoji.extractUnicodeEmoji("👍🏽")).toBe("👍🏽");
+    expect(GameNameEmoji.extractUnicodeEmoji("1️⃣")).toBe("1️⃣");
+    expect(GameNameEmoji.extractUnicodeEmoji("👨‍👩‍👧‍👦")).toBe("👨‍👩‍👧‍👦");
   });
 
   test("strips surrounding text and extracts the first emoji", () => {
     expect(GameNameEmoji.extractUnicodeEmoji("🚂 Brass")).toBe("🚂");
     expect(GameNameEmoji.extractUnicodeEmoji('"🐦"')).toBe("🐦");
     expect(GameNameEmoji.extractUnicodeEmoji("Use 🎲 for this game.")).toBe("🎲");
+  });
+
+  test("extracts a unicode emoji even when a shortcode or custom emoji is also present", () => {
+    expect(GameNameEmoji.extractUnicodeEmoji("🚂 :train:")).toBe("🚂");
+    expect(GameNameEmoji.extractUnicodeEmoji(":smile: 🚂")).toBe("🚂");
+    expect(GameNameEmoji.extractUnicodeEmoji("🚂 <:brass:123456789012345678>")).toBe(
+      "🚂"
+    );
   });
 
   test("rejects text, shortcodes, and Discord custom emojis", () => {
@@ -66,6 +77,7 @@ describe("GameNameEmoji.formatChannelName", () => {
     expect(GameNameEmoji.formatChannelName("Brass", null)).toBe("Brass");
     expect(GameNameEmoji.formatChannelName("Brass", ":train:")).toBe("Brass");
     expect(GameNameEmoji.formatChannelName("Brass", "not-an-emoji")).toBe("Brass");
+    expect(GameNameEmoji.formatChannelName("Brass", "🚂🐦")).toBe("Brass");
   });
 
   test("stays within Discord's 100-character channel name limit", () => {
@@ -77,6 +89,24 @@ describe("GameNameEmoji.formatChannelName", () => {
     const withEmoji = GameNameEmoji.formatChannelName("A".repeat(100), "🚂");
     expect(withEmoji.length).toBe(100);
     expect(withEmoji.startsWith("🚂 ")).toBe(true);
+  });
+
+  test("truncation does not split a surrogate pair or grapheme", () => {
+    const smileAtCut = GameNameEmoji.formatChannelName(`${"A".repeat(96)}😀`, "🚂");
+    expect(smileAtCut.isWellFormed()).toBe(true);
+    expect(smileAtCut.startsWith("🚂 ")).toBe(true);
+    expect(smileAtCut.length).toBeLessThanOrEqual(100);
+    expect(smileAtCut).toBe(`🚂 ${"A".repeat(96)}`);
+
+    const family = "👨‍👩‍👧‍👦";
+    const familyAtCut = GameNameEmoji.formatChannelName(
+      `${"A".repeat(90)}${family}`,
+      "🚂"
+    );
+    expect(familyAtCut.isWellFormed()).toBe(true);
+    expect(familyAtCut.length).toBeLessThanOrEqual(100);
+    expect(familyAtCut.endsWith("\u200D")).toBe(false);
+    expect(familyAtCut).toBe(`🚂 ${"A".repeat(90)}`);
   });
 });
 
