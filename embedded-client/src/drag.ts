@@ -43,6 +43,40 @@ export function translateCss(x: number, y: number): string {
   return `translate(${x}px, ${y}px)`;
 }
 
+/** Read translate(x, y) from a computed `transform` matrix. */
+export function parseTranslate(transform: string | null | undefined): CardOffset | null {
+  if (!transform || transform === "none") return { x: 0, y: 0 };
+  const text = transform.trim();
+  if (text.startsWith("matrix3d(")) {
+    const n = text
+      .slice(9, -1)
+      .split(",")
+      .map((part) => Number.parseFloat(part));
+    if (n.length < 14 || !Number.isFinite(n[12]) || !Number.isFinite(n[13])) return null;
+    return { x: n[12], y: n[13] };
+  }
+  if (text.startsWith("matrix(")) {
+    const n = text
+      .slice(7, -1)
+      .split(",")
+      .map((part) => Number.parseFloat(part));
+    if (n.length < 6 || !Number.isFinite(n[4]) || !Number.isFinite(n[5])) return null;
+    return { x: n[4], y: n[5] };
+  }
+  return null;
+}
+
+/** Where the tile is on screen right now, including a mid-snap interpolated translate. */
+export function visualOffset(tile: HTMLElement): CardOffset | null {
+  const view = tile.ownerDocument?.defaultView;
+  if (!view?.getComputedStyle) return null;
+  try {
+    return parseTranslate(view.getComputedStyle(tile).transform);
+  } catch {
+    return null;
+  }
+}
+
 export function nextOffset(
   origin: CardOffset,
   start: CardOffset,
@@ -147,6 +181,7 @@ export function snapCardBack(
 
   let settled = false;
   function onEnd(event: Event) {
+    if (event.target != null && event.target !== tile) return;
     const property = (event as TransitionEvent).propertyName;
     if (property && property !== "transform") return;
     settle();
@@ -206,11 +241,15 @@ export function enableCardDrag(
     if (event.button != null && event.button !== 0) return;
     if (activePointer != null) return;
     event.preventDefault();
+    // Freeze the interpolated snap position before removing `.snapping`, or
+    // the tile jumps to the rest slot (inline transform is already rest).
+    const visual = visualOffset(tile);
+    if (visual) applyCardOffset(tile, visual);
     abortPendingSnap(tile);
     const pointerId = event.pointerId;
     activePointer = pointerId;
     const rest = copyOffset(positions.get(cardId));
-    const origin = raiseTile(tile, rest);
+    const origin = raiseTile(tile, visual ?? rest);
     positions.set(cardId, origin);
     const start = { x: event.clientX, y: event.clientY };
     tile.classList.add("dragging");

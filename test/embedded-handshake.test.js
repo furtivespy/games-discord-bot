@@ -23,7 +23,9 @@ const {
   isMovedOffset,
   nextCardStackOrder,
   nextOffset,
+  parseTranslate,
   translateCss,
+  visualOffset,
 } = require("../embedded-client/src/drag.ts");
 const {
   asCardList,
@@ -576,10 +578,23 @@ describe("client-only card drag", () => {
     expect(positions.get("hand-4")).toEqual({ x: 0, y: 0 });
   });
 
+  test("parseTranslate reads 2d and 3d matrix translates", () => {
+    expect(parseTranslate("none")).toEqual({ x: 0, y: 0 });
+    expect(parseTranslate("matrix(1, 0, 0, 1, 18, -120)")).toEqual({ x: 18, y: -120 });
+    expect(
+      parseTranslate("matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 30, -165, 0, 1)")
+    ).toEqual({ x: 30, y: -165 });
+  });
+
   test("a new drag during snap-back is not reset by the previous snap", async () => {
     const tile = createFakeTile();
     tile.ownerDocument.defaultView = {
-      getComputedStyle: () => ({ transitionDuration: "0.22s" }),
+      getComputedStyle: () => ({
+        transform: tile.classList.contains("snapping")
+          ? "matrix(1, 0, 0, 1, 18, -120)"
+          : "none",
+        transitionDuration: `${SNAP_BACK_DURATION_MS}ms`,
+      }),
     };
     const positions = new Map();
     enableCardDrag(tile, "hand-5", positions);
@@ -591,16 +606,18 @@ describe("client-only card drag", () => {
       pointerEvent("pointerup", { clientX: 30, clientY: 40 })
     );
     expect(tile.classList.contains("snapping")).toBe(true);
+    expect(visualOffset(tile)).toEqual({ x: 18, y: -120 });
 
     tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
     expect(tile.classList.contains("dragging")).toBe(true);
     expect(tile.classList.contains("snapping")).toBe(false);
+    expect(tile.style.transform).toBe(translateCss(18, -120));
     tile.ownerDocument.dispatchEvent(
       pointerEvent("pointermove", { clientX: 10, clientY: 20 })
     );
     await new Promise((resolve) => setTimeout(resolve, SNAP_BACK_DURATION_MS + 80));
     expect(tile.classList.contains("dragging")).toBe(true);
-    expect(tile.style.transform).toBe(translateCss(10, 20));
+    expect(tile.style.transform).toBe(translateCss(28, -100));
   });
 
   test("a pending snap is a no-op after the tile is replaced", async () => {

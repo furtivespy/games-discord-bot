@@ -197,6 +197,81 @@ try {
 }
 `;
 
+const REGRAB_HARNESS_JS = `
+function center(el) {
+  const box = el.getBoundingClientRect();
+  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+}
+
+function drag(tile, toX, toY) {
+  const from = center(tile);
+  const pointerId = 1;
+  tile.dispatchEvent(new PointerEvent("pointerdown", {
+    bubbles: true,
+    cancelable: true,
+    pointerId,
+    button: 0,
+    clientX: from.x,
+    clientY: from.y,
+  }));
+  document.dispatchEvent(new PointerEvent("pointermove", {
+    bubbles: true,
+    pointerId,
+    clientX: toX,
+    clientY: toY,
+  }));
+  document.dispatchEvent(new PointerEvent("pointerup", {
+    bubbles: true,
+    pointerId,
+    clientX: toX,
+    clientY: toY,
+  }));
+}
+
+async function report(body) {
+  await fetch("/result", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+try {
+  const { enableCardDrag } = await import("/drag.js");
+  const positions = new Map();
+  for (const tile of document.querySelectorAll(".card-tile[data-card-id]")) {
+    enableCardDrag(tile, tile.dataset.cardId, positions);
+  }
+  const king = document.querySelector('[data-card-id="hand-2"]');
+  if (!king) throw new Error("missing hand card");
+  const from = center(king);
+  drag(king, from.x, from.y - 200);
+  await new Promise((resolve) => setTimeout(resolve, 90));
+  const mid = king.getBoundingClientRect();
+  const grab = { x: mid.left + mid.width / 2, y: mid.top + mid.height / 2 };
+  king.dispatchEvent(new PointerEvent("pointerdown", {
+    bubbles: true,
+    cancelable: true,
+    pointerId: 2,
+    button: 0,
+    clientX: grab.x,
+    clientY: grab.y,
+  }));
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const after = king.getBoundingClientRect();
+  await report({
+    jumpX: Math.abs(after.left - mid.left),
+    jumpY: Math.abs(after.top - mid.top),
+    midTop: mid.top,
+    afterTop: after.top,
+    dragging: king.classList.contains("dragging"),
+    snapping: king.classList.contains("snapping"),
+  });
+} catch (error) {
+  await report({ error: String(error && error.stack ? error.stack : error) });
+}
+`;
+
 describe("dropped cards snap back to their rest slot", () => {
   const chrome = workingChromeBin();
   let server;
@@ -308,5 +383,76 @@ describe("dropped cards snap back to their rest slot", () => {
     expect(result.provinceTransform === "" || result.provinceTransform === "none").toBe(true);
     expect(result.boardZoneZ).toBe("auto");
     expect(result.playZoneZ).toBe("auto");
+  }, 30000);
+
+  test.skipIf(!chrome)("QA: re-grabbing mid-snap keeps the card under the pointer", async () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const built = await Bun.build({
+      entrypoints: [DRAG_PATH],
+      target: "browser",
+      format: "esm",
+    });
+    expect(built.success).toBe(true);
+    const dragJs = await built.outputs[0].text();
+
+    let resolveResult;
+    const resultPromise = new Promise((resolve) => {
+      resolveResult = resolve;
+    });
+
+    server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const url = new URL(req.url);
+        if (req.method === "POST" && url.pathname === "/result") {
+          resolveResult(await req.json());
+          return new Response("ok");
+        }
+        if (url.pathname === "/drag.js") {
+          return new Response(dragJs, {
+            headers: { "Content-Type": "text/javascript; charset=utf-8" },
+          });
+        }
+        if (url.pathname === "/harness.js") {
+          return new Response(REGRAB_HARNESS_JS, {
+            headers: { "Content-Type": "text/javascript; charset=utf-8" },
+          });
+        }
+        return new Response(stackingHarness(css), {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      },
+    });
+
+    userDataDir = fs.mkdtempSync(path.join(require("os").tmpdir(), "card-regrab-"));
+    chromeProc = spawn(
+      chrome,
+      [
+        "--headless=new",
+        "--disable-gpu",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--hide-scrollbars",
+        "--no-first-run",
+        "--window-size=1280,800",
+        `--user-data-dir=${userDataDir}`,
+        String(server.url),
+      ],
+      { stdio: "ignore" }
+    );
+
+    const result = await Promise.race([
+      resultPromise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("timed out waiting for Chrome re-grab result")), 20000)
+      ),
+    ]);
+
+    expect(result.error).toBeUndefined();
+    expect(result.dragging).toBe(true);
+    expect(result.snapping).toBe(false);
+    expect(result.jumpX).toBeLessThan(8);
+    expect(result.jumpY).toBeLessThan(8);
   }, 30000);
 });
