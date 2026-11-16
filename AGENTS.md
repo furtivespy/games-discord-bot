@@ -23,6 +23,8 @@ services) goes under "For you to test" in the PR.
 - Shared pieces and the ADRs that constrain them: [docs/primitives.md](docs/primitives.md)
 - Merging, risk tiers, the QA Status block: [docs/merge-policy.md](docs/merge-policy.md)
 - Shipping a PR: [.agents/skills/ship-pr/SKILL.md](.agents/skills/ship-pr/SKILL.md)
+- Filing friction (repo papercuts) in Linear: [.agents/skills/friction-log/SKILL.md](.agents/skills/friction-log/SKILL.md)
+- Scheduled cleanup agents and their prompts: [docs/cleanup-automations.md](docs/cleanup-automations.md)
 - Decisions to read before proposing big changes: [docs/adr/](docs/adr/)
 - Rolling back a release: [docs/runbooks/rollback.md](docs/runbooks/rollback.md)
 
