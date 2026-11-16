@@ -14,6 +14,7 @@ export class MockDiscordSDK {
   readonly clientId: string;
   readonly channelId: string;
   readonly guildId: string;
+  readonly openedExternalLinks: string[] = [];
   readonly commands: {
     authorize: (args: unknown) => Promise<{ code: string }>;
     authenticate: (args: { access_token: string }) => Promise<{
@@ -24,6 +25,7 @@ export class MockDiscordSDK {
         global_name: string;
       };
     }>;
+    openExternalLink: (args: { url: string }) => Promise<{ opened: boolean }>;
   };
 
   constructor(clientId: string, options: MockDiscordSdkOptions = {}) {
@@ -40,6 +42,10 @@ export class MockDiscordSDK {
           global_name: MOCK_USER.global_name,
         },
       }),
+      openExternalLink: async ({ url }) => {
+        this.openedExternalLinks.push(url);
+        return { opened: true };
+      },
     };
   }
 

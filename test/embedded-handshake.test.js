@@ -25,6 +25,7 @@ const {
   gameChannelUrl,
   parseActionCount,
   visualActionBody,
+  visualActionErrorMessage,
 } = require("../embedded-client/src/visualActions.ts");
 const {
   SNAP_BACK_DURATION_MS,
@@ -229,6 +230,14 @@ describe("mock Discord SDK shim", () => {
       username: MOCK_USER.username,
       global_name: MOCK_USER.global_name,
     });
+    expect(
+      await sdk.commands.openExternalLink({
+        url: "https://discord.com/channels/seeded-guild/seeded-channel",
+      })
+    ).toEqual({ opened: true });
+    expect(sdk.openedExternalLinks).toEqual([
+      "https://discord.com/channels/seeded-guild/seeded-channel",
+    ]);
   });
 });
 
@@ -826,6 +835,17 @@ describe("deck hover Deal and Draw", () => {
     expect(css).toContain("scale(1.48)");
     expect(css).not.toContain("scale(1.28)");
     expect(css).toMatch(/\.card-tile img[\s\S]*object-fit:\s*contain/);
+    expect(css).toMatch(/\.hand-fan[\s\S]*padding:\s*5\.4rem/);
+    expect(visualActionErrorMessage("not_a_player")).toBe(
+      "You're not a player in this game."
+    );
+    expect(visualActionErrorMessage("invalid_count")).toBe(
+      "Enter a number from 1 to 99."
+    );
+    expect(visualActionErrorMessage("no_cards_in_draw")).toBe("No cards in draw pile");
+    expect(visualActionErrorMessage("mystery", "No cards to deal.")).toBe(
+      "No cards to deal."
+    );
   });
 });
 

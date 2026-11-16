@@ -30,6 +30,7 @@ import {
   gameChannelUrl,
   parseActionCount,
   visualActionBody,
+  visualActionErrorMessage,
   type DeckActionKind,
 } from "./visualActions";
 import { enableCardDrag, type CardOffset } from "./drag";
@@ -68,8 +69,14 @@ let activeSession: {
   config: EmbeddedConfig;
   accessToken: string;
   guildId: string;
+  discordSdk?: {
+    commands?: {
+      openExternalLink?: (args: { url: string }) => Promise<unknown>;
+    };
+  };
 } | null = null;
 let actionDialogBound = false;
+let actionInFlight = false;
 
 type EmbeddedConfig = {
   clientId: string;
@@ -241,6 +248,12 @@ function renderGameChannelLink(guildId: unknown, channelId: unknown) {
   anchor.target = "_blank";
   anchor.rel = "noreferrer";
   anchor.textContent = GAME_CHANNEL_LINK_LABEL;
+  anchor.addEventListener("click", (event) => {
+    const openExternal = activeSession?.discordSdk?.commands?.openExternalLink;
+    if (typeof openExternal !== "function") return;
+    event.preventDefault();
+    void openExternal({ url: href });
+  });
   el.replaceChildren(anchor);
   el.hidden = false;
 }
@@ -268,12 +281,13 @@ function setActionDialogError(message: string | null) {
 
 function closeActionDialog() {
   const { dialog, confirm } = actionDialogElements();
-  if (confirm) confirm.disabled = false;
+  if (confirm && !actionInFlight) confirm.disabled = false;
   setActionDialogError(null);
   dialog?.close?.();
 }
 
 function openActionDialog(kind: DeckActionKind, deckName: string) {
+  if (actionInFlight) return;
   const els = actionDialogElements();
   if (!els.dialog || !els.input || !els.form) return;
   const copy = actionDialogCopy(kind);
@@ -304,6 +318,8 @@ async function submitDeckAction(kind: DeckActionKind, deckName: string, count: n
     setActionDialogError("Could not reach the game.");
     return;
   }
+  if (actionInFlight) return;
+  actionInFlight = true;
   const channelId = liveSelectedChannelId(session.config.channelId);
   const guildId = session.guildId || session.config.guildId;
   const { confirm } = actionDialogElements();
@@ -341,16 +357,18 @@ async function submitDeckAction(kind: DeckActionKind, deckName: string, count: n
     }
     if (!response.ok) {
       setActionDialogError(
-        payload.message || payload.error || "Could not run that action."
+        visualActionErrorMessage(payload.error, payload.message)
       );
-      if (confirm) confirm.disabled = false;
       return;
     }
     closeActionDialog();
     applySnapshot(session.config, payload);
   } catch {
     setActionDialogError("Could not run that action.");
-    if (confirm) confirm.disabled = false;
+  } finally {
+    actionInFlight = false;
+    const els = actionDialogElements();
+    if (els.confirm && els.dialog?.open) els.confirm.disabled = false;
   }
 }
 
@@ -364,6 +382,7 @@ function bindActionDialog() {
   });
   els.form.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (actionInFlight) return;
     const kind = String(els.dialog?.dataset.action || "") as DeckActionKind;
     const deckName = String(els.dialog?.dataset.deckName || "").trim();
     const count = parseActionCount(els.input?.value);
@@ -1023,7 +1042,7 @@ async function bootstrap() {
   // discordSdk.guildId is the SDK field (query param guild_id). The game
   // channel/thread id comes from the picker, not discordSdk.channelId.
   const guildId = String(discordSdk.guildId || config.guildId || "").trim();
-  activeSession = { config, accessToken, guildId };
+  activeSession = { config, accessToken, guildId, discordSdk };
   const fixture = readFixture();
   if (config.mock && isSnapshotFixture(fixture) && !isPickerFixture(fixture)) {
     await loadSnapshot(config, accessToken, {

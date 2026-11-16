@@ -7,6 +7,8 @@ const {
   GAME_COLLECTION,
   isMissingGame,
   resolveGetGameData,
+  resolvePlayerDisplays,
+  snapshotFromGameData,
   snapshotGameForUser,
   userIsPlayer,
 } = require("./embeddedGames");
@@ -34,15 +36,23 @@ function parseVisualActionCount(value) {
 function parseVisualActionBody(body = {}) {
   const action = String(body.action || "").trim().toLowerCase();
   if (!VISUAL_ACTIONS.has(action)) {
-    return { error: "invalid_action", status: 400 };
+    return {
+      error: "invalid_action",
+      status: 400,
+      message: "Deal and Draw are the only visual actions.",
+    };
   }
   const deckName = typeof body.deck === "string" ? body.deck.trim() : "";
   if (!deckName) {
-    return { error: "missing_deck", status: 400 };
+    return { error: "missing_deck", status: 400, message: "Pick a deck first." };
   }
   const count = parseVisualActionCount(body.count);
   if (count == null) {
-    return { error: "invalid_count", status: 400 };
+    return {
+      error: "invalid_count",
+      status: 400,
+      message: `Enter a number from ${VISUAL_ACTION_MIN} to ${VISUAL_ACTION_MAX}.`,
+    };
   }
   return { action, deckName, count };
 }
@@ -185,9 +195,24 @@ async function runVisualCardAction({
   const gid = String(guildId || "").trim();
   const cid = String(channelId || "").trim();
   const uid = String(user?.id || "").trim();
-  if (!gid) return { status: 400, body: { error: "missing_guild" } };
-  if (!cid) return { status: 400, body: { error: "missing_channel" } };
-  if (!uid) return { status: 401, body: { error: "unauthorized" } };
+  if (!gid) {
+    return {
+      status: 400,
+      body: { error: "missing_guild", message: "Could not find the server for this game." },
+    };
+  }
+  if (!cid) {
+    return {
+      status: 400,
+      body: { error: "missing_channel", message: "Could not find the channel for this game." },
+    };
+  }
+  if (!uid) {
+    return {
+      status: 401,
+      body: { error: "unauthorized", message: "Could not sign in to run that action." },
+    };
+  }
 
   const loader = resolveGetGameData({ getGameData, discordClient, gameStore });
   if (!loader) {
@@ -209,10 +234,29 @@ async function runVisualCardAction({
     return { status: 404, body: { error: "no_game" } };
   }
   if (!userIsPlayer(gameData, uid)) {
-    return { status: 403, body: { error: "not_a_player" } };
+    return {
+      status: 403,
+      body: {
+        error: "not_a_player",
+        message: "You're not a player in this game.",
+      },
+    };
   }
 
   const actor = actorFromDiscordUser(user);
+  try {
+    const displays = await resolvePlayerDisplays({
+      discordClient,
+      guildId: gid,
+      userIds: [uid],
+    });
+    const guildName = displays[uid]?.name;
+    if (typeof guildName === "string" && guildName.trim()) {
+      actor.displayName = guildName.trim();
+    }
+  } catch {
+    // OAuth global_name / username is enough if the guild member lookup fails.
+  }
   const applied = applyVisualCardAction(gameData, {
     action,
     deckName,
@@ -269,21 +313,30 @@ async function runVisualCardAction({
     userId: uid,
     logger,
   });
-  if (snapshot.status !== 200) {
-    return snapshot;
+  if (snapshot.status === 200) {
+    return {
+      status: 200,
+      body: {
+        ...snapshot.body,
+        message: applied.content,
+      },
+    };
   }
+  // The write already landed; do not 4xx/5xx or the dialog will retry and deal twice.
   return {
     status: 200,
     body: {
-      ...snapshot.body,
+      ...snapshotFromGameData(gameData, {
+        channelId: cid,
+        guildId: gid,
+        userId: uid,
+      }),
       message: applied.content,
     },
   };
 }
 
 module.exports = {
-  VISUAL_ACTION_MAX,
-  VISUAL_ACTION_MIN,
   actorFromDiscordUser,
   applyVisualCardAction,
   parseVisualActionBody,

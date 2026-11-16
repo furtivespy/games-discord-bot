@@ -474,14 +474,20 @@ function createEmbeddedApp({
     const accessToken = bearerTokenFromHeader(req.get("authorization"));
     const parsed = parseVisualActionBody(req.body || {});
     if (parsed.error) {
-      res.status(parsed.status).json({ error: parsed.error });
+      res.status(parsed.status).json({
+        error: parsed.error,
+        message: parsed.message,
+      });
       return;
     }
     const requestedChannelId = sanitizeHostChannelId(req.body?.channelId);
     const requestedGuildId = sanitizeHostChannelId(req.body?.guildId);
     if (mockEnabled) {
       if (accessToken !== MOCK_ACCESS_TOKEN) {
-        res.status(401).json({ error: "unauthorized" });
+        res.status(401).json({
+          error: "unauthorized",
+          message: "Could not sign in to run that action.",
+        });
         return;
       }
       const result = mockSession.applyAction({
@@ -496,7 +502,10 @@ function createEmbeddedApp({
       return;
     }
     if (!accessToken) {
-      res.status(401).json({ error: "unauthorized" });
+      res.status(401).json({
+        error: "unauthorized",
+        message: "Could not sign in to run that action.",
+      });
       return;
     }
     let user = null;
@@ -509,15 +518,24 @@ function createEmbeddedApp({
       );
     }
     if (!user?.id) {
-      res.status(401).json({ error: "unauthorized" });
+      res.status(401).json({
+        error: "unauthorized",
+        message: "Could not sign in to run that action.",
+      });
       return;
     }
     if (!requestedGuildId) {
-      res.status(400).json({ error: "missing_guild" });
+      res.status(400).json({
+        error: "missing_guild",
+        message: "Could not find the server for this game.",
+      });
       return;
     }
     if (!requestedChannelId) {
-      res.status(400).json({ error: "missing_channel" });
+      res.status(400).json({
+        error: "missing_channel",
+        message: "Could not find the channel for this game.",
+      });
       return;
     }
     const guard = await optionalDiscordAccessGuard({

@@ -184,5 +184,4 @@ function drawMultiple(gameData, { deck, count, actor, player } = {}) {
 module.exports = {
   dealMultiple,
   drawMultiple,
-  actorDisplayName,
 };

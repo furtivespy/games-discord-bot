@@ -52,6 +52,31 @@ export function deckActionFromDataset(
   return { action, deckName };
 }
 
+export const ACTION_ERROR_MESSAGES: Record<string, string> = {
+  invalid_action: "Deal and Draw are the only visual actions.",
+  missing_deck: "Pick a deck first.",
+  invalid_count: `Enter a number from ${ACTION_COUNT_MIN} to ${ACTION_COUNT_MAX}.`,
+  unauthorized: "Could not sign in to run that action.",
+  not_a_player: "You're not a player in this game.",
+  no_game: "No game for that channel.",
+  missing_guild: "Could not find the server for this game.",
+  missing_channel: "Could not find the channel for this game.",
+  unknown_deck: "Unknown deck.",
+  no_cards_to_deal: "No cards to deal.",
+  no_cards_in_draw: "No cards in draw pile",
+  action_failed: "Could not run that action.",
+};
+
+export function visualActionErrorMessage(
+  error: unknown,
+  fallback?: string | null
+): string {
+  const key = String(error || "").trim();
+  if (key && ACTION_ERROR_MESSAGES[key]) return ACTION_ERROR_MESSAGES[key];
+  const text = typeof fallback === "string" ? fallback.trim() : "";
+  return text || ACTION_ERROR_MESSAGES.action_failed;
+}
+
 export function visualActionBody(opts: {
   action: DeckActionKind;
   deck: string;
