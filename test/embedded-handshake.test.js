@@ -112,6 +112,8 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("renderDeckActions");
     expect(main).toContain("deckActionsFor");
     expect(main).toContain("dataset.deckAction");
+    expect(main).toContain("button.blur");
+    expect(main).not.toContain("dataset.deckName");
     expect(main).toContain("autoSelectGameId");
     const requestSeq = require("fs").readFileSync(
       require("path").join(__dirname, "..", "embedded-client", "src", "requestSeq.ts"),
@@ -362,6 +364,10 @@ function createFakeTile() {
       list.push(fn);
       listeners.set(type, list);
     },
+    removeEventListener(type, fn) {
+      const list = (listeners.get(type) || []).filter((handler) => handler !== fn);
+      listeners.set(type, list);
+    },
     dispatchEvent(event) {
       for (const handler of listeners.get(event.type) || []) handler(event);
       return true;
@@ -536,6 +542,54 @@ describe("client-only card drag", () => {
     expect(copied).toEqual({ x: 3, y: 5, z: 41 });
     expect(copyOffset(undefined)).toEqual({ x: 0, y: 0 });
     expect(SNAP_BACK_DURATION_MS).toBe(220);
+    const css = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "embedded-client", "src", "style.css"),
+      "utf8"
+    );
+    expect(css).toContain(`transform ${SNAP_BACK_DURATION_MS / 1000}s`);
+  });
+
+  test("pointercancel snaps the card back like pointerup", () => {
+    const tile = createFakeTile();
+    const positions = new Map();
+    enableCardDrag(tile, "hand-4", positions);
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 18, clientY: 9 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointercancel", { clientX: 18, clientY: 9 })
+    );
+    expect(tile.style.transform).toBe("");
+    expect(tile.classList.contains("dragging")).toBe(false);
+    expect(positions.get("hand-4")).toEqual({ x: 0, y: 0 });
+  });
+
+  test("a new drag during snap-back is not reset by the previous snap", async () => {
+    const tile = createFakeTile();
+    tile.ownerDocument.defaultView = {
+      getComputedStyle: () => ({ transitionDuration: "0.22s" }),
+    };
+    const positions = new Map();
+    enableCardDrag(tile, "hand-5", positions);
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 30, clientY: 40 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 30, clientY: 40 })
+    );
+    expect(tile.classList.contains("snapping")).toBe(true);
+
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    expect(tile.classList.contains("dragging")).toBe(true);
+    expect(tile.classList.contains("snapping")).toBe(false);
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 10, clientY: 20 })
+    );
+    await new Promise((resolve) => setTimeout(resolve, SNAP_BACK_DURATION_MS + 80));
+    expect(tile.classList.contains("dragging")).toBe(true);
+    expect(tile.style.transform).toBe(translateCss(10, 20));
   });
 });
 

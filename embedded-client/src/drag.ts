@@ -110,6 +110,18 @@ function clearDragClasses(tile: HTMLElement) {
   tile.classList.remove("moved");
 }
 
+type PendingSnap = { abort: () => void };
+
+const pendingSnaps = new WeakMap<HTMLElement, PendingSnap>();
+
+/** Cancel an in-flight snap without restoring rest (a new drag may be live). */
+export function abortPendingSnap(tile: HTMLElement) {
+  const pending = pendingSnaps.get(tile);
+  if (!pending) return;
+  pendingSnaps.delete(tile);
+  pending.abort();
+}
+
 /**
  * Restore the tile's pre-drag slot (order is unchanged in the DOM) and visual
  * state: transform, z-index, and drag classes. Face, rotation, size, and
@@ -122,6 +134,7 @@ export function snapCardBack(
   positions: Map<string, CardOffset>,
   rest: CardOffset
 ) {
+  abortPendingSnap(tile);
   tile.classList.remove("dragging");
   tile.classList.add("snapping");
   forceReflow(tile);
@@ -139,23 +152,29 @@ export function snapCardBack(
   }
 
   let settled = false;
-  const settle = () => {
-    if (settled) return;
-    settled = true;
-    tile.removeEventListener("transitionend", onEnd);
-    finish();
-  };
   const onEnd = (event: Event) => {
     const property = (event as TransitionEvent).propertyName;
     if (property && property !== "transform") return;
     settle();
   };
+  const settle = () => {
+    if (settled) return;
+    settled = true;
+    pendingSnaps.delete(tile);
+    tile.removeEventListener("transitionend", onEnd);
+    finish();
+  };
+  const timer = setTimeout(settle, SNAP_BACK_DURATION_MS + 50);
+  pendingSnaps.set(tile, {
+    abort: () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      tile.removeEventListener("transitionend", onEnd);
+      tile.classList.remove("snapping");
+    },
+  });
   tile.addEventListener("transitionend", onEnd);
-  setTimeout(settle, duration + 50);
-}
-
-function dropPointFrom(event: PointerEvent): DropPoint {
-  return { x: event.clientX, y: event.clientY };
 }
 
 function dropWasConsumed(
@@ -190,6 +209,7 @@ export function enableCardDrag(
     if (event.button != null && event.button !== 0) return;
     if (activePointer != null) return;
     event.preventDefault();
+    abortPendingSnap(tile);
     const pointerId = event.pointerId;
     activePointer = pointerId;
     const rest = copyOffset(positions.get(cardId));
@@ -229,7 +249,7 @@ export function enableCardDrag(
 
       const ctx: DropContext = {
         cardId,
-        point: dropPointFrom(pointer),
+        point: { x: pointer.clientX, y: pointer.clientY },
         tile,
       };
       if (dropWasConsumed(hooks, ctx)) {

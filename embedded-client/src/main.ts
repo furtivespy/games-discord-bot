@@ -515,10 +515,12 @@ function renderDeckActions(deck: SnapshotDeck): HTMLDivElement {
     button.type = "button";
     button.className = "deck-action";
     button.dataset.deckAction = action.id;
+    button.tabIndex = -1;
     button.textContent = action.label;
     // Placeholder: click is UI-only until a later ticket wires Deal/Draw.
     button.addEventListener("click", (event) => {
       event.preventDefault();
+      button.blur();
     });
     actions.append(button);
   }
@@ -540,7 +542,6 @@ function renderDecks(config: EmbeddedConfig, decks: SnapshotDeck[] | undefined) 
     name.className = "deck-name";
     name.textContent =
       typeof deck.name === "string" && deck.name.trim() ? deck.name.trim() : "Deck";
-    tile.dataset.deckName = name.textContent;
     const count = document.createElement("span");
     count.className = "deck-count";
     count.textContent = deckCountLabel(deck.remaining, deck.total);
