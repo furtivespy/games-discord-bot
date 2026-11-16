@@ -330,9 +330,21 @@ describe("runVisualCardAction", () => {
   });
 
   test("concurrent draws with a slow nick lookup each persist a different card", async () => {
-    const stored = JSON.parse(JSON.stringify(gameWithDeck()));
-    const store = new Map();
-    store.set("guild-1:game:race-thread", stored);
+    const rows = new Map();
+    rows.set("guild-1:game:race-thread", JSON.parse(JSON.stringify(gameWithDeck())));
+    const gameStore = {
+      getSpecificGameData(guildId, collection, channelId) {
+        const data = rows.get(`${guildId}:${collection}:${channelId}`);
+        return data ? JSON.parse(JSON.stringify(data)) : null;
+      },
+      upsertGameData(guildId, collection, channelId, data) {
+        rows.set(
+          `${guildId}:${collection}:${channelId}`,
+          JSON.parse(JSON.stringify(data))
+        );
+      },
+    };
+    const posted = [];
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const discordClient = {
       user: { id: "bot-1" },
@@ -343,7 +355,11 @@ describe("runVisualCardAction", () => {
               ? {
                   id: "race-thread",
                   guild: { id: "guild-1" },
-                  send: async (payload) => payload,
+                  messages: { fetch: async () => null },
+                  send: async (payload) => {
+                    posted.push(payload);
+                    return { id: `msg-${posted.length}` };
+                  },
                 }
               : null,
         },
@@ -353,23 +369,20 @@ describe("runVisualCardAction", () => {
         fetch: async () => ({
           members: {
             cache: { get: () => null },
-            fetch: async () => {
-              await delay(40);
-              return { displayName: "WillOnServer" };
+            fetch: async (userId) => {
+              if (userId === "snowflake-user") await delay(150);
+              return {
+                displayName: userId === "snowflake-user" ? "WillOnServer" : "Riley",
+              };
             },
           },
         }),
       },
       async getGameDataV2(guildId, collection, channelId) {
-        const data = store.get(`${guildId}:${collection}:${channelId}`);
-        return data ? JSON.parse(JSON.stringify(data)) : null;
+        return gameStore.getSpecificGameData(guildId, collection, channelId);
       },
       async setGameDataV2(guildId, collection, channelId, data) {
-        await delay(20);
-        store.set(
-          `${guildId}:${collection}:${channelId}`,
-          JSON.parse(JSON.stringify(data))
-        );
+        gameStore.upsertGameData(guildId, collection, channelId, data);
       },
     };
     const draw = {
@@ -380,6 +393,7 @@ describe("runVisualCardAction", () => {
       guildId: "guild-1",
       channelId: "race-thread",
       discordClient,
+      gameStore,
     };
     const [first, second] = await Promise.all([
       runVisualCardAction({ ...draw, requestId: "race-request-aaa" }),
@@ -387,7 +401,7 @@ describe("runVisualCardAction", () => {
     ]);
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
-    const saved = store.get("guild-1:game:race-thread");
+    const saved = gameStore.getSpecificGameData("guild-1", "game", "race-thread");
     expect(saved.players[0].hands.main.map((card) => card.name)).toEqual([
       "Copper",
       "Ace",
@@ -402,6 +416,14 @@ describe("runVisualCardAction", () => {
       second.body.hand.at(-1).name,
     ]);
     expect(lastDrawn).toEqual(new Set(["Ace", "King"]));
+    const drawHistory = saved.history
+      .filter((entry) => entry?.action?.type === GameDB.ACTION_TYPES.DRAW)
+      .map((entry) => entry.summary);
+    expect(drawHistory).toEqual([
+      "WillOnServer drew 1 cards from Main",
+      "WillOnServer drew 1 cards from Main",
+    ]);
+    expect(posted.map((payload) => payload.content)).toEqual(drawHistory);
   });
 
   test("still returns the updated table if the follow-up snapshot load fails", async () => {
