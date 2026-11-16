@@ -21,10 +21,20 @@ export type DropContext = {
  * This ticket wires no targets, so every drop snaps back and game state is
  * unchanged.
  */
+export type InspectContext = {
+  cardId: string;
+  tile: HTMLElement;
+};
+
 export type CardDropHooks = {
   findDropTarget?: (ctx: DropContext) => DropTarget | null | undefined;
   onDropTarget?: (ctx: DropContext & { target: DropTarget }) => boolean | void;
+  /** Pointerup with travel below CLICK_SLOP_PX. Dragging past that skips this. */
+  onInspect?: (ctx: InspectContext) => void;
 };
+
+/** Pointer travel below this is a click (inspect), not a drag. */
+export const CLICK_SLOP_PX = 8;
 
 /** Above `.card-tile:hover { z-index: 30 }` so a dragged card stays grabbable. */
 export const STACK_ABOVE_HOVER = 40;
@@ -224,6 +234,10 @@ function dropWasConsumed(
   return Boolean(hooks?.onDropTarget?.({ ...ctx, target }));
 }
 
+function pointerTravel(start: DropPoint, current: DropPoint): number {
+  return Math.hypot(current.x - start.x, current.y - start.y);
+}
+
 /**
  * Client-only drag. Positions live in the provided map and reset whenever the
  * caller replaces it (snapshot reload or a full page refresh).
@@ -259,6 +273,7 @@ export function enableCardDrag(
     positions.set(cardId, origin);
     const start = { x: event.clientX, y: event.clientY };
     tile.classList.add("dragging");
+    let moved = false;
     try {
       tile.setPointerCapture(pointerId);
     } catch {
@@ -287,10 +302,12 @@ export function enableCardDrag(
         detachDragListeners();
         return;
       }
-      const next = nextOffset(origin, start, {
-        x: pointer.clientX,
-        y: pointer.clientY,
-      });
+      const point = { x: pointer.clientX, y: pointer.clientY };
+      if (!moved) {
+        if (pointerTravel(start, point) < CLICK_SLOP_PX) return;
+        moved = true;
+      }
+      const next = nextOffset(origin, start, point);
       positions.set(cardId, next);
       applyCardOffset(tile, next);
     }
@@ -299,6 +316,16 @@ export function enableCardDrag(
       if (pointer.pointerId !== pointerId) return;
       detachDragListeners();
       if (tile.isConnected === false) return;
+
+      if (!moved) {
+        tile.classList.remove("dragging");
+        positions.set(cardId, copyOffset(rest));
+        applyCardOffset(tile, rest);
+        if (ev.type !== "pointercancel") {
+          hooks?.onInspect?.({ cardId, tile });
+        }
+        return;
+      }
 
       const ctx: DropContext = {
         cardId,

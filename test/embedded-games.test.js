@@ -588,6 +588,28 @@ describe("snapshotGameForUser", () => {
 });
 
 describe("snapshotFromGameData", () => {
+  test("keeps card description on the viewer's hand, play area, and board", () => {
+    const snapshot = snapshotFromGameData(
+      {
+        name: "Described",
+        players: [
+          {
+            userId: "will",
+            hands: {
+              main: [{ id: "h1", name: "Copper", description: "Basic treasure" }],
+            },
+            playArea: [{ id: "p1", name: "Village", description: "Worth 1 action." }],
+          },
+        ],
+        gameBoard: [{ id: "b1", name: "Province", description: "8 points" }],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(snapshot.hand[0].description).toBe("Basic treasure");
+    expect(snapshot.playArea[0].description).toBe("Worth 1 action.");
+    expect(snapshot.gameBoard[0].description).toBe("8 points");
+  });
+
   test("empty hands and missing playArea become empty arrays", () => {
     const snapshot = snapshotFromGameData(
       {
