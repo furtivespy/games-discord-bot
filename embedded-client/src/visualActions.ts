@@ -77,6 +77,28 @@ export function visualActionErrorMessage(
   return text || ACTION_ERROR_MESSAGES.action_failed;
 }
 
+export type OpenExternalLink = (args: { url: string }) => Promise<unknown>;
+
+export async function tryOpenExternalLink(
+  href: string,
+  openExternal: OpenExternalLink
+): Promise<"opened" | "cancelled" | "failed"> {
+  try {
+    const result = await openExternal({ url: href });
+    if (
+      result &&
+      typeof result === "object" &&
+      Object.prototype.hasOwnProperty.call(result, "opened") &&
+      (result as { opened?: unknown }).opened === false
+    ) {
+      return "cancelled";
+    }
+    return "opened";
+  } catch {
+    return "failed";
+  }
+}
+
 export function visualActionBody(opts: {
   action: DeckActionKind;
   deck: string;

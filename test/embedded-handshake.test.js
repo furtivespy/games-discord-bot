@@ -24,6 +24,7 @@ const {
   deckActionFromDataset,
   gameChannelUrl,
   parseActionCount,
+  tryOpenExternalLink,
   visualActionBody,
   visualActionErrorMessage,
 } = require("../embedded-client/src/visualActions.ts");
@@ -846,6 +847,22 @@ describe("deck hover Deal and Draw", () => {
     expect(visualActionErrorMessage("mystery", "No cards to deal.")).toBe(
       "No cards to deal."
     );
+  });
+
+  test("channel-link SDK success stays in Discord; reject falls back to href", async () => {
+    const href = "https://discord.com/channels/guild-1/thread-9";
+    expect(
+      await tryOpenExternalLink(href, async () => ({ opened: true }))
+    ).toBe("opened");
+    expect(
+      await tryOpenExternalLink(href, async () => ({ opened: false }))
+    ).toBe("cancelled");
+    expect(await tryOpenExternalLink(href, async () => undefined)).toBe("opened");
+    expect(
+      await tryOpenExternalLink(href, async () => {
+        throw new Error("command failed");
+      })
+    ).toBe("failed");
   });
 });
 

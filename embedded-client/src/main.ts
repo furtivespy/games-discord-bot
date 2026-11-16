@@ -29,6 +29,7 @@ import {
   deckActionFromDataset,
   gameChannelUrl,
   parseActionCount,
+  tryOpenExternalLink,
   visualActionBody,
   visualActionErrorMessage,
   type DeckActionKind,
@@ -252,7 +253,11 @@ function renderGameChannelLink(guildId: unknown, channelId: unknown) {
     const openExternal = activeSession?.discordSdk?.commands?.openExternalLink;
     if (typeof openExternal !== "function") return;
     event.preventDefault();
-    void openExternal({ url: href });
+    void tryOpenExternalLink(href, openExternal).then((status) => {
+      if (status === "failed") {
+        window.open(href, "_blank", "noopener,noreferrer");
+      }
+    });
   });
   el.replaceChildren(anchor);
   el.hidden = false;
