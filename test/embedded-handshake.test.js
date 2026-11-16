@@ -806,6 +806,20 @@ describe("client-only card drag", () => {
     expect(positions.get("hand-inspect")).toEqual({ x: 0, y: 0 });
   });
 
+  test("a pointerup that jumps past slop without pointermove does not inspect", () => {
+    const tile = createFakeTile();
+    const inspected = [];
+    enableCardDrag(tile, "hand-jump", new Map(), {
+      onInspect: (ctx) => inspected.push(ctx),
+    });
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 40, clientY: 0 })
+    );
+    expect(inspected).toEqual([]);
+    expect(tile.classList.contains("dragging")).toBe(false);
+  });
+
   test("dragging past the click slop does not inspect", () => {
     const tile = createFakeTile();
     const positions = new Map();

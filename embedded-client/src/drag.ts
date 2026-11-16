@@ -273,7 +273,7 @@ export function enableCardDrag(
     positions.set(cardId, origin);
     const start = { x: event.clientX, y: event.clientY };
     tile.classList.add("dragging");
-    let moved = false;
+    let pastClickSlop = false;
     try {
       tile.setPointerCapture(pointerId);
     } catch {
@@ -295,6 +295,12 @@ export function enableCardDrag(
       eventTarget.removeEventListener("pointerup", up);
       eventTarget.removeEventListener("pointercancel", up);
     }
+    function crossedClickSlop(point: DropPoint): boolean {
+      if (!pastClickSlop && pointerTravel(start, point) >= CLICK_SLOP_PX) {
+        pastClickSlop = true;
+      }
+      return pastClickSlop;
+    }
     function move(ev: Event) {
       const pointer = ev as PointerEvent;
       if (pointer.pointerId !== pointerId) return;
@@ -303,10 +309,7 @@ export function enableCardDrag(
         return;
       }
       const point = { x: pointer.clientX, y: pointer.clientY };
-      if (!moved) {
-        if (pointerTravel(start, point) < CLICK_SLOP_PX) return;
-        moved = true;
-      }
+      if (!crossedClickSlop(point)) return;
       const next = nextOffset(origin, start, point);
       positions.set(cardId, next);
       applyCardOffset(tile, next);
@@ -317,7 +320,9 @@ export function enableCardDrag(
       detachDragListeners();
       if (tile.isConnected === false) return;
 
-      if (!moved) {
+      // pointerup can jump without a move event (OS coalescing). Measure
+      // travel here too so a far-away up is a drag, not inspect.
+      if (!crossedClickSlop({ x: pointer.clientX, y: pointer.clientY })) {
         tile.classList.remove("dragging");
         positions.set(cardId, copyOffset(rest));
         applyCardOffset(tile, rest);
