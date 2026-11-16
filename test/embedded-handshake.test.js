@@ -15,13 +15,17 @@ const {
   urlMappingsForApiHost,
 } = require("../embedded-client/src/handshake.ts");
 const {
+  SNAP_BACK_DURATION_MS,
   STACK_ABOVE_HOVER,
   applyCardOffset,
+  copyOffset,
   enableCardDrag,
   isMovedOffset,
   nextCardStackOrder,
   nextOffset,
+  parseTranslate,
   translateCss,
+  visualOffset,
 } = require("../embedded-client/src/drag.ts");
 const {
   asCardList,
@@ -41,7 +45,10 @@ const {
   DEFAULT_CARD_BACK,
   UNASSIGNED_TEAM_LABEL,
   autoSelectGameId,
+  DEFAULT_DECK_ACTIONS,
+  deckActionsFor,
   deckCountLabel,
+  onDeckActionClick,
   groupPlayersByTeam,
   handCountLabel,
   initialsFromName,
@@ -105,6 +112,12 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("renderGameStatus");
     expect(main).toContain("renderOtherPlayers");
     expect(main).toContain("renderDecks");
+    expect(main).toContain("renderDeckActions");
+    expect(main).toContain("deckActionsFor");
+    expect(main).toContain("dataset.deckAction");
+    expect(main).toContain("onDeckActionClick");
+    expect(main).not.toContain("dataset.deckName");
+    expect(main).not.toContain("tabIndex");
     expect(main).toContain("autoSelectGameId");
     const requestSeq = require("fs").readFileSync(
       require("path").join(__dirname, "..", "embedded-client", "src", "requestSeq.ts"),
@@ -329,12 +342,20 @@ function createFakeTile() {
       for (const handler of docListeners.get(event.type) || []) handler(event);
       return true;
     },
+    listenerCount(type) {
+      return (docListeners.get(type) || []).length;
+    },
   };
   const tile = {
-    style: { transform: "", zIndex: "" },
+    style: { transform: "", zIndex: "", transitionDuration: "" },
+    isConnected: true,
     classList: {
-      add: (name) => classSet.add(name),
-      remove: (name) => classSet.delete(name),
+      add: (...names) => {
+        for (const name of names) classSet.add(name);
+      },
+      remove: (...names) => {
+        for (const name of names) classSet.delete(name);
+      },
       toggle: (name, force) => {
         if (force === undefined) {
           if (classSet.has(name)) classSet.delete(name);
@@ -349,6 +370,10 @@ function createFakeTile() {
     addEventListener(type, fn) {
       const list = listeners.get(type) || [];
       list.push(fn);
+      listeners.set(type, list);
+    },
+    removeEventListener(type, fn) {
+      const list = (listeners.get(type) || []).filter((handler) => handler !== fn);
       listeners.set(type, list);
     },
     dispatchEvent(event) {
@@ -405,10 +430,12 @@ describe("client-only card drag", () => {
     expect(tile.style.zIndex).toBe(String(first));
   });
 
-  test("raises a card's z-index on drag start and again on drop", () => {
+  test("raises a card's z-index while dragging, then snaps back to the rest slot", () => {
     const before = nextCardStackOrder();
     const tile = createFakeTile();
-    enableCardDrag(tile, "board-1", new Map());
+    tile.classList.add("selected");
+    const positions = new Map();
+    enableCardDrag(tile, "hand-1", positions);
     tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
     const duringDrag = Number(tile.style.zIndex);
     expect(duringDrag).toBeGreaterThan(before);
@@ -417,17 +444,22 @@ describe("client-only card drag", () => {
     tile.ownerDocument.dispatchEvent(
       pointerEvent("pointermove", { clientX: 40, clientY: 80 })
     );
+    expect(tile.style.transform).toBe(translateCss(30, 70));
+    expect(tile.classList.contains("moved")).toBe(true);
+
     tile.ownerDocument.dispatchEvent(
       pointerEvent("pointerup", { clientX: 40, clientY: 80 })
     );
-    const afterDrop = Number(tile.style.zIndex);
-    expect(afterDrop).toBeGreaterThan(duringDrag);
     expect(tile.classList.contains("dragging")).toBe(false);
-    expect(tile.classList.contains("moved")).toBe(true);
-    expect(tile.style.transform).toBe(translateCss(30, 70));
+    expect(tile.classList.contains("moved")).toBe(false);
+    expect(tile.classList.contains("snapping")).toBe(false);
+    expect(tile.classList.contains("selected")).toBe(true);
+    expect(tile.style.transform).toBe("");
+    expect(tile.style.zIndex).toBe("");
+    expect(positions.get("hand-1")).toEqual({ x: 0, y: 0 });
   });
 
-  test("a later drag raises that card above an earlier drop", () => {
+  test("a later drag still raises that card above others while the pointer is down", () => {
     const province = createFakeTile();
     const village = createFakeTile();
     const market = createFakeTile();
@@ -437,6 +469,7 @@ describe("client-only card drag", () => {
     enableCardDrag(market, "play-2", positions);
 
     province.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    const provinceZ = Number(province.style.zIndex);
     province.ownerDocument.dispatchEvent(
       pointerEvent("pointermove", { clientX: 10, clientY: 80 })
     );
@@ -445,6 +478,9 @@ describe("client-only card drag", () => {
     );
 
     market.dispatchEvent(pointerEvent("pointerdown", { clientX: 20, clientY: 0 }));
+    const marketZ = Number(market.style.zIndex);
+    expect(provinceZ).toBeGreaterThan(Number(village.style.zIndex || 0));
+    expect(marketZ).toBeGreaterThan(provinceZ);
     market.ownerDocument.dispatchEvent(
       pointerEvent("pointermove", { clientX: 20, clientY: 120 })
     );
@@ -452,12 +488,319 @@ describe("client-only card drag", () => {
       pointerEvent("pointerup", { clientX: 20, clientY: 120 })
     );
 
-    const provinceZ = Number(province.style.zIndex);
-    const marketZ = Number(market.style.zIndex);
-    expect(provinceZ).toBeGreaterThan(Number(village.style.zIndex || 0));
-    expect(marketZ).toBeGreaterThan(provinceZ);
-    expect(positions.get("board-1").z).toBe(provinceZ);
-    expect(positions.get("play-2").z).toBe(marketZ);
+    expect(positions.get("board-1")).toEqual({ x: 0, y: 0 });
+    expect(positions.get("play-2")).toEqual({ x: 0, y: 0 });
+    expect(province.style.transform).toBe("");
+    expect(market.style.transform).toBe("");
+  });
+
+  test("a drop target that consumes the drop keeps the card where it landed", () => {
+    const tile = createFakeTile();
+    const positions = new Map();
+    const hits = [];
+    enableCardDrag(tile, "hand-2", positions, {
+      findDropTarget: (ctx) => {
+        hits.push(ctx);
+        return { id: "future-play-area" };
+      },
+      onDropTarget: ({ target }) => target.id === "future-play-area",
+    });
+
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 4, clientY: 4 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 24, clientY: 54 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 24, clientY: 54 })
+    );
+
+    expect(hits).toHaveLength(1);
+    expect(hits[0].cardId).toBe("hand-2");
+    expect(hits[0].point).toEqual({ x: 24, y: 54 });
+    expect(tile.classList.contains("dragging")).toBe(false);
+    expect(tile.classList.contains("moved")).toBe(true);
+    expect(tile.style.transform).toBe(translateCss(20, 50));
+  });
+
+  test("a drop target that does not consume still snaps the card back", () => {
+    const tile = createFakeTile();
+    const positions = new Map();
+    enableCardDrag(tile, "hand-3", positions, {
+      findDropTarget: () => ({ id: "ignored" }),
+      onDropTarget: () => false,
+    });
+
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 12, clientY: 8 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 12, clientY: 8 })
+    );
+
+    expect(tile.style.transform).toBe("");
+    expect(tile.classList.contains("moved")).toBe(false);
+    expect(positions.get("hand-3")).toEqual({ x: 0, y: 0 });
+  });
+
+  test("copyOffset snapshots rest state without sharing the original object", () => {
+    const origin = { x: 3, y: 5, z: 41 };
+    const copied = copyOffset(origin);
+    origin.x = 99;
+    expect(copied).toEqual({ x: 3, y: 5, z: 41 });
+    expect(copyOffset(undefined)).toEqual({ x: 0, y: 0 });
+    expect(SNAP_BACK_DURATION_MS).toBe(220);
+    const css = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "embedded-client", "src", "style.css"),
+      "utf8"
+    );
+    expect(css).not.toMatch(/\.card-tile\.snapping\s*\{[^}]*0\.22s/);
+    const drag = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "embedded-client", "src", "drag.ts"),
+      "utf8"
+    );
+    expect(drag).toContain("tile.style.transitionDuration = `${SNAP_BACK_DURATION_MS}ms`");
+  });
+
+  test("pointercancel snaps the card back like pointerup", () => {
+    const tile = createFakeTile();
+    const positions = new Map();
+    enableCardDrag(tile, "hand-4", positions);
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 18, clientY: 9 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointercancel", { clientX: 18, clientY: 9 })
+    );
+    expect(tile.style.transform).toBe("");
+    expect(tile.classList.contains("dragging")).toBe(false);
+    expect(positions.get("hand-4")).toEqual({ x: 0, y: 0 });
+  });
+
+  test("parseTranslate reads 2d and 3d matrix translates", () => {
+    expect(parseTranslate("none")).toEqual({ x: 0, y: 0 });
+    expect(parseTranslate("matrix(1, 0, 0, 1, 18, -120)")).toEqual({ x: 18, y: -120 });
+    expect(
+      parseTranslate("matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 30, -165, 0, 1)")
+    ).toEqual({ x: 30, y: -165 });
+  });
+
+  test("a new drag during snap-back is not reset by the previous snap", async () => {
+    const tile = createFakeTile();
+    tile.ownerDocument.defaultView = {
+      getComputedStyle: () => ({
+        transform: tile.classList.contains("snapping")
+          ? "matrix(1, 0, 0, 1, 18, -120)"
+          : "none",
+        transitionDuration: `${SNAP_BACK_DURATION_MS}ms`,
+      }),
+    };
+    const positions = new Map();
+    enableCardDrag(tile, "hand-5", positions);
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 30, clientY: 40 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 30, clientY: 40 })
+    );
+    expect(tile.classList.contains("snapping")).toBe(true);
+    expect(visualOffset(tile)).toEqual({ x: 18, y: -120 });
+
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    expect(tile.classList.contains("dragging")).toBe(true);
+    expect(tile.classList.contains("snapping")).toBe(false);
+    expect(tile.style.transform).toBe(translateCss(18, -120));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 10, clientY: 20 })
+    );
+    await new Promise((resolve) => setTimeout(resolve, SNAP_BACK_DURATION_MS + 80));
+    expect(tile.classList.contains("dragging")).toBe(true);
+    expect(tile.style.transform).toBe(translateCss(28, -100));
+  });
+
+  test("re-grab during snap-back starts from the computed mid-animation offset", () => {
+    const mid = { x: 18, y: -99 };
+    const tile = createFakeTile();
+    const styled = [];
+    tile.ownerDocument.defaultView = {
+      getComputedStyle: (el) => {
+        styled.push(el);
+        return { transform: "matrix(1, 0, 0, 1, 18, -99)" };
+      },
+    };
+    const positions = new Map();
+    enableCardDrag(tile, "hand-5b", positions);
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 30, clientY: -165 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 30, clientY: -165 })
+    );
+    expect(tile.classList.contains("snapping")).toBe(true);
+    expect(tile.style.transform).toBe("");
+
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 18, clientY: -99 }));
+    expect(styled[styled.length - 1]).toBe(tile);
+    expect(tile.classList.contains("dragging")).toBe(true);
+    expect(tile.classList.contains("snapping")).toBe(false);
+    expect(tile.style.transitionDuration).toBe("");
+    expect(tile.style.transform).toBe(translateCss(mid.x, mid.y));
+    expect(positions.get("hand-5b")).toEqual({
+      x: mid.x,
+      y: mid.y,
+      z: Number(tile.style.zIndex),
+    });
+
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 23, clientY: -94 })
+    );
+    expect(tile.style.transform).toBe(translateCss(23, -94));
+  });
+
+  test("transitionend from a child does not end the snap early", () => {
+    const tile = createFakeTile();
+    tile.ownerDocument.defaultView = {
+      getComputedStyle: () => ({ transitionDuration: `${SNAP_BACK_DURATION_MS}ms` }),
+    };
+    const positions = new Map();
+    enableCardDrag(tile, "hand-5c", positions);
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 4, clientY: 4 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 4, clientY: 4 })
+    );
+    expect(tile.classList.contains("snapping")).toBe(true);
+
+    const face = { nodeName: "DIV" };
+    tile.dispatchEvent({
+      type: "transitionend",
+      target: face,
+      propertyName: "transform",
+    });
+    expect(tile.classList.contains("snapping")).toBe(true);
+    expect(tile.style.transitionDuration).toBe(`${SNAP_BACK_DURATION_MS}ms`);
+
+    tile.dispatchEvent({
+      type: "transitionend",
+      target: tile,
+      propertyName: "opacity",
+    });
+    expect(tile.classList.contains("snapping")).toBe(true);
+
+    tile.dispatchEvent({
+      type: "transitionend",
+      target: tile,
+      propertyName: "transform",
+    });
+    expect(tile.classList.contains("snapping")).toBe(false);
+    expect(tile.classList.contains("dragging")).toBe(false);
+    expect(tile.style.transform).toBe("");
+    expect(tile.style.transitionDuration).toBe("");
+  });
+
+  test("a pending snap is a no-op after the tile is replaced", async () => {
+    const tile = createFakeTile();
+    tile.ownerDocument.defaultView = {
+      getComputedStyle: () => ({ transitionDuration: `${SNAP_BACK_DURATION_MS}ms` }),
+    };
+    const positions = new Map();
+    enableCardDrag(tile, "hand-6", positions);
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 10, clientY: 10 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 10, clientY: 10 })
+    );
+    expect(tile.classList.contains("snapping")).toBe(true);
+    tile.isConnected = false;
+    await new Promise((resolve) => setTimeout(resolve, SNAP_BACK_DURATION_MS + 80));
+    expect(tile.classList.contains("snapping")).toBe(true);
+  });
+
+  test("removing the tile mid-drag drops document listeners", () => {
+    const tile = createFakeTile();
+    const positions = new Map();
+    enableCardDrag(tile, "hand-7", positions);
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 12, clientY: 8 })
+    );
+    expect(tile.ownerDocument.listenerCount("pointermove")).toBe(1);
+    tile.isConnected = false;
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 40, clientY: 40 })
+    );
+    expect(tile.ownerDocument.listenerCount("pointermove")).toBe(0);
+    expect(tile.ownerDocument.listenerCount("pointerup")).toBe(0);
+    expect(tile.ownerDocument.listenerCount("pointercancel")).toBe(0);
+    expect(tile.style.transform).toBe(translateCss(12, 8));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 99, clientY: 99 })
+    );
+    expect(tile.style.transform).toBe(translateCss(12, 8));
+  });
+});
+
+describe("placeholder deck hover actions", () => {
+  test("every deck gets Deal and Draw so later tickets can specialize per deck", () => {
+    expect(DEFAULT_DECK_ACTIONS).toEqual([
+      { id: "deal", label: "Deal" },
+      { id: "draw", label: "Draw" },
+    ]);
+    expect(deckActionsFor({ name: "Main" })).toEqual(DEFAULT_DECK_ACTIONS);
+    expect(deckActionsFor({ name: "Events" })).toEqual(DEFAULT_DECK_ACTIONS);
+    expect(deckActionsFor(null)).toEqual(DEFAULT_DECK_ACTIONS);
+  });
+
+  test("clicking Deal or Draw is a no-op: no state change, no fetch, no postMessage, no errors", () => {
+    const fetchCalls = [];
+    const postMessages = [];
+    const originalFetch = globalThis.fetch;
+    const originalPostMessage = globalThis.postMessage;
+    globalThis.fetch = (...args) => {
+      fetchCalls.push(args);
+      return Promise.reject(new Error("unexpected fetch"));
+    };
+    globalThis.postMessage = (...args) => {
+      postMessages.push(args);
+    };
+
+    const gameState = { remaining: 12, hand: ["Copper"] };
+    const before = structuredClone(gameState);
+    const errors = [];
+
+    try {
+      for (const action of deckActionsFor({ name: "Main" })) {
+        let prevented = false;
+        let blurred = false;
+        onDeckActionClick({
+          preventDefault() {
+            prevented = true;
+          },
+          currentTarget: {
+            dataset: { deckAction: action.id },
+            blur() {
+              blurred = true;
+            },
+          },
+        });
+        expect(prevented).toBe(true);
+        expect(blurred).toBe(true);
+      }
+    } catch (error) {
+      errors.push(error);
+    } finally {
+      globalThis.fetch = originalFetch;
+      globalThis.postMessage = originalPostMessage;
+    }
+
+    expect(errors).toEqual([]);
+    expect(gameState).toEqual(before);
+    expect(fetchCalls).toEqual([]);
+    expect(postMessages).toEqual([]);
   });
 });
 

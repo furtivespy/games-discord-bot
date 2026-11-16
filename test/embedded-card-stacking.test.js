@@ -134,6 +134,14 @@ async function report(body) {
   });
 }
 
+function waitSnap(tile) {
+  return new Promise((resolve) => {
+    const done = () => resolve();
+    tile.addEventListener("transitionend", done, { once: true });
+    setTimeout(done, 400);
+  });
+}
+
 try {
   const { enableCardDrag } = await import("/drag.js");
   const positions = new Map();
@@ -151,17 +159,20 @@ try {
     throw new Error("missing cards");
   }
 
+  const provinceHome = center(province);
   const villageCenter = center(village);
   drag(province, villageCenter.x, villageCenter.y);
-  await frame();
+  await waitSnap(province);
 
   const marketFrom = center(market);
+  const marketHome = { ...marketFrom };
   const handBox = hand.getBoundingClientRect();
   drag(market, marketFrom.x, handBox.top + Math.min(40, handBox.height / 2));
-  await frame();
+  await waitSnap(market);
 
   const provinceNow = center(province);
-  const hitNode = document.elementFromPoint(provinceNow.x, provinceNow.y);
+  const marketNow = center(market);
+  const hitNode = document.elementFromPoint(provinceHome.x, provinceHome.y);
   const hit = hitNode?.closest?.(".card-tile") || hitNode;
   await report({
     hitTitle: hit?.title || hit?.textContent || null,
@@ -172,15 +183,96 @@ try {
     marketZ: market.style.zIndex,
     boardZoneZ: getComputedStyle(province.closest(".zone")).zIndex,
     playZoneZ: getComputedStyle(village.closest(".zone")).zIndex,
-    x: provinceNow.x,
-    y: provinceNow.y,
+    provinceDx: Math.abs(provinceNow.x - provinceHome.x),
+    provinceDy: Math.abs(provinceNow.y - provinceHome.y),
+    marketDx: Math.abs(marketNow.x - marketHome.x),
+    marketDy: Math.abs(marketNow.y - marketHome.y),
+    provinceDragging: province.classList.contains("dragging"),
+    provinceMoved: province.classList.contains("moved"),
+    provinceSnapping: province.classList.contains("snapping"),
+    provinceTransform: province.style.transform,
   });
 } catch (error) {
   await report({ error: String(error && error.stack ? error.stack : error) });
 }
 `;
 
-describe("dropped cards stay pickable across zones", () => {
+const REGRAB_HARNESS_JS = `
+function center(el) {
+  const box = el.getBoundingClientRect();
+  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+}
+
+function drag(tile, toX, toY) {
+  const from = center(tile);
+  const pointerId = 1;
+  tile.dispatchEvent(new PointerEvent("pointerdown", {
+    bubbles: true,
+    cancelable: true,
+    pointerId,
+    button: 0,
+    clientX: from.x,
+    clientY: from.y,
+  }));
+  document.dispatchEvent(new PointerEvent("pointermove", {
+    bubbles: true,
+    pointerId,
+    clientX: toX,
+    clientY: toY,
+  }));
+  document.dispatchEvent(new PointerEvent("pointerup", {
+    bubbles: true,
+    pointerId,
+    clientX: toX,
+    clientY: toY,
+  }));
+}
+
+async function report(body) {
+  await fetch("/result", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+try {
+  const { enableCardDrag } = await import("/drag.js");
+  const positions = new Map();
+  for (const tile of document.querySelectorAll(".card-tile[data-card-id]")) {
+    enableCardDrag(tile, tile.dataset.cardId, positions);
+  }
+  const king = document.querySelector('[data-card-id="hand-2"]');
+  if (!king) throw new Error("missing hand card");
+  const from = center(king);
+  drag(king, from.x, from.y - 200);
+  await new Promise((resolve) => setTimeout(resolve, 90));
+  const mid = king.getBoundingClientRect();
+  const grab = { x: mid.left + mid.width / 2, y: mid.top + mid.height / 2 };
+  king.dispatchEvent(new PointerEvent("pointerdown", {
+    bubbles: true,
+    cancelable: true,
+    pointerId: 2,
+    button: 0,
+    clientX: grab.x,
+    clientY: grab.y,
+  }));
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const after = king.getBoundingClientRect();
+  await report({
+    jumpX: Math.abs(after.left - mid.left),
+    jumpY: Math.abs(after.top - mid.top),
+    midTop: mid.top,
+    afterTop: after.top,
+    dragging: king.classList.contains("dragging"),
+    snapping: king.classList.contains("snapping"),
+  });
+} catch (error) {
+  await report({ error: String(error && error.stack ? error.stack : error) });
+}
+`;
+
+describe("dropped cards snap back to their rest slot", () => {
   const chrome = workingChromeBin();
   let server;
   let chromeProc;
@@ -214,7 +306,7 @@ describe("dropped cards stay pickable across zones", () => {
     }
   });
 
-  test.skipIf(!chrome)("QA 3-step: elementFromPoint at Province's center is Province after Market moves", async () => {
+  test.skipIf(!chrome)("QA: dropping Province and Market snaps each card home without leftover drag styling", async () => {
     const css = fs.readFileSync(STYLE_PATH, "utf8");
     const built = await Bun.build({
       entrypoints: [DRAG_PATH],
@@ -281,8 +373,86 @@ describe("dropped cards stay pickable across zones", () => {
     expect(result.error).toBeUndefined();
     expect(result.hitId).toBe("board-1");
     expect(result.hitTitle).toBe("Province");
-    expect(Number(result.provinceZ)).toBeGreaterThan(Number(result.villageZ || 0));
+    expect(result.provinceDx).toBeLessThan(2);
+    expect(result.provinceDy).toBeLessThan(2);
+    expect(result.marketDx).toBeLessThan(2);
+    expect(result.marketDy).toBeLessThan(2);
+    expect(result.provinceDragging).toBe(false);
+    expect(result.provinceMoved).toBe(false);
+    expect(result.provinceSnapping).toBe(false);
+    expect(result.provinceTransform === "" || result.provinceTransform === "none").toBe(true);
     expect(result.boardZoneZ).toBe("auto");
     expect(result.playZoneZ).toBe("auto");
+  }, 30000);
+
+  test.skipIf(!chrome)("QA: re-grabbing mid-snap keeps the card under the pointer", async () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const built = await Bun.build({
+      entrypoints: [DRAG_PATH],
+      target: "browser",
+      format: "esm",
+    });
+    expect(built.success).toBe(true);
+    const dragJs = await built.outputs[0].text();
+
+    let resolveResult;
+    const resultPromise = new Promise((resolve) => {
+      resolveResult = resolve;
+    });
+
+    server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const url = new URL(req.url);
+        if (req.method === "POST" && url.pathname === "/result") {
+          resolveResult(await req.json());
+          return new Response("ok");
+        }
+        if (url.pathname === "/drag.js") {
+          return new Response(dragJs, {
+            headers: { "Content-Type": "text/javascript; charset=utf-8" },
+          });
+        }
+        if (url.pathname === "/harness.js") {
+          return new Response(REGRAB_HARNESS_JS, {
+            headers: { "Content-Type": "text/javascript; charset=utf-8" },
+          });
+        }
+        return new Response(stackingHarness(css), {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      },
+    });
+
+    userDataDir = fs.mkdtempSync(path.join(require("os").tmpdir(), "card-regrab-"));
+    chromeProc = spawn(
+      chrome,
+      [
+        "--headless=new",
+        "--disable-gpu",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--hide-scrollbars",
+        "--no-first-run",
+        "--window-size=1280,800",
+        `--user-data-dir=${userDataDir}`,
+        String(server.url),
+      ],
+      { stdio: "ignore" }
+    );
+
+    const result = await Promise.race([
+      resultPromise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("timed out waiting for Chrome re-grab result")), 20000)
+      ),
+    ]);
+
+    expect(result.error).toBeUndefined();
+    expect(result.dragging).toBe(true);
+    expect(result.snapping).toBe(false);
+    expect(result.jumpX).toBeLessThan(8);
+    expect(result.jumpY).toBeLessThan(8);
   }, 30000);
 });

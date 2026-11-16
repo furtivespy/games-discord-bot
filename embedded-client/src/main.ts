@@ -27,7 +27,9 @@ import {
   asRecordList,
   autoSelectGameId,
   DEFAULT_CARD_BACK,
+  deckActionsFor,
   deckCountLabel,
+  onDeckActionClick,
   groupPlayersByTeam,
   handCountLabel,
   initialsFromName,
@@ -421,6 +423,7 @@ function renderCards(
     tile.title = name;
     tile.append(renderCardFace(config, card));
     if (cardId) {
+      // No drop targets yet: enableCardDrag snaps back unless a later hook consumes the drop.
       enableCardDrag(tile, cardId, positions);
     }
     container.append(tile);
@@ -505,6 +508,21 @@ function renderOtherPlayers(
   row.hidden = false;
 }
 
+function renderDeckActions(deck: SnapshotDeck): HTMLDivElement {
+  const actions = document.createElement("div");
+  actions.className = "deck-actions";
+  for (const action of deckActionsFor(deck)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "deck-action";
+    button.dataset.deckAction = action.id;
+    button.textContent = action.label;
+    button.addEventListener("click", onDeckActionClick);
+    actions.append(button);
+  }
+  return actions;
+}
+
 function renderDecks(config: EmbeddedConfig, decks: SnapshotDeck[] | undefined) {
   const container = document.getElementById("decks");
   if (!container) return;
@@ -524,7 +542,7 @@ function renderDecks(config: EmbeddedConfig, decks: SnapshotDeck[] | undefined) 
     count.className = "deck-count";
     count.textContent = deckCountLabel(deck.remaining, deck.total);
     face.append(name, count);
-    tile.append(face);
+    tile.append(face, renderDeckActions(deck));
     container.append(tile);
   }
 }
