@@ -44,5 +44,8 @@ decisions live in `.github/ship-pr.json`. This skill only runs the loop.
 7. **After merge**, `release.yml` builds the image and its `verify-deploy` job
    waits for `/health` to report the merge commit. To check by hand:
    `SHIP_PR_SHA=<merge-sha> node scripts/check-deployed-version.js`.
-8. **Leftovers:** file follow-ups as Linear issues in the Game Bot project, with a
-   priority; add the `needs-decision` label when the owner must decide.
+8. **Leftovers and friction:** file follow-ups as Linear issues in the Game Bot
+   project, with a priority; add the `needs-decision` label when the owner must
+   decide. If the PR cost you time because of the repo itself (a flaky check, a
+   wrong doc, a missing fixture), file it by following
+   [friction-log](../friction-log/SKILL.md). Nothing met the bar? File nothing.
