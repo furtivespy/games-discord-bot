@@ -329,6 +329,81 @@ describe("runVisualCardAction", () => {
     expect(store.get("guild-1:game:thread-game").players[0].hands.main).toHaveLength(2);
   });
 
+  test("concurrent draws with a slow nick lookup each persist a different card", async () => {
+    const stored = JSON.parse(JSON.stringify(gameWithDeck()));
+    const store = new Map();
+    store.set("guild-1:game:race-thread", stored);
+    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const discordClient = {
+      user: { id: "bot-1" },
+      channels: {
+        cache: {
+          get: (id) =>
+            id === "race-thread"
+              ? {
+                  id: "race-thread",
+                  guild: { id: "guild-1" },
+                  send: async (payload) => payload,
+                }
+              : null,
+        },
+      },
+      guilds: {
+        cache: { get: () => null },
+        fetch: async () => ({
+          members: {
+            cache: { get: () => null },
+            fetch: async () => {
+              await delay(40);
+              return { displayName: "WillOnServer" };
+            },
+          },
+        }),
+      },
+      async getGameDataV2(guildId, collection, channelId) {
+        const data = store.get(`${guildId}:${collection}:${channelId}`);
+        return data ? JSON.parse(JSON.stringify(data)) : null;
+      },
+      async setGameDataV2(guildId, collection, channelId, data) {
+        await delay(20);
+        store.set(
+          `${guildId}:${collection}:${channelId}`,
+          JSON.parse(JSON.stringify(data))
+        );
+      },
+    };
+    const draw = {
+      action: "draw",
+      deckName: "Main",
+      count: 1,
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "race-thread",
+      discordClient,
+    };
+    const [first, second] = await Promise.all([
+      runVisualCardAction({ ...draw, requestId: "race-request-aaa" }),
+      runVisualCardAction({ ...draw, requestId: "race-request-bbb" }),
+    ]);
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    const saved = store.get("guild-1:game:race-thread");
+    expect(saved.players[0].hands.main.map((card) => card.name)).toEqual([
+      "Copper",
+      "Ace",
+      "King",
+    ]);
+    expect(saved.decks[0].piles.draw.cards.map((card) => card.name)).toEqual([
+      "Queen",
+      "Jack",
+    ]);
+    const lastDrawn = new Set([
+      first.body.hand.at(-1).name,
+      second.body.hand.at(-1).name,
+    ]);
+    expect(lastDrawn).toEqual(new Set(["Ace", "King"]));
+  });
+
   test("still returns the updated table if the follow-up snapshot load fails", async () => {
     const gameData = gameWithDeck();
     let loads = 0;

@@ -236,6 +236,49 @@ function applyVisualCardAction(gameData, { action, deckName, count, actor, userI
 }
 
 /**
+ * Serialize load → mutate → save for one game document. Two Deal/Draw POSTs
+ * with different requestIds must not both load the same snapshot.
+ */
+function createGameChannelLock() {
+  const tails = new Map();
+
+  function run(guildId, channelId, fn) {
+    const key = `${guildId}:${channelId}`;
+    const previous = tails.get(key) || Promise.resolve();
+    const next = previous.catch(() => {}).then(fn);
+    const idle = next.then(
+      () => {},
+      () => {}
+    );
+    tails.set(key, idle);
+    idle.then(() => {
+      if (tails.get(key) === idle) tails.delete(key);
+    });
+    return next;
+  }
+
+  return { run };
+}
+
+const defaultGameChannelLock = createGameChannelLock();
+
+async function enrichActorDisplayName(actor, { discordClient, guildId, userId }) {
+  try {
+    const displays = await resolvePlayerDisplays({
+      discordClient,
+      guildId,
+      userIds: [userId],
+    });
+    const guildName = displays[userId]?.name;
+    if (typeof guildName === "string" && guildName.trim()) {
+      actor.displayName = guildName.trim();
+    }
+  } catch {
+    // OAuth global_name / username / member nick is enough if the lookup fails.
+  }
+}
+
+/**
  * Per-process in-memory TTL map. A second instance still runs the same
  * requestId. The key includes action, deck, and count so a reused id for a
  * different Deal/Draw is not swallowed.
@@ -327,6 +370,7 @@ async function runVisualCardAction({
   logger,
   requestId,
   idempotency,
+  gameChannelLock,
 } = {}) {
   const gid = String(guildId || "").trim();
   const cid = String(channelId || "").trim();
@@ -335,21 +379,46 @@ async function runVisualCardAction({
   if (!cid) return errorBody("missing_channel", 400);
   if (!uid) return errorBody("unauthorized", 401);
 
-  const execute = () =>
-    runVisualCardActionOnce({
-      action,
-      deckName,
-      count,
-      user,
-      member,
+  const actor = actorFromDiscordUser(user, member);
+  await enrichActorDisplayName(actor, {
+    discordClient,
+    guildId: gid,
+    userId: uid,
+  });
+
+  const lock =
+    gameChannelLock && typeof gameChannelLock.run === "function"
+      ? gameChannelLock
+      : defaultGameChannelLock;
+
+  const execute = async () => {
+    const persisted = await lock.run(gid, cid, () =>
+      persistVisualCardAction({
+        action,
+        deckName,
+        count,
+        actor,
+        guildId: gid,
+        channelId: cid,
+        userId: uid,
+        getGameData,
+        discordClient,
+        gameStore,
+        logger,
+      })
+    );
+    if (persisted.status !== 200) return persisted;
+    return finishVisualCardAction({
+      gameData: persisted.gameData,
+      applied: persisted.applied,
+      actor,
+      discordClient,
       guildId: gid,
       channelId: cid,
       userId: uid,
-      getGameData,
-      discordClient,
-      gameStore,
       logger,
     });
+  };
 
   if (idempotency && typeof idempotency.run === "function") {
     return idempotency.run(requestId, uid, gid, cid, execute, {
@@ -361,12 +430,11 @@ async function runVisualCardAction({
   return execute();
 }
 
-async function runVisualCardActionOnce({
+async function persistVisualCardAction({
   action,
   deckName,
   count,
-  user,
-  member,
+  actor,
   guildId,
   channelId,
   userId,
@@ -395,20 +463,6 @@ async function runVisualCardActionOnce({
     return errorBody("no_game", 404);
   }
 
-  const actor = actorFromDiscordUser(user, member);
-  try {
-    const displays = await resolvePlayerDisplays({
-      discordClient,
-      guildId,
-      userIds: [userId],
-    });
-    const guildName = displays[userId]?.name;
-    if (typeof guildName === "string" && guildName.trim()) {
-      actor.displayName = guildName.trim();
-    }
-  } catch {
-    // OAuth global_name / username / member nick is enough if the lookup fails.
-  }
   if (action === "draw" && !userIsPlayer(gameData, userId)) {
     ensurePlayer(gameData, {
       userId,
@@ -443,6 +497,19 @@ async function runVisualCardActionOnce({
     return errorBody("action_failed", 500);
   }
 
+  return { status: 200, gameData, applied };
+}
+
+async function finishVisualCardAction({
+  gameData,
+  applied,
+  actor,
+  discordClient,
+  guildId,
+  channelId,
+  userId,
+  logger,
+}) {
   let channelPosted = false;
   try {
     channelPosted = Boolean(
@@ -487,6 +554,7 @@ module.exports = {
   actorFromDiscordUser,
   applyVisualCardAction,
   createActionIdempotencyCache,
+  createGameChannelLock,
   parseVisualActionBody,
   parseVisualActionRequestId,
   postCommandToGameChannel,
