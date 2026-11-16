@@ -407,6 +407,7 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain("scale(1.28)");
     expect(css).toContain(".deck-tile:hover .deck-actions");
     expect(css).toContain(".deck-tile:has(:focus-visible) .deck-actions");
+    expect(css).toMatch(/\.deck-actions\s*\{[^}]*bottom:\s*1\.35rem/);
     expect(css).not.toContain(".deck-tile:focus-within");
     expect(css).toContain(".deck-action");
     expect(css).toContain(".hand-fan .card-tile + .card-tile");

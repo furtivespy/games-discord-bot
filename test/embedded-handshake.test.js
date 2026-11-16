@@ -620,6 +620,86 @@ describe("client-only card drag", () => {
     expect(tile.style.transform).toBe(translateCss(28, -100));
   });
 
+  test("re-grab during snap-back starts from the computed mid-animation offset", () => {
+    const mid = { x: 18, y: -99 };
+    const tile = createFakeTile();
+    const styled = [];
+    tile.ownerDocument.defaultView = {
+      getComputedStyle: (el) => {
+        styled.push(el);
+        return { transform: "matrix(1, 0, 0, 1, 18, -99)" };
+      },
+    };
+    const positions = new Map();
+    enableCardDrag(tile, "hand-5b", positions);
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 30, clientY: -165 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 30, clientY: -165 })
+    );
+    expect(tile.classList.contains("snapping")).toBe(true);
+    expect(tile.style.transform).toBe("");
+
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 18, clientY: -99 }));
+    expect(styled[styled.length - 1]).toBe(tile);
+    expect(tile.classList.contains("dragging")).toBe(true);
+    expect(tile.classList.contains("snapping")).toBe(false);
+    expect(tile.style.transitionDuration).toBe("");
+    expect(tile.style.transform).toBe(translateCss(mid.x, mid.y));
+    expect(positions.get("hand-5b")).toEqual({
+      x: mid.x,
+      y: mid.y,
+      z: Number(tile.style.zIndex),
+    });
+
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 23, clientY: -94 })
+    );
+    expect(tile.style.transform).toBe(translateCss(23, -94));
+  });
+
+  test("transitionend from a child does not end the snap early", () => {
+    const tile = createFakeTile();
+    tile.ownerDocument.defaultView = {
+      getComputedStyle: () => ({ transitionDuration: `${SNAP_BACK_DURATION_MS}ms` }),
+    };
+    const positions = new Map();
+    enableCardDrag(tile, "hand-5c", positions);
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 4, clientY: 4 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 4, clientY: 4 })
+    );
+    expect(tile.classList.contains("snapping")).toBe(true);
+
+    const face = { nodeName: "DIV" };
+    tile.dispatchEvent({
+      type: "transitionend",
+      target: face,
+      propertyName: "transform",
+    });
+    expect(tile.classList.contains("snapping")).toBe(true);
+    expect(tile.style.transitionDuration).toBe(`${SNAP_BACK_DURATION_MS}ms`);
+
+    tile.dispatchEvent({
+      type: "transitionend",
+      target: tile,
+      propertyName: "opacity",
+    });
+    expect(tile.classList.contains("snapping")).toBe(true);
+
+    tile.dispatchEvent({
+      type: "transitionend",
+      target: tile,
+      propertyName: "transform",
+    });
+    expect(tile.classList.contains("snapping")).toBe(false);
+    expect(tile.classList.contains("dragging")).toBe(false);
+    expect(tile.style.transform).toBe("");
+    expect(tile.style.transitionDuration).toBe("");
+  });
+
   test("a pending snap is a no-op after the tile is replaced", async () => {
     const tile = createFakeTile();
     tile.ownerDocument.defaultView = {

@@ -77,6 +77,12 @@ export function visualOffset(tile: HTMLElement): CardOffset | null {
   }
 }
 
+/** Freeze a mid-snap tile so aborting the CSS transition cannot jump it to rest. */
+function pinVisualOffset(tile: HTMLElement, offset: CardOffset) {
+  applyCardOffset(tile, offset);
+  tile.style.transitionDuration = "0s";
+}
+
 export function nextOffset(
   origin: CardOffset,
   start: CardOffset,
@@ -181,7 +187,7 @@ export function snapCardBack(
 
   let settled = false;
   function onEnd(event: Event) {
-    if (event.target != null && event.target !== tile) return;
+    if (event.target !== tile) return;
     const property = (event as TransitionEvent).propertyName;
     if (property && property !== "transform") return;
     settle();
@@ -241,14 +247,14 @@ export function enableCardDrag(
     if (event.button != null && event.button !== 0) return;
     if (activePointer != null) return;
     event.preventDefault();
+    const rest = copyOffset(positions.get(cardId));
     // Freeze the interpolated snap position before removing `.snapping`, or
     // the tile jumps to the rest slot (inline transform is already rest).
-    const visual = visualOffset(tile);
-    if (visual) applyCardOffset(tile, visual);
+    const visual = tile.classList.contains("snapping") ? visualOffset(tile) : null;
+    if (visual) pinVisualOffset(tile, visual);
     abortPendingSnap(tile);
     const pointerId = event.pointerId;
     activePointer = pointerId;
-    const rest = copyOffset(positions.get(cardId));
     const origin = raiseTile(tile, visual ?? rest);
     positions.set(cardId, origin);
     const start = { x: event.clientX, y: event.clientY };
