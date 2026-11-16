@@ -8,31 +8,20 @@ const FLAG_RE = /^\p{Regional_Indicator}{2}$/u;
 const DIGIT_VS16_RE = /^[\d#*]\uFE0F$/u;
 const WRAPPER_RE = /^[\s"'`.,;:!?()[\]{}]+$/;
 
-function logSkip(client, reason) {
-  const message =
-    reason instanceof Error
-      ? reason.message || String(reason)
-      : String(reason || "unknown");
-  const line = `Game name emoji skipped: ${message}`;
-  if (typeof client?.logger?.warn === "function") {
-    client.logger.warn(line);
-  } else if (typeof client?.logger?.log === "function") {
-    client.logger.log(line, "warn");
-  } else {
-    console.warn(line);
-  }
-}
-
-function hasGeminiKey(client) {
-  const key = client?.config?.geminiKey;
-  return typeof key === "string" && key.trim().length > 0;
-}
-
 function graphemes(text) {
   if (typeof text !== "string" || !text) return [];
   return [...new Intl.Segmenter("en", { granularity: "grapheme" }).segment(text)].map(
     (part) => part.segment
   );
+}
+
+function logSkip(client, reason) {
+  GoogleGemini.logGeminiSkip(client, "Game name emoji skipped:", reason);
+}
+
+function hasGeminiKey(client) {
+  const key = client?.config?.geminiKey;
+  return typeof key === "string" && key.trim().length > 0;
 }
 
 function isUnicodeEmoji(grapheme) {
@@ -79,29 +68,42 @@ function sanitizeGameName(name) {
   return String(name || "Game").replace(/[\r\n]+/g, " ").trim() || "Game";
 }
 
-function truncateToLength(text, max) {
-  if (typeof text !== "string" || max <= 0) return "";
-  if (text.length <= max) return text;
-  let end = 0;
-  for (const segment of graphemes(text)) {
-    if (end + segment.length > max) break;
-    end += segment.length;
+function isWellFormedString(text) {
+  return typeof text === "string" &&
+    (typeof text.isWellFormed !== "function" || text.isWellFormed());
+}
+
+function truncateToUtf16Limit(text, maxUnits) {
+  const value = String(text || "");
+  if (maxUnits <= 0) return "";
+  if (value.length <= maxUnits) return value;
+  let out = "";
+  for (const segment of graphemes(value)) {
+    if (out.length + segment.length > maxUnits) break;
+    out += segment;
   }
-  return text.slice(0, end);
+  return out;
+}
+
+function isValidChannelName(name) {
+  return (
+    typeof name === "string" &&
+    name.length > 0 &&
+    name.length <= DISCORD_CHANNEL_NAME_MAX &&
+    isWellFormedString(name)
+  );
 }
 
 function formatChannelName(gameName, emoji) {
-  const cleaned = truncateToLength(
-    sanitizeGameName(gameName),
-    DISCORD_CHANNEL_NAME_MAX
-  );
+  const sanitized = sanitizeGameName(gameName);
+  const cleaned = truncateToUtf16Limit(sanitized, DISCORD_CHANNEL_NAME_MAX);
   if (!emoji || !isSingleUnicodeEmoji(emoji) || startsWithUnicodeEmoji(cleaned)) {
     return cleaned;
   }
   const prefix = `${emoji} `;
   const remaining = DISCORD_CHANNEL_NAME_MAX - prefix.length;
   if (remaining <= 0) return cleaned;
-  return `${prefix}${truncateToLength(sanitizeGameName(gameName), remaining)}`;
+  return `${prefix}${truncateToUtf16Limit(sanitized, remaining)}`;
 }
 
 async function chooseForGame(client, gameName) {
@@ -111,8 +113,7 @@ async function chooseForGame(client, gameName) {
     const raw = await gemini.suggestGameEmoji(gameName);
     const emoji = extractUnicodeEmoji(raw);
     if (!emoji) {
-      const preview = String(raw ?? "").slice(0, 80);
-      logSkip(client, `invalid model output: ${JSON.stringify(preview)}`);
+      logSkip(client, "invalid model output");
       return null;
     }
     return emoji;
@@ -130,7 +131,9 @@ module.exports = {
   extractUnicodeEmoji,
   startsWithUnicodeEmoji,
   sanitizeGameName,
-  truncateToLength,
+  truncateToLength: truncateToUtf16Limit,
+  truncateToUtf16Limit,
+  isValidChannelName,
   formatChannelName,
   chooseForGame,
   logSkip,

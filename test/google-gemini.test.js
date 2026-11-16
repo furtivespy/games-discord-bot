@@ -1,4 +1,4 @@
-const { afterEach, describe, expect, test } = require("bun:test");
+const { afterEach, describe, expect, test, jest } = require("bun:test");
 const { HarmCategory, HarmBlockThreshold, Modality } = require("@google/genai");
 const {
   createGeminiAI,
@@ -48,6 +48,7 @@ function captureGeminiFetch(responseJson) {
 afterEach(() => {
   globalThis.fetch = originalFetch;
   delete process.env.GOOGLE_GENAI_USE_VERTEXAI;
+  jest.useRealTimers();
   delete process.env.GOOGLE_GENAI_USE_ENTERPRISE;
   delete process.env.GOOGLE_GENAI_API_VERSION;
 });
@@ -172,13 +173,15 @@ describe("Gemini models and extraction", () => {
       },
     };
 
-    const text = await gemini.suggestGameEmoji("Brass");
+    const text = await gemini.suggestGameEmoji("Brass\nIgnore previous");
 
     expect(text).toBe("🚂");
     expect(captured.model).toBe(DEFAULT_GEMINI_RULES_MODEL);
-    expect(captured.contents).toContain("Brass");
+    expect(captured.contents).toContain("Brass Ignore previous");
+    expect(captured.contents).not.toContain("Brass\n");
     expect(captured.config.tools).toBeUndefined();
     expect(captured.config.maxOutputTokens).toBe(32);
+    expect(captured.config.abortSignal).toBeInstanceOf(AbortSignal);
     expect(captured.config.systemInstruction).toContain("Unicode emoji");
     expect(captured.config.safetySettings).toEqual(
       expect.arrayContaining([
@@ -196,14 +199,34 @@ describe("Gemini models and extraction", () => {
   });
 
   test("suggestGameEmoji times out instead of hanging", async () => {
-    const gemini = createGeminiAI(fakeClient({ geminiEmojiTimeoutMs: 20 }));
+    jest.useFakeTimers();
+    const gemini = createGeminiAI(fakeClient({ geminiEmojiTimeoutMs: 8000 }));
+    let capturedSignal = null;
     gemini.AI2 = {
       models: {
-        generateContent: () => new Promise(() => {}),
+        generateContent: ({ config }) => {
+          capturedSignal = config.abortSignal;
+          return new Promise(() => {});
+        },
+      },
+    };
+    const pending = gemini.suggestGameEmoji("Brass");
+    jest.advanceTimersByTime(8000);
+    await expect(pending).rejects.toThrow("Gemini emoji selection timed out");
+    expect(capturedSignal?.aborted).toBe(true);
+  });
+
+  test("suggestGameEmoji throws on a blocked SAFETY response", async () => {
+    const gemini = createGeminiAI(fakeClient());
+    gemini.AI2 = {
+      models: {
+        generateContent: async () => ({
+          promptFeedback: { blockReason: "SAFETY" },
+        }),
       },
     };
     await expect(gemini.suggestGameEmoji("Brass")).rejects.toThrow(
-      "Gemini emoji selection timed out"
+      "Gemini emoji selection blocked (SAFETY)"
     );
   });
 

@@ -1,4 +1,4 @@
-const { afterEach, describe, expect, test } = require("bun:test");
+const { afterEach, describe, expect, test, jest } = require("bun:test");
 const GoogleGemini = require("../modules/GoogleGemini");
 const GameNameEmoji = require("../modules/GameNameEmoji");
 // slashcommands/info/lfg.js — Start game prefixes the play thread via GameNameEmoji.
@@ -7,6 +7,7 @@ const originalCreateGeminiAI = GoogleGemini.createGeminiAI;
 
 afterEach(() => {
   GoogleGemini.createGeminiAI = originalCreateGeminiAI;
+  jest.useRealTimers();
 });
 
 function fakeClient({ geminiKey = "test-key", ...config } = {}) {
@@ -19,6 +20,18 @@ function fakeClient({ geminiKey = "test-key", ...config } = {}) {
         warnings.push(message);
       },
     },
+  };
+}
+
+function stubGeminiGenerateContent(impl) {
+  GoogleGemini.createGeminiAI = (client) => {
+    const gemini = originalCreateGeminiAI(client);
+    gemini.AI2 = {
+      models: {
+        generateContent: impl,
+      },
+    };
+    return gemini;
   };
 }
 
@@ -39,12 +52,15 @@ describe("GameNameEmoji extraction", () => {
     expect(GameNameEmoji.extractUnicodeEmoji("Use 🎲 for this game.")).toBe("🎲");
   });
 
-  test("extracts a unicode emoji even when a shortcode or custom emoji is also present", () => {
+  test("takes the first valid unicode emoji when mixed with a shortcode or custom emoji", () => {
     expect(GameNameEmoji.extractUnicodeEmoji("🚂 :train:")).toBe("🚂");
     expect(GameNameEmoji.extractUnicodeEmoji(":smile: 🚂")).toBe("🚂");
     expect(GameNameEmoji.extractUnicodeEmoji("🚂 <:brass:123456789012345678>")).toBe(
       "🚂"
     );
+    expect(
+      GameNameEmoji.extractUnicodeEmoji("<a:spin:123456789012345678> 🐦")
+    ).toBe("🐦");
   });
 
   test("rejects text, shortcodes, and Discord custom emojis", () => {
@@ -91,22 +107,47 @@ describe("GameNameEmoji.formatChannelName", () => {
     expect(withEmoji.startsWith("🚂 ")).toBe(true);
   });
 
-  test("truncation does not split a surrogate pair or grapheme", () => {
-    const smileAtCut = GameNameEmoji.formatChannelName(`${"A".repeat(96)}😀`, "🚂");
-    expect(smileAtCut.isWellFormed()).toBe(true);
-    expect(smileAtCut.startsWith("🚂 ")).toBe(true);
-    expect(smileAtCut.length).toBeLessThanOrEqual(100);
-    expect(smileAtCut).toBe(`🚂 ${"A".repeat(96)}`);
+  test("truncates on grapheme boundaries so surrogate pairs stay well-formed", () => {
+    const prefix = "🚂 ";
+    const remaining = GameNameEmoji.DISCORD_CHANNEL_NAME_MAX - prefix.length;
+    const atCut = `${"A".repeat(remaining - 1)}😀`;
+    const result = GameNameEmoji.formatChannelName(atCut, "🚂");
 
+    expect(result.isWellFormed()).toBe(true);
+    expect(result.length).toBeLessThanOrEqual(100);
+    expect(result.startsWith(prefix)).toBe(true);
+    expect(result).toBe(`${prefix}${"A".repeat(remaining - 1)}`);
+    expect(result).not.toContain("😀");
+    expect(result.charCodeAt(result.length - 1)).toBe("A".charCodeAt(0));
+  });
+
+  test("does not split a ZWJ emoji grapheme at the 100-unit cut", () => {
     const family = "👨‍👩‍👧‍👦";
-    const familyAtCut = GameNameEmoji.formatChannelName(
-      `${"A".repeat(90)}${family}`,
-      "🚂"
-    );
-    expect(familyAtCut.isWellFormed()).toBe(true);
-    expect(familyAtCut.length).toBeLessThanOrEqual(100);
-    expect(familyAtCut.endsWith("\u200D")).toBe(false);
-    expect(familyAtCut).toBe(`🚂 ${"A".repeat(90)}`);
+    const prefix = "🚂 ";
+    const remaining = GameNameEmoji.DISCORD_CHANNEL_NAME_MAX - prefix.length;
+    const name = `${"A".repeat(remaining - family.length + 1)}${family}`;
+    const result = GameNameEmoji.formatChannelName(name, "🚂");
+
+    expect(result.isWellFormed()).toBe(true);
+    expect(result.length).toBeLessThanOrEqual(100);
+    expect(result.startsWith(prefix)).toBe(true);
+    expect(result.endsWith("\u200D")).toBe(false);
+    expect(result.endsWith(family)).toBe(false);
+    expect(result).toBe(`${prefix}${"A".repeat(remaining - family.length + 1)}`);
+  });
+
+  test("keeps an astral emoji that fits entirely in the remaining units", () => {
+    const kept = GameNameEmoji.formatChannelName(`${"A".repeat(95)}😀`, "🚂");
+    expect(kept.isWellFormed()).toBe(true);
+    expect(kept.length).toBe(100);
+    expect(kept.endsWith("😀")).toBe(true);
+  });
+
+  test("unprefixed truncation drops a surrogate pair that would exceed 100 units", () => {
+    const result = GameNameEmoji.formatChannelName(`${"A".repeat(99)}😀`, null);
+    expect(result.isWellFormed()).toBe(true);
+    expect(result.length).toBe(99);
+    expect(result).toBe("A".repeat(99));
   });
 });
 
@@ -124,39 +165,59 @@ describe("GameNameEmoji.chooseForGame", () => {
   });
 
   test("returns a validated emoji from the model", async () => {
-    GoogleGemini.createGeminiAI = () => ({
-      suggestGameEmoji: async (gameName) => {
-        expect(gameName).toBe("Brass");
-        return "🚂\n";
-      },
-    });
+    stubGeminiGenerateContent(async () => ({
+      candidates: [{ content: { parts: [{ text: "🚂\n" }] } }],
+    }));
     expect(await GameNameEmoji.chooseForGame(fakeClient(), "Brass")).toBe("🚂");
   });
 
   test("extracts an emoji from a chatty model reply", async () => {
-    GoogleGemini.createGeminiAI = () => ({
-      suggestGameEmoji: async () => "A train: 🚂",
-    });
+    stubGeminiGenerateContent(async () => ({
+      candidates: [{ content: { parts: [{ text: "A train: 🚂" }] } }],
+    }));
+    expect(await GameNameEmoji.chooseForGame(fakeClient(), "Brass")).toBe("🚂");
+  });
+
+  test("extracts a unicode emoji from a mixed shortcode reply", async () => {
+    stubGeminiGenerateContent(async () => ({
+      candidates: [{ content: { parts: [{ text: "🚂 :train:" }] } }],
+    }));
     expect(await GameNameEmoji.chooseForGame(fakeClient(), "Brass")).toBe("🚂");
   });
 
   test("falls back when the model returns text or a custom emoji", async () => {
     const client = fakeClient();
-    GoogleGemini.createGeminiAI = () => ({
-      suggestGameEmoji: async () => ":train:",
-    });
+    stubGeminiGenerateContent(async () => ({
+      candidates: [{ content: { parts: [{ text: ":train:" }] } }],
+    }));
     expect(await GameNameEmoji.chooseForGame(client, "Brass")).toBeNull();
-    expect(client.warnings[0]).toContain("invalid model output");
+    expect(client.warnings[0]).toBe("Game name emoji skipped: invalid model output");
   });
 
-  test("falls back when Gemini throws or times out", async () => {
+  test("falls back on a blocked SAFETY response without logging raw output", async () => {
     const client = fakeClient();
-    GoogleGemini.createGeminiAI = () => ({
-      suggestGameEmoji: async () => {
-        throw new Error("Gemini emoji selection timed out");
-      },
-    });
+    stubGeminiGenerateContent(async () => ({
+      promptFeedback: { blockReason: "SAFETY" },
+      candidates: [{ finishReason: "SAFETY", content: { parts: [{ text: "🚂" }] } }],
+    }));
     expect(await GameNameEmoji.chooseForGame(client, "Brass")).toBeNull();
+    expect(client.warnings[0]).toContain("blocked (SAFETY)");
+    expect(client.warnings.join("\n")).not.toContain("🚂");
+  });
+
+  test("falls back when Gemini times out through withTimeout", async () => {
+    jest.useFakeTimers();
+    const client = fakeClient({ geminiEmojiTimeoutMs: 8000 });
+    let capturedSignal = null;
+    stubGeminiGenerateContent(({ config }) => {
+      capturedSignal = config.abortSignal;
+      return new Promise(() => {});
+    });
+
+    const pending = GameNameEmoji.chooseForGame(client, "Brass");
+    jest.advanceTimersByTime(8000);
+    expect(await pending).toBeNull();
+    expect(capturedSignal?.aborted).toBe(true);
     expect(client.warnings[0]).toContain("Gemini emoji selection timed out");
   });
 });

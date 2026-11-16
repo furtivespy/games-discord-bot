@@ -368,6 +368,7 @@ function createThreadEnv({
   pinThrows = null,
   failGameSave = false,
   failThreadCreate = false,
+  failThreadCreateTimes = 0,
   failCreatePostTimes = 0,
   failGatherSaves = 0,
   parentType = ChannelType.GuildText,
@@ -379,6 +380,9 @@ function createThreadEnv({
   let nextMessageId = 1;
   let createPostFailuresLeft = failCreatePostTimes;
   let gatherFailuresLeft = failGatherSaves;
+  let threadCreateFailuresLeft = failThreadCreate
+    ? Math.max(1, failThreadCreateTimes)
+    : failThreadCreateTimes;
 
   const thread = {
     id: "thread-1",
@@ -423,8 +427,9 @@ function createThreadEnv({
     threads: {
       create: async (opts) => {
         created.push(opts);
-        if (failThreadCreate) {
-          throw new Error("Missing Permissions");
+        if (threadCreateFailuresLeft > 0) {
+          threadCreateFailuresLeft--;
+          throw new Error("Invalid Form Body");
         }
         if (opts?.name) thread.name = opts.name;
         return thread;
@@ -1249,6 +1254,167 @@ describe("GatherStartGame start flow", () => {
       String(r.content || "").includes("Game started")
     );
     expect(started).toBeTruthy();
+  });
+
+  test("emoji selection does not hold the gather lock", async () => {
+    const env = createThreadEnv({ gather });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+    let lockHeldDuringChoose = null;
+    await runStart(interaction, env.client, gather, {
+      chooseGameEmoji: async () => {
+        lockHeldDuringChoose = GatherInterest.hasActiveLock(gather.id);
+        return "🚂";
+      },
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+    expect(lockHeldDuringChoose).toBe(false);
+    expect(env.created[0].name).toBe("🚂 Wingspan");
+  });
+
+  test("deferred Start picker path still prefixes after emoji selection", async () => {
+    const env = createThreadEnv({ gather });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+    });
+    interaction.deferred = true;
+    interaction.replied = true;
+    delete interaction._values;
+
+    const handlers = {};
+    const fakeCollector = {
+      on(event, handler) {
+        handlers[event] = handler;
+        if (event === "collect") {
+          Promise.resolve().then(async () => {
+            await handler({
+              customId: GatherInterest.seatsCustomId(gather.id),
+              user: { id: gather.hostUserId },
+              values: ["a"],
+              update: async () => {},
+            });
+            await handler({
+              customId: GatherInterest.confirmSeatsCustomId(gather.id),
+              user: { id: gather.hostUserId },
+              deferUpdate: async () => {},
+            });
+          });
+        }
+      },
+      stop(reason) {
+        handlers.end?.([], reason);
+      },
+    };
+
+    let deferredWhenChoosing = false;
+    await GatherStartGame.promptAndStart(interaction, env.client, gather, {
+      createCollector: () => fakeCollector,
+      loadBgg: async () => STUB_BGG,
+      chooseGameEmoji: async () => {
+        deferredWhenChoosing = interaction.deferred;
+        return "🚂";
+      },
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+
+    expect(deferredWhenChoosing).toBe(true);
+    expect(env.created[0].name).toBe("🚂 Wingspan");
+    const started = replies.find((r) =>
+      String(r.content || "").includes("Game started")
+    );
+    expect(started).toBeTruthy();
+  });
+
+  test("retries thread create with the unprefixed name if the prefixed name fails", async () => {
+    const env = createThreadEnv({ gather, failThreadCreateTimes: 1 });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+    await runStart(interaction, env.client, gather, {
+      chooseGameEmoji: async () => "🚂",
+      upsertPinnedStatus: async (thread, client, pinInteraction, gameData) => {
+        const sent = await thread.send({ content: "📌 Live game status" });
+        gameData.pinnedStatusMessageId = sent.id;
+        gameData.pinnedStatusChannelId = thread.id;
+        gameData.pinnedStatusPinned = true;
+      },
+    });
+    expect(env.created.map((opts) => opts.name)).toEqual([
+      "🚂 Wingspan",
+      "Wingspan",
+    ]);
+    const started = replies.find((r) =>
+      String(r.content || "").includes("Game started")
+    );
+    expect(started).toBeTruthy();
+  });
+
+  test("does not retry thread create when the name was already unprefixed", async () => {
+    const env = createThreadEnv({ gather, failThreadCreateTimes: 1 });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+    await runStart(interaction, env.client, gather, {
+      chooseGameEmoji: async () => null,
+    });
+    expect(env.created).toHaveLength(1);
+    expect(env.created[0].name).toBe("Wingspan");
+    expect(
+      replies.some((r) =>
+        String(r.content || "").includes("couldn't create a thread")
+      )
+    ).toBe(true);
+  });
+
+  test("surfaces a permissions-shaped error when the unprefixed retry also fails", async () => {
+    const env = createThreadEnv({ gather, failThreadCreateTimes: 2 });
+    const replies = [];
+    const interaction = startInteraction({
+      gather,
+      client: env.client,
+      edits: [],
+      replies,
+      values: ["a"],
+    });
+    await runStart(interaction, env.client, gather, {
+      chooseGameEmoji: async () => "🚂",
+    });
+    expect(env.created).toHaveLength(2);
+    expect(
+      replies.some((r) =>
+        String(r.content || "").includes("couldn't create a thread")
+      )
+    ).toBe(true);
   });
 
   test("Start does not double-prefix a game name that already starts with an emoji", async () => {

@@ -493,7 +493,59 @@ class GatherStartGame {
     });
   }
 
+  static playThreadCreateError(forumLike) {
+    return this.hostError(
+      forumLike
+        ? "I couldn't create a forum post in the games channel. I need permission to create posts and send messages there."
+        : "I couldn't create a thread in the games channel. I need permission to create public threads and send messages there."
+    );
+  }
+
+  static async createPlayThread(parent, gather, threadName) {
+    const forumLike = this.isForumLikeParent(parent);
+    const plainName = this.threadNameFromGame(
+      GatherInterest.gameDisplayName(gather)
+    );
+    const tryCreate = (name) =>
+      parent.threads.create(this.buildThreadCreateOptions(gather, parent, name));
+
+    try {
+      return await tryCreate(threadName);
+    } catch (error) {
+      const canRetry =
+        typeof threadName === "string" &&
+        threadName !== plainName &&
+        GameNameEmoji.isValidChannelName(plainName);
+      if (!canRetry) {
+        console.error("Failed to create game thread for LFG start.", error);
+        throw this.playThreadCreateError(forumLike);
+      }
+      try {
+        return await tryCreate(plainName);
+      } catch (plainError) {
+        console.error("Failed to create game thread for LFG start.", plainError);
+        throw this.playThreadCreateError(forumLike);
+      }
+    }
+  }
+
   static async confirmStart(interaction, client, gatherId, seatedIds, deps = {}) {
+    const nextDeps = { ...deps };
+    if (typeof nextDeps.threadName !== "string") {
+      const gatherForName = await GatherInterest.loadGather(
+        client,
+        interaction.guildId,
+        gatherId
+      );
+      if (gatherForName) {
+        nextDeps.threadName = await this.resolveThreadName(
+          client,
+          gatherForName,
+          nextDeps
+        );
+      }
+    }
+
     return GatherInterest.withGatherLock(gatherId, async () => {
       const gather = await GatherInterest.loadGather(
         client,
@@ -513,7 +565,7 @@ class GatherStartGame {
 
       const seatedIdsWithHost = this.ensureHostSeated(seatedIds, gather.hostUserId);
       const extraNames = {
-        ...(deps.displayNames || {}),
+        ...(nextDeps.displayNames || {}),
         ...this.memberDisplayNames(interaction.guild, seatedIdsWithHost),
       };
       if (gather.hostUserId && gather.hostDisplayName) {
@@ -543,7 +595,7 @@ class GatherStartGame {
           gather,
           seated,
           warnings,
-          deps
+          nextDeps
         );
         return true;
       } catch (error) {
@@ -593,18 +645,16 @@ class GatherStartGame {
 
     let thread;
     const forumLike = this.isForumLikeParent(parent);
-    const threadName = await this.resolveThreadName(client, gather, deps);
+    const threadName =
+      typeof deps.threadName === "string"
+        ? deps.threadName
+        : await this.resolveThreadName(client, gather, deps);
     try {
-      thread = await parent.threads.create(
-        this.buildThreadCreateOptions(gather, parent, threadName)
-      );
+      thread = await this.createPlayThread(parent, gather, threadName);
     } catch (error) {
+      if (error.hostMessage) throw error;
       console.error("Failed to create game thread for LFG start.", error);
-      throw this.hostError(
-        forumLike
-          ? "I couldn't create a forum post in the games channel. I need permission to create posts and send messages there."
-          : "I couldn't create a thread in the games channel. I need permission to create public threads and send messages there."
-      );
+      throw this.playThreadCreateError(forumLike);
     }
 
     try {
