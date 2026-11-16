@@ -10,6 +10,21 @@ export type SnapshotDeck = {
   backImageUrl?: string;
 };
 
+export type DeckAction = {
+  id: string;
+  label: string;
+};
+
+/** Placeholder hover actions. Specialize per deck later by branching on `deck`. */
+export const DEFAULT_DECK_ACTIONS: DeckAction[] = [
+  { id: "deal", label: "Deal" },
+  { id: "draw", label: "Draw" },
+];
+
+export function deckActionsFor(_deck: SnapshotDeck | undefined | null): DeckAction[] {
+  return DEFAULT_DECK_ACTIONS;
+}
+
 export type OtherPlayer = {
   userId?: string;
   name?: string;

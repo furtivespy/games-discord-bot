@@ -394,6 +394,7 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain("#table[hidden]");
     expect(css).toContain(".card-tile.dragging");
     expect(css).toContain(".card-tile.moved");
+    expect(css).toContain(".card-tile.snapping");
     expect(css).not.toContain(".zone:has(.dragging)");
     expect(css).not.toContain(".zone:has(.moved)");
     expect(css).not.toContain(".zone:has(.card-tile:hover)");
@@ -402,7 +403,10 @@ describe("embedded HTTP origin", () => {
     expect(zoneBlock).not.toMatch(/z-index/);
     expect(css).toContain("z-index: 20");
     expect(css).toContain(".card-tile:hover .card-face");
+    expect(css).not.toContain(".deck-tile:hover .card-face");
     expect(css).toContain("scale(1.28)");
+    expect(css).toContain(".deck-tile:hover .deck-actions");
+    expect(css).toContain(".deck-action");
     expect(css).toContain(".hand-fan .card-tile + .card-tile");
     expect(css).toContain(".player-team-group");
     expect(css).toContain(".status-player-score");

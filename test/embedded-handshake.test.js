@@ -15,8 +15,10 @@ const {
   urlMappingsForApiHost,
 } = require("../embedded-client/src/handshake.ts");
 const {
+  SNAP_BACK_DURATION_MS,
   STACK_ABOVE_HOVER,
   applyCardOffset,
+  copyOffset,
   enableCardDrag,
   isMovedOffset,
   nextCardStackOrder,
@@ -41,6 +43,8 @@ const {
   DEFAULT_CARD_BACK,
   UNASSIGNED_TEAM_LABEL,
   autoSelectGameId,
+  DEFAULT_DECK_ACTIONS,
+  deckActionsFor,
   deckCountLabel,
   groupPlayersByTeam,
   handCountLabel,
@@ -105,6 +109,9 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("renderGameStatus");
     expect(main).toContain("renderOtherPlayers");
     expect(main).toContain("renderDecks");
+    expect(main).toContain("renderDeckActions");
+    expect(main).toContain("deckActionsFor");
+    expect(main).toContain("dataset.deckAction");
     expect(main).toContain("autoSelectGameId");
     const requestSeq = require("fs").readFileSync(
       require("path").join(__dirname, "..", "embedded-client", "src", "requestSeq.ts"),
@@ -333,8 +340,12 @@ function createFakeTile() {
   const tile = {
     style: { transform: "", zIndex: "" },
     classList: {
-      add: (name) => classSet.add(name),
-      remove: (name) => classSet.delete(name),
+      add: (...names) => {
+        for (const name of names) classSet.add(name);
+      },
+      remove: (...names) => {
+        for (const name of names) classSet.delete(name);
+      },
       toggle: (name, force) => {
         if (force === undefined) {
           if (classSet.has(name)) classSet.delete(name);
@@ -405,10 +416,12 @@ describe("client-only card drag", () => {
     expect(tile.style.zIndex).toBe(String(first));
   });
 
-  test("raises a card's z-index on drag start and again on drop", () => {
+  test("raises a card's z-index while dragging, then snaps back to the rest slot", () => {
     const before = nextCardStackOrder();
     const tile = createFakeTile();
-    enableCardDrag(tile, "board-1", new Map());
+    tile.classList.add("selected");
+    const positions = new Map();
+    enableCardDrag(tile, "hand-1", positions);
     tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
     const duringDrag = Number(tile.style.zIndex);
     expect(duringDrag).toBeGreaterThan(before);
@@ -417,17 +430,22 @@ describe("client-only card drag", () => {
     tile.ownerDocument.dispatchEvent(
       pointerEvent("pointermove", { clientX: 40, clientY: 80 })
     );
+    expect(tile.style.transform).toBe(translateCss(30, 70));
+    expect(tile.classList.contains("moved")).toBe(true);
+
     tile.ownerDocument.dispatchEvent(
       pointerEvent("pointerup", { clientX: 40, clientY: 80 })
     );
-    const afterDrop = Number(tile.style.zIndex);
-    expect(afterDrop).toBeGreaterThan(duringDrag);
     expect(tile.classList.contains("dragging")).toBe(false);
-    expect(tile.classList.contains("moved")).toBe(true);
-    expect(tile.style.transform).toBe(translateCss(30, 70));
+    expect(tile.classList.contains("moved")).toBe(false);
+    expect(tile.classList.contains("snapping")).toBe(false);
+    expect(tile.classList.contains("selected")).toBe(true);
+    expect(tile.style.transform).toBe("");
+    expect(tile.style.zIndex).toBe("");
+    expect(positions.get("hand-1")).toEqual({ x: 0, y: 0 });
   });
 
-  test("a later drag raises that card above an earlier drop", () => {
+  test("a later drag still raises that card above others while the pointer is down", () => {
     const province = createFakeTile();
     const village = createFakeTile();
     const market = createFakeTile();
@@ -437,6 +455,7 @@ describe("client-only card drag", () => {
     enableCardDrag(market, "play-2", positions);
 
     province.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    const provinceZ = Number(province.style.zIndex);
     province.ownerDocument.dispatchEvent(
       pointerEvent("pointermove", { clientX: 10, clientY: 80 })
     );
@@ -445,6 +464,9 @@ describe("client-only card drag", () => {
     );
 
     market.dispatchEvent(pointerEvent("pointerdown", { clientX: 20, clientY: 0 }));
+    const marketZ = Number(market.style.zIndex);
+    expect(provinceZ).toBeGreaterThan(Number(village.style.zIndex || 0));
+    expect(marketZ).toBeGreaterThan(provinceZ);
     market.ownerDocument.dispatchEvent(
       pointerEvent("pointermove", { clientX: 20, clientY: 120 })
     );
@@ -452,12 +474,80 @@ describe("client-only card drag", () => {
       pointerEvent("pointerup", { clientX: 20, clientY: 120 })
     );
 
-    const provinceZ = Number(province.style.zIndex);
-    const marketZ = Number(market.style.zIndex);
-    expect(provinceZ).toBeGreaterThan(Number(village.style.zIndex || 0));
-    expect(marketZ).toBeGreaterThan(provinceZ);
-    expect(positions.get("board-1").z).toBe(provinceZ);
-    expect(positions.get("play-2").z).toBe(marketZ);
+    expect(positions.get("board-1")).toEqual({ x: 0, y: 0 });
+    expect(positions.get("play-2")).toEqual({ x: 0, y: 0 });
+    expect(province.style.transform).toBe("");
+    expect(market.style.transform).toBe("");
+  });
+
+  test("a drop target that consumes the drop keeps the card where it landed", () => {
+    const tile = createFakeTile();
+    const positions = new Map();
+    const hits = [];
+    enableCardDrag(tile, "hand-2", positions, {
+      findDropTarget: (ctx) => {
+        hits.push(ctx);
+        return { id: "future-play-area" };
+      },
+      onDropTarget: ({ target }) => target.id === "future-play-area",
+    });
+
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 4, clientY: 4 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 24, clientY: 54 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 24, clientY: 54 })
+    );
+
+    expect(hits).toHaveLength(1);
+    expect(hits[0].cardId).toBe("hand-2");
+    expect(hits[0].point).toEqual({ x: 24, y: 54 });
+    expect(tile.classList.contains("dragging")).toBe(false);
+    expect(tile.classList.contains("moved")).toBe(true);
+    expect(tile.style.transform).toBe(translateCss(20, 50));
+  });
+
+  test("a drop target that does not consume still snaps the card back", () => {
+    const tile = createFakeTile();
+    const positions = new Map();
+    enableCardDrag(tile, "hand-3", positions, {
+      findDropTarget: () => ({ id: "ignored" }),
+      onDropTarget: () => false,
+    });
+
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 12, clientY: 8 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 12, clientY: 8 })
+    );
+
+    expect(tile.style.transform).toBe("");
+    expect(tile.classList.contains("moved")).toBe(false);
+    expect(positions.get("hand-3")).toEqual({ x: 0, y: 0 });
+  });
+
+  test("copyOffset snapshots rest state without sharing the original object", () => {
+    const origin = { x: 3, y: 5, z: 41 };
+    const copied = copyOffset(origin);
+    origin.x = 99;
+    expect(copied).toEqual({ x: 3, y: 5, z: 41 });
+    expect(copyOffset(undefined)).toEqual({ x: 0, y: 0 });
+    expect(SNAP_BACK_DURATION_MS).toBe(220);
+  });
+});
+
+describe("placeholder deck hover actions", () => {
+  test("every deck gets Deal and Draw so later tickets can specialize per deck", () => {
+    expect(DEFAULT_DECK_ACTIONS).toEqual([
+      { id: "deal", label: "Deal" },
+      { id: "draw", label: "Draw" },
+    ]);
+    expect(deckActionsFor({ name: "Main" })).toEqual(DEFAULT_DECK_ACTIONS);
+    expect(deckActionsFor({ name: "Events" })).toEqual(DEFAULT_DECK_ACTIONS);
+    expect(deckActionsFor(null)).toEqual(DEFAULT_DECK_ACTIONS);
   });
 });
 

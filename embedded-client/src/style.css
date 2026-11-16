@@ -410,16 +410,27 @@ body {
 }
 
 .card-tile.dragging,
-.card-tile.moved {
+.card-tile.moved,
+.card-tile.snapping {
   z-index: 20;
 }
 
 .card-tile.dragging {
   cursor: grabbing;
+  transition: none;
 }
 
-.card-tile:hover,
-.deck-tile:hover {
+.card-tile.snapping {
+  transition: transform 0.22s ease-out;
+}
+
+.card-tile:hover {
+  z-index: 30;
+}
+
+/* Raise the hovered deck so Deal/Draw sit above a sibling deck. Do not zoom. */
+.deck-tile:hover,
+.deck-tile:focus-within {
   z-index: 30;
 }
 
@@ -455,14 +466,54 @@ body {
   border-color: #e6c35c;
 }
 
-.card-tile:hover .card-face,
-.deck-tile:hover .card-face {
+.card-tile:hover .card-face {
   transform: translateY(-18px) scale(1.28);
   box-shadow: 0 18px 28px rgba(0, 0, 0, 0.45);
 }
 
-.card-tile.dragging:hover .card-face {
+.card-tile.dragging:hover .card-face,
+.card-tile.snapping:hover .card-face {
   transform: none;
+}
+
+.deck-actions {
+  position: absolute;
+  left: 0.28rem;
+  right: 0.28rem;
+  top: 0.28rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: 2;
+}
+
+.deck-tile:hover .deck-actions,
+.deck-tile:focus-within .deck-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.deck-action {
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  padding: 0.2rem 0.3rem;
+  border-radius: 0.3rem;
+  border: 1px solid rgba(230, 195, 92, 0.75);
+  background: rgba(18, 12, 8, 0.88);
+  color: #f8e7a1;
+  cursor: pointer;
+}
+
+.deck-action:hover,
+.deck-action:focus-visible {
+  background: rgba(48, 28, 12, 0.94);
+  border-color: #f3d98c;
 }
 
 .card-index,

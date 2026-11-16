@@ -134,6 +134,14 @@ async function report(body) {
   });
 }
 
+function waitSnap(tile) {
+  return new Promise((resolve) => {
+    const done = () => resolve();
+    tile.addEventListener("transitionend", done, { once: true });
+    setTimeout(done, 400);
+  });
+}
+
 try {
   const { enableCardDrag } = await import("/drag.js");
   const positions = new Map();
@@ -151,17 +159,20 @@ try {
     throw new Error("missing cards");
   }
 
+  const provinceHome = center(province);
   const villageCenter = center(village);
   drag(province, villageCenter.x, villageCenter.y);
-  await frame();
+  await waitSnap(province);
 
   const marketFrom = center(market);
+  const marketHome = { ...marketFrom };
   const handBox = hand.getBoundingClientRect();
   drag(market, marketFrom.x, handBox.top + Math.min(40, handBox.height / 2));
-  await frame();
+  await waitSnap(market);
 
   const provinceNow = center(province);
-  const hitNode = document.elementFromPoint(provinceNow.x, provinceNow.y);
+  const marketNow = center(market);
+  const hitNode = document.elementFromPoint(provinceHome.x, provinceHome.y);
   const hit = hitNode?.closest?.(".card-tile") || hitNode;
   await report({
     hitTitle: hit?.title || hit?.textContent || null,
@@ -172,15 +183,21 @@ try {
     marketZ: market.style.zIndex,
     boardZoneZ: getComputedStyle(province.closest(".zone")).zIndex,
     playZoneZ: getComputedStyle(village.closest(".zone")).zIndex,
-    x: provinceNow.x,
-    y: provinceNow.y,
+    provinceDx: Math.abs(provinceNow.x - provinceHome.x),
+    provinceDy: Math.abs(provinceNow.y - provinceHome.y),
+    marketDx: Math.abs(marketNow.x - marketHome.x),
+    marketDy: Math.abs(marketNow.y - marketHome.y),
+    provinceDragging: province.classList.contains("dragging"),
+    provinceMoved: province.classList.contains("moved"),
+    provinceSnapping: province.classList.contains("snapping"),
+    provinceTransform: province.style.transform,
   });
 } catch (error) {
   await report({ error: String(error && error.stack ? error.stack : error) });
 }
 `;
 
-describe("dropped cards stay pickable across zones", () => {
+describe("dropped cards snap back to their rest slot", () => {
   const chrome = workingChromeBin();
   let server;
   let chromeProc;
@@ -214,7 +231,7 @@ describe("dropped cards stay pickable across zones", () => {
     }
   });
 
-  test.skipIf(!chrome)("QA 3-step: elementFromPoint at Province's center is Province after Market moves", async () => {
+  test.skipIf(!chrome)("QA: dropping Province and Market snaps each card home without leftover drag styling", async () => {
     const css = fs.readFileSync(STYLE_PATH, "utf8");
     const built = await Bun.build({
       entrypoints: [DRAG_PATH],
@@ -281,7 +298,14 @@ describe("dropped cards stay pickable across zones", () => {
     expect(result.error).toBeUndefined();
     expect(result.hitId).toBe("board-1");
     expect(result.hitTitle).toBe("Province");
-    expect(Number(result.provinceZ)).toBeGreaterThan(Number(result.villageZ || 0));
+    expect(result.provinceDx).toBeLessThan(2);
+    expect(result.provinceDy).toBeLessThan(2);
+    expect(result.marketDx).toBeLessThan(2);
+    expect(result.marketDy).toBeLessThan(2);
+    expect(result.provinceDragging).toBe(false);
+    expect(result.provinceMoved).toBe(false);
+    expect(result.provinceSnapping).toBe(false);
+    expect(result.provinceTransform === "" || result.provinceTransform === "none").toBe(true);
     expect(result.boardZoneZ).toBe("auto");
     expect(result.playZoneZ).toBe("auto");
   }, 30000);
