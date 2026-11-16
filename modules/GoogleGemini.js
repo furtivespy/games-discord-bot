@@ -93,8 +93,7 @@ function sourceLinkTokens(text) {
   const tokens = [];
   const re = new RegExp(SOURCE_LINK_RE.source, "g");
   let lastIndex = 0;
-  let match;
-  while ((match = re.exec(text)) !== null) {
+  for (let match = re.exec(text); match !== null; match = re.exec(text)) {
     if (match.index > lastIndex) {
       const gap = text.slice(lastIndex, match.index).trim();
       if (gap) tokens.push(...splitByBreaks(gap, DISCORD_CONTENT_MAX));

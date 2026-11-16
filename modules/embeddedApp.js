@@ -303,6 +303,14 @@ function createEmbeddedApp({
   app.disable("x-powered-by");
   app.use(express.json({ limit: "8kb" }));
 
+  // Deploy check: the release workflow polls this until `sha` matches the
+  // commit it just built (GIT_SHA is baked into the image). Registered before
+  // the SPA fallback below, which would otherwise answer /health with index.html.
+  app.get("/health", (req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.json({ status: "ok", sha: env.GIT_SHA || "unknown" });
+  });
+
   async function exchangeToken(req, res) {
     if (mockEnabled) {
       const result = handleMockTokenExchange({

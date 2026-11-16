@@ -4,7 +4,20 @@ on:
   workflow_call:
     inputs:
       semver_tag:
-        description: "Semver tag (e.g. v1.2.3). When provided, pushes semver + latest. Otherwise pushes commit SHA."
+        description: "Semver tag (e.g. v1.2.3). When provided, pushes semver + latest. Otherwise pushes the commit short SHA (and extra_tag)."
+        required: false
+        type: string
+        default: ""
+      ref:
+        description: "Commit to check out and build."
+        required: true
+        type: string
+      git_sha:
+        description: "Full commit SHA baked into the image as GIT_SHA (served by GET /health)."
+        required: true
+        type: string
+      extra_tag:
+        description: "Additional tag for non-semver builds (e.g. pr-123)."
         required: false
         type: string
         default: ""
@@ -28,6 +41,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -41,17 +56,27 @@ jobs:
 
       - name: Resolve image tags
         id: meta
+        env:
+          SEMVER_TAG: ${{ inputs.semver_tag }}
+          EXTRA_TAG: ${{ inputs.extra_tag }}
+          GIT_SHA: ${{ inputs.git_sha }}
         run: |
-          if [[ -n "${{ inputs.semver_tag }}" ]]; then
+          if [[ -n "${SEMVER_TAG}" ]]; then
             {
               echo "tags<<EOF"
-              echo "${REGISTRY}/${IMAGE_NAME}:${{ inputs.semver_tag }}"
+              echo "${REGISTRY}/${IMAGE_NAME}:${SEMVER_TAG}"
               echo "${REGISTRY}/${IMAGE_NAME}:latest"
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
           else
-            SHA="$(git rev-parse --short HEAD)"
-            echo "tags=${REGISTRY}/${IMAGE_NAME}:${SHA}" >> "$GITHUB_OUTPUT"
+            {
+              echo "tags<<EOF"
+              echo "${REGISTRY}/${IMAGE_NAME}:${GIT_SHA::7}"
+              if [[ -n "${EXTRA_TAG}" ]]; then
+                echo "${REGISTRY}/${IMAGE_NAME}:${EXTRA_TAG}"
+              fi
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build and push
@@ -60,3 +85,5 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            GIT_SHA=${{ inputs.git_sha }}

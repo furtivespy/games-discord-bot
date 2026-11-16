@@ -1,12 +1,36 @@
 name: Tests
 
+# Runs on every pull request and on master. Branch pushes are covered by the
+# pull_request run, so they no longer run the suite twice.
 on:
   push:
     branches:
-      - "**"
+      - master
   pull_request:
 
 jobs:
+  # Required check. Fast: skips lifecycle scripts so canvas is not compiled.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Install dependencies
+        run: |
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          bun install --frozen-lockfile --ignore-scripts
+
+      - name: Lint
+        run: bun run lint
+
+  # Required check. `bun run verify` = lint + this job's two steps.
   test:
     runs-on: ubuntu-latest
     steps:
