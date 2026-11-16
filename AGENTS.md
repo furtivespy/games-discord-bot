@@ -11,8 +11,16 @@ embedded-client build. CI runs the same three steps as the `lint` and `test`
 jobs. Run it before you push. `bun run hooks:install` (once per clone) makes
 `git push` run the lint step first.
 
+Beyond tests, `bun run control` lets you run and look at your change yourself
+(`doctor`, `map`, `execute`, `browse`, `dev`, `health`). Start with
+[.agents/skills/control-gamebot/SKILL.md](.agents/skills/control-gamebot/SKILL.md).
+Anything it cannot prove (real Discord rendering, clicks, permissions, network
+services) goes under "For you to test" in the PR.
+
 ## Map
 
+- Slash commands, what each needs, and how to run it: [docs/feature-map/INDEX.md](docs/feature-map/INDEX.md) and [notes.md](docs/feature-map/notes.md) (`bun run control map <command>`). Update `notes.md` and run `bun run control map --write` when you add, rename, or remove a command or subcommand.
+- Shared pieces and the ADRs that constrain them: [docs/primitives.md](docs/primitives.md)
 - Merging, risk tiers, the QA Status block: [docs/merge-policy.md](docs/merge-policy.md)
 - Shipping a PR: [.agents/skills/ship-pr/SKILL.md](.agents/skills/ship-pr/SKILL.md)
 - Decisions to read before proposing big changes: [docs/adr/](docs/adr/)

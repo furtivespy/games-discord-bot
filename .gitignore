@@ -73,6 +73,8 @@ data/
 # local planning docs (the shared docs below are tracked)
 docs/*
 !docs/adr/
+!docs/feature-map/
+!docs/primitives.md
 !docs/merge-policy.md
 !docs/runbooks/
 
@@ -83,3 +85,6 @@ embedded-client/.env
 
 # Autopilot audit artifacts
 .autopilot/
+
+# control-gamebot screenshots and logs
+tmp/

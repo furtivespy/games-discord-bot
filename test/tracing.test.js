@@ -1,4 +1,8 @@
-const { describe, expect, test } = require("bun:test");
+const { describe, expect, setDefaultTimeout, test } = require("bun:test");
+
+// Each startup test spawns a fresh Bun process, which can take over the 5s
+// default when the disk cache is cold.
+setDefaultTimeout(30_000);
 const path = require("path");
 
 const ROOT = path.join(__dirname, "..");
