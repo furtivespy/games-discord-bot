@@ -1,5 +1,9 @@
 const { snapshotFromGameData } = require("./embeddedGames");
-const { applyVisualCardAction } = require("./embeddedActions");
+const {
+  applyVisualCardAction,
+  createActionIdempotencyCache,
+  visualActionErrorMessage,
+} = require("./embeddedActions");
 
 const ENV_NAME = "EMBEDDED_APP_MOCK";
 const TRUTHY = new Set(["1", "true", "yes", "on"]);
@@ -367,6 +371,7 @@ function mockActor() {
 
 function createMockGameSession() {
   const games = new Map();
+  const idempotency = createActionIdempotencyCache();
 
   function stateKey(name, channelId, guildId) {
     return `${name}:${channelId}:${guildId}`;
@@ -407,40 +412,64 @@ function createMockGameSession() {
     };
   }
 
-  function applyAction({ fixture, channelId, guildId, action, deckName, count } = {}) {
+  function applyAction({
+    fixture,
+    channelId,
+    guildId,
+    action,
+    deckName,
+    count,
+    requestId,
+  } = {}) {
     const name = sanitizeFixtureName(fixture);
     if (!name) {
       return { status: 400, body: { error: "unknown_fixture" } };
     }
     if (name === "no-game") {
-      return { status: 404, body: { error: "no_game" } };
+      return {
+        status: 404,
+        body: { error: "no_game", message: visualActionErrorMessage("no_game") },
+      };
     }
     if (name === "not-a-player") {
-      return { status: 403, body: { error: "not_a_player" } };
+      return {
+        status: 403,
+        body: {
+          error: "not_a_player",
+          message: visualActionErrorMessage("not_a_player"),
+        },
+      };
     }
     const cid = channelId || DEFAULT_MOCK_CHANNEL_ID;
     const gid = guildId || DEFAULT_MOCK_GUILD_ID;
-    const gameData = getGame(name, cid, gid);
-    const applied = applyVisualCardAction(gameData, {
-      action,
-      deckName,
-      count,
-      actor: mockActor(),
-      userId: MOCK_USER.id,
-    });
-    if (!applied.ok) {
+    const run = () => {
+      const gameData = getGame(name, cid, gid);
+      const applied = applyVisualCardAction(gameData, {
+        action,
+        deckName,
+        count,
+        actor: mockActor(),
+        userId: MOCK_USER.id,
+      });
+      if (!applied.ok) {
+        return {
+          status: applied.status,
+          body: {
+            error: applied.error,
+            message: applied.content || visualActionErrorMessage(applied.error),
+          },
+        };
+      }
       return {
-        status: applied.status,
-        body: { error: applied.error, message: applied.content },
+        status: 200,
+        body: {
+          ...snapshotFromSeed(gameData, { channelId: cid, guildId: gid }),
+          message: applied.content,
+          channelPosted: true,
+        },
       };
-    }
-    return {
-      status: 200,
-      body: {
-        ...snapshotFromSeed(gameData, { channelId: cid, guildId: gid }),
-        message: applied.content,
-      },
     };
+    return idempotency.run(requestId, MOCK_USER.id, gid, cid, run);
   }
 
   return { getSnapshot, applyAction };

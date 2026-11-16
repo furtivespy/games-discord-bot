@@ -14,6 +14,7 @@ export class MockDiscordSDK {
   readonly clientId: string;
   readonly channelId: string;
   readonly guildId: string;
+  readonly isMock = true;
   readonly openedExternalLinks: string[] = [];
   readonly commands: {
     authorize: (args: unknown) => Promise<{ code: string }>;

@@ -558,6 +558,26 @@ describe("/cards command handlers", () => {
     );
   });
 
+  test("deck deal rejects a count outside the shared parser range", async () => {
+    await withHarness(
+      {
+        gameData: gameWithDeck(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "deal",
+          integers: { count: 0 },
+          strings: { deck: "Main" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toContain("whole number of cards");
+        const saved = await harness.getSavedGame();
+        expect(saved.players[0].hands.main).toEqual([]);
+      }
+    );
+  });
+
   test("deck deal deals count cards to every player", async () => {
     const cards = [
       createCard({ id: "c1", name: "One", origin: "Main" }),

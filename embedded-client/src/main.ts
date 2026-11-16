@@ -23,12 +23,15 @@ import {
 import {
   ACTION_COUNT_MAX,
   ACTION_COUNT_MIN,
+  CHANNEL_POST_FAILED_NOTICE,
   DEFAULT_ACTION_COUNT,
   GAME_CHANNEL_LINK_LABEL,
   actionDialogCopy,
   deckActionFromDataset,
   gameChannelUrl,
+  newActionRequestId,
   parseActionCount,
+  shouldUseOpenExternalLink,
   tryOpenExternalLink,
   visualActionBody,
   visualActionErrorMessage,
@@ -78,6 +81,7 @@ let activeSession: {
 } | null = null;
 let actionDialogBound = false;
 let actionInFlight = false;
+let actionRequestId: string | null = null;
 
 type EmbeddedConfig = {
   clientId: string;
@@ -106,6 +110,7 @@ type GameSnapshot = {
   decks?: SnapshotDeck[];
   status?: GameStatus;
   error?: string;
+  channelPosted?: boolean;
 };
 
 type PickerGame = {
@@ -175,6 +180,23 @@ function setSnapshotStatus(text: string | null) {
   el.hidden = true;
 }
 
+function setActionNotice(text: string | null) {
+  const el = document.getElementById("action-notice");
+  if (!el) return;
+  const value = typeof text === "string" ? text.trim() : "";
+  el.textContent = value;
+  el.hidden = !value;
+}
+
+function setDeckActionsLocked(locked: boolean) {
+  actionInFlight = locked;
+  document.querySelectorAll<HTMLButtonElement>("button.deck-action").forEach((button) => {
+    button.disabled = locked;
+  });
+  const { confirm } = actionDialogElements();
+  if (confirm) confirm.disabled = locked;
+}
+
 function setTableVisible(visible: boolean) {
   const table = document.getElementById("table");
   if (table) table.hidden = !visible;
@@ -187,6 +209,7 @@ function setTableVisible(visible: boolean) {
     const others = document.getElementById("other-players");
     if (others) others.hidden = true;
     renderGameChannelLink(null, null);
+    setActionNotice(null);
   }
 }
 
@@ -249,16 +272,18 @@ function renderGameChannelLink(guildId: unknown, channelId: unknown) {
   anchor.target = "_blank";
   anchor.rel = "noreferrer";
   anchor.textContent = GAME_CHANNEL_LINK_LABEL;
-  anchor.addEventListener("click", (event) => {
-    const openExternal = activeSession?.discordSdk?.commands?.openExternalLink;
-    if (typeof openExternal !== "function") return;
-    event.preventDefault();
-    void tryOpenExternalLink(href, openExternal).then((status) => {
-      if (status === "failed") {
-        window.open(href, "_blank", "noopener,noreferrer");
-      }
+  const openExternal = activeSession?.discordSdk?.commands?.openExternalLink;
+  if (shouldUseOpenExternalLink(Boolean(activeSession?.config.mock), openExternal)) {
+    const openLink = openExternal as (args: { url: string }) => Promise<unknown>;
+    anchor.addEventListener("click", (event) => {
+      event.preventDefault();
+      void tryOpenExternalLink(href, openLink).then((status) => {
+        if (status === "failed") {
+          window.open(href, "_blank", "noopener,noreferrer");
+        }
+      });
     });
-  });
+  }
   el.replaceChildren(anchor);
   el.hidden = false;
 }
@@ -300,7 +325,7 @@ function openActionDialog(kind: DeckActionKind, deckName: string) {
   if (els.label) els.label.textContent = copy.label;
   if (els.confirm) {
     els.confirm.textContent = copy.confirm;
-    els.confirm.disabled = false;
+    els.confirm.disabled = actionInFlight;
   }
   els.dialog.dataset.action = kind;
   els.dialog.dataset.deckName = deckName;
@@ -324,11 +349,10 @@ async function submitDeckAction(kind: DeckActionKind, deckName: string, count: n
     return;
   }
   if (actionInFlight) return;
-  actionInFlight = true;
   const channelId = liveSelectedChannelId(session.config.channelId);
   const guildId = session.guildId || session.config.guildId;
-  const { confirm } = actionDialogElements();
-  if (confirm) confirm.disabled = true;
+  actionRequestId = newActionRequestId();
+  setDeckActionsLocked(true);
   setActionDialogError(null);
   try {
     const response = await fetch(
@@ -346,34 +370,38 @@ async function submitDeckAction(kind: DeckActionKind, deckName: string, count: n
             count,
             channelId,
             guildId,
+            requestId: actionRequestId,
             fixture: session.config.mock ? readFixture() : undefined,
           })
         ),
       }
     );
-    let payload: GameSnapshot & { message?: string; error?: string } = {};
+    let payload: GameSnapshot & {
+      message?: string;
+      error?: string;
+      channelPosted?: boolean;
+    } = {};
     try {
       payload = (await response.json()) as GameSnapshot & {
         message?: string;
         error?: string;
+        channelPosted?: boolean;
       };
     } catch {
       payload = {};
     }
     if (!response.ok) {
-      setActionDialogError(
-        visualActionErrorMessage(payload.error, payload.message)
-      );
+      setActionDialogError(visualActionErrorMessage(payload.error, payload.message));
       return;
     }
     closeActionDialog();
     applySnapshot(session.config, payload);
+    setActionNotice(payload.channelPosted === false ? CHANNEL_POST_FAILED_NOTICE : null);
   } catch {
-    setActionDialogError("Could not run that action.");
+    setActionDialogError(visualActionErrorMessage("action_failed"));
   } finally {
-    actionInFlight = false;
-    const els = actionDialogElements();
-    if (els.confirm && els.dialog?.open) els.confirm.disabled = false;
+    actionRequestId = null;
+    setDeckActionsLocked(false);
   }
 }
 
@@ -384,6 +412,11 @@ function bindActionDialog() {
   actionDialogBound = true;
   els.cancel?.addEventListener("click", () => {
     closeActionDialog();
+  });
+  els.dialog.addEventListener("close", () => {
+    setActionDialogError(null);
+    const { confirm } = actionDialogElements();
+    if (confirm && !actionInFlight) confirm.disabled = false;
   });
   els.form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -407,6 +440,7 @@ function bindActionDialog() {
 
 function onDeckActionButtonClick(event: Event) {
   event.preventDefault();
+  if (actionInFlight) return;
   const target = event.currentTarget as HTMLElement | null;
   const parsed = deckActionFromDataset(target?.dataset);
   target?.blur?.();
@@ -726,6 +760,7 @@ function renderDeckActions(deck: SnapshotDeck): HTMLDivElement {
     button.dataset.deckAction = action.id;
     button.dataset.deckName = deckName;
     button.textContent = action.label;
+    button.disabled = actionInFlight;
     button.addEventListener("click", onDeckActionButtonClick);
     actions.append(button);
   }
@@ -939,6 +974,7 @@ async function loadSnapshot(
 
 function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot) {
   setSnapshotStatus(null);
+  if (payload.channelPosted !== false) setActionNotice(null);
   const positions = new Map<string, CardOffset>();
   renderGameChannelLink(payload.guildId || config.guildId, payload.channelId);
   renderGameStatus(payload.status, payload.gameName || "");

@@ -119,7 +119,7 @@ function drawMultiple(gameData, { deck, count, actor, player } = {}) {
     return {
       ok: false,
       error: "no_cards_in_draw",
-      dealCount: 0,
+      drawnCount: 0,
       wasShuffled: false,
       content: "No cards in draw pile",
     };
@@ -128,13 +128,13 @@ function drawMultiple(gameData, { deck, count, actor, player } = {}) {
     return {
       ok: false,
       error: "not_a_player",
-      dealCount: 0,
+      drawnCount: 0,
       wasShuffled: false,
       content: "You're not a player in this game.",
     };
   }
 
-  let dealCount = 0;
+  let drawnCount = 0;
   let wasShuffled = "";
 
   dealLoop: for (let i = 0; i < cardCount; i++) {
@@ -146,21 +146,21 @@ function drawMultiple(gameData, { deck, count, actor, player } = {}) {
       break dealLoop;
     }
     mainHand(player).push(takeTopDrawCard(deck));
-    dealCount++;
+    drawnCount++;
   }
 
   const displayName = actorDisplayName(actor);
   const shuffleNote = wasShuffled ? " (deck was shuffled)" : "";
-  if (dealCount > 0) {
+  if (drawnCount > 0) {
     try {
       GameHelper.recordMove(
         gameData,
         recordActor(actor),
         GameDB.ACTION_CATEGORIES.CARD,
         GameDB.ACTION_TYPES.DRAW,
-        `${displayName} drew ${dealCount} cards from ${deck.name}${shuffleNote}`,
+        `${displayName} drew ${drawnCount} cards from ${deck.name}${shuffleNote}`,
         {
-          cardCount: dealCount,
+          cardCount: drawnCount,
           deckName: deck.name,
           source: "draw pile",
           wasShuffled: wasShuffled.length > 0,
@@ -175,9 +175,9 @@ function drawMultiple(gameData, { deck, count, actor, player } = {}) {
   return {
     ok: true,
     error: null,
-    dealCount,
+    drawnCount,
     wasShuffled: wasShuffled.length > 0,
-    content: `${displayName} drew ${dealCount} cards from ${deck.name}${wasShuffled}`,
+    content: `${displayName} drew ${drawnCount} cards from ${deck.name}${wasShuffled}`,
   };
 }
 

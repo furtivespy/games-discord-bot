@@ -385,6 +385,7 @@ describe("embedded HTTP origin", () => {
     expect(html).toContain('id="other-players"');
     expect(html).toContain('id="game-status"');
     expect(html).toContain('id="game-channel-link"');
+    expect(html).toContain('id="action-notice"');
     expect(html).toContain('id="action-dialog"');
     expect(html).toContain('id="decks"');
     expect(html).toContain("hand-fan");
@@ -886,9 +887,18 @@ describe("GET /api/game/snapshot", () => {
 
 describe("POST /api/game/action", () => {
   const Formatter = require("../modules/GameFormatter");
+  const { withDiscordAccess } = require("./helpers/discordAccess");
   const originalCreateGameStatusReply = Formatter.createGameStatusReply;
 
-  function actionGame(userId = "snowflake-user") {
+  function actionGame({
+    userId = "snowflake-user",
+    draw = [
+      { id: "d1", name: "Ace", url: null },
+      { id: "d2", name: "King", url: null },
+      { id: "d3", name: "Queen", url: null },
+      { id: "d4", name: "Jack", url: null },
+    ],
+  } = {}) {
     return {
       isdeleted: false,
       name: "Friday Inis",
@@ -910,14 +920,7 @@ describe("POST /api/game/action", () => {
         {
           name: "Main",
           piles: {
-            draw: {
-              cards: [
-                { id: "d1", name: "Ace", url: null },
-                { id: "d2", name: "King", url: null },
-                { id: "d3", name: "Queen", url: null },
-                { id: "d4", name: "Jack", url: null },
-              ],
-            },
+            draw: { cards: draw },
             discard: { cards: [] },
           },
         },
@@ -943,7 +946,10 @@ describe("POST /api/game/action", () => {
     }
   }
 
-  test("draw updates the snapshot hand and history and posts to the game channel", async () => {
+  async function withActionApp(
+    { game = actionGame(), send, botToken = "bot-token", access = {}, meBody } = {},
+    run
+  ) {
     Formatter.createGameStatusReply = async (_gameData, _guild, _clientUserId, options = {}) => ({
       content: options.content ?? "📊",
       embeds: [],
@@ -951,12 +957,13 @@ describe("POST /api/game/action", () => {
     });
     try {
       await withStore(async (store) => {
-        store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", actionGame());
+        store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", game);
         const posted = [];
         const channel = {
           id: "thread-game",
           guild: { id: "guild-1" },
           send: async (payload) => {
+            if (typeof send === "function") return send(payload, posted);
             posted.push(payload);
             return { id: "msg-1" };
           },
@@ -966,11 +973,13 @@ describe("POST /api/game/action", () => {
           path.join(staticDir, "index.html"),
           `<!doctype html><html><head></head><body></body></html>`
         );
+        const userId = meBody?.id || "snowflake-user";
         const app = createEmbeddedApp({
           clientId: "client-123",
           clientSecret: "server-secret",
           staticDir,
           gameStore: store,
+          botToken,
           discordClient: {
             user: { id: "bot-1" },
             channels: {
@@ -982,63 +991,25 @@ describe("POST /api/game/action", () => {
               store.upsertGameData(guildId, collection, channelId, data);
             },
           },
-          fetchImpl: mockDiscordFetch({
-            meBody: {
-              id: "snowflake-user",
-              username: "willsullivan",
-              global_name: "Will",
-            },
-          }),
+          fetchImpl: withDiscordAccess(
+            mockDiscordFetch({
+              meBody: meBody || {
+                id: userId,
+                username: "willsullivan",
+                global_name: "Will",
+              },
+            }),
+            {
+              guildId: "guild-1",
+              channelId: "thread-game",
+              userId,
+              ...access,
+            }
+          ),
         });
         const { server, url } = await listen(app);
         try {
-          const missingAuth = await fetch(`${url}/api/game/action`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "draw",
-              deck: "Main",
-              count: 2,
-              guildId: "guild-1",
-              channelId: "thread-game",
-            }),
-          });
-          expect(missingAuth.status).toBe(401);
-          expect(await missingAuth.json()).toEqual({
-            error: "unauthorized",
-            message: "Could not sign in to run that action.",
-          });
-
-          const drawn = await fetch(`${url}/api/game/action`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${SECRET_TOKEN}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              action: "draw",
-              deck: "Main",
-              count: 2,
-              guildId: "guild-1",
-              channelId: "thread-game",
-            }),
-          });
-          expect(drawn.status).toBe(200);
-          const body = await drawn.json();
-          expect(body.message).toBe("Will drew 2 cards from Main");
-          expect(body.hand.map((card) => card.name)).toEqual(["Copper", "Ace", "King"]);
-          expect(body.status.history.at(-1).summary).toBe("Will drew 2 cards from Main");
-          expect(posted[0].content).toContain("Will drew 2 cards from Main");
-
-          const snapshot = await fetch(
-            `${url}/api/game/snapshot?guildId=guild-1&channelId=thread-game`,
-            { headers: { Authorization: `Bearer ${SECRET_TOKEN}` } }
-          );
-          expect((await snapshot.json()).hand.map((card) => card.name)).toEqual([
-            "Copper",
-            "Ace",
-            "King",
-          ]);
+          await run({ url, posted, store });
         } finally {
           server.close();
           fs.rmSync(staticDir, { recursive: true, force: true });
@@ -1047,181 +1018,162 @@ describe("POST /api/game/action", () => {
     } finally {
       Formatter.createGameStatusReply = originalCreateGameStatusReply;
     }
-  });
+  }
 
-  test("deal follows /cards deck deal and rejects bad counts, empty decks, and non-players", async () => {
-    Formatter.createGameStatusReply = async (_gameData, _guild, _clientUserId, options = {}) => ({
-      content: options.content ?? "📊",
-      embeds: [],
-      files: [],
+  function postAction(url, body) {
+    return fetch(`${url}/api/game/action`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SECRET_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        guildId: "guild-1",
+        channelId: "thread-game",
+        ...body,
+      }),
     });
-    try {
-      await withStore(async (store) => {
-        store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", actionGame());
-        const emptyGame = actionGame();
-        emptyGame.decks[0].piles.draw.cards = [];
-        store.upsertGameData("guild-1", GAME_COLLECTION, "empty-game", emptyGame);
-        const posted = [];
-        const channels = {
-          "thread-game": {
-            id: "thread-game",
-            guild: { id: "guild-1" },
-            send: async (payload) => {
-              posted.push(payload);
-              return { id: "msg-deal" };
-            },
-          },
-        };
-        const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-action-deal-"));
-        fs.writeFileSync(
-          path.join(staticDir, "index.html"),
-          `<!doctype html><html><head></head><body></body></html>`
-        );
-        const app = createEmbeddedApp({
-          clientId: "client-123",
-          clientSecret: "server-secret",
-          staticDir,
-          gameStore: store,
-          discordClient: {
-            user: { id: "bot-1" },
-            channels: {
-              cache: { get: (id) => channels[id] || null },
-            },
-            getGameDataV2: async (guildId, collection, channelId) =>
-              store.getSpecificGameData(guildId, collection, channelId),
-            setGameDataV2: async (guildId, collection, channelId, data) => {
-              store.upsertGameData(guildId, collection, channelId, data);
-            },
-          },
-          fetchImpl: mockDiscordFetch({
-            meBody: {
-              id: "snowflake-user",
-              username: "willsullivan",
-              global_name: "Will",
-            },
-          }),
-        });
-        const { server, url } = await listen(app);
-        const auth = {
-          Authorization: `Bearer ${SECRET_TOKEN}`,
-          "Content-Type": "application/json",
-        };
-        try {
-          const badCount = await fetch(`${url}/api/game/action`, {
-            method: "POST",
-            headers: auth,
-            body: JSON.stringify({
-              action: "deal",
-              deck: "Main",
-              count: 0,
-              guildId: "guild-1",
-              channelId: "thread-game",
-            }),
-          });
-          expect(badCount.status).toBe(400);
-          expect(await badCount.json()).toEqual({
-            error: "invalid_count",
-            message: "Enter a number from 1 to 99.",
-          });
+  }
 
-          const emptyDraw = await fetch(`${url}/api/game/action`, {
-            method: "POST",
-            headers: auth,
-            body: JSON.stringify({
-              action: "draw",
-              deck: "Main",
-              count: 1,
-              guildId: "guild-1",
-              channelId: "empty-game",
-            }),
-          });
-          expect(emptyDraw.status).toBe(409);
-          expect(await emptyDraw.json()).toEqual({
-            error: "no_cards_in_draw",
-            message: "No cards in draw pile",
-          });
-
-          const dealt = await fetch(`${url}/api/game/action`, {
-            method: "POST",
-            headers: auth,
-            body: JSON.stringify({
-              action: "deal",
-              deck: "Main",
-              count: 1,
-              guildId: "guild-1",
-              channelId: "thread-game",
-            }),
-          });
-          expect(dealt.status).toBe(200);
-          const body = await dealt.json();
-          expect(body.message).toBe("Dealt out a total of 2 cards from Main.");
-          expect(body.hand.map((card) => card.name)).toEqual(["Copper", "Ace"]);
-          expect(body.status.history.at(-1).summary).toBe(
-            "Will dealt 2 cards from Main to all players"
-          );
-          expect(posted[0].content).toContain("Dealt out a total of 2 cards from Main.");
-        } finally {
-          server.close();
-          fs.rmSync(staticDir, { recursive: true, force: true });
-        }
-      });
-    } finally {
-      Formatter.createGameStatusReply = originalCreateGameStatusReply;
-    }
-  });
-
-  test("non-players get 403 from POST /api/game/action", async () => {
-    await withStore(async (store) => {
-      store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", actionGame());
-      const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-action-403-"));
-      fs.writeFileSync(
-        path.join(staticDir, "index.html"),
-        `<!doctype html><html><head></head><body></body></html>`
-      );
-      const app = createEmbeddedApp({
-        clientId: "client-123",
-        clientSecret: "server-secret",
-        staticDir,
-        gameStore: store,
-        discordClient: {
-          user: { id: "bot-1" },
-          channels: { cache: { get: () => null } },
-          getGameDataV2: async (guildId, collection, channelId) =>
-            store.getSpecificGameData(guildId, collection, channelId),
-        },
-        fetchImpl: mockDiscordFetch({
-          meBody: {
-            id: "stranger",
-            username: "nope",
-            global_name: "Nope",
-          },
+  test("draw updates the snapshot hand and history and posts to the game channel", async () => {
+    await withActionApp({}, async ({ url, posted }) => {
+      const missingAuth = await fetch(`${url}/api/game/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "draw",
+          deck: "Main",
+          count: 2,
+          guildId: "guild-1",
+          channelId: "thread-game",
         }),
       });
-      const { server, url } = await listen(app);
-      try {
-        const denied = await fetch(`${url}/api/game/action`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${SECRET_TOKEN}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            action: "deal",
-            deck: "Main",
-            count: 1,
-            guildId: "guild-1",
-            channelId: "thread-game",
-          }),
-        });
-        expect(denied.status).toBe(403);
-        expect(await denied.json()).toEqual({
-          error: "not_a_player",
-          message: "You're not a player in this game.",
-        });
-      } finally {
-        server.close();
-        fs.rmSync(staticDir, { recursive: true, force: true });
+      expect(missingAuth.status).toBe(401);
+
+      const drawn = await postAction(url, { action: "draw", deck: "Main", count: 2 });
+      expect(drawn.status).toBe(200);
+      const body = await drawn.json();
+      expect(body.message).toBe("TableWill drew 2 cards from Main");
+      expect(body.channelPosted).toBe(true);
+      expect(body.hand.map((card) => card.name)).toEqual(["Copper", "Ace", "King"]);
+      expect(body.status.history.at(-1).summary).toBe("TableWill drew 2 cards from Main");
+      expect(posted[0].content).toContain("TableWill drew 2 cards from Main");
+
+      const snapshot = await fetch(
+        `${url}/api/game/snapshot?guildId=guild-1&channelId=thread-game`,
+        { headers: { Authorization: `Bearer ${SECRET_TOKEN}` } }
+      );
+      expect((await snapshot.json()).hand.map((card) => card.name)).toEqual([
+        "Copper",
+        "Ace",
+        "King",
+      ]);
+    });
+  });
+
+  test("deal 200 deals to each player and posts", async () => {
+    await withActionApp({}, async ({ url, posted }) => {
+      const dealt = await postAction(url, { action: "deal", deck: "Main", count: 1 });
+      expect(dealt.status).toBe(200);
+      const body = await dealt.json();
+      expect(body.message).toBe("Dealt out a total of 2 cards from Main.");
+      expect(body.channelPosted).toBe(true);
+      expect(body.hand.map((card) => card.name)).toEqual(["Copper", "Ace"]);
+      expect(posted[0].content).toContain("Dealt out a total of 2 cards from Main.");
+    });
+  });
+
+  test("403 not_a_player when the user is not a guild member", async () => {
+    await withActionApp({ access: { memberStatus: 404 } }, async ({ url }) => {
+      const res = await postAction(url, { action: "draw", deck: "Main", count: 1 });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({
+        error: "not_a_player",
+        message: "You're not a player in this game.",
+      });
+    });
+  });
+
+  test("bad count is 400 with a friendly message", async () => {
+    await withActionApp({}, async ({ url }) => {
+      const res = await postAction(url, { action: "draw", deck: "Main", count: 0 });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: "invalid_count",
+        message: expect.stringContaining("whole number"),
+      });
+    });
+  });
+
+  test("empty deck is 409", async () => {
+    await withActionApp({ game: actionGame({ draw: [] }) }, async ({ url }) => {
+      const res = await postAction(url, { action: "draw", deck: "Main", count: 1 });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        error: "no_cards_in_draw",
+        message: "No cards in draw pile",
+      });
+    });
+  });
+
+  test("guard deny when the member cannot view the channel", async () => {
+    const { PermissionFlagsBits } = require("discord.js");
+    await withActionApp(
+      {
+        access: {
+          overwrites: [
+            {
+              id: "snowflake-user",
+              deny: String(PermissionFlagsBits.ViewChannel),
+              allow: "0",
+            },
+          ],
+        },
+      },
+      async ({ url }) => {
+        const res = await postAction(url, { action: "deal", deck: "Main", count: 1 });
+        expect(res.status).toBe(403);
+        expect(await res.json()).toMatchObject({ error: "forbidden" });
       }
+    );
+  });
+
+  test("no bot token fails closed", async () => {
+    await withActionApp({ botToken: "" }, async ({ url }) => {
+      const res = await postAction(url, { action: "deal", deck: "Main", count: 1 });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ error: "access_unverified" });
+    });
+  });
+
+  test("cross-guild channel mismatch is 403", async () => {
+    await withActionApp({ access: { channelGuildId: "other-guild" } }, async ({ url }) => {
+      const res = await postAction(url, { action: "deal", deck: "Main", count: 1 });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ error: "channel_mismatch" });
+    });
+  });
+
+  test("cross-guild document key does not mutate the real game", async () => {
+    await withActionApp({ access: { guildId: "guild-2" } }, async ({ url, store }) => {
+      const res = await fetch(`${url}/api/game/action`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${SECRET_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "deal",
+          deck: "Main",
+          count: 1,
+          guildId: "guild-2",
+          channelId: "thread-game",
+        }),
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({ error: "no_game" });
+      const saved = store.getSpecificGameData("guild-1", GAME_COLLECTION, "thread-game");
+      expect(saved.players[0].hands.main).toHaveLength(1);
     });
   });
 });

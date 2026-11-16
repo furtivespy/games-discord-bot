@@ -1,6 +1,7 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
 const CardMoves = require('../../modules/cardMoves')
+const { ACTION_COUNT_MAX, ACTION_COUNT_MIN, parseActionCount } = require('../../modules/actionCount')
 
 class Deal {
     async execute(interaction, client) {
@@ -18,7 +19,13 @@ class Deal {
                 return
             }
 
-            const cardCount = interaction.options.getInteger('count')
+            const cardCount = parseActionCount(interaction.options.getInteger('count'))
+            if (cardCount == null) {
+                await interaction.editReply({
+                    content: `Enter a whole number of cards from ${ACTION_COUNT_MIN} to ${ACTION_COUNT_MAX}.`,
+                })
+                return
+            }
 
             const deckResult = GameHelper.resolveDeckOption(gameData, interaction.options.getString('deck'))
             if (await GameHelper.replyIfUnspecifiedDeck(interaction, deckResult)) {

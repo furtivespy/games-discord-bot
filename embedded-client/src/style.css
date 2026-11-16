@@ -222,6 +222,12 @@ body {
   color: #eee3c5;
 }
 
+#action-notice {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #ffd7a1;
+}
+
 #game-channel-link {
   margin: 0;
   font-size: 0.82rem;
@@ -458,14 +464,14 @@ body {
   flex-wrap: wrap;
   gap: 0.4rem;
   overflow: visible;
-  padding: 2.2rem 0.4rem 0.75rem;
+  padding: 5.6rem 0.4rem 0.75rem;
 }
 
 .hand-fan {
   flex-wrap: nowrap;
   justify-content: center;
   gap: 0;
-  padding: 5.4rem 2.2rem 0.35rem 0.4rem;
+  padding: 5.6rem 2.2rem 0.35rem 0.4rem;
   overflow: visible;
 }
 
@@ -599,6 +605,11 @@ body {
 .deck-action:focus-visible {
   background: rgba(48, 28, 12, 0.94);
   border-color: #f3d98c;
+}
+
+.deck-action:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .card-index,

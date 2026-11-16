@@ -493,6 +493,7 @@ describe("mock embedded HTTP", () => {
       expect(drawn.status).toBe(200);
       const drawnBody = await drawn.json();
       expect(drawnBody.hand).toHaveLength(handBefore + 2);
+      expect(drawnBody.channelPosted).toBe(true);
       expect(drawnBody.status.history.at(-1).summary).toContain("drew 2 cards from Main");
       expect(Number(drawnBody.decks[0].remaining)).toBe(remainingBefore - 2);
 

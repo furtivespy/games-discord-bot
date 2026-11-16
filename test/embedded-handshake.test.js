@@ -18,12 +18,14 @@ const {
 const {
   ACTION_COUNT_MAX,
   ACTION_COUNT_MIN,
+  CHANNEL_POST_FAILED_NOTICE,
   DEFAULT_ACTION_COUNT,
   GAME_CHANNEL_LINK_LABEL,
   actionDialogCopy,
   deckActionFromDataset,
   gameChannelUrl,
   parseActionCount,
+  shouldUseOpenExternalLink,
   tryOpenExternalLink,
   visualActionBody,
   visualActionErrorMessage,
@@ -222,6 +224,7 @@ describe("mock Discord SDK shim", () => {
     await sdk.ready();
     expect(sdk.channelId).toBe("seeded-channel");
     expect(sdk.guildId).toBe("seeded-guild");
+    expect(sdk.isMock).toBe(true);
     expect(await sdk.commands.authorize({})).toEqual({ code: MOCK_OAUTH_CODE });
     const auth = await sdk.commands.authenticate({
       access_token: "mock-access-token",
@@ -800,6 +803,7 @@ describe("deck hover Deal and Draw", () => {
         count: 2,
         channelId: "newest-thread",
         guildId: "mock-guild",
+        requestId: "req-abc-123456",
         fixture: "several-games",
       })
     ).toEqual({
@@ -808,8 +812,14 @@ describe("deck hover Deal and Draw", () => {
       count: 2,
       channelId: "newest-thread",
       guildId: "mock-guild",
+      requestId: "req-abc-123456",
       fixture: "several-games",
     });
+    expect(shouldUseOpenExternalLink(true, async () => ({}))).toBe(false);
+    expect(shouldUseOpenExternalLink(false, async () => ({}))).toBe(true);
+    expect(shouldUseOpenExternalLink(false, undefined)).toBe(false);
+    expect(visualActionErrorMessage("invalid_count")).toContain("whole number");
+    expect(CHANNEL_POST_FAILED_NOTICE).toContain("channel message");
     expect(actionRequestUrl("", "https:")).toBe("/api/game/action");
     expect(actionRequestUrl("gamebot.example.com", "https:")).toBe(
       "https://gamebot.example.com/api/game/action"
@@ -836,12 +846,13 @@ describe("deck hover Deal and Draw", () => {
     expect(css).toContain("scale(1.48)");
     expect(css).not.toContain("scale(1.28)");
     expect(css).toMatch(/\.card-tile img[\s\S]*object-fit:\s*contain/);
-    expect(css).toMatch(/\.hand-fan[\s\S]*padding:\s*5\.4rem/);
+    expect(css).toMatch(/\.hand-fan\s*\{[^}]*padding:\s*5\.6rem/);
+    expect(css).not.toContain(".deck-tile:hover .card-face");
     expect(visualActionErrorMessage("not_a_player")).toBe(
       "You're not a player in this game."
     );
     expect(visualActionErrorMessage("invalid_count")).toBe(
-      "Enter a number from 1 to 99."
+      `Enter a whole number from ${ACTION_COUNT_MIN} to ${ACTION_COUNT_MAX}.`
     );
     expect(visualActionErrorMessage("no_cards_in_draw")).toBe("No cards in draw pile");
     expect(visualActionErrorMessage("mystery", "No cards to deal.")).toBe(

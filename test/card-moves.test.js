@@ -86,7 +86,7 @@ describe("cardMoves drawMultiple", () => {
       player: gameData.players[0],
     });
     expect(result.ok).toBe(true);
-    expect(result.dealCount).toBe(2);
+    expect(result.drawnCount).toBe(2);
     expect(result.content).toBe("Alice drew 2 cards from Main");
     expect(gameData.players[0].hands.main.map((card) => card.name)).toEqual(["One", "Two"]);
     expect(gameData.players[1].hands.main).toEqual([]);

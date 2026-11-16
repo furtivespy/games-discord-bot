@@ -16,13 +16,16 @@ const {
   createMockGameSession,
 } = require("./embeddedAppMock");
 const {
+  createActionIdempotencyCache,
   parseVisualActionBody,
   runVisualCardAction,
+  visualActionErrorMessage,
 } = require("./embeddedActions");
 const {
   channelNameFromDiscordClient,
   listActiveGamesForUser,
   optionalDiscordAccessGuard,
+  requiredDiscordAccessGuard,
   snapshotGameForUser,
 } = require("./embeddedGames");
 const {
@@ -303,6 +306,7 @@ function createEmbeddedApp({
   const resolvedClientId =
     sanitizeClientId(clientId) || (mockEnabled ? DEFAULT_MOCK_CLIENT_ID : clientId);
   const mockSession = mockEnabled ? createMockGameSession() : null;
+  const actionIdempotency = createActionIdempotencyCache();
 
   const app = express();
   app.disable("x-powered-by");
@@ -476,7 +480,7 @@ function createEmbeddedApp({
     if (parsed.error) {
       res.status(parsed.status).json({
         error: parsed.error,
-        message: parsed.message,
+        message: parsed.message || visualActionErrorMessage(parsed.error),
       });
       return;
     }
@@ -490,13 +494,14 @@ function createEmbeddedApp({
         });
         return;
       }
-      const result = mockSession.applyAction({
+      const result = await mockSession.applyAction({
         fixture: req.body?.fixture || firstQueryValue(req.query?.fixture),
         channelId: requestedChannelId || resolvedMockChannelId,
         guildId: requestedGuildId || resolvedMockGuildId,
         action: parsed.action,
         deckName: parsed.deckName,
         count: parsed.count,
+        requestId: parsed.requestId,
       });
       sendSnapshotResult(res, result);
       return;
@@ -538,7 +543,7 @@ function createEmbeddedApp({
       });
       return;
     }
-    const guard = await optionalDiscordAccessGuard({
+    const guard = await requiredDiscordAccessGuard({
       fetchImpl,
       botToken,
       discordClient,
@@ -547,7 +552,10 @@ function createEmbeddedApp({
       userId: user.id,
     });
     if (!guard.ok) {
-      res.status(guard.status).json(guard.body);
+      res.status(guard.status).json({
+        ...guard.body,
+        message: visualActionErrorMessage(guard.body?.error),
+      });
       return;
     }
     const result = await runVisualCardAction({
@@ -555,12 +563,15 @@ function createEmbeddedApp({
       deckName: parsed.deckName,
       count: parsed.count,
       user,
+      member: guard.member,
       guildId: requestedGuildId,
       channelId: requestedChannelId,
       getGameData,
       discordClient,
       gameStore,
       logger,
+      requestId: parsed.requestId,
+      idempotency: actionIdempotency,
     });
     sendSnapshotResult(res, result);
   }

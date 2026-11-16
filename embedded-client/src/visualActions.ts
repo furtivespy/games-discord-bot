@@ -1,9 +1,30 @@
 export const ACTION_COUNT_MIN = 1;
-export const ACTION_COUNT_MAX = 99;
+export const ACTION_COUNT_MAX = 1000;
 export const DEFAULT_ACTION_COUNT = 1;
 export const GAME_CHANNEL_LINK_LABEL = "Open Discord channel";
+export const CHANNEL_POST_FAILED_NOTICE =
+  "The table updated, but Discord didn't get the channel message.";
 
 export type DeckActionKind = "deal" | "draw";
+
+export const ACTION_ERROR_MESSAGES: Record<string, string> = {
+  access_unverified: "Could not verify access to that channel.",
+  action_failed: "Could not run that action.",
+  channel_mismatch: "That game doesn't belong to this server.",
+  forbidden: "You don't have access to that channel.",
+  invalid_action: "Deal and Draw are the only visual actions.",
+  invalid_count: `Enter a whole number from ${ACTION_COUNT_MIN} to ${ACTION_COUNT_MAX}.`,
+  missing_channel: "Could not find the channel for this game.",
+  missing_deck: "Pick a deck first.",
+  missing_guild: "Could not find the server for this game.",
+  no_cards_in_draw: "No cards in draw pile",
+  no_cards_to_deal: "No cards to deal.",
+  no_game: "No game for that channel.",
+  not_a_player: "You're not a player in this game.",
+  unauthorized: "Could not sign in to run that action.",
+  unknown_deck: "Unknown deck.",
+  unspecified_deck: "Specify a deck — this game has more than one.",
+};
 
 export function gameChannelUrl(
   guildId: unknown,
@@ -16,12 +37,59 @@ export function gameChannelUrl(
   return `https://discord.com/channels/${guild}/${channel}`;
 }
 
+export function shouldUseOpenExternalLink(
+  isMock: boolean,
+  openExternalLink: unknown
+): boolean {
+  return !isMock && typeof openExternalLink === "function";
+}
+
+export type OpenExternalLink = (args: { url: string }) => Promise<unknown>;
+
+export async function tryOpenExternalLink(
+  href: string,
+  openExternal: OpenExternalLink
+): Promise<"opened" | "cancelled" | "failed"> {
+  try {
+    const result = await openExternal({ url: href });
+    if (
+      result &&
+      typeof result === "object" &&
+      Object.prototype.hasOwnProperty.call(result, "opened") &&
+      (result as { opened?: unknown }).opened === false
+    ) {
+      return "cancelled";
+    }
+    return "opened";
+  } catch {
+    return "failed";
+  }
+}
+
 export function parseActionCount(value: unknown): number | null {
   const raw =
     typeof value === "number" ? value : Number(String(value ?? "").trim());
   if (!Number.isInteger(raw)) return null;
   if (raw < ACTION_COUNT_MIN || raw > ACTION_COUNT_MAX) return null;
   return raw;
+}
+
+export function newActionRequestId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `act_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function visualActionErrorMessage(
+  error: unknown,
+  fallback?: string | null
+): string {
+  const text = typeof fallback === "string" ? fallback.trim() : "";
+  if (text) return text;
+  const key = String(error || "").trim();
+  if (key && ACTION_ERROR_MESSAGES[key]) return ACTION_ERROR_MESSAGES[key];
+  return ACTION_ERROR_MESSAGES.action_failed;
 }
 
 export function actionDialogCopy(kind: DeckActionKind): {
@@ -52,59 +120,13 @@ export function deckActionFromDataset(
   return { action, deckName };
 }
 
-export const ACTION_ERROR_MESSAGES: Record<string, string> = {
-  invalid_action: "Deal and Draw are the only visual actions.",
-  missing_deck: "Pick a deck first.",
-  invalid_count: `Enter a number from ${ACTION_COUNT_MIN} to ${ACTION_COUNT_MAX}.`,
-  unauthorized: "Could not sign in to run that action.",
-  not_a_player: "You're not a player in this game.",
-  no_game: "No game for that channel.",
-  missing_guild: "Could not find the server for this game.",
-  missing_channel: "Could not find the channel for this game.",
-  unknown_deck: "Unknown deck.",
-  no_cards_to_deal: "No cards to deal.",
-  no_cards_in_draw: "No cards in draw pile",
-  action_failed: "Could not run that action.",
-};
-
-export function visualActionErrorMessage(
-  error: unknown,
-  fallback?: string | null
-): string {
-  const key = String(error || "").trim();
-  if (key && ACTION_ERROR_MESSAGES[key]) return ACTION_ERROR_MESSAGES[key];
-  const text = typeof fallback === "string" ? fallback.trim() : "";
-  return text || ACTION_ERROR_MESSAGES.action_failed;
-}
-
-export type OpenExternalLink = (args: { url: string }) => Promise<unknown>;
-
-export async function tryOpenExternalLink(
-  href: string,
-  openExternal: OpenExternalLink
-): Promise<"opened" | "cancelled" | "failed"> {
-  try {
-    const result = await openExternal({ url: href });
-    if (
-      result &&
-      typeof result === "object" &&
-      Object.prototype.hasOwnProperty.call(result, "opened") &&
-      (result as { opened?: unknown }).opened === false
-    ) {
-      return "cancelled";
-    }
-    return "opened";
-  } catch {
-    return "failed";
-  }
-}
-
 export function visualActionBody(opts: {
   action: DeckActionKind;
   deck: string;
   count: number;
   channelId: string;
   guildId: string;
+  requestId?: string | null;
   fixture?: string | null;
 }): Record<string, string | number> {
   const body: Record<string, string | number> = {
@@ -114,6 +136,8 @@ export function visualActionBody(opts: {
     channelId: opts.channelId,
     guildId: opts.guildId,
   };
+  const requestId = String(opts.requestId || "").trim();
+  if (requestId) body.requestId = requestId;
   const fixture = String(opts.fixture || "").trim();
   if (fixture) body.fixture = fixture;
   return body;
