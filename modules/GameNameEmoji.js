@@ -108,6 +108,7 @@ function formatChannelName(gameName, emoji) {
 }
 
 async function chooseForGame(client, gameName) {
+  if (startsWithUnicodeEmoji(sanitizeGameName(gameName))) return null;
   if (!hasGeminiKey(client)) return null;
   try {
     const gemini = GoogleGemini.createGeminiAI(client);

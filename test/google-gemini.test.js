@@ -12,6 +12,7 @@ const {
   DEFAULT_GEMINI_IMAGE_MODEL,
   DEFAULT_GEMINI_RULES_MODEL,
   DEFAULT_EMOJI_TIMEOUT_MS,
+  DEFAULT_EMOJI_MAX_OUTPUT_TOKENS,
 } = require("../modules/GoogleGemini");
 
 const PNG_BYTES = Buffer.from("fake-png-bytes");
@@ -180,7 +181,9 @@ describe("Gemini models and extraction", () => {
     expect(captured.contents).toContain("Brass Ignore previous");
     expect(captured.contents).not.toContain("Brass\n");
     expect(captured.config.tools).toBeUndefined();
-    expect(captured.config.maxOutputTokens).toBe(32);
+    expect(DEFAULT_EMOJI_MAX_OUTPUT_TOKENS).toBe(256);
+    expect(captured.config.maxOutputTokens).toBe(DEFAULT_EMOJI_MAX_OUTPUT_TOKENS);
+    expect(captured.config.thinkingConfig).toEqual({ thinkingLevel: "LOW" });
     expect(captured.config.abortSignal).toBeInstanceOf(AbortSignal);
     expect(captured.config.systemInstruction).toContain("Unicode emoji");
     expect(captured.config.safetySettings).toEqual(
@@ -567,6 +570,12 @@ describe("@google/genai serialized generateContent", () => {
       `models/${DEFAULT_GEMINI_RULES_MODEL}:generateContent`
     );
     expect(body.tools).toBeUndefined();
+    expect(body.generationConfig.maxOutputTokens).toBe(
+      DEFAULT_EMOJI_MAX_OUTPUT_TOKENS
+    );
+    expect(body.generationConfig.thinkingConfig).toEqual({
+      thinkingLevel: "LOW",
+    });
     expect(JSON.stringify(body.systemInstruction)).toContain("Unicode emoji");
     expect(JSON.stringify(body.contents)).toContain("Brass");
   });

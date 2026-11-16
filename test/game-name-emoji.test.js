@@ -173,6 +173,18 @@ describe("GameNameEmoji.chooseForGame", () => {
     expect(called).toBe(false);
   });
 
+  test("skips Gemini when the game name already starts with a unicode emoji", async () => {
+    let called = false;
+    GoogleGemini.createGeminiAI = () => {
+      called = true;
+      throw new Error("should not construct Gemini");
+    };
+    expect(
+      await GameNameEmoji.chooseForGame(fakeClient(), "🚂 Express Test")
+    ).toBeNull();
+    expect(called).toBe(false);
+  });
+
   test("returns a validated emoji from the model", async () => {
     stubGeminiGenerateContent(async () => ({
       candidates: [{ content: { parts: [{ text: "🚂\n" }] } }],

@@ -16,6 +16,7 @@ const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-lite-image";
 const DEFAULT_GEMINI_RULES_MODEL = "gemini-3.8-flash";
 const DEFAULT_IMAGE_TIMEOUT_MS = 45_000;
 const DEFAULT_EMOJI_TIMEOUT_MS = 8_000;
+const DEFAULT_EMOJI_MAX_OUTPUT_TOKENS = 256;
 const GAME_EMOJI_SYSTEM_INSTRUCTION =
   "You pick one standard Unicode emoji that represents a board or card game. Reply with that emoji only. Never use Discord custom emojis or :shortcode: names.";
 const TEXT_SAFETY_SETTINGS = [
@@ -457,7 +458,8 @@ class GeminiAI {
         model: DEFAULT_GEMINI_RULES_MODEL,
         contents: gameEmojiPrompt(gameName),
         config: {
-          maxOutputTokens: 32,
+          maxOutputTokens: DEFAULT_EMOJI_MAX_OUTPUT_TOKENS,
+          thinkingConfig: { thinkingLevel: "LOW" },
           safetySettings: TEXT_SAFETY_SETTINGS,
           systemInstruction: GAME_EMOJI_SYSTEM_INSTRUCTION,
           abortSignal: controller.signal,
@@ -495,4 +497,5 @@ module.exports = {
   DEFAULT_GEMINI_RULES_MODEL,
   DEFAULT_IMAGE_TIMEOUT_MS,
   DEFAULT_EMOJI_TIMEOUT_MS,
-}
+  DEFAULT_EMOJI_MAX_OUTPUT_TOKENS,
+};
