@@ -62,6 +62,10 @@ export function cardImageRequestUrl(
   return apiUrl(apiHost, protocol, imageUrl);
 }
 
+export function actionRequestUrl(apiHost: string, protocol: string): string {
+  return apiUrl(apiHost, protocol, "/api/game/action");
+}
+
 export function gamesRequestUrl(
   apiHost: string,
   protocol: string,

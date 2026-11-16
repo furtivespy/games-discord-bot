@@ -187,7 +187,7 @@ Named tokens per game and player: create, gain, lose, give, take and reveal.
 Launch the embedded Activity for a channel.
 
 - Seed: none.
-- Reach: the command reply is covered by `test/visual-command.test.js`. To see the Activity itself, use `bun run control browse`. Team grouping: `bun run control browse --path '/?fixture=team-game&game=team-thread'`.
+- Reach: the command reply is covered by `test/visual-command.test.js`. To see the Activity itself, use `bun run control browse`. Team grouping: `bun run control browse --path '/?fixture=team-game&game=team-thread'`. Deal/Draw from a hovered deck: `bun run control browse --path '/?fixture=several-games&game=newest-thread'`.
 
 ## /winshare
 

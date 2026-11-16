@@ -10,10 +10,22 @@ const {
   isDiscordProxyHost,
   originLine,
   OUTSIDE_DISCORD_FALLBACK,
+  actionRequestUrl,
   snapshotRequestUrl,
   tokenRequestUrl,
   urlMappingsForApiHost,
 } = require("../embedded-client/src/handshake.ts");
+const {
+  ACTION_COUNT_MAX,
+  ACTION_COUNT_MIN,
+  DEFAULT_ACTION_COUNT,
+  GAME_CHANNEL_LINK_LABEL,
+  actionDialogCopy,
+  deckActionFromDataset,
+  gameChannelUrl,
+  parseActionCount,
+  visualActionBody,
+} = require("../embedded-client/src/visualActions.ts");
 const {
   SNAP_BACK_DURATION_MS,
   STACK_ABOVE_HOVER,
@@ -48,7 +60,6 @@ const {
   DEFAULT_DECK_ACTIONS,
   deckActionsFor,
   deckCountLabel,
-  onDeckActionClick,
   groupPlayersByTeam,
   handCountLabel,
   initialsFromName,
@@ -115,8 +126,13 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("renderDeckActions");
     expect(main).toContain("deckActionsFor");
     expect(main).toContain("dataset.deckAction");
-    expect(main).toContain("onDeckActionClick");
-    expect(main).not.toContain("dataset.deckName");
+    expect(main).toContain("dataset.deckName");
+    expect(main).toContain("onDeckActionButtonClick");
+    expect(main).toContain("openActionDialog");
+    expect(main).toContain("submitDeckAction");
+    expect(main).toContain("actionRequestUrl");
+    expect(main).toContain("applySnapshot");
+    expect(main).toContain("renderGameChannelLink");
     expect(main).not.toContain("tabIndex");
     expect(main).toContain("autoSelectGameId");
     const requestSeq = require("fs").readFileSync(
@@ -744,7 +760,7 @@ describe("client-only card drag", () => {
   });
 });
 
-describe("placeholder deck hover actions", () => {
+describe("deck hover Deal and Draw", () => {
   test("every deck gets Deal and Draw so later tickets can specialize per deck", () => {
     expect(DEFAULT_DECK_ACTIONS).toEqual([
       { id: "deal", label: "Deal" },
@@ -755,52 +771,61 @@ describe("placeholder deck hover actions", () => {
     expect(deckActionsFor(null)).toEqual(DEFAULT_DECK_ACTIONS);
   });
 
-  test("clicking Deal or Draw is a no-op: no state change, no fetch, no postMessage, no errors", () => {
-    const fetchCalls = [];
-    const postMessages = [];
-    const originalFetch = globalThis.fetch;
-    const originalPostMessage = globalThis.postMessage;
-    globalThis.fetch = (...args) => {
-      fetchCalls.push(args);
-      return Promise.reject(new Error("unexpected fetch"));
-    };
-    globalThis.postMessage = (...args) => {
-      postMessages.push(args);
-    };
+  test("Deal and Draw clicks read the deck name and build the action request", () => {
+    expect(deckActionFromDataset({ deckAction: "deal", deckName: "Main" })).toEqual({
+      action: "deal",
+      deckName: "Main",
+    });
+    expect(deckActionFromDataset({ deckAction: "draw" })).toBeNull();
+    expect(actionDialogCopy("deal").label).toBe("Cards to deal each player");
+    expect(actionDialogCopy("draw").label).toBe("Cards to draw");
+    expect(parseActionCount("3")).toBe(3);
+    expect(parseActionCount(0)).toBeNull();
+    expect(parseActionCount(ACTION_COUNT_MAX + 1)).toBeNull();
+    expect(DEFAULT_ACTION_COUNT).toBe(ACTION_COUNT_MIN);
+    expect(
+      visualActionBody({
+        action: "draw",
+        deck: "Main",
+        count: 2,
+        channelId: "newest-thread",
+        guildId: "mock-guild",
+        fixture: "several-games",
+      })
+    ).toEqual({
+      action: "draw",
+      deck: "Main",
+      count: 2,
+      channelId: "newest-thread",
+      guildId: "mock-guild",
+      fixture: "several-games",
+    });
+    expect(actionRequestUrl("", "https:")).toBe("/api/game/action");
+    expect(actionRequestUrl("gamebot.example.com", "https:")).toBe(
+      "https://gamebot.example.com/api/game/action"
+    );
+  });
 
-    const gameState = { remaining: 12, hand: ["Copper"] };
-    const before = structuredClone(gameState);
-    const errors = [];
-
-    try {
-      for (const action of deckActionsFor({ name: "Main" })) {
-        let prevented = false;
-        let blurred = false;
-        onDeckActionClick({
-          preventDefault() {
-            prevented = true;
-          },
-          currentTarget: {
-            dataset: { deckAction: action.id },
-            blur() {
-              blurred = true;
-            },
-          },
-        });
-        expect(prevented).toBe(true);
-        expect(blurred).toBe(true);
-      }
-    } catch (error) {
-      errors.push(error);
-    } finally {
-      globalThis.fetch = originalFetch;
-      globalThis.postMessage = originalPostMessage;
-    }
-
-    expect(errors).toEqual([]);
-    expect(gameState).toEqual(before);
-    expect(fetchCalls).toEqual([]);
-    expect(postMessages).toEqual([]);
+  test("game channel link uses the selected guild and channel ids", () => {
+    expect(gameChannelUrl("guild-1", "thread-9")).toBe(
+      "https://discord.com/channels/guild-1/thread-9"
+    );
+    expect(gameChannelUrl("", "thread-9")).toBeNull();
+    expect(GAME_CHANNEL_LINK_LABEL).toBe("Open Discord channel");
+    const html = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "embedded-client", "index.html"),
+      "utf8"
+    );
+    expect(html).toContain('id="game-channel-link"');
+    expect(html).toContain('id="action-dialog"');
+    expect(html).toContain('id="action-count"');
+    const css = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "embedded-client", "src", "style.css"),
+      "utf8"
+    );
+    expect(css).toContain("scale(1.48)");
+    expect(css).not.toContain("scale(1.28)");
+    expect(css).toMatch(/\.card-tile img[\s\S]*object-fit:\s*contain/);
   });
 });
 

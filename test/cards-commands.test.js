@@ -532,6 +532,60 @@ describe("/cards command handlers", () => {
     );
   });
 
+  test("deck drawmultiple draws count cards into the caller's hand", async () => {
+    const cards = [
+      createCard({ id: "c1", name: "One", origin: "Main" }),
+      createCard({ id: "c2", name: "Two", origin: "Main" }),
+      createCard({ id: "c3", name: "Three", origin: "Main" }),
+    ];
+    await withHarness(
+      {
+        gameData: gameWithDeck({ draw: cards }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "drawmultiple",
+          integers: { count: 2 },
+          strings: { deck: "Main" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        expect(saved.players[0].hands.main.map((card) => card.id)).toEqual(["c1", "c2"]);
+        expect(harness.lastContent()).toContain("drew 2 cards from Main");
+        expect(saved.history.at(-1).action.type).toBe("draw");
+      }
+    );
+  });
+
+  test("deck deal deals count cards to every player", async () => {
+    const cards = [
+      createCard({ id: "c1", name: "One", origin: "Main" }),
+      createCard({ id: "c2", name: "Two", origin: "Main" }),
+      createCard({ id: "c3", name: "Three", origin: "Main" }),
+      createCard({ id: "c4", name: "Four", origin: "Main" }),
+    ];
+    await withHarness(
+      {
+        gameData: gameWithDeck({ draw: cards }),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "deal",
+          integers: { count: 2 },
+          strings: { deck: "Main" },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        expect(saved.players[0].hands.main.map((card) => card.id)).toEqual(["c1", "c3"]);
+        expect(saved.players[1].hands.main.map((card) => card.id)).toEqual(["c2", "c4"]);
+        expect(harness.lastContent()).toContain("Dealt out a total of 4 cards from Main");
+        expect(saved.history.at(-1).action.type).toBe("deal");
+      }
+    );
+  });
+
   test("deck draw reports an empty draw pile", async () => {
     await withHarness(
       {

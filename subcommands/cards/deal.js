@@ -1,7 +1,6 @@
-const GameDB = require('../../db/anygame.js')
-const GameStatusHelper = require('../../modules/GameStatusHelper')
 const GameHelper = require('../../modules/GlobalGameHelper')
-const Shuffle = require(`./shuffle`)
+const GameStatusHelper = require('../../modules/GameStatusHelper')
+const CardMoves = require('../../modules/cardMoves')
 
 class Deal {
     async execute(interaction, client) {
@@ -20,59 +19,30 @@ class Deal {
             }
 
             const cardCount = interaction.options.getInteger('count')
-            let dealCount = 0
 
             const deckResult = GameHelper.resolveDeckOption(gameData, interaction.options.getString('deck'))
             if (await GameHelper.replyIfUnspecifiedDeck(interaction, deckResult)) {
                 return
             }
             const deck = deckResult.deck
-            if (!deck || deck.piles.draw.cards.length + deck.piles.discard.cards.length < 1){
-                await interaction.editReply({ content: `No cards to deal.`})
+            const result = CardMoves.dealMultiple(gameData, {
+                deck,
+                count: cardCount,
+                actor: {
+                    id: interaction.user.id,
+                    username: interaction.user.username,
+                    displayName: interaction.member?.displayName || interaction.user.username,
+                },
+            })
+            if (!result.ok) {
+                await interaction.editReply({ content: result.content })
                 return
-            } 
-            
-            dealLoop:
-            for (let i = 0; i < cardCount; i++) {
-                for (const player of gameData.players) {
-                    if (deck.piles.draw.cards.length < 1){
-                        Shuffle.DoShuffle(deck)
-                    } 
-
-                    if (deck.piles.draw.cards.length < 1){
-                        break dealLoop
-                    }
-                    const theCard = deck.piles.draw.cards.shift()
-                    player.hands.main.push(theCard)
-                    dealCount++
-                }
-            }
-
-            // Record history
-            try {
-                const actorDisplayName = interaction.member?.displayName || interaction.user.username
-                
-                GameHelper.recordMove(
-                    gameData,
-                    interaction.user,
-                    GameDB.ACTION_CATEGORIES.CARD,
-                    GameDB.ACTION_TYPES.DEAL,
-                    `${actorDisplayName} dealt ${dealCount} cards from ${deck.name} to all players`,
-                    {
-                        deckName: deck.name,
-                        cardCount: dealCount,
-                        requestedCount: cardCount,
-                        playerCount: gameData.players.length
-                    }
-                )
-            } catch (error) {
-                console.warn('Failed to record card deal in history:', error)
             }
 
             await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)           
 
             await GameStatusHelper.sendGameStatus(interaction, client, gameData,
-              { content: `Dealt out a total of ${dealCount} cards from ${deck.name}.` }
+              { content: result.content }
             );
         }
     }

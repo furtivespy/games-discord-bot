@@ -384,6 +384,8 @@ describe("embedded HTTP origin", () => {
     expect(html).toContain('id="side-panel"');
     expect(html).toContain('id="other-players"');
     expect(html).toContain('id="game-status"');
+    expect(html).toContain('id="game-channel-link"');
+    expect(html).toContain('id="action-dialog"');
     expect(html).toContain('id="decks"');
     expect(html).toContain("hand-fan");
     const css = fs.readFileSync(
@@ -404,7 +406,8 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain("z-index: 20");
     expect(css).toContain(".card-tile:hover .card-face");
     expect(css).not.toContain(".deck-tile:hover .card-face");
-    expect(css).toContain("scale(1.28)");
+    expect(css).toContain("scale(1.48)");
+    expect(css).toMatch(/\.card-tile img[\s\S]*object-fit:\s*contain/);
     expect(css).toContain(".deck-tile:hover .deck-actions");
     expect(css).toContain(".deck-tile:has(:focus-visible) .deck-actions");
     expect(css).toMatch(/\.deck-actions\s*\{[^}]*bottom:\s*1\.35rem/);
@@ -878,5 +881,167 @@ describe("GET /api/game/snapshot", () => {
         fs.rmSync(staticDir, { recursive: true, force: true });
       }
     });
+  });
+});
+
+describe("POST /api/game/action", () => {
+  const Formatter = require("../modules/GameFormatter");
+  const originalCreateGameStatusReply = Formatter.createGameStatusReply;
+
+  function actionGame(userId = "snowflake-user") {
+    return {
+      isdeleted: false,
+      name: "Friday Inis",
+      players: [
+        {
+          userId,
+          name: "Will",
+          order: 0,
+          hands: { main: [{ id: "hand-1", name: "Copper", url: null }] },
+        },
+        {
+          userId: "other-player",
+          name: "Riley",
+          order: 1,
+          hands: { main: [] },
+        },
+      ],
+      decks: [
+        {
+          name: "Main",
+          piles: {
+            draw: {
+              cards: [
+                { id: "d1", name: "Ace", url: null },
+                { id: "d2", name: "King", url: null },
+                { id: "d3", name: "Queen", url: null },
+                { id: "d4", name: "Jack", url: null },
+              ],
+            },
+            discard: { cards: [] },
+          },
+        },
+      ],
+      history: [],
+    };
+  }
+
+  async function withStore(run) {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-action-"));
+    const previous = process.env.GAMEBOT_DATA_DIR;
+    process.env.GAMEBOT_DATA_DIR = dataDir;
+    const store = new GameStore();
+    try {
+      return await run(store);
+    } finally {
+      try {
+        store.db.close();
+      } catch {}
+      if (previous === undefined) delete process.env.GAMEBOT_DATA_DIR;
+      else process.env.GAMEBOT_DATA_DIR = previous;
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  }
+
+  test("draw updates the snapshot hand and history and posts to the game channel", async () => {
+    Formatter.createGameStatusReply = async (_gameData, _guild, _clientUserId, options = {}) => ({
+      content: options.content ?? "📊",
+      embeds: [],
+      files: [],
+    });
+    try {
+      await withStore(async (store) => {
+        store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", actionGame());
+        const posted = [];
+        const channel = {
+          id: "thread-game",
+          guild: { id: "guild-1" },
+          send: async (payload) => {
+            posted.push(payload);
+            return { id: "msg-1" };
+          },
+        };
+        const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-action-http-"));
+        fs.writeFileSync(
+          path.join(staticDir, "index.html"),
+          `<!doctype html><html><head></head><body></body></html>`
+        );
+        const app = createEmbeddedApp({
+          clientId: "client-123",
+          clientSecret: "server-secret",
+          staticDir,
+          gameStore: store,
+          discordClient: {
+            user: { id: "bot-1" },
+            channels: {
+              cache: { get: (id) => (id === "thread-game" ? channel : null) },
+            },
+            getGameDataV2: async (guildId, collection, channelId) =>
+              store.getSpecificGameData(guildId, collection, channelId),
+            setGameDataV2: async (guildId, collection, channelId, data) => {
+              store.upsertGameData(guildId, collection, channelId, data);
+            },
+          },
+          fetchImpl: mockDiscordFetch({
+            meBody: {
+              id: "snowflake-user",
+              username: "willsullivan",
+              global_name: "Will",
+            },
+          }),
+        });
+        const { server, url } = await listen(app);
+        try {
+          const missingAuth = await fetch(`${url}/api/game/action`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "draw",
+              deck: "Main",
+              count: 2,
+              guildId: "guild-1",
+              channelId: "thread-game",
+            }),
+          });
+          expect(missingAuth.status).toBe(401);
+
+          const drawn = await fetch(`${url}/api/game/action`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${SECRET_TOKEN}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              action: "draw",
+              deck: "Main",
+              count: 2,
+              guildId: "guild-1",
+              channelId: "thread-game",
+            }),
+          });
+          expect(drawn.status).toBe(200);
+          const body = await drawn.json();
+          expect(body.message).toBe("Will drew 2 cards from Main");
+          expect(body.hand.map((card) => card.name)).toEqual(["Copper", "Ace", "King"]);
+          expect(body.status.history.at(-1).summary).toBe("Will drew 2 cards from Main");
+          expect(posted[0].content).toContain("Will drew 2 cards from Main");
+
+          const snapshot = await fetch(
+            `${url}/api/game/snapshot?guildId=guild-1&channelId=thread-game`,
+            { headers: { Authorization: `Bearer ${SECRET_TOKEN}` } }
+          );
+          expect((await snapshot.json()).hand.map((card) => card.name)).toEqual([
+            "Copper",
+            "Ace",
+            "King",
+          ]);
+        } finally {
+          server.close();
+          fs.rmSync(staticDir, { recursive: true, force: true });
+        }
+      });
+    } finally {
+      Formatter.createGameStatusReply = originalCreateGameStatusReply;
+    }
   });
 });
