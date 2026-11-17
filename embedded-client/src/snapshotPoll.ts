@@ -96,20 +96,16 @@ export function isSnapshotPollBlocked(doc: Document | null | undefined): boolean
 }
 
 /**
- * Poller refresh outcome. `true` means the table painted; `"deferred"` means
- * apply parked a pending snapshot (drag/dialog) and must not stamp knownVersion.
- * `false` is a failed refresh that should retry with backoff.
+ * Poller refresh outcome. `painted` is the only kind that stamps knownVersion.
+ * `deferred` means apply parked a pending snapshot (drag/dialog).
+ * `unchanged` is a 304: the last paint is still current.
+ * `failed` retries with backoff.
  */
-export type SnapshotRefreshResult = boolean | "deferred";
-
-/** Silent poll refresh succeeded only if the table actually painted. */
-export function snapshotRefreshResult(didPaint: boolean): SnapshotRefreshResult {
-  return didPaint ? true : "deferred";
-}
-
-export function shouldStampKnownVersion(result: SnapshotRefreshResult): boolean {
-  return result === true;
-}
+export type SnapshotRefreshResult =
+  | { kind: "painted" }
+  | { kind: "deferred" }
+  | { kind: "unchanged" }
+  | { kind: "failed" };
 
 export type SnapshotPollerOptions = {
   intervalMs?: number;
@@ -182,12 +178,12 @@ export function createSnapshotPoller(opts: SnapshotPollerOptions) {
       if (opts.isHidden() || opts.isBlocked()) return;
       const applied = await opts.refresh();
       if (stopped || gen !== generation) return;
-      // Parked pendingSnapshot is not painted yet. Keep knownVersion on the
-      // last painted snapshot so dropping pending (hide table) can still
-      // refresh this version later.
-      if (shouldStampKnownVersion(applied)) {
+      // Only a paint stamps knownVersion. Deferred (parked pending) and 304
+      // must leave it on the last painted snapshot so this version can still
+      // refresh later.
+      if (applied.kind === "painted") {
         knownVersion = result.version;
-      } else if (applied !== "deferred") {
+      } else if (applied.kind === "failed") {
         noteError();
       }
     } catch {

@@ -155,10 +155,10 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("HISTORY_CHANGED_CLASS");
     expect(main).toContain("SNAPSHOT_STALE_MESSAGE");
     expect(main).toContain("pendingSnapshot");
-    expect(main).toContain("snapshotRefreshResult");
-    expect(main).toContain(
-      "return snapshotRefreshResult(applySnapshot(config, payload))"
-    );
+    expect(main).toContain('kind: "painted"');
+    expect(main).toContain('kind: "deferred"');
+    expect(main).toContain('kind: "unchanged"');
+    expect(main).toContain('kind: "failed"');
     expect(main).toMatch(
       /pendingSnapshot = \{ config, payload \};\s*return false;/
     );

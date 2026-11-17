@@ -34,7 +34,6 @@ import {
   newHistoryKeys,
   restoreScrollTop,
   retryAfterMsFromHeader,
-  snapshotRefreshResult,
   type SnapshotRefreshResult,
   type VersionPollResult,
 } from "./snapshotPoll";
@@ -350,9 +349,9 @@ async function fetchSnapshotVersion(): Promise<VersionPollResult> {
 
 async function refreshSnapshotFromPoll(): Promise<SnapshotRefreshResult> {
   const session = activeSession;
-  if (!session) return false;
+  if (!session) return { kind: "failed" };
   const channelId = liveSelectedChannelId(session.config.channelId);
-  if (!channelId) return false;
+  if (!channelId) return { kind: "failed" };
   return loadSnapshot(
     session.config,
     session.accessToken,
@@ -1161,7 +1160,7 @@ async function loadSnapshot(
     outcome.status === "stale" ||
     outcome.status === "cleared"
   ) {
-    return false;
+    return { kind: "failed" };
   }
 
   if (outcome.status === "failed") {
@@ -1169,23 +1168,23 @@ async function loadSnapshot(
       setTableVisible(false);
       setSnapshotStatus(snapshotErrorMessage(undefined, 0));
     }
-    return false;
+    return { kind: "failed" };
   }
 
   if (outcome.result.status === 304) {
-    return true;
+    return { kind: "unchanged" };
   }
 
   const payload = outcome.result.payload as GameSnapshot;
   if (liveSelectedChannelId(ids.channelId) !== ids.channelId) {
-    return false;
+    return { kind: "failed" };
   }
   if (
     typeof payload.channelId === "string" &&
     payload.channelId.trim() &&
     payload.channelId !== ids.channelId
   ) {
-    return false;
+    return { kind: "failed" };
   }
 
   if (outcome.status === "error") {
@@ -1196,10 +1195,12 @@ async function loadSnapshot(
       setSnapshotStatus(snapshotErrorMessage(payload.error, outcome.result.status));
       stopSnapshotPolling();
     }
-    return false;
+    return { kind: "failed" };
   }
 
-  return snapshotRefreshResult(applySnapshot(config, payload));
+  return applySnapshot(config, payload)
+    ? { kind: "painted" }
+    : { kind: "deferred" };
 }
 
 function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot): boolean {
