@@ -20,7 +20,6 @@ const {
 const {
   ACTION_COUNT_MAX,
   ACTION_COUNT_MIN,
-  ACTION_SUBMIT_CLOSES_DIALOG_IMMEDIATELY,
   CHANNEL_POST_FAILED_NOTICE,
   DEFAULT_ACTION_COUNT,
   GAME_CHANNEL_LINK_LABEL,
@@ -148,7 +147,16 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("onDeckActionButtonClick");
     expect(main).toContain("openActionDialog");
     expect(main).toContain("submitDeckAction");
-    expect(main).toContain("ACTION_SUBMIT_CLOSES_DIALOG_IMMEDIATELY");
+    const submitDeckAction = main.slice(
+      main.indexOf("async function submitDeckAction"),
+      main.indexOf("function bindActionDialog")
+    );
+    expect(submitDeckAction.indexOf("closeActionDialog();")).toBeGreaterThan(-1);
+    expect(submitDeckAction.indexOf("closeActionDialog();")).toBeLessThan(
+      submitDeckAction.indexOf("await fetch(")
+    );
+    expect(submitDeckAction).toContain("shouldApplySnapshot");
+    expect(main).toContain("select.disabled = locked");
     expect(main).toContain("actionRequestUrl");
     expect(main).toContain("applySnapshot");
     expect(main).toContain("renderGameChannelLink");
@@ -933,7 +941,6 @@ describe("deck hover Deal and Draw", () => {
     expect(deckActionFromDataset({ deckAction: "draw" })).toBeNull();
     expect(actionDialogCopy("deal").label).toBe("Cards to deal each player");
     expect(actionDialogCopy("draw").label).toBe("Cards to draw");
-    expect(ACTION_SUBMIT_CLOSES_DIALOG_IMMEDIATELY).toBe(true);
     expect(parseActionCount("3")).toBe(3);
     expect(parseActionCount(0)).toBeNull();
     expect(parseActionCount(ACTION_COUNT_MAX + 1)).toBeNull();

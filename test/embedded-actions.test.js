@@ -7,13 +7,14 @@ const {
 const {
   applyVisualCardAction,
   createActionIdempotencyCache,
-  drainVisualActionChannelPosts,
+  drainLockedVisualActions,
   parseVisualActionBody,
   runVisualCardAction,
   visualActionErrorMessage,
 } = require("../modules/embeddedActions");
 const GameDB = require("../db/anygame");
 const Formatter = require("../modules/GameFormatter");
+const GameStatusHelper = require("../modules/GameStatusHelper");
 const {
   createActiveGame,
   createCard,
@@ -145,11 +146,6 @@ describe("applyVisualCardAction", () => {
   });
 });
 
-async function settleChannelPost(result) {
-  if (result?.channelPost) await result.channelPost;
-  return result;
-}
-
 describe("runVisualCardAction", () => {
   const originalCreateGameStatusReply = Formatter.createGameStatusReply;
 
@@ -166,7 +162,7 @@ describe("runVisualCardAction", () => {
   });
 
   afterEach(async () => {
-    await drainVisualActionChannelPosts();
+    await drainLockedVisualActions();
   });
 
   function clientForGame(gameData, { send } = {}) {
@@ -212,11 +208,10 @@ describe("runVisualCardAction", () => {
       channelId: "thread-game",
       discordClient,
     });
-    await settleChannelPost(result);
+    await drainLockedVisualActions();
 
     expect(result.status).toBe(200);
     expect(result.body.message).toBe("Will drew 2 cards from Main");
-    expect(result.body.channelPosted).toBe(true);
     expect(result.body.hand.map((card) => card.name)).toEqual(["Copper", "Ace", "King"]);
     expect(result.body.status.history.at(-1).summary).toBe("Will drew 2 cards from Main");
     expect(posted[0].content).toContain("Will drew 2 cards from Main");
@@ -243,7 +238,7 @@ describe("runVisualCardAction", () => {
     expect(saved.players.some((player) => String(player.userId) === "stranger")).toBe(
       true
     );
-    await settleChannelPost(result);
+    await drainLockedVisualActions();
   });
 
   test("deal does not require the caller to already be a player", async () => {
@@ -259,7 +254,7 @@ describe("runVisualCardAction", () => {
     });
     expect(result.status).toBe(200);
     expect(result.body.message).toBe("Dealt out a total of 2 cards from Main.");
-    await settleChannelPost(result);
+    await drainLockedVisualActions();
   });
 
   test("uses the guild nickname in history and the channel post", async () => {
@@ -314,7 +309,7 @@ describe("runVisualCardAction", () => {
       channelId: "thread-game",
       discordClient,
     });
-    await settleChannelPost(result);
+    await drainLockedVisualActions();
 
     expect(result.status).toBe(200);
     expect(result.body.message).toBe("WillOnServer drew 1 cards from Main");
@@ -340,10 +335,39 @@ describe("runVisualCardAction", () => {
       discordClient,
     });
     expect(result.status).toBe(200);
-    expect(result.body.channelPosted).toBe(true);
     expect(result.body.hand.map((card) => card.name)).toEqual(["Copper", "Ace"]);
     expect(store.get("guild-1:game:thread-game").players[0].hands.main).toHaveLength(2);
-    expect(await settleChannelPost(result)).toBe(result);
+    await drainLockedVisualActions();
+  });
+
+  test("failed channel post still refreshes the live pin", async () => {
+    const originalRefresh = GameStatusHelper.refreshPinnedStatusAfterGameSave;
+    const refreshes = [];
+    GameStatusHelper.refreshPinnedStatusAfterGameSave = async (...args) => {
+      refreshes.push(args);
+    };
+    try {
+      const { discordClient } = clientForGame(gameWithDeck(), {
+        send: async () => {
+          throw new Error("cannot send");
+        },
+      });
+      const result = await runVisualCardAction({
+        action: "deal",
+        deckName: "Main",
+        count: 1,
+        user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+        guildId: "guild-1",
+        channelId: "thread-game",
+        discordClient,
+      });
+      expect(result.status).toBe(200);
+      await drainLockedVisualActions();
+      expect(refreshes).toHaveLength(1);
+      expect(refreshes[0][1]).toEqual({ guildId: "guild-1", channelId: "thread-game" });
+    } finally {
+      GameStatusHelper.refreshPinnedStatusAfterGameSave = originalRefresh;
+    }
   });
 
   function concurrentActionClient() {
@@ -414,7 +438,7 @@ describe("runVisualCardAction", () => {
       runVisualCardAction({ ...draw, requestId: "race-request-aaa" }),
       runVisualCardAction({ ...draw, requestId: "race-request-bbb" }),
     ]);
-    await Promise.all([settleChannelPost(first), settleChannelPost(second)]);
+    await drainLockedVisualActions();
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
     const saved = store.get("guild-1:game:race-thread");
@@ -457,7 +481,7 @@ describe("runVisualCardAction", () => {
       runVisualCardAction({ ...deal, requestId: "race-deal-aaa" }),
       runVisualCardAction({ ...deal, requestId: "race-deal-bbb" }),
     ]);
-    await Promise.all([settleChannelPost(first), settleChannelPost(second)]);
+    await drainLockedVisualActions();
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
     const saved = store.get("guild-1:game:race-thread");
@@ -540,8 +564,7 @@ describe("runVisualCardAction", () => {
     expect(result.status).toBe(200);
     expect(result.body.message).toBe("Will drew 1 cards from Main");
     expect(result.body.hand.map((card) => card.name)).toEqual(["Copper", "Ace"]);
-    expect(result.body.channelPosted).toBe(true);
-    await settleChannelPost(result);
+    await drainLockedVisualActions();
   });
 
   test("duplicate request ids reuse the first successful result", async () => {
@@ -569,7 +592,7 @@ describe("runVisualCardAction", () => {
       requestId: "same-request-id-01",
       idempotency: cache,
     });
-    await settleChannelPost(first);
+    await drainLockedVisualActions();
     expect(first.status).toBe(200);
     expect(second.body.hand).toEqual(first.body.hand);
     expect(posted).toHaveLength(1);
@@ -600,7 +623,7 @@ describe("runVisualCardAction", () => {
       requestId: "same-request-id-01",
       idempotency: cache,
     });
-    await Promise.all([settleChannelPost(draw), settleChannelPost(deal)]);
+    await drainLockedVisualActions();
     expect(draw.status).toBe(200);
     expect(deal.status).toBe(200);
     expect(posted).toHaveLength(2);
@@ -635,7 +658,7 @@ describe("runVisualCardAction", () => {
       idempotency: cache,
     });
     expect(cache.size()).toBe(1);
-    await Promise.all([settleChannelPost(first), settleChannelPost(second)]);
+    await drainLockedVisualActions();
     const replayFirst = await runVisualCardAction({
       action: "draw",
       deckName: "Main",
@@ -647,7 +670,7 @@ describe("runVisualCardAction", () => {
       requestId: "first-request-01",
       idempotency: cache,
     });
-    await settleChannelPost(replayFirst);
+    await drainLockedVisualActions();
     expect(firstClient.posted).toHaveLength(2);
     expect(replayFirst.status).toBe(200);
   });
@@ -717,14 +740,13 @@ describe("runVisualCardAction", () => {
       expect(result.status).toBe(200);
       expect(result.body.message).toBe("Dealt out a total of 2 cards from Main.");
       expect(result.body.hand.map((card) => card.name)).toEqual(["Copper", "Ace"]);
-      expect(result.body.channelPosted).toBe(true);
       expect(typeof result.body.version).toBe("string");
       expect(posted).toHaveLength(0);
       expect(memberFetches).toBe(0);
     } finally {
       releasePost();
     }
-    expect(await result.channelPost).toBe(true);
+    await drainLockedVisualActions();
     expect(posted).toHaveLength(1);
     expect(posted[0].content).toContain("Dealt out a total of 2 cards from Main.");
   });

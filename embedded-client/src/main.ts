@@ -40,7 +40,6 @@ import {
   ACTION_COUNT_MAX,
   ACTION_COUNT_MIN,
   ACTION_ERROR_MESSAGES,
-  ACTION_SUBMIT_CLOSES_DIALOG_IMMEDIATELY,
   CHANNEL_POST_FAILED_NOTICE,
   DEFAULT_ACTION_COUNT,
   GAME_CHANNEL_LINK_LABEL,
@@ -59,7 +58,7 @@ import { SNAP_BACK_DURATION_MS, enableCardDrag, type CardOffset } from "./drag";
 import { closeCardInspect, enableCardInspectDialog, openCardInspect } from "./cardInspect";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
-import { asCardList, createSnapshotLoader } from "./requestSeq";
+import { asCardList, createSnapshotLoader, shouldApplySnapshot } from "./requestSeq";
 import {
   asRecordList,
   autoSelectGameId,
@@ -223,6 +222,8 @@ function setDeckActionsLocked(locked: boolean) {
   document.querySelectorAll<HTMLButtonElement>("button.deck-action").forEach((button) => {
     button.disabled = locked;
   });
+  const select = document.getElementById("game-select") as HTMLSelectElement | null;
+  if (select) select.disabled = locked;
   const { confirm } = actionDialogElements();
   if (confirm) confirm.disabled = locked;
 }
@@ -543,8 +544,15 @@ async function submitDeckAction(kind: DeckActionKind, deckName: string, count: n
   actionRequestId = newActionRequestId();
   setDeckActionsLocked(true);
   setActionDialogError(null);
-  if (ACTION_SUBMIT_CLOSES_DIALOG_IMMEDIATELY) closeActionDialog();
+  closeActionDialog();
+  const stillThisGame = () =>
+    shouldApplySnapshot({
+      isCurrent: true,
+      selectedChannelId: liveSelectedChannelId(session.config.channelId),
+      requestedChannelId: channelId,
+    });
   const reopenWithError = (message: string) => {
+    if (!stillThisGame()) return;
     setDeckActionsLocked(false);
     openActionDialog(kind, deckName, count);
     setActionDialogError(message);
@@ -589,6 +597,7 @@ async function submitDeckAction(kind: DeckActionKind, deckName: string, count: n
       reopenWithError(visualActionErrorMessage(payload.error, payload.message));
       return;
     }
+    if (!stillThisGame()) return;
     applySnapshot(session.config, payload);
     setActionNotice(payload.channelPosted === false ? CHANNEL_POST_FAILED_NOTICE : null);
   } catch {

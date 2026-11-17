@@ -18,7 +18,7 @@ const {
   sanitizeClientId,
 } = require("../modules/embeddedApp");
 const VisualLaunch = require("../modules/visualLaunch");
-const { drainVisualActionChannelPosts } = require("../modules/embeddedActions");
+const { drainLockedVisualActions } = require("../modules/embeddedActions");
 const GameStore = require("../db/gameStore");
 const GameDB = require("../db/anygame");
 const { DISCORD_API_BASE, GAME_COLLECTION } = require("../modules/embeddedGames");
@@ -1282,7 +1282,7 @@ describe("POST /api/game/action", () => {
         try {
           await run({ url, posted, store });
         } finally {
-          await drainVisualActionChannelPosts();
+          await drainLockedVisualActions();
           server.close();
           fs.rmSync(staticDir, { recursive: true, force: true });
         }
@@ -1336,7 +1336,7 @@ describe("POST /api/game/action", () => {
       expect(drawn.status).toBe(200);
       const body = await drawn.json();
       expect(body.message).toBe("TableWill drew 2 cards from Main");
-      expect(body.channelPosted).toBe(true);
+      expect(body.channelPosted).toBeUndefined();
       expect(body.hand.map((card) => card.name)).toEqual(["Copper", "Ace", "King"]);
       expect(body.status.history.at(-1).summary).toBe("TableWill drew 2 cards from Main");
       await waitFor(() => posted.length === 1);
@@ -1360,7 +1360,7 @@ describe("POST /api/game/action", () => {
       expect(dealt.status).toBe(200);
       const body = await dealt.json();
       expect(body.message).toBe("Dealt out a total of 2 cards from Main.");
-      expect(body.channelPosted).toBe(true);
+      expect(body.channelPosted).toBeUndefined();
       expect(body.hand.map((card) => card.name)).toEqual(["Copper", "Ace"]);
       await waitFor(() => posted.length === 1);
       expect(posted[0].content).toContain("Dealt out a total of 2 cards from Main.");
@@ -1648,7 +1648,7 @@ describe("POST /api/game/action", () => {
           const body = await res.json();
           expect(body.message).toBe("Dealt out a total of 2 cards from Main.");
           expect(body.hand.map((card) => card.name)).toEqual(["Copper", "Ace"]);
-          expect(body.channelPosted).toBe(true);
+          expect(body.channelPosted).toBeUndefined();
           expect(posted).toHaveLength(0);
           expect(memberFetches).toBe(0);
         } finally {
