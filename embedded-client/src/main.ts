@@ -77,6 +77,7 @@ import {
   groupPlayersByTeam,
   handCountLabel,
   initialsFromName,
+  tablePlayersInSeatOrder,
   suitColorClass,
   suitGlyph,
   visibleDecks,
@@ -976,7 +977,12 @@ function appendPlayerChip(
   player: OtherPlayer
 ) {
   const chip = document.createElement("article");
-  chip.className = "player-chip";
+  chip.className = `player-chip${player.isYou ? " is-you" : ""}`;
+  const userId =
+    typeof player.userId === "string" && player.userId.trim()
+      ? player.userId.trim()
+      : "";
+  if (userId) chip.dataset.userId = userId;
   const name =
     typeof player.name === "string" && player.name.trim()
       ? player.name.trim()
@@ -1013,16 +1019,16 @@ function renderOtherPlayers(
   const list = document.getElementById("other-players-list");
   if (!row || !list) return;
   list.replaceChildren();
-  const others = asRecordList<OtherPlayer>(players);
-  if (!others.length) {
+  const seated = tablePlayersInSeatOrder(players);
+  if (!seated.length) {
     list.classList.remove("has-teams");
     row.hidden = true;
     return;
   }
-  const groups = groupPlayersByTeam(others, teams);
+  const groups = groupPlayersByTeam(seated, teams);
   if (!groups) {
     list.classList.remove("has-teams");
-    for (const player of others) {
+    for (const player of seated) {
       appendPlayerChip(config, list, player);
     }
   } else {

@@ -93,6 +93,8 @@ const {
   statusPlayerScoreLabel,
   statusPlayerSeatName,
   suitGlyph,
+  playerSeatOrder,
+  tablePlayersInSeatOrder,
   visibleDecks,
 } = require("../embedded-client/src/tableLayout.ts");
 
@@ -155,6 +157,9 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("Picker option value is the game document key");
     expect(main).toContain("renderGameStatus");
     expect(main).toContain("renderOtherPlayers");
+    expect(main).toContain("tablePlayersInSeatOrder");
+    expect(main).toContain("const seated = tablePlayersInSeatOrder");
+    expect(main).toContain("dataset.userId");
     expect(main).toContain("renderDecks");
     expect(main).toContain("renderDeckActions");
     expect(main).toContain("deckActionsFor");
@@ -354,6 +359,23 @@ describe("visual table layout helpers", () => {
   });
 
   test("compact sidebar player lines, initials, suits, and mock auto-select", () => {
+    expect(playerSeatOrder({ order: Infinity })).toBe(0);
+    expect(playerSeatOrder({ order: "nope" })).toBe(0);
+    expect(tablePlayersInSeatOrder([
+      { name: "Third", order: 2 },
+      { name: "Will", order: 0, isYou: true },
+      { name: "Second", order: 1 },
+    ]).map((player) => [player.name, player.isYou])).toEqual([
+      ["Will", true],
+      ["Second", undefined],
+      ["Third", undefined],
+    ]);
+    expect(
+      tablePlayersInSeatOrder([
+        { name: "Inf", order: Infinity },
+        { name: "Second", order: 1 },
+      ]).map((player) => player.name)
+    ).toEqual(["Inf", "Second"]);
     expect(statusPlayerSeatName({ name: "QA Tester", order: 0 })).toBe("(1) QA Tester");
     expect(statusPlayerScoreLabel({ score: "12" })).toBe("12");
     expect(statusPlayerScoreLabel({ score: "" })).toBe("—");
@@ -372,6 +394,7 @@ describe("visual table layout helpers", () => {
     expect(main).not.toContain("status-player-meta");
     expect(main).toContain("renderPlayerScoreBlock");
     expect(main).toContain("groupPlayersByTeam");
+    expect(main).toContain('player.isYou ? " is-you" : ""');
     const scoreEdit = require("fs").readFileSync(
       require("path").join(__dirname, "..", "embedded-client", "src", "scoreEdit.ts"),
       "utf8"
@@ -446,6 +469,21 @@ describe("visual table layout helpers", () => {
         color: null,
         players: [{ name: "Riley", teamId: 7, teamName: "🦀🦀" }],
       },
+    ]);
+    const withYou = tablePlayersInSeatOrder([
+      { name: "Riley", teamId: "crab", teamName: "🦀🦀", order: 1 },
+      { name: "QA Tester", teamId: "crab", teamName: "🦀🦀", order: 0, isYou: true },
+      { name: "Alex", teamId: "fish", teamName: "💪🐟", order: 2 },
+    ]);
+    expect(withYou.map((player) => player.name)).toEqual(["QA Tester", "Riley", "Alex"]);
+    expect(
+      groupPlayersByTeam(withYou, [
+        { id: "crab", name: "🦀🦀" },
+        { id: "fish", name: "💪🐟" },
+      ])
+    ).toEqual([
+      { label: "🦀🦀", unassigned: false, color: null, players: [withYou[0], withYou[1]] },
+      { label: "💪🐟", unassigned: false, color: null, players: [withYou[2]] },
     ]);
   });
 });
