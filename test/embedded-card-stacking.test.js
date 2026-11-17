@@ -72,6 +72,20 @@ function highestTop(boxes = []) {
   return boxes.reduce((min, box) => Math.min(min, box.top), Number.POSITIVE_INFINITY);
 }
 
+function clipRect(box, clip) {
+  if (!box || !clip) return null;
+  const left = Math.max(box.left, clip.left);
+  const top = Math.max(box.top, clip.top);
+  const right = Math.min(box.right, clip.right);
+  const bottom = Math.min(box.bottom, clip.bottom);
+  if (right <= left || bottom <= top) return null;
+  return { left, top, right, bottom, width: right - left, height: bottom - top };
+}
+
+function clipRects(boxes = [], clip) {
+  return boxes.map((box) => clipRect(box, clip)).filter(Boolean);
+}
+
 function namedTile(id, title) {
   return `<article class="card-tile" data-card-id="${id}" title="${title}"><div class="card-face named-card"><span class="card-name card-name-full">${title}</span></div></article>`;
 }
@@ -87,27 +101,29 @@ function stackingHarness(css) {
     <div id="app" class="connected">
       <aside id="side-panel"><p>status</p></aside>
       <div id="table">
-        <section id="board-row" class="row board-row">
-          <section class="zone" data-zone="board">
-            <h2>Game Board</h2>
-            <div class="cards board-spread" id="board-cards">
-              ${namedTile("board-1", "Province")}
-              ${namedTile("board-2", "Duchy")}
-              ${namedTile("board-3", "Estate")}
+        <div id="table-main">
+          <section id="board-row" class="row board-row">
+            <section class="zone" data-zone="board">
+              <h2>Game Board</h2>
+              <div class="cards board-spread" id="board-cards">
+                ${namedTile("board-1", "Province")}
+                ${namedTile("board-2", "Duchy")}
+                ${namedTile("board-3", "Estate")}
+              </div>
+            </section>
+            <section class="zone decks-zone" data-zone="decks">
+              <h2>Decks</h2>
+              <div id="decks" class="decks"></div>
+            </section>
+          </section>
+          <section class="zone" data-zone="play-area">
+            <h2>Play Area</h2>
+            <div class="cards board-spread" id="play-area-cards">
+              ${namedTile("play-1", "Village")}
+              ${namedTile("play-2", "Market")}
             </div>
           </section>
-          <section class="zone decks-zone" data-zone="decks">
-            <h2>Decks</h2>
-            <div id="decks" class="decks"></div>
-          </section>
-        </section>
-        <section class="zone" data-zone="play-area">
-          <h2>Play Area</h2>
-          <div class="cards board-spread" id="play-area-cards">
-            ${namedTile("play-1", "Village")}
-            ${namedTile("play-2", "Market")}
-          </div>
-        </section>
+        </div>
         <section class="zone hand-zone" data-zone="hand">
           <h2>Hand</h2>
           <div class="cards hand-fan" id="hand-cards">
@@ -533,32 +549,34 @@ function populatedTableHarness(css, { boardCount = 3, handCount = 5 } = {}) {
     <div id="app" class="connected">
       <aside id="side-panel"><p>status</p></aside>
       <div id="table">
-        <section id="other-players" class="row players-row">
-          <h2>Players</h2>
-          <div id="other-players-list" class="players-rail">
-            ${player("R", "Riley", "1 card")}
-            ${player("S", "Sam", "4 cards")}
-          </div>
-        </section>
-        <section id="board-row" class="row board-row">
-          <section class="zone" data-zone="board">
-            <h2>Game Board</h2>
-            <div class="cards board-spread" id="board-cards">
-              ${boardTiles}
+        <div id="table-main">
+          <section id="other-players" class="row players-row">
+            <h2>Players</h2>
+            <div id="other-players-list" class="players-rail">
+              ${player("R", "Riley", "1 card")}
+              ${player("S", "Sam", "4 cards")}
             </div>
           </section>
-          <section class="zone decks-zone" data-zone="decks">
-            <h2>Decks</h2>
-            <div id="decks" class="decks">${deck("Main", "30")}${deck("Events", "8")}${deck("Chaos", "12")}</div>
+          <section id="board-row" class="row board-row">
+            <section class="zone" data-zone="board">
+              <h2>Game Board</h2>
+              <div class="cards board-spread" id="board-cards">
+                ${boardTiles}
+              </div>
+            </section>
+            <section class="zone decks-zone" data-zone="decks">
+              <h2>Decks</h2>
+              <div id="decks" class="decks">${deck("Main", "30")}${deck("Events", "8")}${deck("Chaos", "12")}</div>
+            </section>
           </section>
-        </section>
-        <section class="zone" data-zone="play-area">
-          <h2>Play Area</h2>
-          <div class="cards board-spread" id="play-area-cards">
-            ${namedTile("play-1", "Village")}
-            ${namedTile("play-2", "Market")}
-          </div>
-        </section>
+          <section class="zone" data-zone="play-area">
+            <h2>Play Area</h2>
+            <div class="cards board-spread" id="play-area-cards">
+              ${namedTile("play-1", "Village")}
+              ${namedTile("play-2", "Market")}
+            </div>
+          </section>
+        </div>
         <section class="zone hand-zone" data-zone="hand">
           <h2>Hand</h2>
           <div class="cards hand-fan" id="hand-cards">
@@ -605,16 +623,18 @@ function rects(selector) {
 try {
   await frame();
   const table = document.getElementById("table");
+  const main = document.getElementById("table-main");
   const hand = document.querySelector(".hand-zone");
   const play = document.querySelector('[data-zone="play-area"]');
   const tile = document.querySelector(".card-tile");
   const face = tile && tile.querySelector(".card-face");
   const tableBox = table.getBoundingClientRect();
+  const mainBox = main.getBoundingClientRect();
   const handBox = hand.getBoundingClientRect();
   const playBox = play.getBoundingClientRect();
   const rest = face.getBoundingClientRect();
   const root = getComputedStyle(document.documentElement);
-  const tableOverflow = table.scrollHeight > table.clientHeight + 1;
+  const mainOverflow = main.scrollHeight > main.clientHeight + 1;
   const boardCards = rects("#board-cards .card-tile");
   const playCards = rects("#play-area-cards .card-tile");
   const handCards = rects("#hand-cards .card-tile");
@@ -623,9 +643,6 @@ try {
     handCards.length < 2 || handCards[1].left < handCards[0].right - 8;
   const handLeft = handCards.length ? Math.min(...handCards.map((box) => box.left)) : tableBox.left;
   const handRight = handCards.length ? Math.max(...handCards.map((box) => box.right)) : tableBox.right;
-  const tileBottoms = [...boardCards, ...playCards, ...handCards, ...deckTiles].map(
-    (box) => box.bottom
-  );
   const sheet = document.styleSheets[0];
   sheet.insertRule(
     ".card-tile.measure-zoom .card-face { transform: translateY(-38px) scale(var(--card-hover-scale)); transition: none; }",
@@ -640,16 +657,19 @@ try {
     viewportHeight: window.innerHeight,
     tableHeight: tableBox.height,
     tableBottom: tableBox.bottom,
-    tableScrollHeight: table.scrollHeight,
-    tableClientHeight: table.clientHeight,
-    tableOverflow,
-    overflowY: getComputedStyle(table).overflowY,
+    tableTop: tableBox.top,
+    mainTop: mainBox.top,
+    mainBottom: mainBox.bottom,
+    mainScrollHeight: main.scrollHeight,
+    mainClientHeight: main.clientHeight,
+    mainOverflow,
+    overflowY: getComputedStyle(main).overflowY,
+    tableOverflowY: getComputedStyle(table).overflowY,
     handTop: handBox.top,
     handBottom: handBox.bottom,
     playBottom: playBox.bottom,
     gapBelowHand: tableBox.bottom - handBox.bottom,
     spaceAboveHand: handBox.top - playBox.bottom,
-    contentBottom: Math.max(tableBox.bottom, handBox.bottom, ...tileBottoms),
     handOverlaps,
     handFitsTable: handLeft >= tableBox.left - 24 && handRight <= tableBox.right + 24,
     boardCards,
@@ -779,11 +799,20 @@ describe("hand zone stays at the bottom of the table", () => {
   }
 
   function expectNoTileOverlap(result, label) {
+    const mainClip = {
+      left: Number.NEGATIVE_INFINITY,
+      right: Number.POSITIVE_INFINITY,
+      top: result.mainTop,
+      bottom: result.mainBottom,
+    };
+    const visibleBoard = clipRects(result.boardCards, mainClip);
+    const visiblePlay = clipRects(result.playCards, mainClip);
+    const visibleDecks = clipRects(result.deckTiles, mainClip);
     const boardPlay = maxIntersectingOverlapY(result.boardCards, result.playCards);
-    const playHand = maxIntersectingOverlapY(result.playCards, result.handCards);
-    const boardHand = maxIntersectingOverlapY(result.boardCards, result.handCards);
+    const playHand = maxIntersectingOverlapY(visiblePlay, result.handCards);
+    const boardHand = maxIntersectingOverlapY(visibleBoard, result.handCards);
     const deckPlay = maxIntersectingOverlapY(result.deckTiles, result.playCards);
-    const deckHand = maxIntersectingOverlapY(result.deckTiles, result.handCards);
+    const deckHand = maxIntersectingOverlapY(visibleDecks, result.handCards);
     expect({
       label,
       boardPlayClear: boardPlay <= 1,
@@ -812,9 +841,34 @@ describe("hand zone stays at the bottom of the table", () => {
     expect(lowestBottom(result.boardCards)).toBeLessThanOrEqual(
       highestTop(result.playCards) + 1
     );
-    expect(lowestBottom(result.playCards)).toBeLessThanOrEqual(
-      highestTop(result.handCards) + 1
-    );
+    if (visiblePlay.length && result.handCards.length) {
+      expect(lowestBottom(visiblePlay)).toBeLessThanOrEqual(
+        highestTop(result.handCards) + 1
+      );
+    }
+  }
+
+  function expectHandPinned(result, label) {
+    expect({
+      label,
+      error: result.error,
+      tableOverflowY: result.tableOverflowY,
+      mainOverflowY: result.overflowY,
+      handOnScreen: result.handTop >= 0 && result.handBottom <= result.viewportHeight + 1,
+      handAtTableBottom: result.handBottom <= result.tableBottom + 1,
+      gapOk: result.gapBelowHand >= 0 && result.gapBelowHand < 24,
+    }).toEqual({
+      label,
+      error: undefined,
+      tableOverflowY: "hidden",
+      mainOverflowY: "auto",
+      handOnScreen: true,
+      handAtTableBottom: true,
+      gapOk: true,
+    });
+    expect(result.handBottom).toBeGreaterThan(result.viewportHeight - 32);
+    expect(result.handTop).toBeGreaterThan(result.tableTop);
+    expect(result.handTop).toBeGreaterThanOrEqual(result.mainBottom - 1);
   }
 
   test.skipIf(!chrome)("QA: hand sits on the table bottom with slack above it", async () => {
@@ -834,7 +888,7 @@ describe("hand zone stays at the bottom of the table", () => {
     expect(result.gapBelowHand).toBeLessThan(24);
     expect(result.spaceAboveHand).toBeGreaterThan(result.gapBelowHand);
     expect(result.spaceAboveHand).toBeGreaterThan(8);
-    expect(result.overflowY).toBe("auto");
+    expectHandPinned(result, "1280x800-pin");
   }, 30000);
 
   const overflowViewports = [
@@ -852,22 +906,15 @@ describe("hand zone stays at the bottom of the table", () => {
       const result = await measureLayout(html, viewport);
       const label = `${viewport.width}x${viewport.height}`;
       expect({ label, error: result.error }).toEqual({ label, error: undefined });
-      expect(result.overflowY).toBe("auto");
       expectRestSize(result, label);
       expectNoTileOverlap(result, label);
-      expect(result.handBottom).toBeGreaterThan(result.playBottom);
+      expectHandPinned(result, label);
       expect(result.handOverlaps).toBe(true);
       expect(result.handFitsTable).toBe(true);
-      expect(result.tableOverflow).toBe(result.tableScrollHeight > result.tableClientHeight + 1);
-      if (result.tableOverflow) {
-        expect(result.tableScrollHeight).toBeGreaterThan(result.tableClientHeight + 1);
-        expect(result.contentBottom).toBeGreaterThan(result.tableBottom + 1);
+      if (result.mainOverflow) {
+        expect(result.mainScrollHeight).toBeGreaterThan(result.mainClientHeight + 1);
       } else {
-        expect(result.handBottom).toBeLessThanOrEqual(result.viewportHeight + 1);
-        expect(result.handBottom).toBeGreaterThan(result.viewportHeight - 32);
-        expect(result.gapBelowHand).toBeGreaterThanOrEqual(0);
-        expect(result.gapBelowHand).toBeLessThan(24);
-        expect(result.contentBottom).toBeLessThanOrEqual(result.tableBottom + 1);
+        expect(result.spaceAboveHand).toBeGreaterThan(8);
       }
     }
   }, 120000);
@@ -883,9 +930,8 @@ describe("hand zone stays at the bottom of the table", () => {
     expect(result.boardCards).toHaveLength(11);
     expectRestSize(result, "1024x768x11");
     expectNoTileOverlap(result, "1024x768x11");
-    expect(result.overflowY).toBe("auto");
-    expect(result.tableOverflow).toBe(true);
-    expect(result.handBottom).toBeGreaterThan(result.playBottom);
+    expectHandPinned(result, "1024x768x11");
+    expect(result.mainOverflow).toBe(true);
   }, 30000);
 
   test.skipIf(!chrome)("QA: ten hand cards at 1024x768 keep rest width", async () => {
@@ -898,11 +944,30 @@ describe("hand zone stays at the bottom of the table", () => {
     expect(result.error).toBeUndefined();
     expect(result.handCards).toHaveLength(10);
     expectRestSize(result, "1024x768x10hand");
+    expectHandPinned(result, "1024x768x10hand");
     for (const card of result.handCards) {
       expect(card.width).toBeGreaterThan(REST_WIDTH_PX - 4);
       expect(card.width).toBeLessThan(REST_WIDTH_PX + 4);
       expect(card.height).toBeGreaterThan(REST_HEIGHT_PX - 4);
       expect(card.height).toBeLessThan(REST_HEIGHT_PX + 4);
     }
+  }, 30000);
+
+  test.skipIf(!chrome)("QA: 6 board and 7 hand at 1280x800 keep the hand on screen", async () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const result = await measureLayout(
+      populatedTableHarness(css, { boardCount: 6, handCount: 7 }),
+      { width: 1280, height: 800 }
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.boardCards).toHaveLength(6);
+    expect(result.handCards).toHaveLength(7);
+    expectRestSize(result, "1280x800-dune");
+    expectNoTileOverlap(result, "1280x800-dune");
+    expectHandPinned(result, "1280x800-dune");
+    expect(result.handFitsTable).toBe(true);
+    const visibleHandHeight = Math.min(result.handBottom, result.viewportHeight) - Math.max(result.handTop, 0);
+    expect(visibleHandHeight / (result.handBottom - result.handTop)).toBeGreaterThan(0.9);
   }, 30000);
 });

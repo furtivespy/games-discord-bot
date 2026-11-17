@@ -28,24 +28,26 @@
         <section id="game-status" hidden></section>
       </aside>
       <div id="table" hidden>
-        <section id="other-players" class="row players-row" hidden>
-          <h2>Players</h2>
-          <div id="other-players-list" class="players-rail"></div>
-        </section>
-        <section id="board-row" class="row board-row">
-          <section class="zone" data-zone="board">
-            <h2>Game Board</h2>
-            <div class="cards board-spread" id="board-cards"></div>
+        <div id="table-main">
+          <section id="other-players" class="row players-row" hidden>
+            <h2>Players</h2>
+            <div id="other-players-list" class="players-rail"></div>
           </section>
-          <section class="zone decks-zone" data-zone="decks">
-            <h2>Decks</h2>
-            <div id="decks" class="decks"></div>
+          <section id="board-row" class="row board-row">
+            <section class="zone" data-zone="board">
+              <h2>Game Board</h2>
+              <div class="cards board-spread" id="board-cards"></div>
+            </section>
+            <section class="zone decks-zone" data-zone="decks">
+              <h2>Decks</h2>
+              <div id="decks" class="decks"></div>
+            </section>
           </section>
-        </section>
-        <section class="zone" data-zone="play-area">
-          <h2>Play Area</h2>
-          <div class="cards board-spread" id="play-area-cards"></div>
-        </section>
+          <section class="zone" data-zone="play-area">
+            <h2>Play Area</h2>
+            <div class="cards board-spread" id="play-area-cards"></div>
+          </section>
+        </div>
         <section class="zone hand-zone" data-zone="hand">
           <h2>Hand</h2>
           <div class="cards hand-fan" id="hand-cards"></div>

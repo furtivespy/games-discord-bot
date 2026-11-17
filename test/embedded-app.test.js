@@ -460,8 +460,11 @@ describe("embedded HTTP origin", () => {
       expect(body).not.toMatch(/overflow:\s*(auto|scroll|hidden)/);
     };
 
-    expect(ruleBody("#table")).toMatch(/overflow:\s*auto/);
+    expect(html).toMatch(/id="table-main"/);
+    expect(ruleBody("#table")).toMatch(/overflow:\s*hidden/);
     expect(ruleBody("#table")).not.toMatch(/overflow:\s*visible/);
+    expect(ruleBody("#table")).not.toMatch(/overflow:\s*auto/);
+    expect(ruleBody("#table-main")).toMatch(/overflow:\s*auto/);
     overflowIsVisible(ruleBody(".zone"));
     overflowIsVisible(ruleBody(".cards"));
     overflowIsVisible(ruleBody(".board-spread"));
@@ -491,6 +494,9 @@ describe("embedded HTTP origin", () => {
       "utf8"
     );
     expect(html).toMatch(/class="zone hand-zone" data-zone="hand"/);
+    expect(html).toMatch(
+      /id="table-main"[\s\S]*class="zone hand-zone" data-zone="hand"/
+    );
 
     const ruleBody = (selector) => {
       const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -506,11 +512,15 @@ describe("embedded HTTP origin", () => {
     expect(ruleBody("#table")).toMatch(/flex-direction:\s*column/);
     expect(ruleBody("#table")).toMatch(/height:\s*100%/);
     expect(ruleBody("#table")).toMatch(/box-sizing:\s*border-box/);
+    expect(ruleBody("#table")).toMatch(/overflow:\s*hidden/);
     expect(ruleBody("#table")).not.toMatch(/container-type:/);
     expect(ruleBody("#table")).not.toMatch(/align-content:\s*start/);
-    expect(ruleBody("#table > *")).toMatch(/flex-shrink:\s*0/);
-    expect(ruleBody(".hand-zone")).toMatch(/flex-shrink:\s*0/);
-    expect(ruleBody(".hand-zone")).toMatch(/margin-top:\s*auto/);
+    expect(ruleBody("#table-main")).toMatch(/flex:\s*1 1 auto/);
+    expect(ruleBody("#table-main")).toMatch(/min-height:\s*0/);
+    expect(ruleBody("#table-main")).toMatch(/overflow:\s*auto/);
+    expect(ruleBody("#table-main > *")).toMatch(/flex-shrink:\s*0/);
+    expect(ruleBody(".hand-zone")).toMatch(/flex:\s*0 0 auto/);
+    expect(ruleBody(".hand-zone")).not.toMatch(/margin-top:\s*auto/);
     expect(ruleBody(".hand-zone")).not.toMatch(/z-index\s*:/);
     expect(ruleBody(".hand-zone")).not.toMatch(/transform\s*:/);
     expect(css).toMatch(
@@ -546,8 +556,8 @@ describe("embedded HTTP origin", () => {
     expect(css).not.toContain("max(5.5rem");
     expect(css).toContain("scale(var(--card-hover-scale))");
     expect(css).toContain("margin-left: calc(-1 * var(--hand-overlap))");
-    expect(css).toMatch(/#table\s*>\s*\*\s*\{[^}]*flex-shrink:\s*0/);
-    expect(css).toMatch(/\.hand-zone\s*\{[^}]*flex-shrink:\s*0/);
+    expect(css).toMatch(/#table-main\s*>\s*\*\s*\{[^}]*flex-shrink:\s*0/);
+    expect(css).toMatch(/\.hand-zone\s*\{[^}]*flex:\s*0 0 auto/);
     expect(css).not.toMatch(/\.card-tile,\s*\.deck-tile\s*\{[^}]*width:\s*5\.4rem/);
     expect(css).not.toMatch(/\.card-tile,\s*\.deck-tile\s*\{[^}]*height:\s*7\.55rem/);
     expect(css).not.toContain("scale(1.28)");
