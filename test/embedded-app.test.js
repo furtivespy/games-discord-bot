@@ -465,6 +465,9 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain(".hand-fan .card-tile + .card-tile");
     expect(css).toContain(".player-team-group");
     expect(css).toContain(".status-player-score");
+    expect(css).toContain(".status-edit-scores");
+    expect(css).not.toMatch(/\.status-edit-scores\s*\{[^}]*text-transform:\s*uppercase/);
+    expect(css).toContain(".status-player-score-input");
     expect(css).not.toContain(".status-title");
     expect(css).not.toContain(".status-player-meta");
   });
@@ -1916,5 +1919,82 @@ describe("POST /api/game/action", () => {
         expect(posted[0].content).toContain("Dealt out a total of 2 cards from Main.");
       }
     );
+  });
+
+  test("scores updates player scores like the scoreall modal and posts that message", async () => {
+    await withActionApp({}, async ({ url, posted, store }) => {
+      const res = await postAction(url, {
+        action: "scores",
+        scores: { "snowflake-user": "21", "other-player": "9" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.message).toBe("Player scores updated successfully.");
+      expect(body.status.players.map((player) => player.score)).toEqual(["21", "9"]);
+      expect(body.status.history.at(-1).summary).toContain("updated player scores");
+      await drainLockedVisualActions();
+      expect(posted[0].content).toContain("Player scores updated successfully.");
+      const saved = store.getSpecificGameData("guild-1", GAME_COLLECTION, "thread-game");
+      expect(saved.players[0].score).toBe("21");
+      expect(saved.players[1].score).toBe("9");
+    });
+  });
+
+  test("scores from a channel member who is not seated is 403 not_a_player", async () => {
+    await withActionApp(
+      {
+        meBody: { id: "spectator", username: "eve", global_name: "Eve" },
+      },
+      async ({ url, store }) => {
+        const before = store.getSpecificGameData(
+          "guild-1",
+          GAME_COLLECTION,
+          "thread-game"
+        );
+        const res = await postAction(url, {
+          action: "scores",
+          scores: { "snowflake-user": "99", "other-player": "88" },
+        });
+        expect(res.status).toBe(403);
+        expect(await res.json()).toMatchObject({
+          error: "not_a_player",
+          message: "You're not a player in this game.",
+        });
+        const saved = store.getSpecificGameData(
+          "guild-1",
+          GAME_COLLECTION,
+          "thread-game"
+        );
+        expect(saved.players[0].score).toBe(before.players[0].score);
+        expect(saved.players[1].score).toBe(before.players[1].score);
+        expect(saved.history).toEqual([]);
+      }
+    );
+  });
+
+  test("scores ignores NaN, Infinity, and oversized values", async () => {
+    const game = actionGame();
+    game.players[0].score = "10";
+    game.players[1].score = "7";
+    await withActionApp({ game }, async ({ url, store }) => {
+      const res = await postAction(url, {
+        action: "scores",
+        scores: {
+          "snowflake-user": "NaN",
+          "other-player": "x".repeat(4001),
+        },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.status.players.map((player) => player.score)).toEqual(["10", "7"]);
+      const saved = store.getSpecificGameData(
+        "guild-1",
+        GAME_COLLECTION,
+        "thread-game"
+      );
+      expect(saved.players[0].score).toBe("10");
+      expect(saved.players[1].score).toBe("7");
+      expect(saved.history).toEqual([]);
+    });
   });
 });

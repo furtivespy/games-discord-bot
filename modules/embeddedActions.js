@@ -4,7 +4,8 @@ const { cloneDeep } = require("lodash");
 const GameDB = require("../db/anygame");
 const GameHelper = require("./GlobalGameHelper");
 const GameStatusHelper = require("./GameStatusHelper");
-const CardMoves = require("./cardMoves");
+const CardMoves = require("./gameLogic/cardMoves");
+const PlayerScores = require("./gameLogic/playerScores");
 const { parseActionCount } = require("./actionCount");
 const {
   ACTION_ERROR_MESSAGES: SHARED_ACTION_ERROR_MESSAGES,
@@ -20,7 +21,7 @@ const {
   userIsPlayer,
 } = require("./embeddedGames");
 
-const VISUAL_ACTIONS = new Set(["deal", "draw"]);
+const VISUAL_ACTIONS = new Set(["deal", "draw", "scores"]);
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 const ACTION_IDEMPOTENCY_MAX = 500;
 const ACTION_ERROR_MESSAGES = Object.freeze({
@@ -64,6 +65,25 @@ function displayNameFromGuildMember(member) {
   return displayNameFromDiscordUser(member.user);
 }
 
+function parseVisualScoreMap(value) {
+  const scores = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return scores;
+  for (const [userId, score] of Object.entries(value)) {
+    const id = String(userId || "").trim();
+    if (!id) continue;
+    scores[id] = PlayerScores.scoreValue(score);
+  }
+  return scores;
+}
+
+function scoresIdempotencyKey(scores) {
+  const map = parseVisualScoreMap(scores);
+  return Object.keys(map)
+    .sort()
+    .map((id) => `${id}=${map[id]}`)
+    .join("&");
+}
+
 function parseVisualActionBody(body = {}) {
   const action = String(body.action || "").trim().toLowerCase();
   if (!VISUAL_ACTIONS.has(action)) {
@@ -71,6 +91,14 @@ function parseVisualActionBody(body = {}) {
       error: "invalid_action",
       status: 400,
       message: ACTION_ERROR_MESSAGES.invalid_action,
+    };
+  }
+  const requestId = parseVisualActionRequestId(body.requestId);
+  if (action === "scores") {
+    return {
+      action,
+      scores: parseVisualScoreMap(body.scores),
+      requestId,
     };
   }
   const deckName = typeof body.deck === "string" ? body.deck.trim() : "";
@@ -93,7 +121,7 @@ function parseVisualActionBody(body = {}) {
     action,
     deckName,
     count,
-    requestId: parseVisualActionRequestId(body.requestId),
+    requestId,
   };
 }
 
@@ -239,6 +267,62 @@ function applyVisualCardAction(gameData, { action, deckName, count, actor, userI
   return { ok: true, content: result.content };
 }
 
+function applyVisualScoreAction(gameData, { scores, actor, playerNames } = {}) {
+  const result = PlayerScores.applyPlayerScores(gameData, {
+    scores,
+    actor,
+    actorDisplayName: actor?.displayName,
+    playerNames,
+  });
+  return {
+    ok: true,
+    content: result.content,
+    changed: result.changed,
+  };
+}
+
+function pendingScoreUserIds(gameData, scores) {
+  const ids = [];
+  const updates = scores && typeof scores === "object" ? scores : {};
+  const players = Array.isArray(gameData?.players) ? gameData.players : [];
+  for (const player of players) {
+    const id = String(player?.userId || "");
+    if (!id) continue;
+    if (
+      !Object.prototype.hasOwnProperty.call(updates, id) &&
+      !Object.prototype.hasOwnProperty.call(updates, player.userId)
+    ) {
+      continue;
+    }
+    const raw = Object.prototype.hasOwnProperty.call(updates, id)
+      ? updates[id]
+      : updates[player.userId];
+    const newScore = PlayerScores.scoreValue(raw);
+    if (newScore && player.score !== newScore) ids.push(id);
+  }
+  return ids;
+}
+
+async function playerNamesForScoreUpdate(gameData, scores, { discordClient, guildId }) {
+  const userIds = pendingScoreUserIds(gameData, scores);
+  const playerNames = {};
+  if (!userIds.length) return playerNames;
+  const displays = await resolvePlayerDisplays({
+    discordClient,
+    guildId,
+    userIds,
+    fetchMissing: true,
+  });
+  for (const userId of userIds) {
+    const name = displays[userId]?.name;
+    playerNames[userId] =
+      typeof name === "string" && name.trim()
+        ? name.trim()
+        : `Player ${userId}`;
+  }
+  return playerNames;
+}
+
 /**
  * Serialize load → mutate → save for one game document. Two Deal/Draw POSTs
  * with different requestIds must not both load the same snapshot. The Discord
@@ -303,8 +387,9 @@ async function enrichActorDisplayName(actor, { discordClient, guildId, userId })
 
 /**
  * Per-process in-memory TTL map. A second instance still runs the same
- * requestId. The key includes action, deck, and count so a reused id for a
- * different Deal/Draw is not swallowed.
+ * requestId. The key includes action plus a per-action detail (deck:count for
+ * Deal/Draw, the score map for scores) so a reused id for a different action
+ * is not swallowed.
  */
 function createActionIdempotencyCache({
   ttlMs = 5 * 60 * 1000,
@@ -313,8 +398,8 @@ function createActionIdempotencyCache({
   const completed = new Map();
   const inflight = new Map();
 
-  function cacheKey(userId, guildId, channelId, requestId, action, deckName, count) {
-    return `${userId}:${guildId}:${channelId}:${requestId}:${action}:${deckName}:${count}`;
+  function cacheKey(userId, guildId, channelId, requestId, action, detail) {
+    return `${userId}:${guildId}:${channelId}:${requestId}:${action}:${detail}`;
   }
 
   function remember(key, result) {
@@ -330,9 +415,8 @@ function createActionIdempotencyCache({
     const id = parseVisualActionRequestId(requestId);
     if (!id) return fn();
     const action = String(actionParts.action || "");
-    const deckName = String(actionParts.deckName || "");
-    const count = String(actionParts.count ?? "");
-    const key = cacheKey(userId, guildId, channelId, id, action, deckName, count);
+    const detail = String(actionParts.detail ?? "");
+    const key = cacheKey(userId, guildId, channelId, id, action, detail);
     const cached = completed.get(key);
     if (cached) return cached;
     if (inflight.has(key)) return inflight.get(key);
@@ -412,6 +496,8 @@ async function runVisualCardAction({
   fetchImpl,
   botToken,
   hostImageCache,
+  idempotencyDetail,
+  mutateOnce,
 } = {}) {
   const gid = String(guildId || "").trim();
   const cid = String(channelId || "").trim();
@@ -440,19 +526,30 @@ async function runVisualCardAction({
     trackLockedVisualAction(() =>
       lock.run(gid, cid, async () => {
         try {
-          const persisted = await runVisualCardActionOnce({
-            action,
-            deckName,
-            count,
-            actor,
-            guildId: gid,
-            channelId: cid,
-            userId: uid,
-            getGameData,
-            discordClient,
-            gameStore,
-            logger,
-          });
+          const persisted = await (typeof mutateOnce === "function"
+            ? mutateOnce({
+                actor,
+                guildId: gid,
+                channelId: cid,
+                userId: uid,
+                getGameData,
+                discordClient,
+                gameStore,
+                logger,
+              })
+            : runVisualCardActionOnce({
+                action,
+                deckName,
+                count,
+                actor,
+                guildId: gid,
+                channelId: cid,
+                userId: uid,
+                getGameData,
+                discordClient,
+                gameStore,
+                logger,
+              }));
           if (persisted.status !== 200) {
             releaseHttp.resolve(persisted);
             return persisted;
@@ -530,8 +627,10 @@ async function runVisualCardAction({
   if (idempotency && typeof idempotency.run === "function") {
     return idempotency.run(requestId, uid, gid, cid, execute, {
       action,
-      deckName,
-      count,
+      detail:
+        idempotencyDetail != null
+          ? String(idempotencyDetail)
+          : `${deckName}:${count}`,
     });
   }
   return execute();
@@ -607,17 +706,134 @@ async function runVisualCardActionOnce({
   return { status: 200, gameData, applied };
 }
 
+async function runVisualScoreActionOnce({
+  scores,
+  actor,
+  guildId,
+  channelId,
+  userId,
+  getGameData,
+  discordClient,
+  gameStore,
+  logger,
+}) {
+  const loader = resolveGetGameData({ getGameData, discordClient, gameStore });
+  if (!loader) {
+    return errorBody("no_game", 404);
+  }
+
+  let gameData = null;
+  try {
+    gameData = await loader(guildId, GAME_COLLECTION, channelId);
+  } catch (err) {
+    logger?.log?.(
+      `Failed to load game for visual-mode action: ${err.message || err}`,
+      "error"
+    );
+    return errorBody("action_failed", 500);
+  }
+
+  if (isMissingGame(gameData)) {
+    return errorBody("no_game", 404);
+  }
+
+  if (!userIsPlayer(gameData, userId)) {
+    return errorBody("not_a_player", 403);
+  }
+
+  const playerNames = await playerNamesForScoreUpdate(gameData, scores, {
+    discordClient,
+    guildId,
+  });
+
+  let applied;
+  try {
+    applied = applyVisualScoreAction(gameData, { scores, actor, playerNames });
+  } catch (err) {
+    logger?.log?.(
+      `Failed to apply visual-mode scores: ${err.message || err}`,
+      "error"
+    );
+    return errorBody("action_failed", 500);
+  }
+
+  if (applied.changed) {
+    try {
+      await persistGameData({
+        discordClient,
+        gameStore,
+        guildId,
+        channelId,
+        gameData,
+      });
+    } catch (err) {
+      logger?.log?.(
+        `Failed to save visual-mode action: ${err.message || err}`,
+        "error"
+      );
+      return errorBody("action_failed", 500);
+    }
+  }
+
+  return { status: 200, gameData, applied };
+}
+
+async function runVisualScoreAction({
+  scores,
+  user,
+  member,
+  guildId,
+  channelId,
+  getGameData,
+  discordClient,
+  gameStore,
+  logger,
+  requestId,
+  idempotency,
+  gameChannelLock,
+  fetchImpl,
+  botToken,
+  hostImageCache,
+} = {}) {
+  return runVisualCardAction({
+    action: "scores",
+    user,
+    member,
+    guildId,
+    channelId,
+    getGameData,
+    discordClient,
+    gameStore,
+    logger,
+    requestId,
+    idempotency,
+    gameChannelLock,
+    fetchImpl,
+    botToken,
+    hostImageCache,
+    idempotencyDetail: scoresIdempotencyKey(scores),
+    mutateOnce: (ctx) =>
+      runVisualScoreActionOnce({
+        scores,
+        ...ctx,
+      }),
+  });
+}
+
 module.exports = {
   ACTION_ERROR_MESSAGES,
   ACTION_IDEMPOTENCY_MAX,
   actorFromDiscordUser,
   applyVisualCardAction,
+  applyVisualScoreAction,
   createActionIdempotencyCache,
   createGameChannelLock,
   drainLockedVisualActions,
   parseVisualActionBody,
   parseVisualActionRequestId,
   postCommandToGameChannel,
+  scoresIdempotencyKey,
   runVisualCardAction,
+  runVisualScoreAction,
   visualActionErrorMessage,
 };

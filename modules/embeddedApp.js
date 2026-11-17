@@ -19,6 +19,7 @@ const {
   createActionIdempotencyCache,
   parseVisualActionBody,
   runVisualCardAction,
+  runVisualScoreAction,
   visualActionErrorMessage,
 } = require("./embeddedActions");
 const {
@@ -647,6 +648,7 @@ function createEmbeddedApp({
         action: parsed.action,
         deckName: parsed.deckName,
         count: parsed.count,
+        scores: parsed.scores,
         requestId: parsed.requestId,
       });
       sendSnapshotResult(res, result, req);
@@ -702,24 +704,42 @@ function createEmbeddedApp({
       });
       return;
     }
-    const result = await runVisualCardAction({
-      action: parsed.action,
-      deckName: parsed.deckName,
-      count: parsed.count,
-      user,
-      member: guard.member,
-      guildId: requestedGuildId,
-      channelId: requestedChannelId,
-      getGameData,
-      discordClient,
-      gameStore,
-      logger,
-      requestId: parsed.requestId,
-      idempotency: actionIdempotency,
-      fetchImpl,
-      botToken,
-      hostImageCache: hostImageLookupCache,
-    });
+    const result =
+      parsed.action === "scores"
+        ? await runVisualScoreAction({
+            scores: parsed.scores,
+            user,
+            member: guard.member,
+            guildId: requestedGuildId,
+            channelId: requestedChannelId,
+            getGameData,
+            discordClient,
+            gameStore,
+            logger,
+            requestId: parsed.requestId,
+            idempotency: actionIdempotency,
+            fetchImpl,
+            botToken,
+            hostImageCache: hostImageLookupCache,
+          })
+        : await runVisualCardAction({
+            action: parsed.action,
+            deckName: parsed.deckName,
+            count: parsed.count,
+            user,
+            member: guard.member,
+            guildId: requestedGuildId,
+            channelId: requestedChannelId,
+            getGameData,
+            discordClient,
+            gameStore,
+            logger,
+            requestId: parsed.requestId,
+            idempotency: actionIdempotency,
+            fetchImpl,
+            botToken,
+            hostImageCache: hostImageLookupCache,
+          });
     sendSnapshotResult(res, result, req);
   }
 

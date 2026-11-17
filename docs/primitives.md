@@ -27,6 +27,14 @@ Shared, publishable decks that games can start from.
 - Code: `db/deckCatalog.js`, `db/catalogDecks.js`, `db/catalogPublish.js`, `db/seedDeckCatalog.js`, `slashcommands/genericgame/catalog.js`, `slashcommands/util/migrate.js`
 - ADRs: [0001](adr/0001-data-scope-changes-need-migration.md)
 
+## Shared game logic
+
+Pure game-document mutations used by both slash/chat commands and visual mode.
+
+- Code: `modules/gameLogic/playerScores.js`, `modules/gameLogic/cardMoves.js`
+- ADRs: [0002](adr/0002-pr-scope-and-approved-design.md)
+- Notes: slash handlers and `modules/embeddedActions.js` are adapters (load/save, Discord UX, Activity HTTP). Put new shared mutations here rather than duplicating them in a command and the Activity.
+
 ## Embedded Activity
 
 The Discord Activity (visual mode): an Express server and a Vite client.

@@ -103,7 +103,7 @@ Per-player money in a game: check, deal, pay, spend, take and reveal.
 Manage players in a game: add, remove, set first, colors and scores.
 
 - Seed: an active game.
-- Reach: `session.run("players", { subcommand: "score", strings: { score: "3" } })` and read `session.game.players`. `score` is a string option.
+- Reach: `session.run("players", { subcommand: "score", strings: { score: "3" } })` and read `session.game.players`. `score` is a string option. Bulk edit: `scoreall` modal submit (`test/modal-collector.test.js`). Visual Edit Scores uses the same `applyPlayerScores` path.
 
 ## /releasenotes
 
@@ -187,7 +187,7 @@ Named tokens per game and player: create, gain, lose, give, take and reveal.
 Launch the embedded Activity in the current channel. `/visual` has no options.
 
 - Seed: none.
-- Reach: the command reply is covered by `test/visual-command.test.js`. To see the Activity itself, use `bun run control browse`. Team grouping: `bun run control browse --path '/?fixture=team-game&game=team-thread'`. Deal/Draw from a hovered deck: `bun run control browse --path '/?fixture=several-games&game=newest-thread'`.
+- Reach: the command reply is covered by `test/visual-command.test.js`. To see the Activity itself, use `bun run control browse`. Team grouping: `bun run control browse --path '/?fixture=team-game&game=team-thread'`. Deal/Draw from a hovered deck, and Edit Scores in the Players list: `bun run control browse --path '/?fixture=several-games&game=newest-thread'`.
 
 ## /winshare
 

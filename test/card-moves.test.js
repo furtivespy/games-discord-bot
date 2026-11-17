@@ -1,5 +1,5 @@
 const { describe, expect, test } = require("bun:test");
-const CardMoves = require("../modules/cardMoves");
+const CardMoves = require("../modules/gameLogic/cardMoves");
 const {
   createActiveGame,
   createCard,

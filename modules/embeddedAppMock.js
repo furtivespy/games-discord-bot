@@ -1,7 +1,9 @@
 const { snapshotFromGameData, snapshotVersion } = require("./embeddedGames");
 const {
   applyVisualCardAction,
+  applyVisualScoreAction,
   createActionIdempotencyCache,
+  scoresIdempotencyKey,
   visualActionErrorMessage,
 } = require("./embeddedActions");
 
@@ -484,6 +486,7 @@ function createMockGameSession() {
     action,
     deckName,
     count,
+    scores,
     requestId,
   } = {}) {
     const name = sanitizeFixtureName(fixture);
@@ -509,13 +512,19 @@ function createMockGameSession() {
     const gid = guildId || DEFAULT_MOCK_GUILD_ID;
     const run = () => {
       const gameData = getGame(name, cid, gid);
-      const applied = applyVisualCardAction(gameData, {
-        action,
-        deckName,
-        count,
-        actor: mockActor(),
-        userId: MOCK_USER.id,
-      });
+      const applied =
+        action === "scores"
+          ? applyVisualScoreAction(gameData, {
+              scores,
+              actor: mockActor(),
+            })
+          : applyVisualCardAction(gameData, {
+              action,
+              deckName,
+              count,
+              actor: mockActor(),
+              userId: MOCK_USER.id,
+            });
       if (!applied.ok) {
         return {
           status: applied.status,
@@ -545,8 +554,10 @@ function createMockGameSession() {
     };
     return idempotency.run(requestId, MOCK_USER.id, gid, cid, run, {
       action,
-      deckName,
-      count,
+      detail:
+        action === "scores"
+          ? scoresIdempotencyKey(scores)
+          : `${deckName}:${count}`,
     });
   }
 

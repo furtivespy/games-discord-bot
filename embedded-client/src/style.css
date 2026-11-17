@@ -184,6 +184,53 @@ body {
   color: var(--muted);
 }
 
+.status-edit-scores {
+  display: inline-block;
+  margin: 0 0 0.45rem;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.18rem 0.42rem;
+  border-radius: 0.3rem;
+  border: 1px solid rgba(230, 195, 92, 0.65);
+  background: rgba(18, 12, 8, 0.72);
+  color: #f8e7a1;
+  cursor: pointer;
+}
+
+.status-edit-scores:hover,
+.status-edit-scores:focus-visible {
+  background: rgba(48, 28, 12, 0.94);
+  border-color: #f3d98c;
+}
+
+.status-edit-scores:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.status-player-score-input {
+  width: 4.4rem;
+  max-width: 5.6rem;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding: 0.08rem 0.28rem;
+  border-radius: 0.28rem;
+  border: 1px solid #c9a227;
+  background: #1b140c;
+  color: #eee3c5;
+}
+
+.status-scores-error {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  color: #ffb4a2;
+}
+
 .status-player {
   display: flex;
   align-items: baseline;

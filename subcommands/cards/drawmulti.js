@@ -4,7 +4,7 @@ const GameHelper = require('../../modules/GlobalGameHelper')
 const { cloneDeep, find } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
-const CardMoves = require('../../modules/cardMoves')
+const CardMoves = require('../../modules/gameLogic/cardMoves')
 
 class DrawMulti {
     async execute(interaction, client) {

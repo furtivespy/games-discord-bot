@@ -7,7 +7,7 @@
     "action_failed": "Could not run that action.",
     "channel_mismatch": "That game doesn't belong to this server.",
     "forbidden": "You don't have access to that channel.",
-    "invalid_action": "Deal and Draw are the only visual actions.",
+    "invalid_action": "Deal, Draw, and Edit Scores are the only visual actions.",
     "invalid_count": "Enter a whole number from 1 to 1000.",
     "missing_channel": "Could not find the channel for this game.",
     "missing_deck": "Pick a deck first.",

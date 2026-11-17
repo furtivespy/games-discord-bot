@@ -563,6 +563,32 @@ describe("mock embedded HTTP", () => {
       const dealtBody = await dealt.json();
       expect(dealtBody.message).toContain("Dealt out a total of");
       expect(dealtBody.status.history.at(-1).summary).toContain("dealt");
+
+      const scored = await fetch(`${url}/api/game/action`, {
+        method: "POST",
+        headers: auth,
+        body: JSON.stringify({
+          action: "scores",
+          scores: { [MOCK_USER.id]: "99", "other-player-2": "1" },
+          channelId: "newest-thread",
+          guildId: "mock-guild",
+          fixture: "several-games",
+        }),
+      });
+      expect(scored.status).toBe(200);
+      const scoredBody = await scored.json();
+      expect(scoredBody.message).toBe("Player scores updated successfully.");
+      const will = scoredBody.status.players.find(
+        (player) => player.userId === MOCK_USER.id
+      );
+      const riley = scoredBody.status.players.find(
+        (player) => player.userId === "other-player-2"
+      );
+      expect(will.score).toBe("99");
+      expect(riley.score).toBe("1");
+      expect(scoredBody.status.history.at(-1).summary).toContain(
+        "updated player scores"
+      );
     } finally {
       server.close();
       fs.rmSync(staticDir, { recursive: true, force: true });

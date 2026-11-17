@@ -1,6 +1,6 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
-const CardMoves = require('../../modules/cardMoves')
+const CardMoves = require('../../modules/gameLogic/cardMoves')
 
 class Deal {
     async execute(interaction, client) {

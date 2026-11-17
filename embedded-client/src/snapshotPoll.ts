@@ -92,6 +92,7 @@ export function isSnapshotPollBlocked(doc: Document | null | undefined): boolean
   if (!doc?.querySelector) return false;
   if (doc.querySelector(".card-tile.dragging, .card-tile.snapping")) return true;
   if (doc.querySelector("dialog[open]")) return true;
+  if (doc.querySelector(".status-scores-editing")) return true;
   return false;
 }
 

@@ -65,6 +65,8 @@ describe("modals and collectors", () => {
         expect(saved.players[0].score).toBe("10");
         expect(saved.players[1].score).toBe("7");
         expect(harness.lastContent()).toContain("Player scores updated");
+        expect(saved.history.at(-1).action.type).toBe("score");
+        expect(saved.history.at(-1).summary).toContain("updated player scores");
       }
     );
   });
