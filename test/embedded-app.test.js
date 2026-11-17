@@ -537,6 +537,9 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain("--hand-overlap: 3.478rem");
     expect(css).toContain("width: var(--card-width)");
     expect(css).toContain("height: var(--card-height)");
+    expect(css).toMatch(
+      /\.card-tile,\s*\.deck-tile\s*\{[^}]*flex-shrink:\s*0/
+    );
     expect(css).not.toContain("--card-used-height");
     expect(css).not.toContain("--card-fit-height");
     expect(css).not.toContain("container-type: size");

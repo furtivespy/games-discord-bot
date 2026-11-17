@@ -535,6 +535,7 @@ body {
   box-sizing: border-box;
   width: var(--card-width);
   height: var(--card-height);
+  flex-shrink: 0;
   padding: 0;
   border: 0;
   background: transparent;

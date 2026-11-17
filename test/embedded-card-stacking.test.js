@@ -488,7 +488,7 @@ describe("dropped cards snap back to their rest slot", () => {
   }, 30000);
 });
 
-function populatedTableHarness(css, { boardCount = 3 } = {}) {
+function populatedTableHarness(css, { boardCount = 3, handCount = 5 } = {}) {
   const deck = (name, count) =>
     `<article class="deck-tile" title="${name}"><div class="card-face deck-face"><span class="deck-name">${name}</span><span class="deck-count">${count}</span></div></article>`;
   const player = (initials, name, count) =>
@@ -510,6 +510,19 @@ function populatedTableHarness(css, { boardCount = 3 } = {}) {
     .slice(0, boardCount)
     .map((name, index) => namedTile(`board-${index + 1}`, name))
     .join("");
+  const defaultHands = [
+    ["hand-1", "Copper"],
+    ["hand-2", "Queen of Diamonds"],
+    ["hand-3", "Jack of Clubs"],
+    ["hand-4", "10 of Spades"],
+    ["hand-5", "Ace of Hearts"],
+  ];
+  const handTiles = Array.from({ length: handCount }, (_, index) => {
+    const preset = defaultHands[index];
+    return preset
+      ? namedTile(preset[0], preset[1])
+      : namedTile(`hand-${index + 1}`, `Hand ${index + 1}`);
+  }).join("");
   return `<!doctype html>
 <html>
   <head>
@@ -549,11 +562,7 @@ function populatedTableHarness(css, { boardCount = 3 } = {}) {
         <section class="zone hand-zone" data-zone="hand">
           <h2>Hand</h2>
           <div class="cards hand-fan" id="hand-cards">
-            ${namedTile("hand-1", "Copper")}
-            ${namedTile("hand-2", "Queen of Diamonds")}
-            ${namedTile("hand-3", "Jack of Clubs")}
-            ${namedTile("hand-4", "10 of Spades")}
-            ${namedTile("hand-5", "Ace of Hearts")}
+            ${handTiles}
           </div>
         </section>
       </div>
@@ -877,5 +886,23 @@ describe("hand zone stays at the bottom of the table", () => {
     expect(result.overflowY).toBe("auto");
     expect(result.tableOverflow).toBe(true);
     expect(result.handBottom).toBeGreaterThan(result.playBottom);
+  }, 30000);
+
+  test.skipIf(!chrome)("QA: ten hand cards at 1024x768 keep rest width", async () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const result = await measureLayout(populatedTableHarness(css, { handCount: 10 }), {
+      width: 1024,
+      height: 768,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.handCards).toHaveLength(10);
+    expectRestSize(result, "1024x768x10hand");
+    for (const card of result.handCards) {
+      expect(card.width).toBeGreaterThan(REST_WIDTH_PX - 4);
+      expect(card.width).toBeLessThan(REST_WIDTH_PX + 4);
+      expect(card.height).toBeGreaterThan(REST_HEIGHT_PX - 4);
+      expect(card.height).toBeLessThan(REST_HEIGHT_PX + 4);
+    }
   }, 30000);
 });
