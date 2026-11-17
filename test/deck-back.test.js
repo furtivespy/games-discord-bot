@@ -54,6 +54,17 @@ describe("DeckBack helper", () => {
     expect(DeckBack.parseBackUrlInput("not a url").error).toBe(
       DeckBack.INVALID_MESSAGE
     );
+    expect(DeckBack.parseBackUrlInput("")).toEqual({ present: false });
+    expect(DeckBack.parseBackUrlInput("   ")).toEqual({ present: false });
+    expect(DeckBack.parseBackUrlInput("\t")).toEqual({ present: false });
+  });
+
+  test("canonicalBackUrl keeps only http(s) backs", () => {
+    expect(
+      DeckBack.canonicalBackUrl({ backUrl: "https://example.test/a.png" })
+    ).toBe("https://example.test/a.png");
+    expect(DeckBack.canonicalBackUrl({ cardBackUrl: "ftp://example.test/a.png" })).toBeNull();
+    expect(DeckBack.canonicalBackUrl({ backUrl: "not-a-url" })).toBeNull();
   });
 
   test("applyBackUrl writes the canonical field and drops aliases", () => {
@@ -67,6 +78,8 @@ describe("DeckBack helper", () => {
     DeckBack.applyBackUrl(deck, null);
     expect(deck.backUrl).toBeNull();
     expect(deck).not.toHaveProperty("cardBackUrl");
+    DeckBack.applyBackUrl(deck, "ftp://example.test/x.png");
+    expect(deck.backUrl).toBeNull();
   });
 });
 
@@ -150,6 +163,28 @@ describe("catalog publish payload includes deck back", () => {
     });
     expect(result.ok).toBe(true);
     expect(result.payload.backUrl).toBe("https://example.test/back.png");
+  });
+
+  test("payload drops ftp and alias backs that are not http(s) images", () => {
+    const result = buildPublishPayload({
+      id: "my-custom",
+      name: "My Custom",
+      createdBy: "owner-1",
+      allCards: [
+        {
+          name: "Ace",
+          description: "",
+          type: "",
+          suit: "",
+          value: "",
+          url: null,
+          format: "A",
+        },
+      ],
+      deck: { name: "Main", cardBackUrl: "ftp://example.test/back.png" },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.payload.backUrl).toBeNull();
   });
 
   test("payload backUrl is null when the deck has none", () => {

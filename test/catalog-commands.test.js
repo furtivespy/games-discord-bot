@@ -510,8 +510,10 @@ describe("/catalog command handlers", () => {
 
         await runCatalog(harness);
         expect(harness.lastContent()).toContain("Set `standard` deck back");
-        expect(harness.lastContent()).toContain("https://example.test/standard-back.png");
         expect(harness.lastContent()).toContain("Live games are unchanged");
+        expect(primaryPayload(harness).embeds[0].data.image.url).toBe(
+          "https://example.test/standard-back.png"
+        );
 
         const catalog = new DeckCatalog({ dataDir: harness.dataDir });
         try {

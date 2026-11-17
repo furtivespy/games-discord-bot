@@ -621,7 +621,10 @@ describe("/cards command handlers", () => {
           return null;
         };
         await runCards(harness);
-        expect(harness.lastContent()).toContain("https://example.test/existing.png");
+        expect(harness.lastContent()).toContain("uses a custom deck back");
+        expect(harness.calls.editReply.at(-1).embeds[0].data.image.url).toBe(
+          "https://example.test/existing.png"
+        );
         saved = await harness.getSavedGame();
         expect(saved.decks[0].backUrl).toBe("https://example.test/existing.png");
 
@@ -635,6 +638,27 @@ describe("/cards command handlers", () => {
         saved = await harness.getSavedGame();
         expect(saved.decks[0].backUrl).toBeNull();
         expect(harness.lastContent()).toContain("Cleared Main deck back");
+      }
+    );
+  });
+
+  test("deck configure reply stays within Discord content limits for a long back URL", async () => {
+    const url = `https://example.test/${"a".repeat(2000)}.png`;
+    expect(url.length).toBeGreaterThan(2000);
+    await withHarness(
+      {
+        gameData: gameWithDeck(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "configure",
+          strings: { config: "deckback", deck: "Main", url },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent().length).toBeLessThanOrEqual(2000);
+        expect(harness.lastContent()).toContain("Set Main deck back");
+        expect((await harness.getSavedGame()).decks[0].backUrl).toBe(url);
       }
     );
   });

@@ -6,6 +6,7 @@ const {
   deferCatalogReply,
   formatLayoutLabel,
   formatCreatorName,
+  formatDeckBackLine,
   catalogUnavailableReply,
   openReadyCatalog,
   replyEphemeral,
@@ -74,9 +75,7 @@ class CatalogShow {
         ]
           .filter(Boolean)
           .join(" · "),
-        template.backUrl
-          ? `Deck back: ${template.backUrl}`
-          : "Deck back: default",
+        formatDeckBackLine(template.backUrl),
       ].join("\n");
 
       await replyEphemeralEmbeds(

@@ -135,6 +135,10 @@ function formatCreatorName(createdBy, creatorNames = new Map()) {
   return id;
 }
 
+function formatDeckBackLine(backUrl) {
+  return backUrl ? `Deck back: ${backUrl}` : "Deck back: default";
+}
+
 function formatTemplateListLine(template, { creatorNames } = {}) {
   const creator = formatCreatorName(template.created_by, creatorNames);
   const suffix = creator ? `, by ${creator}` : "";
@@ -236,6 +240,7 @@ module.exports = {
   enabledHeading,
   formatLayoutLabel,
   formatCreatorName,
+  formatDeckBackLine,
   formatTemplateListLine,
   resolveCreatorNames,
   autocompleteTemplates,

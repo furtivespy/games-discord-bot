@@ -365,7 +365,12 @@ function openDeckCatalogDatabase(dbPath) {
 function ensureBackUrlColumn(db) {
   const columns = db.query(`PRAGMA table_info(deck_templates)`).all();
   if (columns.some((column) => column.name === "back_url")) return;
-  db.exec(`ALTER TABLE deck_templates ADD COLUMN back_url TEXT`);
+  try {
+    db.exec(`ALTER TABLE deck_templates ADD COLUMN back_url TEXT`);
+  } catch (error) {
+    const message = String(error?.message || error);
+    if (!/duplicate column name:\s*back_url/i.test(message)) throw error;
+  }
 }
 
 module.exports = DeckCatalog;

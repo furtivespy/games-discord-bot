@@ -146,11 +146,19 @@ class Configure {
             return
         }
 
-        const originalValue = DeckBack.readBackUrl(deck)
+        const originalValue = DeckBack.canonicalBackUrl(deck)
         if (!parsed.present) {
-            await interaction.editReply({
-                content: `${deck.name} deck back: ${DeckBack.describeBackUrl(originalValue)}. Pass url to set an image, or url:clear for the default.`
-            })
+            const payload = {
+                content: originalValue
+                    ? `${deck.name} uses a custom deck back. Pass url to set an image, or url:clear for the default.`
+                    : `${deck.name} uses ${DeckBack.DEFAULT_LABEL}. Pass url to set an image, or url:clear for the default.`,
+            }
+            if (originalValue) {
+                payload.embeds = [
+                    new EmbedBuilder().setTitle(`${deck.name} deck back`).setImage(originalValue),
+                ]
+            }
+            await interaction.editReply(payload)
             return
         }
 
@@ -183,7 +191,7 @@ class Configure {
             ? [new EmbedBuilder().setTitle(`${deck.name} deck back`).setImage(parsed.backUrl)]
             : []
         const content = parsed.backUrl
-            ? `Set ${deck.name} deck back to ${parsed.backUrl}`
+            ? `Set ${deck.name} deck back.`
             : `Cleared ${deck.name} deck back; using ${DeckBack.DEFAULT_LABEL}.`
 
         await GameStatusHelper.sendGameStatus(interaction, client, gameData, {

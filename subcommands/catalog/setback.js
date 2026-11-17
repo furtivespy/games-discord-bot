@@ -68,7 +68,7 @@ class CatalogSetBack {
             .setColor(EMBED_COLOR)
             .setTitle(`${updated.name} deck back`)
             .setDescription(
-              `Set \`${updated.id}\` deck back to ${parsed.backUrl}. Live games are unchanged; new \`/cards deck new\` uses this back.`
+              `Set \`${updated.id}\` deck back. Live games are unchanged; new \`/cards deck new\` uses this back.`
             )
             .setImage(parsed.backUrl),
         ]);

@@ -153,7 +153,7 @@ function buildPublishPayload({ id, name, allCards, deck, players, createdBy }) {
       cards: cardsCheck.cards,
       createdBy: createdBy == null ? "" : String(createdBy),
       enabled: 1,
-      backUrl: DeckBack.readBackUrl(deck),
+      backUrl: DeckBack.canonicalBackUrl(deck),
     },
   };
 }

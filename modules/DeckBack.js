@@ -2,7 +2,7 @@ const DeckRecipeHelper = require("./DeckRecipeHelper");
 
 const FIELD = "backUrl";
 const ALIAS_FIELDS = ["cardBackUrl", "backImage"];
-const CLEAR_VALUES = new Set(["", "clear", "none", "default"]);
+const CLEAR_VALUES = new Set(["clear", "none", "default"]);
 const DEFAULT_LABEL = "the default deck back";
 const IMAGE_URL_MAX = 2048;
 const INVALID_MESSAGE =
@@ -20,6 +20,7 @@ function readBackUrl(source) {
 function parseBackUrlInput(raw) {
   if (raw == null) return { present: false };
   const trimmed = String(raw).trim();
+  if (!trimmed) return { present: false };
   if (CLEAR_VALUES.has(trimmed.toLowerCase())) {
     return { present: true, backUrl: null, cleared: true };
   }
@@ -29,6 +30,12 @@ function parseBackUrlInput(raw) {
   return { present: true, backUrl: trimmed, cleared: false };
 }
 
+function canonicalBackUrl(source) {
+  const url = readBackUrl(source);
+  if (!url || !DeckRecipeHelper.isEmbedImageUrl(url)) return null;
+  return url;
+}
+
 function applyBackUrl(target, backUrl) {
   if (!target || typeof target !== "object") return;
   for (const key of ALIAS_FIELDS) {
@@ -36,7 +43,8 @@ function applyBackUrl(target, backUrl) {
       delete target[key];
     }
   }
-  target[FIELD] = backUrl || null;
+  const next = backUrl && DeckRecipeHelper.isEmbedImageUrl(backUrl) ? backUrl : null;
+  target[FIELD] = next;
 }
 
 function describeBackUrl(backUrl) {
@@ -50,6 +58,7 @@ module.exports = {
   INVALID_MESSAGE,
   readBackUrl,
   parseBackUrlInput,
+  canonicalBackUrl,
   applyBackUrl,
   describeBackUrl,
 };
