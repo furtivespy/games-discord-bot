@@ -13,7 +13,6 @@ export type ScoreMap = Record<string, string>;
 export type PlayerScoreBlock = HTMLElement & {
   setSaving: (saving: boolean) => void;
   setError: (message: string | null) => void;
-  exitEdit: () => void;
 };
 
 export function visualScoreBody(opts: {
@@ -105,17 +104,6 @@ function fillScoreInputs(block: HTMLElement, players: StatusPlayer[]): void {
   }
 }
 
-function restoreScoreLabels(block: HTMLElement, players: StatusPlayer[]): void {
-  for (const player of players) {
-    const userId = String(player.userId || "").trim();
-    if (!userId) continue;
-    const row = playerRow(block, userId);
-    const scoreSlot = row?.querySelector(".status-player-score");
-    if (!scoreSlot) continue;
-    scoreSlot.textContent = statusPlayerScoreLabel(player);
-  }
-}
-
 export function renderPlayerScoreBlock(
   players: StatusPlayer[],
   options: {
@@ -161,14 +149,6 @@ export function renderPlayerScoreBlock(
     first?.select();
   };
 
-  const leaveEdit = () => {
-    block.classList.remove(SCORE_EDITING_CLASS);
-    edit.textContent = EDIT_SCORES_LABEL;
-    edit.disabled = false;
-    restoreScoreLabels(block, players);
-    setScoreError(block, null);
-  };
-
   edit.addEventListener("click", () => {
     if (edit.disabled) return;
     if (!block.classList.contains(SCORE_EDITING_CLASS)) {
@@ -198,7 +178,6 @@ export function renderPlayerScoreBlock(
     setError(message: string | null) {
       setScoreError(block, message);
     },
-    exitEdit: leaveEdit,
   });
 
   return block as PlayerScoreBlock;

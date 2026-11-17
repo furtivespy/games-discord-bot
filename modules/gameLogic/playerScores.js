@@ -128,7 +128,7 @@ function setPlayerScore(
  */
 function applyPlayerScores(
   gameData,
-  { scores, actor, actorDisplayName: actorName, playerNames, nameForPlayer } = {}
+  { scores, actor, actorDisplayName: actorName, playerNames } = {}
 ) {
   const updates = scores && typeof scores === "object" ? scores : {};
   const players = Array.isArray(gameData?.players) ? gameData.players : [];
@@ -146,11 +146,11 @@ function applyPlayerScores(
     if (newScore && player.score !== newScore) {
       const oldScore = player.score;
       player.score = newScore;
-      const playerName =
-        typeof nameForPlayer === "function"
-          ? nameForPlayer(player, oldScore, newScore)
-          : playerNameFromMap(player, playerNames);
-      changes.push({ playerName, oldScore, newScore });
+      changes.push({
+        playerName: playerNameFromMap(player, playerNames),
+        oldScore,
+        newScore,
+      });
     }
   }
 
@@ -164,18 +164,14 @@ function applyPlayerScores(
       )
       .join("\n");
 
-    try {
-      GameHelper.recordMove(
-        gameData,
-        recordActor(actor),
-        GameDB.ACTION_CATEGORIES.PLAYER,
-        GameDB.ACTION_TYPES.SCORE,
-        historyMessage,
-        { changes }
-      );
-    } catch (error) {
-      console.warn("Failed to record score change action in history:", error);
-    }
+    GameHelper.recordMove(
+      gameData,
+      recordActor(actor),
+      GameDB.ACTION_CATEGORIES.PLAYER,
+      GameDB.ACTION_TYPES.SCORE,
+      historyMessage,
+      { changes }
+    );
   }
 
   return {

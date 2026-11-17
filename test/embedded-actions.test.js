@@ -178,6 +178,20 @@ describe("applyVisualScoreAction", () => {
     );
     expect(game.history.at(-1).action).toEqual({ category: "player", type: "score" });
   });
+
+  test("history uses provided player display names like the scoreall modal", () => {
+    const game = gameWithDeck();
+    game.players[0].score = "1";
+    const applied = applyVisualScoreAction(game, {
+      scores: { "snowflake-user": "21" },
+      actor,
+      playerNames: { "snowflake-user": "WillOnServer" },
+    });
+    expect(applied.ok).toBe(true);
+    expect(game.history.at(-1).summary).toBe(
+      "Will updated player scores:\nWillOnServer's score changed from 1 to 21"
+    );
+  });
 });
 
 describe("runVisualCardAction", () => {
@@ -809,6 +823,44 @@ describe("runVisualCardAction", () => {
     expect(saved.players[0].score).toBe("21");
     expect(saved.players[1].score).toBe("9");
     expect(saved.history.at(-1).action.type).toBe("score");
+  });
+
+  test("score history uses cached guild display names when present", async () => {
+    const game = gameWithDeck();
+    game.players[0].score = "1";
+    const { posted, discordClient } = clientForGame(game);
+    discordClient.guilds = {
+      cache: {
+        get: (guildId) =>
+          guildId === "guild-1"
+            ? {
+                members: {
+                  cache: {
+                    get: (userId) =>
+                      userId === "snowflake-user"
+                        ? { displayName: "WillOnServer" }
+                        : userId === "other-player"
+                          ? { displayName: "RileyOnServer" }
+                          : null,
+                  },
+                },
+              }
+            : null,
+      },
+    };
+    const result = await runVisualScoreAction({
+      scores: { "snowflake-user": "21", "other-player": "9" },
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+    });
+    await drainLockedVisualActions();
+    expect(result.status).toBe(200);
+    expect(posted[0].content).toContain("Player scores updated successfully.");
+    expect(result.body.status.history.at(-1).summary).toBe(
+      "WillOnServer updated player scores:\nWillOnServer's score changed from 1 to 21\nRileyOnServer's score changed from 0 to 9"
+    );
   });
 });
 

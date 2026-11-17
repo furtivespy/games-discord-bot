@@ -67,22 +67,29 @@ function displayNameFromGuildMember(member) {
 
 function parseVisualScoreMap(value) {
   const scores = {};
-  if (Array.isArray(value)) {
-    for (const row of value) {
-      if (!row || typeof row !== "object") continue;
-      const id = String(row.userId || "").trim();
-      if (!id) continue;
-      scores[id] = row.score == null ? "" : String(row.score);
-    }
-    return scores;
-  }
-  if (!value || typeof value !== "object") return scores;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return scores;
   for (const [userId, score] of Object.entries(value)) {
     const id = String(userId || "").trim();
     if (!id) continue;
     scores[id] = score == null ? "" : String(score);
   }
   return scores;
+}
+
+function playerNamesFromGame(gameData, displays = {}) {
+  const names = {};
+  const players = Array.isArray(gameData?.players) ? gameData.players : [];
+  for (const player of players) {
+    const id = String(player?.userId || "");
+    if (!id) continue;
+    const fromDisplay = displays[id]?.name;
+    if (typeof fromDisplay === "string" && fromDisplay.trim()) {
+      names[id] = fromDisplay.trim();
+    } else if (typeof player?.name === "string" && player.name.trim()) {
+      names[id] = player.name.trim();
+    }
+  }
+  return names;
 }
 
 function scoresIdempotencyKey(scores) {
@@ -276,11 +283,12 @@ function applyVisualCardAction(gameData, { action, deckName, count, actor, userI
   return { ok: true, content: result.content };
 }
 
-function applyVisualScoreAction(gameData, { scores, actor } = {}) {
+function applyVisualScoreAction(gameData, { scores, actor, playerNames } = {}) {
   const result = PlayerScores.applyPlayerScores(gameData, {
     scores,
     actor,
     actorDisplayName: actor?.displayName,
+    playerNames: playerNames || playerNamesFromGame(gameData),
   });
   return {
     ok: true,
@@ -699,7 +707,26 @@ async function runVisualScoreActionOnce({
     return errorBody("no_game", 404);
   }
 
-  const applied = applyVisualScoreAction(gameData, { scores, actor });
+  const userIds = Array.isArray(gameData?.players)
+    ? gameData.players.map((player) => String(player?.userId || "")).filter(Boolean)
+    : [];
+  let displays = {};
+  try {
+    displays = await resolvePlayerDisplays({
+      discordClient,
+      guildId,
+      userIds,
+      fetchMissing: false,
+    });
+  } catch {
+    displays = {};
+  }
+
+  const applied = applyVisualScoreAction(gameData, {
+    scores,
+    actor,
+    playerNames: playerNamesFromGame(gameData, displays),
+  });
   if (!applied.ok) {
     return errorBody(applied.error, applied.status, applied.content);
   }

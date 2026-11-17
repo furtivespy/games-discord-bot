@@ -456,6 +456,7 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain(".player-team-group");
     expect(css).toContain(".status-player-score");
     expect(css).toContain(".status-edit-scores");
+    expect(css).not.toMatch(/\.status-edit-scores\s*\{[^}]*text-transform:\s*uppercase/);
     expect(css).toContain(".status-player-score-input");
     expect(css).not.toContain(".status-title");
     expect(css).not.toContain(".status-player-meta");
