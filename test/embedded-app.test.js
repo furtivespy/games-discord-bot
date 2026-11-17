@@ -948,6 +948,128 @@ describe("GET /api/game/snapshot", () => {
       }
     });
   });
+
+  test("empty board snapshot shows the host's latest Discord images through the proxy", async () => {
+    await withStore(async (store) => {
+      store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", {
+        isdeleted: false,
+        name: "No board",
+        players: [
+          {
+            userId: "snowflake-user",
+            hands: { main: [{ id: "hand-1", name: "Copper", url: null }] },
+            playArea: [],
+          },
+        ],
+        gameBoard: [],
+        history: [
+          {
+            timestamp: "2026-11-17T12:00:00.000Z",
+            actor: { userId: "snowflake-user" },
+            action: {
+              category: GameDB.ACTION_CATEGORIES.GAME,
+              type: GameDB.ACTION_TYPES.CREATE,
+            },
+          },
+        ],
+      });
+      const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-host-img-"));
+      fs.writeFileSync(
+        path.join(staticDir, "index.html"),
+        `<!doctype html><html><head></head><body></body></html>`
+      );
+      const mapUrl = "https://cdn.discordapp.com/attachments/1/2/map.png";
+      const refUrl = "https://cdn.discordapp.com/attachments/1/2/ref.jpg";
+      const messageUrls = [];
+      const app = createEmbeddedApp({
+        clientId: "client-123",
+        clientSecret: "server-secret",
+        staticDir,
+        gameStore: store,
+        botToken: "bot-token",
+        fetchImpl: async (url, options = {}) => {
+          const href = String(url);
+          if (href === DISCORD_ME_URL || href === DISCORD_TOKEN_URL) {
+            return mockDiscordFetch({
+              meBody: {
+                id: "snowflake-user",
+                username: "willsullivan",
+                global_name: "Will",
+              },
+            })(url, options);
+          }
+          if (href.includes("/messages")) {
+            messageUrls.push(href);
+            return jsonResponse(200, [
+              {
+                id: "m-host",
+                author: { id: "snowflake-user" },
+                attachments: [
+                  {
+                    id: "a1",
+                    filename: "map.png",
+                    content_type: "image/png",
+                    url: mapUrl,
+                  },
+                  {
+                    id: "a2",
+                    filename: "ref.jpg",
+                    content_type: "image/jpeg",
+                    url: refUrl,
+                  },
+                ],
+              },
+            ]);
+          }
+          if (href.includes("/members/") || href.includes("/channels/")) {
+            return jsonResponse(200, { id: "ok" });
+          }
+          throw new Error(`unexpected fetch ${href}`);
+        },
+      });
+      const { server, url } = await listen(app);
+      try {
+        const snapshot = await fetch(
+          `${url}/api/game/snapshot?guildId=guild-1&channelId=thread-game`,
+          { headers: { Authorization: `Bearer ${SECRET_TOKEN}` } }
+        );
+        expect(snapshot.status).toBe(200);
+        const body = await snapshot.json();
+        const key = deriveImageProxyKey("server-secret");
+        expect(body.gameBoard).toEqual([
+          {
+            id: "host-image:m-host:a1",
+            name: "map",
+            imageUrl: cardImagePath(mapUrl, key),
+          },
+          {
+            id: "host-image:m-host:a2",
+            name: "ref",
+            imageUrl: cardImagePath(refUrl, key),
+          },
+        ]);
+        expect(JSON.stringify(body)).not.toContain('"url"');
+        expect(messageUrls).toEqual([
+          `${DISCORD_API_BASE}/channels/thread-game/messages?limit=50`,
+        ]);
+
+        const version = await fetch(
+          `${url}/api/game/version?guildId=guild-1&channelId=thread-game`,
+          {
+            headers: {
+              Authorization: `Bearer ${SECRET_TOKEN}`,
+              "If-None-Match": snapshot.headers.get("etag"),
+            },
+          }
+        );
+        expect(version.status).toBe(304);
+        expect(messageUrls).toHaveLength(1);
+      } finally {
+        server.close();
+        fs.rmSync(staticDir, { recursive: true, force: true });
+      }
+    });
+  });
 });
 
 describe("GET /api/game/version", () => {

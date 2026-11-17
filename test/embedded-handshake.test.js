@@ -1,6 +1,7 @@
 const { describe, expect, test } = require("bun:test");
 const {
   cardImageRequestUrl,
+  resolveCardImageUrl,
   firstNonEmptyName,
   GAMES_EMPTY_MESSAGE,
   GAMES_SELECT_PLACEHOLDER,
@@ -240,6 +241,14 @@ describe("embedded client handshake URLs", () => {
     ).toBeNull();
     expect(cardImageRequestUrl("", "https:", "/api/card-imagex?u=1")).toBeNull();
     expect(cardImageRequestUrl("", "https:", null)).toBeNull();
+    expect(resolveCardImageUrl("", "https:", "/mock-host-setup.svg", true)).toBe(
+      "/mock-host-setup.svg"
+    );
+    expect(resolveCardImageUrl("", "https:", "/api/evil", true)).toBeNull();
+    expect(
+      resolveCardImageUrl("", "https:", "https://cdn.discordapp.com/a.png", true)
+    ).toBeNull();
+    expect(resolveCardImageUrl("", "https:", "/mock-host-setup.svg", false)).toBeNull();
   });
 
   test("games URL is same-origin inside Discord and carries guild plus mock fixture", () => {
@@ -267,8 +276,10 @@ describe("embedded client handshake URLs", () => {
     expect(isPickerFixture("team-game")).toBe(true);
     expect(isPickerFixture("no-game")).toBe(false);
     expect(isPickerFixture("not-a-player")).toBe(false);
+    expect(isPickerFixture("host-images")).toBe(false);
     expect(isSnapshotFixture("no-game")).toBe(true);
     expect(isSnapshotFixture("not-a-player")).toBe(true);
+    expect(isSnapshotFixture("host-images")).toBe(true);
     expect(isSnapshotFixture("populated")).toBe(true);
     expect(isSnapshotFixture("team-game")).toBe(true);
     expect(isSnapshotFixture("several-games")).toBe(false);

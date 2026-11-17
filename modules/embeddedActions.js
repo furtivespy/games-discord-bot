@@ -13,6 +13,7 @@ const {
   GAME_COLLECTION,
   isMissingGame,
   resolveGetGameData,
+  resolveHostBoardImages,
   resolvePlayerDisplays,
   snapshotFromGameData,
   snapshotVersion,
@@ -361,6 +362,9 @@ async function snapshotFromCurrentGame({
   guildId,
   channelId,
   userId,
+  fetchImpl,
+  botToken,
+  hostImageCache,
 }) {
   const userIds = Array.isArray(gameData?.players)
     ? gameData.players.map((player) => String(player?.userId || "")).filter(Boolean)
@@ -371,12 +375,23 @@ async function snapshotFromCurrentGame({
     userIds,
     fetchMissing: false,
   });
-  return snapshotFromGameData(gameData, {
+  const hostBoardImages = await resolveHostBoardImages(gameData, {
+    fetchImpl,
+    botToken,
+    discordClient,
     channelId,
-    guildId,
-    userId,
-    playerDisplays,
+    hostImageCache,
   });
+  return {
+    body: snapshotFromGameData(gameData, {
+      channelId,
+      guildId,
+      userId,
+      playerDisplays,
+      hostBoardImages,
+    }),
+    hostBoardImages,
+  };
 }
 
 async function runVisualCardAction({
@@ -394,6 +409,9 @@ async function runVisualCardAction({
   requestId,
   idempotency,
   gameChannelLock,
+  fetchImpl,
+  botToken,
+  hostImageCache,
 } = {}) {
   const gid = String(guildId || "").trim();
   const cid = String(channelId || "").trim();
@@ -439,17 +457,22 @@ async function runVisualCardAction({
             releaseHttp.resolve(persisted);
             return persisted;
           }
-          const snapshotBody = await snapshotFromCurrentGame({
+          const snapshot = await snapshotFromCurrentGame({
             gameData: persisted.gameData,
             discordClient,
             guildId: gid,
             channelId: cid,
             userId: uid,
+            fetchImpl,
+            botToken,
+            hostImageCache,
           });
+          const snapshotBody = snapshot.body;
           const version = snapshotVersion(persisted.gameData, {
             channelId: cid,
             guildId: gid,
             userId: uid,
+            hostBoardImages: snapshot.hostBoardImages,
           });
           releaseHttp.resolve({
             status: 200,

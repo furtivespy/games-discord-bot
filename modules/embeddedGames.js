@@ -3,6 +3,12 @@
 const { createHash } = require("crypto");
 const { ChannelType, PermissionFlagsBits } = require("discord.js");
 const GameDB = require("../db/anygame");
+const {
+  gameHostUserId,
+  hostImageMessagesPath,
+  loadHostBoardImages,
+  shouldUseHostBoardImages,
+} = require("./embeddedHostImages");
 const DeckBack = require("./DeckBack");
 
 const GAME_COLLECTION = GameDB.ACTION_CATEGORIES.GAME;
@@ -454,6 +460,7 @@ function snapshotVersion(data, ids = {}) {
       userId: String(opts.userId || ""),
       channelId: String(opts.channelId || ""),
       guildId: String(opts.guildId || ""),
+      hostBoardImages: opts.hostBoardImages,
     });
     return opaqueSnapshotHash(JSON.stringify(visible));
   } catch {
@@ -492,9 +499,15 @@ function statusSummary(data, userId, displays) {
   };
 }
 
+function snapshotBoard(data, hostBoardImages) {
+  const board = copyCards(data?.gameBoard);
+  if (board.length > 0) return board;
+  return copyCards(hostBoardImages);
+}
+
 function snapshotFromGameData(
   data,
-  { channelId, guildId, userId, playerDisplays } = {}
+  { channelId, guildId, userId, playerDisplays, hostBoardImages } = {}
 ) {
   const uid = String(userId || "");
   const displays =
@@ -508,7 +521,7 @@ function snapshotFromGameData(
     guildId: String(guildId || ""),
     hand: copyCards(player?.hands?.main),
     playArea: copyCards(player?.playArea),
-    gameBoard: copyCards(data?.gameBoard),
+    gameBoard: snapshotBoard(data, hostBoardImages),
     otherPlayers: otherPlayersSummary(data, uid, displays),
     decks: deckSummaries(data),
     status: statusSummary(data, uid, displays),
@@ -1003,6 +1016,39 @@ async function requiredDiscordAccessGuard({
   return { ok: true, member };
 }
 
+async function resolveHostBoardImages(
+  data,
+  {
+    fetchImpl,
+    botToken,
+    discordClient,
+    channelId,
+    hostImageCache,
+    wait,
+  } = {}
+) {
+  if (!shouldUseHostBoardImages(data) || !gameHostUserId(data)) return [];
+  const cid = String(channelId || "").trim();
+  const path = hostImageMessagesPath(cid);
+  const token = String(botToken || discordClient?.token || "").trim();
+  if (!path || !token) return [];
+  const fetchFn = fetchImpl || fetch;
+  return loadHostBoardImages({
+    data,
+    listMessages: async () => {
+      const result = await discordBotGet({
+        fetchFn,
+        headers: { Authorization: `Bot ${token}` },
+        path,
+        cache: hostImageCache,
+        wait,
+      });
+      if (result.status !== 200 || !Array.isArray(result.body)) return [];
+      return result.body;
+    },
+  });
+}
+
 async function loadViewerGame({
   getGameData,
   discordClient,
@@ -1042,23 +1088,31 @@ async function loadViewerGame({
     return { status: 403, body: { error: "not_a_player" } };
   }
 
-  const version = snapshotVersion(data, {
-    channelId: cid,
-    guildId: gid,
-    userId: uid,
-  });
-  if (!version) {
-    return { status: 500, body: { error: "snapshot_failed" } };
-  }
-
   return {
     status: 200,
     data,
-    version,
     guildId: gid,
     channelId: cid,
     userId: uid,
   };
+}
+
+async function viewerSnapshotFields(loaded, opts = {}) {
+  const hostBoardImages = await resolveHostBoardImages(loaded.data, {
+    fetchImpl: opts.fetchImpl,
+    botToken: opts.botToken,
+    discordClient: opts.discordClient,
+    channelId: loaded.channelId,
+    hostImageCache: opts.hostImageCache,
+    wait: opts.wait,
+  });
+  const version = snapshotVersion(loaded.data, {
+    channelId: loaded.channelId,
+    guildId: loaded.guildId,
+    userId: loaded.userId,
+    hostBoardImages,
+  });
+  return { hostBoardImages, version };
 }
 
 async function versionGameForUser({ ifNoneMatch, ...opts } = {}) {
@@ -1066,13 +1120,17 @@ async function versionGameForUser({ ifNoneMatch, ...opts } = {}) {
   if (loaded.status !== 200) {
     return { status: loaded.status, body: loaded.body };
   }
-  if (etagMatches(ifNoneMatch, loaded.version)) {
-    return { status: 304, version: loaded.version };
+  const { version } = await viewerSnapshotFields(loaded, opts);
+  if (!version) {
+    return { status: 500, body: { error: "snapshot_failed" } };
+  }
+  if (etagMatches(ifNoneMatch, version)) {
+    return { status: 304, version };
   }
   return {
     status: 200,
-    version: loaded.version,
-    body: { version: loaded.version },
+    version,
+    body: { version },
   };
 }
 
@@ -1081,8 +1139,12 @@ async function snapshotGameForUser({ ifNoneMatch, ...opts } = {}) {
   if (loaded.status !== 200) {
     return { status: loaded.status, body: loaded.body };
   }
-  if (etagMatches(ifNoneMatch, loaded.version)) {
-    return { status: 304, version: loaded.version };
+  const { hostBoardImages, version } = await viewerSnapshotFields(loaded, opts);
+  if (!version) {
+    return { status: 500, body: { error: "snapshot_failed" } };
+  }
+  if (etagMatches(ifNoneMatch, version)) {
+    return { status: 304, version };
   }
 
   const userIds = Array.isArray(loaded.data.players)
@@ -1098,15 +1160,16 @@ async function snapshotGameForUser({ ifNoneMatch, ...opts } = {}) {
 
   return {
     status: 200,
-    version: loaded.version,
+    version,
     body: {
       ...snapshotFromGameData(loaded.data, {
         channelId: loaded.channelId,
         guildId: loaded.guildId,
         userId: loaded.userId,
         playerDisplays,
+        hostBoardImages,
       }),
-      version: loaded.version,
+      version,
     },
   };
 }
@@ -1136,6 +1199,7 @@ module.exports = {
   parseTimestampMs,
   publicHandCount,
   resolveGetGameData,
+  resolveHostBoardImages,
   resolvePlayerDisplays,
   snapshotFromGameData,
   snapshotGameForUser,

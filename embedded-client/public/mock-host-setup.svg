@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 350" role="img" aria-label="Table setup">
+  <rect width="250" height="350" rx="18" fill="#1e3a2f"/>
+  <rect x="14" y="14" width="222" height="322" rx="12" fill="#245c43"/>
+  <rect x="28" y="36" width="194" height="118" rx="10" fill="#d9c48a"/>
+  <rect x="40" y="48" width="80" height="48" rx="6" fill="#7a3b2e"/>
+  <rect x="130" y="48" width="80" height="48" rx="6" fill="#2e4a7a"/>
+  <rect x="40" y="106" width="170" height="32" rx="6" fill="#3d6b4f"/>
+  <circle cx="70" cy="210" r="28" fill="#f2e6c9"/>
+  <circle cx="125" cy="210" r="28" fill="#f2e6c9"/>
+  <circle cx="180" cy="210" r="28" fill="#f2e6c9"/>
+  <rect x="36" y="258" width="178" height="54" rx="8" fill="#163328"/>
+  <text x="125" y="292" text-anchor="middle" fill="#f4e7c3" font-family="Georgia, serif" font-size="18">Setup</text>
+</svg>

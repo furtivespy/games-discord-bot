@@ -32,6 +32,7 @@ const {
   snapshotGameForUser,
   versionGameForUser,
 } = require("./embeddedGames");
+const { HOST_IMAGE_CACHE_TTL_MS } = require("./embeddedHostImages");
 const {
   CARD_IMAGE_PATH,
   createCardImageHandler,
@@ -373,6 +374,9 @@ function createEmbeddedApp({
   const discordUserCache = createDiscordLookupCache({
     ttlMs: DISCORD_USER_CACHE_TTL_MS,
   });
+  const hostImageLookupCache = createDiscordLookupCache({
+    ttlMs: HOST_IMAGE_CACHE_TTL_MS,
+  });
 
   const app = express();
   app.disable("x-powered-by");
@@ -574,6 +578,9 @@ function createEmbeddedApp({
       userId: auth.user.id,
       logger,
       ifNoneMatch: auth.ifNoneMatch,
+      fetchImpl,
+      botToken,
+      hostImageCache: hostImageLookupCache,
     });
     sendSnapshotResult(res, result, req);
   }
@@ -604,6 +611,9 @@ function createEmbeddedApp({
       userId: auth.user.id,
       logger,
       ifNoneMatch: auth.ifNoneMatch,
+      fetchImpl,
+      botToken,
+      hostImageCache: hostImageLookupCache,
     });
     sendVersionedResult(res, result, { ifNoneMatch: auth.ifNoneMatch });
   }
@@ -706,6 +716,9 @@ function createEmbeddedApp({
       logger,
       requestId: parsed.requestId,
       idempotency: actionIdempotency,
+      fetchImpl,
+      botToken,
+      hostImageCache: hostImageLookupCache,
     });
     sendSnapshotResult(res, result, req);
   }
