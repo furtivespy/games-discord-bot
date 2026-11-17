@@ -165,6 +165,13 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("HISTORY_CHANGED_CLASS");
     expect(main).toContain("SNAPSHOT_STALE_MESSAGE");
     expect(main).toContain("pendingSnapshot");
+    expect(main).toContain('kind: "painted"');
+    expect(main).toContain('kind: "deferred"');
+    expect(main).toContain('kind: "unchanged"');
+    expect(main).toContain('kind: "failed"');
+    expect(main).toMatch(
+      /pendingSnapshot = \{ config, payload \};\s*return false;/
+    );
     expect(main).toContain("scheduleHistoryFlashClear");
     const embeddedApp = require("fs").readFileSync(
       require("path").join(__dirname, "..", "modules", "embeddedApp.js"),

@@ -78,7 +78,7 @@ describe("createSnapshotPoller", () => {
       fetchVersion: async () => ({ kind: "changed", version: versions[0] }),
       refresh: async () => {
         refreshes.push("go");
-        return true;
+        return { kind: "painted" };
       },
       isHidden: () => hidden,
       isBlocked: () => blocked,
@@ -112,7 +112,7 @@ describe("createSnapshotPoller", () => {
       fetchVersion: async () => ({ kind: "changed", version: "v2" }),
       refresh: async () => {
         refreshes.push("go");
-        return true;
+        return { kind: "painted" };
       },
       isHidden: () => false,
       isBlocked: () => blocked,
@@ -137,7 +137,7 @@ describe("createSnapshotPoller", () => {
         }),
       refresh: async () => {
         refreshes.push("go");
-        return true;
+        return { kind: "painted" };
       },
       isHidden: () => false,
       isBlocked: () => false,
@@ -151,6 +151,78 @@ describe("createSnapshotPoller", () => {
     expect(refreshes).toEqual([]);
   });
 
+  test("deferred apply does not stamp knownVersion, so a later identical version still refreshes", async () => {
+    let paint = false;
+    const refreshes = [];
+    const poller = createSnapshotPoller({
+      fetchVersion: async () => ({ kind: "changed", version: "v2" }),
+      refresh: async () => {
+        refreshes.push("go");
+        return { kind: paint ? "painted" : "deferred" };
+      },
+      isHidden: () => false,
+      isBlocked: () => false,
+      ...idleTimers(),
+    });
+    poller.start("v1");
+    await poller.pollNow();
+    expect(refreshes).toEqual(["go"]);
+    expect(poller.peekVersion()).toBe("v1");
+    await poller.pollNow();
+    expect(refreshes).toEqual(["go", "go"]);
+    expect(poller.peekVersion()).toBe("v1");
+    paint = true;
+    await poller.pollNow();
+    expect(refreshes).toEqual(["go", "go", "go"]);
+    expect(poller.peekVersion()).toBe("v2");
+    poller.stop();
+  });
+
+  test("deferred apply does not back off", async () => {
+    const delays = [];
+    const poller = createSnapshotPoller({
+      fetchVersion: async () => ({ kind: "changed", version: "v2" }),
+      refresh: async () => ({ kind: "deferred" }),
+      isHidden: () => false,
+      isBlocked: () => false,
+      setTimeoutFn: (_fn, ms) => {
+        delays.push(ms);
+        return 0;
+      },
+      clearTimeoutFn: () => {},
+    });
+    poller.start("v1");
+    expect(delays[0]).toBe(SNAPSHOT_POLL_INTERVAL_MS);
+    await poller.pollNow();
+    poller.stop();
+    expect(delays.at(-1)).toBe(SNAPSHOT_POLL_INTERVAL_MS);
+    expect(poller.peekVersion()).toBe("v1");
+  });
+
+  test("a 304 refresh does not stamp knownVersion, so a later identical version still refreshes", async () => {
+    let paint = false;
+    const refreshes = [];
+    const poller = createSnapshotPoller({
+      fetchVersion: async () => ({ kind: "changed", version: "v2" }),
+      refresh: async () => {
+        refreshes.push("go");
+        return { kind: paint ? "painted" : "unchanged" };
+      },
+      isHidden: () => false,
+      isBlocked: () => false,
+      ...idleTimers(),
+    });
+    poller.start("v1");
+    await poller.pollNow();
+    expect(refreshes).toEqual(["go"]);
+    expect(poller.peekVersion()).toBe("v1");
+    paint = true;
+    await poller.pollNow();
+    expect(refreshes).toEqual(["go", "go"]);
+    expect(poller.peekVersion()).toBe("v2");
+    poller.stop();
+  });
+
   test("a failed silent refresh does not mark the version current and retries", async () => {
     let refreshOk = false;
     const refreshes = [];
@@ -158,7 +230,7 @@ describe("createSnapshotPoller", () => {
       fetchVersion: async () => ({ kind: "changed", version: "v2" }),
       refresh: async () => {
         refreshes.push("go");
-        return refreshOk;
+        return { kind: refreshOk ? "painted" : "failed" };
       },
       isHidden: () => false,
       isBlocked: () => false,
@@ -182,7 +254,7 @@ describe("createSnapshotPoller", () => {
       fetchVersion: async () => results.shift(),
       refresh: async () => {
         refreshes.push("go");
-        return true;
+        return { kind: "painted" };
       },
       isHidden: () => false,
       isBlocked: () => false,
@@ -205,7 +277,7 @@ describe("createSnapshotPoller", () => {
       fetchVersion: async () => ({ kind: "unauthorized" }),
       refresh: async () => {
         refreshes.push("go");
-        return true;
+        return { kind: "painted" };
       },
       isHidden: () => false,
       isBlocked: () => false,
@@ -225,7 +297,7 @@ describe("createSnapshotPoller", () => {
     const delays = [];
     const poller = createSnapshotPoller({
       fetchVersion: async () => ({ kind: "rate_limited", retryAfterMs: 8000 }),
-      refresh: async () => true,
+      refresh: async () => ({ kind: "painted" }),
       isHidden: () => false,
       isBlocked: () => false,
       setTimeoutFn: (fn, ms) => {

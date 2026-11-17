@@ -34,6 +34,7 @@ import {
   newHistoryKeys,
   restoreScrollTop,
   retryAfterMsFromHeader,
+  type SnapshotRefreshResult,
   type VersionPollResult,
 } from "./snapshotPoll";
 import {
@@ -348,11 +349,11 @@ async function fetchSnapshotVersion(): Promise<VersionPollResult> {
   return { kind: "changed", version };
 }
 
-async function refreshSnapshotFromPoll(): Promise<boolean> {
+async function refreshSnapshotFromPoll(): Promise<SnapshotRefreshResult> {
   const session = activeSession;
-  if (!session) return false;
+  if (!session) return { kind: "failed" };
   const channelId = liveSelectedChannelId(session.config.channelId);
-  if (!channelId) return false;
+  if (!channelId) return { kind: "failed" };
   return loadSnapshot(
     session.config,
     session.accessToken,
@@ -1133,7 +1134,7 @@ async function loadSnapshot(
   accessToken: string,
   ids: { channelId: string; guildId: string },
   options: { silent?: boolean } = {}
-): Promise<boolean> {
+): Promise<SnapshotRefreshResult> {
   const silent = Boolean(options.silent);
   const outcome = await snapshotLoader.load(
     ids.channelId,
@@ -1179,7 +1180,7 @@ async function loadSnapshot(
     outcome.status === "stale" ||
     outcome.status === "cleared"
   ) {
-    return false;
+    return { kind: "failed" };
   }
 
   if (outcome.status === "failed") {
@@ -1187,23 +1188,23 @@ async function loadSnapshot(
       setTableVisible(false);
       setSnapshotStatus(snapshotErrorMessage(undefined, 0));
     }
-    return false;
+    return { kind: "failed" };
   }
 
   if (outcome.result.status === 304) {
-    return true;
+    return { kind: "unchanged" };
   }
 
   const payload = outcome.result.payload as GameSnapshot;
   if (liveSelectedChannelId(ids.channelId) !== ids.channelId) {
-    return false;
+    return { kind: "failed" };
   }
   if (
     typeof payload.channelId === "string" &&
     payload.channelId.trim() &&
     payload.channelId !== ids.channelId
   ) {
-    return false;
+    return { kind: "failed" };
   }
 
   if (outcome.status === "error") {
@@ -1214,17 +1215,18 @@ async function loadSnapshot(
       setSnapshotStatus(snapshotErrorMessage(payload.error, outcome.result.status));
       stopSnapshotPolling();
     }
-    return false;
+    return { kind: "failed" };
   }
 
-  applySnapshot(config, payload);
-  return true;
+  return applySnapshot(config, payload)
+    ? { kind: "painted" }
+    : { kind: "deferred" };
 }
 
-function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot) {
+function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot): boolean {
   if (isSnapshotPollBlocked(document)) {
     pendingSnapshot = { config, payload };
-    return;
+    return false;
   }
   pendingSnapshot = null;
   setTableStale(false);
@@ -1269,6 +1271,7 @@ function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot) {
   scheduleHistoryFlashClear(document.getElementById("game-status"));
   setTableVisible(true);
   startSnapshotPolling(appliedVersion);
+  return true;
 }
 
 function createSdk(config: EmbeddedConfig) {

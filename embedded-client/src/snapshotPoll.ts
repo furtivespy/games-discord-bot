@@ -95,11 +95,23 @@ export function isSnapshotPollBlocked(doc: Document | null | undefined): boolean
   return false;
 }
 
+/**
+ * Poller refresh outcome. `painted` is the only kind that stamps knownVersion.
+ * `deferred` means apply parked a pending snapshot (drag/dialog).
+ * `unchanged` is a 304: the last paint is still current.
+ * `failed` retries with backoff.
+ */
+export type SnapshotRefreshResult =
+  | { kind: "painted" }
+  | { kind: "deferred" }
+  | { kind: "unchanged" }
+  | { kind: "failed" };
+
 export type SnapshotPollerOptions = {
   intervalMs?: number;
   maxBackoffMs?: number;
   fetchVersion: () => Promise<VersionPollResult>;
-  refresh: () => Promise<boolean>;
+  refresh: () => Promise<SnapshotRefreshResult>;
   isHidden: () => boolean;
   isBlocked: () => boolean;
   onUnauthorized?: () => void;
@@ -166,9 +178,12 @@ export function createSnapshotPoller(opts: SnapshotPollerOptions) {
       if (opts.isHidden() || opts.isBlocked()) return;
       const applied = await opts.refresh();
       if (stopped || gen !== generation) return;
-      if (applied) {
+      // Only a paint stamps knownVersion. Deferred (parked pending) and 304
+      // must leave it on the last painted snapshot so this version can still
+      // refresh later.
+      if (applied.kind === "painted") {
         knownVersion = result.version;
-      } else {
+      } else if (applied.kind === "failed") {
         noteError();
       }
     } catch {
