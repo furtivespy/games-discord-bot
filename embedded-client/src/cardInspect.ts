@@ -236,6 +236,87 @@ function inspectOverlayOpen(): boolean {
   return isInspectOpen(dialogEl()) && inspectItems.length > 0;
 }
 
+export type InspectBox = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+export function inspectContainedImageRect(
+  box: InspectBox | null | undefined,
+  naturalWidth: number,
+  naturalHeight: number
+): InspectBox | null {
+  const boxW = Number(box?.width);
+  const boxH = Number(box?.height);
+  const natW = Number(naturalWidth);
+  const natH = Number(naturalHeight);
+  const left = Number(box?.left);
+  const top = Number(box?.top);
+  if (
+    !(boxW > 0 && boxH > 0 && natW > 0 && natH > 0 && Number.isFinite(left) && Number.isFinite(top))
+  ) {
+    return null;
+  }
+  const scale = Math.min(boxW / natW, boxH / natH);
+  const width = natW * scale;
+  const height = natH * scale;
+  const paintedLeft = left + (boxW - width) / 2;
+  const paintedTop = top + (boxH - height) / 2;
+  if (![paintedLeft, paintedTop, width, height].every(Number.isFinite)) return null;
+  return { left: paintedLeft, top: paintedTop, width, height };
+}
+
+function inspectArtPaintedRect(art: {
+  naturalWidth?: number;
+  naturalHeight?: number;
+  getBoundingClientRect?: () => { left: number; top: number; width: number; height: number };
+} | null | undefined): InspectBox | null {
+  if (!art || typeof art.getBoundingClientRect !== "function") return null;
+  try {
+    const box = art.getBoundingClientRect();
+    return inspectContainedImageRect(
+      { left: box.left, top: box.top, width: box.width, height: box.height },
+      Number(art.naturalWidth),
+      Number(art.naturalHeight)
+    );
+  } catch {
+    return null;
+  }
+}
+
+function pointInInspectRect(x: number, y: number, rect: InspectBox | null | undefined): boolean {
+  if (!rect) return false;
+  if (![x, y, rect.left, rect.top, rect.width, rect.height].every(Number.isFinite)) return false;
+  return x >= rect.left && x <= rect.left + rect.width && y >= rect.top && y <= rect.top + rect.height;
+}
+
+export function isInspectOutsideClick(
+  event: {
+    target?: EventTarget | null;
+    clientX?: number;
+    clientY?: number;
+  } | null | undefined,
+  dialog: { classList?: { contains?: (name: string) => boolean } } | null | undefined,
+  art?: {
+    naturalWidth?: number;
+    naturalHeight?: number;
+    getBoundingClientRect?: () => { left: number; top: number; width: number; height: number };
+  } | null
+): boolean {
+  if (!event || !dialog) return false;
+  if (event.target === dialog) return true;
+  if (!dialog.classList?.contains?.(INSPECT_PHOTO_CLASS)) return false;
+  if (!art || event.target !== art) return false;
+  const painted = inspectArtPaintedRect(art);
+  if (!painted) return false;
+  const x = Number(event.clientX);
+  const y = Number(event.clientY);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  return !pointInInspectRect(x, y, painted);
+}
+
 function syncInspectNav() {
   const nav = inspectNavState(inspectItems.length, inspectIndex);
   const prev = document.getElementById(PREV_ID);
@@ -257,7 +338,9 @@ export function enableCardInspectDialog() {
   inspectBoundDocument = document;
   dialog.addEventListener("click", (event) => {
     const target = event.target;
-    if (target === dialog) {
+    const art = document.getElementById(ART_ID);
+    const inspectArt = art instanceof HTMLImageElement ? art : null;
+    if (isInspectOutsideClick(event, dialog, inspectArt)) {
       closeCardInspect();
       return;
     }

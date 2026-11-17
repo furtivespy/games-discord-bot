@@ -70,9 +70,11 @@ const {
   isInspectTypingTarget,
   inspectNavIndex,
   inspectNavState,
+  inspectContainedImageRect,
   inspectSequenceIndex,
   inspectView,
   isHostThreadImage,
+  isInspectOutsideClick,
   resolveInspectSession,
 } = require("../embedded-client/src/cardInspect.ts");
 const {
@@ -1064,6 +1066,89 @@ describe("card inspect modal content", () => {
     );
     expect(html).toContain('class="card-inspect-close-form"');
     expect(html).not.toMatch(/class="card-inspect-close"[^>]*>\s*Close\s*</);
+  });
+});
+
+describe("inspect photo letterbox click-outside", () => {
+  const photoBox = { left: 50, top: 40, width: 200, height: 200 };
+
+  test("object-fit contain paints a landscape image as a centered strip", () => {
+    expect(inspectContainedImageRect(photoBox, 400, 100)).toEqual({
+      left: 50,
+      top: 115,
+      width: 200,
+      height: 50,
+    });
+  });
+
+  test("object-fit contain paints a portrait image as a centered column", () => {
+    expect(inspectContainedImageRect(photoBox, 100, 400)).toEqual({
+      left: 125,
+      top: 40,
+      width: 50,
+      height: 200,
+    });
+  });
+
+  test("a matching aspect ratio fills the box", () => {
+    expect(inspectContainedImageRect(photoBox, 100, 100)).toEqual(photoBox);
+  });
+
+  test("unloaded or empty natural size has no painted rect", () => {
+    expect(inspectContainedImageRect(photoBox, 0, 100)).toBeNull();
+    expect(inspectContainedImageRect(photoBox, 100, 0)).toBeNull();
+    expect(inspectContainedImageRect({ left: 0, top: 0, width: 0, height: 200 }, 100, 100)).toBeNull();
+    expect(inspectContainedImageRect(null, 100, 100)).toBeNull();
+  });
+
+  test("dialog chrome is outside; painted pixels are not; letterbox is", () => {
+    const dialog = {
+      classList: { contains: (name) => name === INSPECT_PHOTO_CLASS },
+    };
+    const art = {
+      naturalWidth: 400,
+      naturalHeight: 100,
+      getBoundingClientRect: () => photoBox,
+    };
+    const closeBtn = { id: "close" };
+    expect(isInspectOutsideClick({ target: dialog }, dialog, art)).toBe(true);
+    expect(isInspectOutsideClick({ target: closeBtn }, dialog, art)).toBe(false);
+    expect(isInspectOutsideClick({ target: art, clientX: 150, clientY: 140 }, dialog, art)).toBe(
+      false
+    );
+    expect(isInspectOutsideClick({ target: art, clientX: 150, clientY: 50 }, dialog, art)).toBe(
+      true
+    );
+    expect(isInspectOutsideClick({ target: art, clientX: 150, clientY: 185 }, dialog, art)).toBe(
+      true
+    );
+  });
+
+  test("letterbox hits do not close card inspect or an unloaded photo", () => {
+    const cardDialog = { classList: { contains: () => false } };
+    const photoDialog = {
+      classList: { contains: (name) => name === INSPECT_PHOTO_CLASS },
+    };
+    const art = {
+      naturalWidth: 400,
+      naturalHeight: 100,
+      getBoundingClientRect: () => photoBox,
+    };
+    const unloaded = {
+      naturalWidth: 0,
+      naturalHeight: 0,
+      getBoundingClientRect: () => photoBox,
+    };
+    expect(isInspectOutsideClick({ target: art, clientX: 150, clientY: 50 }, cardDialog, art)).toBe(
+      false
+    );
+    expect(
+      isInspectOutsideClick({ target: unloaded, clientX: 150, clientY: 50 }, photoDialog, unloaded)
+    ).toBe(false);
+    expect(isInspectOutsideClick({ target: art, clientX: 150, clientY: 50 }, photoDialog, null)).toBe(
+      false
+    );
+    expect(isInspectOutsideClick(null, photoDialog, art)).toBe(false);
   });
 });
 
