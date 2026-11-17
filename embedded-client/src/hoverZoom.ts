@@ -26,11 +26,6 @@ function boxHeight(box: HoverBox): number {
   return box.bottom - box.top;
 }
 
-function overflowClips(value: string | null | undefined): boolean {
-  const v = String(value || "").trim();
-  return v === "hidden" || v === "auto" || v === "scroll" || v === "clip" || v === "overlay";
-}
-
 /** Round away from zero so a fractional overflow still stays inside the clip. */
 export function pixelShift(value: number): number {
   if (!Number.isFinite(value) || Math.abs(value) < 0.01) return 0;
@@ -127,29 +122,27 @@ function viewportBox(view: Window): HoverBox | null {
   return { left: 0, top: 0, right: width, bottom: height };
 }
 
+function queryClip(tile: HTMLElement, selector: string): HTMLElement | null {
+  const found = tile.closest?.(selector) as HTMLElement | null | undefined;
+  if (found && typeof found.getBoundingClientRect === "function") return found;
+  return null;
+}
+
+/**
+ * Board/play-area cards clip to `#table-main` inside `#table`. Hand cards sit
+ * outside `#table-main`, so they clip to `#table` only.
+ */
 export function clipBoxForTile(tile: HTMLElement): HoverBox | null {
   const view = tile.ownerDocument?.defaultView;
   if (!view) return null;
   let clip = viewportBox(view);
-  let node: HTMLElement | null = tile.parentElement;
-  while (node) {
-    let overflowX = "";
-    let overflowY = "";
-    if (view.getComputedStyle) {
-      try {
-        const style = view.getComputedStyle(node);
-        overflowX = style.overflowX;
-        overflowY = style.overflowY;
-      } catch {
-        break;
-      }
-    }
-    if (overflowClips(overflowX) || overflowClips(overflowY)) {
-      const next = clip ? intersectBoxes(clip, clientClipRect(node)) : clientClipRect(node);
-      if (!next) return null;
-      clip = next;
-    }
-    node = node.parentElement;
+  const table = queryClip(tile, "#table");
+  const main = queryClip(tile, "#table-main");
+  for (const node of [table, main]) {
+    if (!node) continue;
+    const next = clip ? intersectBoxes(clip, clientClipRect(node)) : clientClipRect(node);
+    if (!next) return null;
+    clip = next;
   }
   return clip;
 }
@@ -199,7 +192,7 @@ function isDragging(tile: HTMLElement): boolean {
 }
 
 function syncHoverShift(tile: HTMLElement) {
-  if (tile.isConnected === false || isDragging(tile)) {
+  if (isDragging(tile)) {
     clearHoverShift(tile);
     return;
   }
@@ -207,7 +200,7 @@ function syncHoverShift(tile: HTMLElement) {
 }
 
 /**
- * On hover, shift the zoomed face so it stays inside the board/viewport clip
+ * On hover, shift the zoomed face so it stays inside the board window
  * (`#table` / `#table-main`). Center cards get a zero shift.
  */
 export function enableHoverZoomClamp(tile: HTMLElement) {
@@ -218,6 +211,11 @@ export function enableHoverZoomClamp(tile: HTMLElement) {
   let listening = false;
 
   function apply() {
+    if (tile.isConnected === false) {
+      stopLayoutListeners();
+      clearHoverShift(tile);
+      return;
+    }
     syncHoverShift(tile);
   }
 
@@ -225,7 +223,7 @@ export function enableHoverZoomClamp(tile: HTMLElement) {
     if (!listening) return;
     listening = false;
     view?.removeEventListener("resize", apply);
-    const scrollParent = tile.closest?.("#table-main");
+    const scrollParent = queryClip(tile, "#table-main");
     scrollParent?.removeEventListener("scroll", apply);
   }
 
@@ -233,8 +231,13 @@ export function enableHoverZoomClamp(tile: HTMLElement) {
     if (listening) return;
     listening = true;
     view?.addEventListener("resize", apply);
-    const scrollParent = tile.closest?.("#table-main");
+    const scrollParent = queryClip(tile, "#table-main");
     scrollParent?.addEventListener("scroll", apply, { passive: true });
+  }
+
+  function afterPointerRelease() {
+    // Drag listens on document; this runs after that handler removes `.dragging`.
+    queueMicrotask(apply);
   }
 
   tile.addEventListener("pointerenter", () => {
@@ -245,8 +248,6 @@ export function enableHoverZoomClamp(tile: HTMLElement) {
     stopLayoutListeners();
     clearHoverShift(tile);
   });
-  tile.addEventListener("pointerup", () => {
-    if (!listening) return;
-    apply();
-  });
+  tile.addEventListener("pointerup", afterPointerRelease);
+  tile.addEventListener("pointercancel", afterPointerRelease);
 }

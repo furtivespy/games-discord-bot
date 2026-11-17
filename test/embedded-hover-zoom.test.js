@@ -152,7 +152,12 @@ describe("hover zoom clamp math", () => {
   });
 });
 
-function createHoverTile({ rest, clip, scale = String(CARD_HOVER_SCALE) }) {
+function createHoverTile({
+  rest,
+  clip,
+  scale = String(CARD_HOVER_SCALE),
+  inTableMain = true,
+}) {
   const properties = {};
   const listeners = new Map();
   const classSet = new Set();
@@ -180,7 +185,9 @@ function createHoverTile({ rest, clip, scale = String(CARD_HOVER_SCALE) }) {
       parentListeners.set(type, list);
     },
     closest(selector) {
-      return selector === "#table-main" ? parent : null;
+      if (selector === "#table") return parent;
+      if (selector === "#table-main") return inTableMain ? parent : null;
+      return null;
     },
   };
   const view = {
@@ -212,6 +219,10 @@ function createHoverTile({ rest, clip, scale = String(CARD_HOVER_SCALE) }) {
     removeEventListener(type, fn) {
       const list = (viewListeners.get(type) || []).filter((handler) => handler !== fn);
       viewListeners.set(type, list);
+    },
+    dispatchEvent(event) {
+      for (const handler of viewListeners.get(event.type) || []) handler(event);
+      return true;
     },
   };
   const tile = {
@@ -274,11 +285,21 @@ describe("hover zoom clamp on a tile", () => {
     expect(tile.properties[HOVER_SHIFT_X_VAR]).toBeUndefined();
   });
 
-  test("clipBoxForTile intersects overflow ancestors with the viewport", () => {
+  test("clipBoxForTile intersects #table / #table-main with the viewport", () => {
     const clip = { left: 40, top: 30, right: 640, bottom: 430 };
     const tile = createHoverTile({
       rest: restBox({ left: 80, top: 80 }),
       clip,
+    });
+    expect(clipBoxForTile(tile)).toEqual(clip);
+  });
+
+  test("hand tiles clip to #table when they are outside #table-main", () => {
+    const clip = { left: 10, top: 20, right: 500, bottom: 400 };
+    const tile = createHoverTile({
+      rest: restBox({ left: 80, top: 80 }),
+      clip,
+      inTableMain: false,
     });
     expect(clipBoxForTile(tile)).toEqual(clip);
   });
@@ -316,7 +337,7 @@ describe("hover zoom clamp on a tile", () => {
     expect(tile.style.getPropertyValue(HOVER_SHIFT_Y_VAR)).toBe("");
   });
 
-  test("dragging clears a pending shift so the face stays on the tile", () => {
+  test("after drag ends while hovered, the face is re-clamped", async () => {
     const clip = { left: 0, top: 0, right: 800, bottom: 600 };
     const tile = createHoverTile({
       rest: restBox({ left: 6, top: 4 }),
@@ -327,6 +348,41 @@ describe("hover zoom clamp on a tile", () => {
     expect(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR)).not.toBe("");
     tile.classList.add("dragging");
     tile.dispatchEvent({ type: "pointerup" });
+    tile.classList.remove("dragging");
+    await Promise.resolve();
+    expect(Number.parseFloat(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR))).toBeGreaterThan(
+      0
+    );
+  });
+
+  test("pointerup still dragging leaves the shift cleared", async () => {
+    const clip = { left: 0, top: 0, right: 800, bottom: 600 };
+    const tile = createHoverTile({
+      rest: restBox({ left: 6, top: 4 }),
+      clip,
+    });
+    enableHoverZoomClamp(tile);
+    tile.dispatchEvent({ type: "pointerenter" });
+    tile.classList.add("dragging");
+    tile.dispatchEvent({ type: "pointerup" });
+    await Promise.resolve();
+    expect(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR)).toBe("");
+  });
+
+  test("a disconnected hovered tile drops layout listeners", async () => {
+    const clip = { left: 0, top: 0, right: 800, bottom: 600 };
+    const tile = createHoverTile({
+      rest: restBox({ left: 6, top: 4 }),
+      clip,
+    });
+    enableHoverZoomClamp(tile);
+    tile.dispatchEvent({ type: "pointerenter" });
+    expect(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR)).not.toBe("");
+    tile.isConnected = false;
+    tile.ownerDocument.defaultView.dispatchEvent({ type: "resize" });
+    expect(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR)).toBe("");
+    tile.isConnected = true;
+    tile.ownerDocument.defaultView.dispatchEvent({ type: "resize" });
     expect(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR)).toBe("");
   });
 });
