@@ -49,13 +49,12 @@ const {
 } = require("../embedded-client/src/drag.ts");
 const {
   HOST_IMAGE_ID_PREFIX,
-  INSPECT_NEXT_LABEL,
   INSPECT_PHOTO_CLASS,
   INSPECT_PHOTO_LABEL,
-  INSPECT_PREV_LABEL,
   inspectCardCaption,
   inspectCardTitle,
   inspectKeyDirection,
+  inspectKeyShouldIgnoreTarget,
   inspectNavDirectionFromDataset,
   inspectNavIndex,
   inspectNavState,
@@ -145,7 +144,9 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("onInspect");
     expect(main).toContain("openCardInspect");
     expect(main).toContain("InspectSequenceItem");
-    expect(main).toContain("openCardInspect(card, imageSrc, tile, sequence)");
+    expect(main).toContain(
+      "openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined)"
+    );
     expect(main).toContain("enableCardInspectDialog");
     expect(main).toContain("closeCardInspect");
     expect(main).toContain("snapshotLoader");
@@ -1046,15 +1047,23 @@ describe("card inspect sequence navigation", () => {
     expect(inspectKeyDirection({ key: "ArrowRight", ctrlKey: true })).toBeNull();
     expect(inspectKeyDirection({ key: "ArrowRight", metaKey: true })).toBeNull();
     expect(inspectKeyDirection({ key: "ArrowLeft", shiftKey: true })).toBeNull();
+    expect(inspectKeyShouldIgnoreTarget({ tagName: "INPUT" })).toBe(true);
+    expect(inspectKeyShouldIgnoreTarget({ tagName: "textarea" })).toBe(true);
+    expect(inspectKeyShouldIgnoreTarget({ tagName: "SELECT" })).toBe(true);
+    expect(inspectKeyShouldIgnoreTarget({ tagName: "BUTTON", isContentEditable: true })).toBe(
+      true
+    );
+    expect(inspectKeyShouldIgnoreTarget({ tagName: "BUTTON" })).toBe(false);
+    expect(inspectKeyShouldIgnoreTarget(null)).toBe(false);
     expect(inspectNavDirectionFromDataset("prev")).toBe("prev");
     expect(inspectNavDirectionFromDataset("next")).toBe("next");
     expect(inspectNavDirectionFromDataset("close")).toBeNull();
   });
 
   test("opens a zone sequence from the clicked tile and stays in that zone", () => {
-    expect(inspectSequenceIndex(sequence, silver, tiles[1])).toBe(1);
-    expect(inspectSequenceIndex(sequence, gold, { id: "other" })).toBe(2);
-    expect(inspectSequenceIndex(sequence, { name: "nope" }, { id: "missing" })).toBe(-1);
+    expect(inspectSequenceIndex(sequence, tiles[1])).toBe(1);
+    expect(inspectSequenceIndex(sequence, { id: "other" })).toBe(-1);
+    expect(inspectSequenceIndex(sequence, { id: "missing" })).toBe(-1);
     const middle = resolveInspectSession(silver, "/silver.png", tiles[1], sequence);
     expect(middle.index).toBe(1);
     expect(middle.nav).toEqual({ index: 1, hasPrev: true, hasNext: true });
@@ -1083,8 +1092,6 @@ describe("card inspect sequence navigation", () => {
   });
 
   test("overlay markup hides nav buttons until a neighbor exists", () => {
-    expect(INSPECT_PREV_LABEL).toBe("Previous card");
-    expect(INSPECT_NEXT_LABEL).toBe("Next card");
     const inspectSrc = require("fs").readFileSync(
       require("path").join(__dirname, "..", "embedded-client", "src", "cardInspect.ts"),
       "utf8"
@@ -1116,8 +1123,10 @@ describe("card inspect sequence navigation", () => {
     expect(css).toContain(".card-inspect-nav[hidden]");
     expect(css).toContain("#card-inspect-prev");
     expect(css).toContain("#card-inspect-next");
-    expect(css).toContain("calc(-100% - 0.7rem)");
-    expect(css).toContain(".card-inspect-dialog.is-photo #card-inspect-prev");
+    expect(css).toMatch(/#card-inspect-prev\s*\{[^}]*left:\s*0\.7rem/);
+    expect(css).toMatch(/#card-inspect-next\s*\{[^}]*right:\s*0\.7rem/);
+    expect(css).not.toContain("calc(-100% - 0.7rem)");
+    expect(css).not.toContain(".card-inspect-dialog.is-photo #card-inspect-prev");
     const main = require("fs").readFileSync(
       require("path").join(__dirname, "..", "embedded-client", "src", "main.ts"),
       "utf8"
@@ -1126,12 +1135,19 @@ describe("card inspect sequence navigation", () => {
       main.indexOf("function renderCards"),
       main.indexOf("function appendPlayerChip")
     );
-    expect(renderCards).toContain("const sequence: InspectSequenceItem[] = []");
-    expect(renderCards).toContain("sequence.push({ card, imageSrc, tile })");
-    expect(renderCards).toContain("openCardInspect(card, imageSrc, tile, sequence)");
+    expect(renderCards).toContain("enableInspectNav = false");
+    expect(renderCards).toContain("if (enableInspectNav) sequence.push({ card, imageSrc, tile })");
+    expect(renderCards).toContain(
+      "openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined)"
+    );
     expect(main).toContain('renderCards(config, "board-cards", payload.gameBoard, cardPositions)');
-    expect(main).toContain('renderCards(config, "play-area-cards", payload.playArea, cardPositions)');
-    expect(main).toContain('renderCards(config, "hand-cards", payload.hand, cardPositions)');
+    expect(main).not.toContain(
+      'renderCards(config, "board-cards", payload.gameBoard, cardPositions, true)'
+    );
+    expect(main).toContain(
+      'renderCards(config, "play-area-cards", payload.playArea, cardPositions, true)'
+    );
+    expect(main).toContain('renderCards(config, "hand-cards", payload.hand, cardPositions, true)');
   });
 });
 

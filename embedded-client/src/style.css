@@ -852,21 +852,13 @@ body {
 }
 
 #card-inspect-prev {
-  left: 0;
-  transform: translate(calc(-100% - 0.7rem), -50%);
+  left: 0.7rem;
+  transform: translateY(-50%);
 }
 
 #card-inspect-next {
-  right: 0;
-  transform: translate(calc(100% + 0.7rem), -50%);
-}
-
-.card-inspect-dialog.is-photo #card-inspect-prev {
-  transform: translate(0.7rem, -50%);
-}
-
-.card-inspect-dialog.is-photo #card-inspect-next {
-  transform: translate(calc(-100% - 0.7rem), -50%);
+  right: 0.7rem;
+  transform: translateY(-50%);
 }
 
 .card-inspect-nav svg {

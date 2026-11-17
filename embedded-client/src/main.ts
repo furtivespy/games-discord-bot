@@ -859,7 +859,8 @@ function renderCards(
   config: EmbeddedConfig,
   containerId: string,
   cards: SnapshotCard[] | undefined,
-  positions: Map<string, CardOffset>
+  positions: Map<string, CardOffset>,
+  enableInspectNav = false
 ) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -879,11 +880,12 @@ function renderCards(
     const imageSrc = mappedImageSrc(config, card.imageUrl);
     tile.append(renderCardFace(config, card));
     enableHoverZoomClamp(tile);
-    sequence.push({ card, imageSrc, tile });
+    if (enableInspectNav) sequence.push({ card, imageSrc, tile });
     if (cardId) {
       // No drop targets yet: enableCardDrag snaps back unless a later hook consumes the drop.
       enableCardDrag(tile, cardId, positions, {
-        onInspect: () => openCardInspect(card, imageSrc, tile, sequence),
+        onInspect: () =>
+          openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined),
       });
     }
     container.append(tile);
@@ -1274,8 +1276,8 @@ function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot): boolean {
   renderOtherPlayers(config, payload.otherPlayers, payload.status?.teams);
   renderDecks(config, payload.decks);
   renderCards(config, "board-cards", payload.gameBoard, cardPositions);
-  renderCards(config, "play-area-cards", payload.playArea, cardPositions);
-  renderCards(config, "hand-cards", payload.hand, cardPositions);
+  renderCards(config, "play-area-cards", payload.playArea, cardPositions, true);
+  renderCards(config, "hand-cards", payload.hand, cardPositions, true);
   restoreScrollTop(document.getElementById("side-panel"), sideScroll);
   restoreScrollTop(document.getElementById("game-status"), statusScroll);
   restoreScrollTop(

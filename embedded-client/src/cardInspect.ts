@@ -39,8 +39,6 @@ export type InspectSession = {
 export const HOST_IMAGE_ID_PREFIX = "host-image:";
 export const INSPECT_PHOTO_CLASS = "is-photo";
 export const INSPECT_PHOTO_LABEL = "Enlarged photo";
-export const INSPECT_PREV_LABEL = "Previous card";
-export const INSPECT_NEXT_LABEL = "Next card";
 
 const DIALOG_ID = "card-inspect";
 const ART_ID = "card-inspect-art";
@@ -141,25 +139,22 @@ export function inspectNavDirectionFromDataset(
   return value === "prev" || value === "next" ? value : null;
 }
 
-function cardId(card: InspectableCard | null | undefined): string {
-  return typeof card?.id === "string" ? card.id.trim() : "";
+export function inspectKeyShouldIgnoreTarget(target: {
+  tagName?: string;
+  isContentEditable?: boolean;
+} | null | undefined): boolean {
+  if (!target) return false;
+  const tag = typeof target.tagName === "string" ? target.tagName.toUpperCase() : "";
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return Boolean(target.isContentEditable);
 }
 
 export function inspectSequenceIndex(
   sequence: InspectSequenceItem[] | null | undefined,
-  card: InspectableCard,
   tile: HTMLElement
 ): number {
   const list = Array.isArray(sequence) ? sequence : [];
-  if (!list.length) return -1;
-  const byTile = list.findIndex((item) => item?.tile === tile);
-  if (byTile >= 0) return byTile;
-  const id = cardId(card);
-  if (id) {
-    const byId = list.findIndex((item) => cardId(item?.card) === id);
-    if (byId >= 0) return byId;
-  }
-  return list.findIndex((item) => item?.card === card);
+  return list.findIndex((item) => item?.tile === tile);
 }
 
 export function resolveInspectSession(
@@ -169,7 +164,7 @@ export function resolveInspectSession(
   sequence?: InspectSequenceItem[] | null
 ): InspectSession {
   const list = Array.isArray(sequence) ? sequence.filter(Boolean) : [];
-  const index = inspectSequenceIndex(list, card, tile);
+  const index = inspectSequenceIndex(list, tile);
   const items = index >= 0 ? list : [{ card, imageSrc, tile }];
   const resolvedIndex = index >= 0 ? index : 0;
   return {
@@ -244,6 +239,7 @@ export function enableCardInspectDialog() {
   });
   document.addEventListener("keydown", (event) => {
     if (!isInspectOpen(dialogEl())) return;
+    if (inspectKeyShouldIgnoreTarget(event.target as HTMLElement | null)) return;
     const direction = inspectKeyDirection(event);
     if (!direction) return;
     event.preventDefault();
