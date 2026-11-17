@@ -389,6 +389,9 @@ describe("embedded HTTP origin", () => {
     expect(html).toContain('id="action-dialog"');
     expect(html).toContain('id="decks"');
     expect(html).toContain("hand-fan");
+    expect(html).toContain('id="card-inspect"');
+    expect(html).toContain('id="card-inspect-art"');
+    expect(html).toContain('id="card-inspect-caption"');
     const css = fs.readFileSync(
       path.join(__dirname, "..", "embedded-client", "src", "style.css"),
       "utf8"
@@ -406,9 +409,14 @@ describe("embedded HTTP origin", () => {
     expect(zoneBlock).not.toMatch(/z-index/);
     expect(css).toContain("z-index: 20");
     expect(css).toContain(".card-tile:hover .card-face");
+    expect(css).toContain(".card-tile.dragging .card-face");
+    expect(css).not.toContain(".card-tile.dragging:hover .card-face");
     expect(css).not.toContain(".deck-tile:hover .card-face");
     expect(css).toContain("scale(1.48)");
+    expect(css).not.toContain("scale(1.28)");
     expect(css).toMatch(/\.card-tile img[\s\S]*object-fit:\s*contain/);
+    expect(css).toContain(".card-inspect-dialog");
+    expect(css).toContain(".card-inspect-description");
     expect(css).toContain(".deck-tile:hover .deck-actions");
     expect(css).toContain(".deck-tile:has(:focus-visible) .deck-actions");
     expect(css).toMatch(/\.deck-actions\s*\{[^}]*bottom:\s*1\.35rem/);
@@ -455,7 +463,10 @@ describe("embedded HTTP origin", () => {
     overflowIsVisible(ruleBody(".board-spread"));
     overflowIsVisible(ruleBody(".hand-fan"));
     expect(ruleBody(".board-spread")).toMatch(/flex-wrap:\s*wrap/);
-    expect(ruleBody(".cards")).toMatch(/min-height:\s*7\.55rem/);
+    expect(ruleBody(".cards")).toMatch(/min-height:\s*2\.5rem/);
+    expect(ruleBody(".zone")).toMatch(/min-height:\s*0/);
+    expect(ruleBody(".zone")).not.toMatch(/min-height:\s*8\.5rem/);
+    expect(ruleBody(".cards")).not.toMatch(/min-height:\s*7\.55rem/);
     expect(ruleBody(".card-face")).toMatch(/box-sizing:\s*border-box/);
     expect(ruleBody("#table")).toMatch(/isolation:\s*isolate/);
     expect(ruleBody(".zone")).not.toMatch(/z-index\s*:/);

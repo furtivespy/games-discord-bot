@@ -106,6 +106,7 @@ describe("mock snapshot fixtures", () => {
       "Village",
       "Market",
     ]);
+    expect(result.body.playArea[0].description).toBe("Worth 1 action. Draw a card.");
     expect(result.body.gameBoard.map((card) => card.name)).toEqual([
       "Province",
       "Duchy",

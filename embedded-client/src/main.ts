@@ -39,6 +39,7 @@ import {
   type DeckActionKind,
 } from "./visualActions";
 import { enableCardDrag, type CardOffset } from "./drag";
+import { closeCardInspect, enableCardInspectDialog, openCardInspect } from "./cardInspect";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
 import { asCardList, createSnapshotLoader } from "./requestSeq";
@@ -95,6 +96,7 @@ type EmbeddedConfig = {
 type SnapshotCard = {
   id?: string;
   name?: string;
+  description?: string;
   imageUrl?: string;
   suit?: string;
   value?: string;
@@ -199,6 +201,7 @@ function setDeckActionsLocked(locked: boolean) {
 }
 
 function setTableVisible(visible: boolean) {
+  if (!visible) closeCardInspect();
   const table = document.getElementById("table");
   if (table) table.hidden = !visible;
   if (!visible) {
@@ -663,7 +666,10 @@ function renderCards(
     tile.append(renderCardFace(config, card));
     if (cardId) {
       // No drop targets yet: enableCardDrag snaps back unless a later hook consumes the drop.
-      enableCardDrag(tile, cardId, positions);
+      enableCardDrag(tile, cardId, positions, {
+        onInspect: () =>
+          openCardInspect(card, mappedImageSrc(config, card.imageUrl), tile),
+      });
     }
     container.append(tile);
   }
@@ -973,6 +979,7 @@ async function loadSnapshot(
 
 function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot) {
   setSnapshotStatus(null);
+  closeCardInspect();
   if (payload.channelPosted !== false) setActionNotice(null);
   const positions = new Map<string, CardOffset>();
   renderGameChannelLink(payload.guildId || config.guildId, payload.channelId);
@@ -1078,6 +1085,7 @@ async function bootstrap() {
   setOrigin(originLine(payload.origin_channel_name));
   setConnected(true);
   bindActionDialog();
+  enableCardInspectDialog();
 
   // discordSdk.guildId is the SDK field (query param guild_id). The game
   // channel/thread id comes from the picker, not discordSdk.channelId.
