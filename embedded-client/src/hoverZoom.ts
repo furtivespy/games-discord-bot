@@ -1,0 +1,252 @@
+/** Matches `--card-hover-scale` on `:root`. */
+export const CARD_HOVER_SCALE = 1.48;
+
+/** Matches `translateY(-38px)` on `.card-tile:hover .card-face`. */
+export const CARD_HOVER_LIFT_PX = 38;
+
+export const HOVER_SHIFT_X_VAR = "--hover-shift-x";
+export const HOVER_SHIFT_Y_VAR = "--hover-shift-y";
+
+export type HoverBox = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
+
+export type HoverShift = { x: number; y: number };
+
+const boundTiles = new WeakSet<HTMLElement>();
+
+function boxWidth(box: HoverBox): number {
+  return box.right - box.left;
+}
+
+function boxHeight(box: HoverBox): number {
+  return box.bottom - box.top;
+}
+
+function overflowClips(value: string | null | undefined): boolean {
+  const v = String(value || "").trim();
+  return v === "hidden" || v === "auto" || v === "scroll" || v === "clip" || v === "overlay";
+}
+
+/** Round away from zero so a fractional overflow still stays inside the clip. */
+export function pixelShift(value: number): number {
+  if (!Number.isFinite(value) || Math.abs(value) < 0.01) return 0;
+  return value > 0 ? Math.ceil(value) : Math.floor(value);
+}
+
+export function intersectBoxes(a: HoverBox, b: HoverBox): HoverBox | null {
+  const left = Math.max(a.left, b.left);
+  const top = Math.max(a.top, b.top);
+  const right = Math.min(a.right, b.right);
+  const bottom = Math.min(a.bottom, b.bottom);
+  if (!(right > left) || !(bottom > top)) return null;
+  return { left, top, right, bottom };
+}
+
+/**
+ * Hover zoom uses `transform-origin: center bottom`, then `translateY(-lift)`.
+ * The tile (not the face) is the rest box because the face is the one that scales.
+ */
+export function hoverZoomRect(
+  rest: HoverBox,
+  options?: { scale?: number; liftPx?: number }
+): HoverBox {
+  const scale = options?.scale ?? CARD_HOVER_SCALE;
+  const liftPx = options?.liftPx ?? CARD_HOVER_LIFT_PX;
+  const width = boxWidth(rest);
+  const height = boxHeight(rest);
+  const scaledW = width * scale;
+  const scaledH = height * scale;
+  const originX = rest.left + width / 2;
+  const originY = rest.bottom;
+  return {
+    left: originX - scaledW / 2,
+    right: originX + scaledW / 2,
+    top: originY - scaledH - liftPx,
+    bottom: originY - liftPx,
+  };
+}
+
+function clampAxis(start: number, size: number, min: number, max: number): number {
+  const view = max - min;
+  if (!(view > 0) || !Number.isFinite(start) || !Number.isFinite(size) || !(size > 0)) {
+    return 0;
+  }
+  if (size >= view) return min - start;
+  if (start < min) return min - start;
+  const end = start + size;
+  if (end > max) return max - end;
+  return 0;
+}
+
+/** Translate a zoomed box so it stays inside `clip`. Oversized boxes pin to the clip origin. */
+export function clampHoverShift(zoomed: HoverBox, clip: HoverBox): HoverShift {
+  return {
+    x: pixelShift(clampAxis(zoomed.left, boxWidth(zoomed), clip.left, clip.right)),
+    y: pixelShift(clampAxis(zoomed.top, boxHeight(zoomed), clip.top, clip.bottom)),
+  };
+}
+
+export function hoverShiftForRects(
+  rest: HoverBox,
+  clip: HoverBox,
+  options?: { scale?: number; liftPx?: number }
+): HoverShift {
+  return clampHoverShift(hoverZoomRect(rest, options), clip);
+}
+
+export function clientClipRect(el: HTMLElement): HoverBox {
+  const rect = el.getBoundingClientRect();
+  const view = el.ownerDocument?.defaultView;
+  let borderLeft = 0;
+  let borderTop = 0;
+  if (view?.getComputedStyle) {
+    try {
+      const style = view.getComputedStyle(el);
+      borderLeft = Number.parseFloat(style.borderLeftWidth) || 0;
+      borderTop = Number.parseFloat(style.borderTopWidth) || 0;
+    } catch {
+      borderLeft = 0;
+      borderTop = 0;
+    }
+  }
+  const width = Number.isFinite(el.clientWidth) ? el.clientWidth : rect.width;
+  const height = Number.isFinite(el.clientHeight) ? el.clientHeight : rect.height;
+  const left = rect.left + borderLeft;
+  const top = rect.top + borderTop;
+  return { left, top, right: left + width, bottom: top + height };
+}
+
+function viewportBox(view: Window): HoverBox | null {
+  const width = view.innerWidth;
+  const height = view.innerHeight;
+  if (!(width > 0) || !(height > 0)) return null;
+  return { left: 0, top: 0, right: width, bottom: height };
+}
+
+export function clipBoxForTile(tile: HTMLElement): HoverBox | null {
+  const view = tile.ownerDocument?.defaultView;
+  if (!view) return null;
+  let clip = viewportBox(view);
+  let node: HTMLElement | null = tile.parentElement;
+  while (node) {
+    let overflowX = "";
+    let overflowY = "";
+    if (view.getComputedStyle) {
+      try {
+        const style = view.getComputedStyle(node);
+        overflowX = style.overflowX;
+        overflowY = style.overflowY;
+      } catch {
+        break;
+      }
+    }
+    if (overflowClips(overflowX) || overflowClips(overflowY)) {
+      const next = clip ? intersectBoxes(clip, clientClipRect(node)) : clientClipRect(node);
+      if (!next) return null;
+      clip = next;
+    }
+    node = node.parentElement;
+  }
+  return clip;
+}
+
+function hoverScaleOf(tile: HTMLElement): number {
+  const view = tile.ownerDocument?.defaultView;
+  if (!view?.getComputedStyle) return CARD_HOVER_SCALE;
+  try {
+    const raw = view.getComputedStyle(tile).getPropertyValue("--card-hover-scale");
+    const n = Number.parseFloat(raw);
+    return Number.isFinite(n) && n > 0 ? n : CARD_HOVER_SCALE;
+  } catch {
+    return CARD_HOVER_SCALE;
+  }
+}
+
+export function applyHoverShift(tile: HTMLElement, shift: HoverShift) {
+  if (!tile.style?.setProperty) return;
+  if (!shift.x && !shift.y) {
+    clearHoverShift(tile);
+    return;
+  }
+  tile.style.setProperty(HOVER_SHIFT_X_VAR, `${shift.x}px`);
+  tile.style.setProperty(HOVER_SHIFT_Y_VAR, `${shift.y}px`);
+}
+
+export function clearHoverShift(tile: HTMLElement) {
+  if (!tile.style?.removeProperty) return;
+  tile.style.removeProperty(HOVER_SHIFT_X_VAR);
+  tile.style.removeProperty(HOVER_SHIFT_Y_VAR);
+}
+
+export function hoverShiftForTile(tile: HTMLElement): HoverShift {
+  if (typeof tile.getBoundingClientRect !== "function") return { x: 0, y: 0 };
+  const clip = clipBoxForTile(tile);
+  if (!clip) return { x: 0, y: 0 };
+  const rest = tile.getBoundingClientRect();
+  return hoverShiftForRects(
+    { left: rest.left, top: rest.top, right: rest.right, bottom: rest.bottom },
+    clip,
+    { scale: hoverScaleOf(tile), liftPx: CARD_HOVER_LIFT_PX }
+  );
+}
+
+function isDragging(tile: HTMLElement): boolean {
+  return Boolean(tile.classList?.contains("dragging"));
+}
+
+function syncHoverShift(tile: HTMLElement) {
+  if (tile.isConnected === false || isDragging(tile)) {
+    clearHoverShift(tile);
+    return;
+  }
+  applyHoverShift(tile, hoverShiftForTile(tile));
+}
+
+/**
+ * On hover, shift the zoomed face so it stays inside the board/viewport clip
+ * (`#table` / `#table-main`). Center cards get a zero shift.
+ */
+export function enableHoverZoomClamp(tile: HTMLElement) {
+  if (boundTiles.has(tile)) return;
+  boundTiles.add(tile);
+
+  const view = tile.ownerDocument?.defaultView;
+  let listening = false;
+
+  function apply() {
+    syncHoverShift(tile);
+  }
+
+  function stopLayoutListeners() {
+    if (!listening) return;
+    listening = false;
+    view?.removeEventListener("resize", apply);
+    const scrollParent = tile.closest?.("#table-main");
+    scrollParent?.removeEventListener("scroll", apply);
+  }
+
+  function startLayoutListeners() {
+    if (listening) return;
+    listening = true;
+    view?.addEventListener("resize", apply);
+    const scrollParent = tile.closest?.("#table-main");
+    scrollParent?.addEventListener("scroll", apply, { passive: true });
+  }
+
+  tile.addEventListener("pointerenter", () => {
+    apply();
+    startLayoutListeners();
+  });
+  tile.addEventListener("pointerleave", () => {
+    stopLayoutListeners();
+    clearHoverShift(tile);
+  });
+  tile.addEventListener("pointerup", () => {
+    if (!listening) return;
+    apply();
+  });
+}

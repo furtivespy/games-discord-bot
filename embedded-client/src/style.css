@@ -616,7 +616,13 @@ body {
   border-color: #e6c35c;
 }
 
-.card-tile:hover .card-face,
+/* Extra translate is a clamp so edge cards stay inside #table / #table-main.
+   Dragging skips it so the zoomed face stays centered on the moving tile. */
+.card-tile:hover .card-face {
+  transform: translateY(-38px) translate(var(--hover-shift-x, 0px), var(--hover-shift-y, 0px)) scale(var(--card-hover-scale));
+  box-shadow: 0 22px 34px rgba(0, 0, 0, 0.5);
+}
+
 .card-tile.dragging .card-face {
   transform: translateY(-38px) scale(var(--card-hover-scale));
   box-shadow: 0 22px 34px rgba(0, 0, 0, 0.5);

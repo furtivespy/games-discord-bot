@@ -133,6 +133,7 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain('"several-games"');
     expect(main).toContain("loadSnapshot");
     expect(main).toContain("enableCardDrag");
+    expect(main).toContain("enableHoverZoomClamp");
     expect(main).toContain("onInspect");
     expect(main).toContain("openCardInspect");
     expect(main).toContain("enableCardInspectDialog");

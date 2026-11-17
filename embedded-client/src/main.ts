@@ -56,6 +56,7 @@ import {
   type DeckActionKind,
 } from "./visualActions";
 import { SNAP_BACK_DURATION_MS, enableCardDrag, type CardOffset } from "./drag";
+import { enableHoverZoomClamp } from "./hoverZoom";
 import { closeCardInspect, enableCardInspectDialog, openCardInspect } from "./cardInspect";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
@@ -870,6 +871,7 @@ function renderCards(
       typeof nameValue === "string" && nameValue.trim() ? nameValue.trim() : "Card";
     tile.title = name;
     tile.append(renderCardFace(config, card));
+    enableHoverZoomClamp(tile);
     if (cardId) {
       // No drop targets yet: enableCardDrag snaps back unless a later hook consumes the drop.
       enableCardDrag(tile, cardId, positions, {

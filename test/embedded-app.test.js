@@ -422,6 +422,16 @@ describe("embedded HTTP origin", () => {
     expect(css).not.toContain(".deck-tile:hover .card-face");
     expect(css).toContain("--card-hover-scale: 1.48");
     expect(css).toContain("scale(var(--card-hover-scale))");
+    expect(css).toContain("translate(var(--hover-shift-x, 0px), var(--hover-shift-y, 0px))");
+    expect(css).toMatch(
+      /\.card-tile:hover \.card-face\s*\{[^}]*--hover-shift-x/
+    );
+    expect(css).toMatch(
+      /\.card-tile\.dragging \.card-face\s*\{[^}]*translateY\(-38px\) scale\(var\(--card-hover-scale\)\)/
+    );
+    expect(css).not.toMatch(
+      /\.card-tile\.dragging \.card-face\s*\{[^}]*--hover-shift-x/
+    );
     expect(css).not.toContain("scale(1.28)");
     expect(css).toMatch(/\.card-tile img[\s\S]*object-fit:\s*contain/);
     expect(css).toContain(".card-inspect-dialog");
@@ -572,6 +582,7 @@ describe("embedded HTTP origin", () => {
     expect(css).not.toContain("container-type: size");
     expect(css).not.toContain("max(5.5rem");
     expect(css).toContain("scale(var(--card-hover-scale))");
+    expect(css).toContain("translate(var(--hover-shift-x, 0px), var(--hover-shift-y, 0px))");
     expect(css).toContain("margin-left: calc(-1 * var(--hand-overlap))");
     expect(css).toMatch(/#table-main\s*>\s*\*\s*\{[^}]*flex-shrink:\s*0/);
     expect(css).toMatch(/\.hand-zone\s*\{[^}]*flex:\s*0 0 auto/);
