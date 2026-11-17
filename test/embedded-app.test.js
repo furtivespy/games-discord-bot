@@ -476,6 +476,43 @@ describe("embedded HTTP origin", () => {
     expect(ruleBody(".board-row")).not.toMatch(/z-index\s*:/);
     expect(ruleBody(".board-row")).not.toMatch(/transform\s*:/);
   });
+
+  test("hand zone is pinned to the bottom of the table", () => {
+    const css = fs
+      .readFileSync(
+        path.join(__dirname, "..", "embedded-client", "src", "style.css"),
+        "utf8"
+      )
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+    const html = fs.readFileSync(
+      path.join(__dirname, "..", "embedded-client", "index.html"),
+      "utf8"
+    );
+    expect(html).toMatch(/class="zone hand-zone" data-zone="hand"/);
+
+    const ruleBody = (selector) => {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const match = css.match(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`));
+      expect(match).toBeTruthy();
+      return match[1];
+    };
+
+    expect(ruleBody("#app.connected")).toMatch(
+      /grid-template-rows:\s*minmax\(0,\s*1fr\)/
+    );
+    expect(ruleBody("#table")).toMatch(/display:\s*flex/);
+    expect(ruleBody("#table")).toMatch(/flex-direction:\s*column/);
+    expect(ruleBody("#table")).toMatch(/height:\s*100%/);
+    expect(ruleBody("#table")).toMatch(/box-sizing:\s*border-box/);
+    expect(ruleBody("#table")).not.toMatch(/align-content:\s*start/);
+    expect(ruleBody("#table > *")).toMatch(/flex-shrink:\s*0/);
+    expect(ruleBody(".hand-zone")).toMatch(/margin-top:\s*auto/);
+    expect(ruleBody(".hand-zone")).not.toMatch(/z-index\s*:/);
+    expect(ruleBody(".hand-zone")).not.toMatch(/transform\s*:/);
+    expect(css).toMatch(
+      /@media\s*\(max-width:\s*820px\)\s*\{[^}]*#app\.connected\s*\{[^}]*grid-template-rows:\s*auto\s+minmax\(0,\s*1fr\)/
+    );
+  });
 });
 
 describe("GET /api/games", () => {
