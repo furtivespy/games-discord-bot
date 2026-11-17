@@ -18,7 +18,11 @@ const {
   hoverZoomRect,
   pixelShift,
 } = require("../embedded-client/src/hoverZoom.ts");
-const { SNAP_BACK_DURATION_MS } = require("../embedded-client/src/drag.ts");
+const {
+  CLICK_SLOP_PX,
+  SNAP_BACK_DURATION_MS,
+  enableCardDrag,
+} = require("../embedded-client/src/drag.ts");
 
 const STYLE_PATH = path.join(__dirname, "..", "embedded-client", "src", "style.css");
 const MAIN_PATH = path.join(__dirname, "..", "embedded-client", "src", "main.ts");
@@ -162,6 +166,27 @@ describe("hover zoom clamp math", () => {
   });
 });
 
+function paint(view) {
+  return new Promise((resolve) => {
+    const raf =
+      view?.requestAnimationFrame?.bind(view) ||
+      ((cb) => setTimeout(cb, 0));
+    raf(() => raf(resolve));
+  });
+}
+
+function pointerEvent(type, { pointerId = 1, button = 0, clientX, clientY, bubbles = false } = {}) {
+  return {
+    type,
+    pointerId,
+    button,
+    clientX,
+    clientY,
+    bubbles,
+    preventDefault() {},
+  };
+}
+
 function createHoverTile({ rest, clip, inTableMain = true, scale = String(CARD_HOVER_SCALE) }) {
   const properties = {};
   const pos = { ...rest };
@@ -170,6 +195,7 @@ function createHoverTile({ rest, clip, inTableMain = true, scale = String(CARD_H
   const classSet = new Set();
   const parentListeners = new Map();
   const viewListeners = new Map();
+  const docListeners = new Map();
 
   function dispatch(map, event) {
     for (const handler of map.get(event.type) || []) handler(event);
@@ -248,9 +274,36 @@ function createHoverTile({ rest, clip, inTableMain = true, scale = String(CARD_H
       dispatch(viewListeners, event);
       return true;
     },
+    requestAnimationFrame(cb) {
+      return setTimeout(cb, 0);
+    },
+    cancelAnimationFrame(id) {
+      clearTimeout(id);
+    },
+  };
+  const ownerDocument = {
+    defaultView: view,
+    addEventListener(type, fn) {
+      const list = docListeners.get(type) || [];
+      list.push(fn);
+      docListeners.set(type, list);
+    },
+    removeEventListener(type, fn) {
+      docListeners.set(
+        type,
+        (docListeners.get(type) || []).filter((handler) => handler !== fn)
+      );
+    },
+    dispatchEvent(event) {
+      dispatch(docListeners, event);
+      return true;
+    },
   };
   const tile = {
     style: {
+      transform: "",
+      zIndex: "",
+      transitionDuration: "",
       setProperty(name, value) {
         properties[name] = value;
       },
@@ -266,10 +319,22 @@ function createHoverTile({ rest, clip, inTableMain = true, scale = String(CARD_H
     isConnected: true,
     classList: {
       contains: (name) => classSet.has(name),
-      add: (name) => classSet.add(name),
-      remove: (name) => classSet.delete(name),
+      add: (...names) => {
+        for (const name of names) classSet.add(name);
+      },
+      remove: (...names) => {
+        for (const name of names) classSet.delete(name);
+      },
+      toggle: (name, force) => {
+        if (force === undefined) {
+          if (classSet.has(name)) classSet.delete(name);
+          else classSet.add(name);
+        } else if (force) classSet.add(name);
+        else classSet.delete(name);
+        return classSet.has(name);
+      },
     },
-    ownerDocument: { defaultView: view },
+    ownerDocument,
     getBoundingClientRect: () => ({
       left: pos.left,
       top: pos.top,
@@ -292,8 +357,11 @@ function createHoverTile({ rest, clip, inTableMain = true, scale = String(CARD_H
     },
     dispatchEvent(event) {
       dispatch(listeners, event);
+      if (event.bubbles) ownerDocument.dispatchEvent(event);
       return true;
     },
+    setPointerCapture() {},
+    releasePointerCapture() {},
     moveTo(next) {
       Object.assign(pos, next);
     },
@@ -430,7 +498,46 @@ describe("hover zoom clamp on a tile", () => {
       target: tile,
       propertyName: "transform",
     });
+    await paint(tile.ownerDocument.defaultView);
     expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe(hoveredX);
+  });
+
+  test("real drag.ts snap-back reclamps a still-hovered edge card", async () => {
+    const rest = restBox({ left: 6, top: 4 });
+    const tile = createHoverTile({ rest, clip: BOARD_CLIP });
+    enableHoverZoomClamp(tile);
+    enableCardDrag(tile, "edge-1", new Map());
+    tile.dispatchEvent({ type: "pointerenter" });
+    const hoveredX = shiftValue(tile, HOVER_SHIFT_X_VAR);
+    expect(hoveredX).not.toBe("");
+
+    const start = { x: 70, y: 90 };
+    const end = { x: start.x + CLICK_SLOP_PX + 40, y: start.y };
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: start.x, clientY: start.y, bubbles: true }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: end.x, clientY: end.y })
+    );
+    // Mid-snap visual box is away from the clip edge, so a too-early apply
+    // would compute a zero shift and leave the zoom unclamped.
+    tile.moveTo(restBox({ left: rest.left + (end.x - start.x), top: rest.top }));
+    tile.dispatchEvent(pointerEvent("pointerup", { clientX: end.x, clientY: end.y, bubbles: true }));
+
+    await Promise.resolve();
+    expect(tile.classList.contains("snapping")).toBe(true);
+    expect(tile.classList.contains("dragging")).toBe(false);
+    expect(hoverShiftForTile(tile).x).toBe(0);
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe("");
+
+    tile.moveTo(rest);
+    tile.dispatchEvent({
+      type: "transitionend",
+      target: tile,
+      propertyName: "transform",
+    });
+    expect(tile.classList.contains("snapping")).toBe(false);
+    await paint(tile.ownerDocument.defaultView);
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe(hoveredX);
+    expect(Number.parseFloat(shiftValue(tile, HOVER_SHIFT_Y_VAR))).toBeGreaterThan(0);
   });
 
   test("after snap-back while hovered, the snap timeout reclamps if transitionend is missed", async () => {
@@ -450,7 +557,8 @@ describe("hover zoom clamp on a tile", () => {
     tile.moveTo(rest);
     tile.classList.remove("snapping");
     expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe("");
-    await new Promise((resolve) => setTimeout(resolve, SNAP_BACK_DURATION_MS + 80));
+    await new Promise((resolve) => setTimeout(resolve, SNAP_BACK_DURATION_MS + 120));
+    await paint(tile.ownerDocument.defaultView);
     expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe(hoveredX);
   });
 

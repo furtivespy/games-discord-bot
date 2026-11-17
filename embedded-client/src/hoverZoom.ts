@@ -210,6 +210,19 @@ function syncHoverShift(tile: HTMLElement) {
   applyHoverShift(tile, hoverShiftForTile(tile));
 }
 
+function afterPaint(view: Window | null | undefined, cb: () => void) {
+  const raf = view?.requestAnimationFrame?.bind(view);
+  if (typeof raf === "function") {
+    raf(cb);
+    return;
+  }
+  if (typeof globalThis.requestAnimationFrame === "function") {
+    globalThis.requestAnimationFrame(cb);
+    return;
+  }
+  setTimeout(cb, 0);
+}
+
 /**
  * On hover, shift the zoomed face so it stays inside the board window
  * (`#table` / `#table-main`). Center cards get a zero shift.
@@ -223,6 +236,7 @@ export function enableHoverZoomClamp(tile: HTMLElement) {
   let scrollParent: HTMLElement | null = null;
   let disconnectObserver: MutationObserver | null = null;
   let snapTimer: ReturnType<typeof setTimeout> | null = null;
+  let applyEpoch = 0;
 
   function apply() {
     if (tile.isConnected === false) {
@@ -239,22 +253,44 @@ export function enableHoverZoomClamp(tile: HTMLElement) {
     snapTimer = null;
   }
 
-  function onTileTransitionEnd(event: Event) {
+  /**
+   * drag.ts's transitionend handler (registered later) clears `.snapping` in
+   * the same event. Wait a frame so rest-slot layout and class cleanup land
+   * before measuring. Retry once if the tile is still mid-snap.
+   */
+  function applyAfterSnap() {
+    const epoch = applyEpoch;
+    const attempt = (retries: number) => {
+      if (applyEpoch !== epoch || !listening) return;
+      if (isHeldOff(tile) && retries > 0) {
+        afterPaint(view, () => attempt(retries - 1));
+        return;
+      }
+      apply();
+    };
+    afterPaint(view, () => attempt(1));
+  }
+
+  function onTileSnapEnd(event: Event) {
     if (event.target && event.target !== tile) return;
-    const property = (event as TransitionEvent).propertyName;
-    if (property && property !== "transform") return;
-    apply();
+    if (event.type === "transitionend") {
+      const property = (event as TransitionEvent).propertyName;
+      if (property && property !== "transform") return;
+    }
+    applyAfterSnap();
   }
 
   function stopLayoutListeners() {
     if (!listening) return;
     listening = false;
+    applyEpoch += 1;
     view?.removeEventListener("resize", apply);
     scrollParent?.removeEventListener("scroll", apply);
     scrollParent = null;
     disconnectObserver?.disconnect();
     disconnectObserver = null;
-    tile.removeEventListener?.("transitionend", onTileTransitionEnd);
+    tile.removeEventListener?.("transitionend", onTileSnapEnd);
+    tile.removeEventListener?.("animationend", onTileSnapEnd);
     clearSnapTimer();
   }
 
@@ -280,7 +316,8 @@ export function enableHoverZoomClamp(tile: HTMLElement) {
     view?.addEventListener("resize", apply);
     scrollParent = queryClip(tile, "#table-main");
     scrollParent?.addEventListener("scroll", apply, { passive: true });
-    tile.addEventListener("transitionend", onTileTransitionEnd);
+    tile.addEventListener("transitionend", onTileSnapEnd);
+    tile.addEventListener("animationend", onTileSnapEnd);
     watchDisconnect();
   }
 
@@ -288,18 +325,20 @@ export function enableHoverZoomClamp(tile: HTMLElement) {
     if (!listening) return;
     // Tile pointerup runs before drag.ts removes `.dragging` (document listener).
     // The microtask covers click-to-inspect. Snap-back still has the tile away
-    // from its rest slot then, so also reclamp after the snap duration and on
-    // the tile's transform transitionend.
+    // from its rest slot then, so reclamp on transform transitionend/animationend
+    // (after a frame, once drag.ts has cleared `.snapping`) and after the snap
+    // duration as a fallback.
     queueMicrotask(() => {
       if (!listening) return;
       apply();
     });
     clearSnapTimer();
+    // drag.ts settles at SNAP_BACK_DURATION_MS + 50; wait past that.
     snapTimer = setTimeout(() => {
       snapTimer = null;
       if (!listening) return;
-      apply();
-    }, SNAP_BACK_DURATION_MS + 50);
+      applyAfterSnap();
+    }, SNAP_BACK_DURATION_MS + 80);
   }
 
   tile.addEventListener("pointerenter", () => {
