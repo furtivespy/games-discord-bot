@@ -1,10 +1,4 @@
-const {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ChannelType,
-  MessageFlags,
-} = require("discord.js");
+const { ChannelType, MessageFlags } = require("discord.js");
 
 const CUSTOM_ID_PREFIX = "visual";
 const OPEN_ACTION = "open";
@@ -22,15 +16,9 @@ const THREAD_TYPES = new Set(
   ].filter((type) => type != null)
 );
 
-const BRIDGE_CHANNEL_TYPES = new Set(
-  [ChannelType.GuildText, ChannelType.GuildAnnouncement].filter(
-    (type) => type != null
-  )
-);
-
 const FORUM_BLOCKED_MESSAGE =
   "Discord can't open visual mode in forum posts or forum channels. " +
-  "Run `/visual` in a normal text channel, or pass a text `channel` to post an Open visual button there. " +
+  "Run `/visual` in a normal text channel. " +
   "A guild-configured visual parent channel is not set up yet.";
 
 const LAUNCH_FALLBACK_MESSAGE =
@@ -91,12 +79,6 @@ async function channelBlocksActivities(channel, client) {
   return isForumParentType(parent?.type);
 }
 
-function canPostBridgeButton(channel) {
-  if (!channel || typeof channel.send !== "function") return false;
-  if (channel.type == null) return true;
-  return BRIDGE_CHANNEL_TYPES.has(channel.type);
-}
-
 function openVisualCustomId(originChannelId) {
   return `${CUSTOM_ID_PREFIX}:${OPEN_ACTION}:${originChannelId}`;
 }
@@ -112,37 +94,6 @@ function parseVisualButton(customId) {
   const originChannelId = parts[2];
   if (!originChannelId) return null;
   return { action: OPEN_ACTION, originChannelId };
-}
-
-function buildOpenVisualRow(originChannelId) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(openVisualCustomId(originChannelId))
-      .setLabel("Open visual")
-      .setStyle(ButtonStyle.Primary)
-  );
-}
-
-function bridgePostedMessage({
-  targetChannelId,
-  originChannelName,
-  fromForum,
-} = {}) {
-  const target = `<#${targetChannelId}>`;
-  const from = originChannelName
-    ? ` you came from ${originChannelName}`
-    : " this channel";
-  if (fromForum) {
-    return (
-      `Discord can't open Activities in forum posts. ` +
-      `I posted an Open visual button in ${target}. ` +
-      `Click it there to open visual — it will remember${from}.`
-    );
-  }
-  return (
-    `Posted an Open visual button in ${target}. ` +
-    `Click it there to open visual with${from} as the origin.`
-  );
 }
 
 function rememberOrigin(userId, record, now = Date.now()) {
@@ -197,16 +148,6 @@ async function replyEphemeral(interaction, content) {
     return interaction.followUp(payload);
   }
   return interaction.reply(payload);
-}
-
-async function postOpenVisualMessage(channel, { originChannelId, originChannelName }) {
-  const from = originChannelName
-    ? ` This launch remembers you came from ${originChannelName}.`
-    : "";
-  return channel.send({
-    content: `Open Game Bot visual mode.${from}`,
-    components: [buildOpenVisualRow(originChannelId)],
-  });
 }
 
 async function launchInPlace(interaction, { logger } = {}) {
@@ -265,9 +206,6 @@ module.exports = {
   LAUNCH_FALLBACK_MESSAGE,
   OPEN_ACTION,
   ORIGIN_TTL_MS,
-  bridgePostedMessage,
-  buildOpenVisualRow,
-  canPostBridgeButton,
   channelBlocksActivities,
   channelDisplayName,
   clearOrigins,
@@ -280,7 +218,6 @@ module.exports = {
   openVisualCustomId,
   parseVisualButton,
   peekOrigin,
-  postOpenVisualMessage,
   rememberOrigin,
   replyEphemeral,
 };
