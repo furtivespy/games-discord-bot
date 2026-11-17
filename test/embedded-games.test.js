@@ -417,12 +417,24 @@ describe("snapshotGameForUser", () => {
         gameBoard: [{ id: "board-1", name: "Province", url: null }],
         otherPlayers: [
           {
+            userId: "will",
+            name: "will",
+            handCount: 2,
+            avatarUrl: null,
+            teamId: "",
+            teamName: "",
+            order: 0,
+            isYou: true,
+          },
+          {
             userId: "other-player",
             name: "other-player",
             handCount: 1,
             avatarUrl: null,
             teamId: "",
             teamName: "",
+            order: 0,
+            isYou: false,
           },
         ],
         decks: [{ name: "Main", remaining: 1, total: 1 }],
@@ -590,8 +602,10 @@ describe("snapshotGameForUser", () => {
     });
     expect(result.status).toBe(200);
     expect(result.body.status.players[0].name).toBe("WillOnServer");
-    expect(result.body.otherPlayers[0].name).toBe("other-player");
-    expect(result.body.otherPlayers[0].avatarUrl).toBeNull();
+    expect(result.body.otherPlayers.map((player) => [player.name, player.isYou, player.avatarUrl])).toEqual([
+      ["WillOnServer", true, "https://cdn.discordapp.com/avatars/will/a.png?size=128"],
+      ["other-player", false, null],
+    ]);
   });
 
   test("If-None-Match skips Discord member lookups and returns 304", async () => {
@@ -896,11 +910,88 @@ describe("snapshotFromGameData", () => {
     expect(snapshot.hand).toEqual([]);
     expect(snapshot.playArea).toEqual([]);
     expect(snapshot.gameBoard).toEqual([]);
-    expect(snapshot.otherPlayers).toEqual([]);
+    expect(snapshot.otherPlayers).toEqual([
+      {
+        userId: "will",
+        name: "will",
+        handCount: 0,
+        avatarUrl: null,
+        teamId: "",
+        teamName: "",
+        order: 0,
+        isYou: true,
+      },
+    ]);
     expect(snapshot.decks).toEqual([]);
     expect(snapshot.status.players).toEqual([
       expect.objectContaining({ userId: "will", isYou: true, handCount: 0 }),
     ]);
+  });
+
+  test("table player list includes the viewer in seat order", () => {
+    const snapshot = snapshotFromGameData(
+      {
+        name: "Seats",
+        players: [
+          {
+            userId: "third",
+            name: "Third",
+            order: 2,
+            hands: { main: [{}] },
+          },
+          {
+            userId: "will",
+            name: "Will",
+            order: 0,
+            hands: { main: [{}, {}] },
+          },
+          {
+            userId: "second",
+            name: "Second",
+            order: 1,
+            hands: { main: [{}] },
+          },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(snapshot.otherPlayers.map((row) => [row.name, row.order, row.isYou, row.handCount])).toEqual([
+      ["Will", 0, true, 2],
+      ["Second", 1, false, 1],
+      ["Third", 2, false, 1],
+    ]);
+
+    const lastSeat = snapshotFromGameData(
+      {
+        name: "Seats",
+        players: [
+          { userId: "first", name: "First", order: 0, hands: { main: [{}] } },
+          { userId: "will", name: "Will", order: 2, hands: { main: [{}] } },
+          { userId: "second", name: "Second", order: 1, hands: { main: [{}] } },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(lastSeat.otherPlayers.map((row) => [row.name, row.isYou])).toEqual([
+      ["First", false],
+      ["Second", false],
+      ["Will", true],
+    ]);
+
+    const reversed = snapshotFromGameData(
+      {
+        name: "Seats",
+        reverseOrder: true,
+        players: [
+          { userId: "third", name: "Third", order: 2, hands: { main: [{}] } },
+          { userId: "will", name: "Will", order: 0, hands: { main: [{}] } },
+          { userId: "second", name: "Second", order: 1, hands: { main: [{}] } },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(reversed.status.reverseOrder).toBe(true);
+    expect(reversed.otherPlayers.map((row) => row.name)).toEqual(["Will", "Second", "Third"]);
   });
 
   test("other players expose name and hand count, never their cards", () => {
@@ -936,12 +1027,24 @@ describe("snapshotFromGameData", () => {
     );
     expect(snapshot.otherPlayers).toEqual([
       {
+        userId: "will",
+        name: "Will",
+        handCount: 1,
+        avatarUrl: null,
+        teamId: "",
+        teamName: "",
+        order: 1,
+        isYou: true,
+      },
+      {
         userId: "riley",
         name: "Riley",
         handCount: 1,
         avatarUrl: null,
         teamId: "",
         teamName: "",
+        order: 2,
+        isYou: false,
       },
     ]);
     expect(snapshot.decks.map((deck) => deck.name)).toEqual(["Main", "Events"]);
@@ -986,7 +1089,10 @@ describe("snapshotFromGameData", () => {
       },
       { channelId: "ch", guildId: "g", userId: "will" }
     );
-    expect(snapshot.otherPlayers[0].handCount).toBe("?");
+    expect(snapshot.otherPlayers.map((row) => [row.name, row.handCount, row.isYou])).toEqual([
+      ["Will", "?", true],
+      ["Riley", "?", false],
+    ]);
     expect(snapshot.status.players.map((row) => row.handCount)).toEqual(["?", "?"]);
     expect(snapshot.status.players[0].tokens.clue).toBe(2);
     expect(snapshot.status.players[1].tokens.clue).toBe("?");
@@ -1038,14 +1144,28 @@ describe("snapshotFromGameData", () => {
       }
     );
     expect(snapshot.status.players[0].name).toBe("WillOnServer");
-    expect(snapshot.otherPlayers[0]).toEqual({
-      userId: "riley",
-      name: "RileyOnServer",
-      handCount: 1,
-      avatarUrl: "https://cdn.discordapp.com/avatars/riley/a.png",
-      teamId: "",
-      teamName: "",
-    });
+    expect(snapshot.otherPlayers).toEqual([
+      {
+        userId: "will",
+        name: "WillOnServer",
+        handCount: 0,
+        avatarUrl: "https://cdn.discordapp.com/avatars/will/a.png",
+        teamId: "",
+        teamName: "",
+        order: 0,
+        isYou: true,
+      },
+      {
+        userId: "riley",
+        name: "RileyOnServer",
+        handCount: 1,
+        avatarUrl: "https://cdn.discordapp.com/avatars/riley/a.png",
+        teamId: "",
+        teamName: "",
+        order: 0,
+        isYou: false,
+      },
+    ]);
   });
 
   test("exposes roster team names on other players and status", () => {
@@ -1075,10 +1195,11 @@ describe("snapshotFromGameData", () => {
       ["Alex", "💪🐟"],
       ["Solo", ""],
     ]);
-    expect(snapshot.otherPlayers.map((row) => [row.name, row.teamId, row.teamName])).toEqual([
-      ["Riley", "crab", "🦀🦀"],
-      ["Alex", "fish", "💪🐟"],
-      ["Solo", "", ""],
+    expect(snapshot.otherPlayers.map((row) => [row.name, row.teamId, row.teamName, row.isYou])).toEqual([
+      ["Will", "crab", "🦀🦀", true],
+      ["Riley", "crab", "🦀🦀", false],
+      ["Alex", "fish", "💪🐟", false],
+      ["Solo", "", "", false],
     ]);
   });
 
@@ -1161,11 +1282,10 @@ describe("snapshotFromGameData", () => {
       },
       { channelId: "ch", guildId: "g", userId: "will" }
     );
-    expect(snapshot.otherPlayers[0]).toMatchObject({
-      name: "Riley",
-      teamId: "7",
-      teamName: "🦀🦀",
-    });
+    expect(snapshot.otherPlayers.map((row) => [row.name, row.teamId, row.isYou])).toEqual([
+      ["Will", "7", true],
+      ["Riley", "7", false],
+    ]);
   });
 });
 

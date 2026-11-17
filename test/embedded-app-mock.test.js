@@ -115,12 +115,13 @@ describe("mock snapshot fixtures", () => {
       "Estate",
     ]);
     expect(result.body.players).toBeUndefined();
-    expect(result.body.otherPlayers.map((player) => player.name)).toEqual([
-      "Riley",
-      "Sam",
+    expect(result.body.otherPlayers.map((player) => [player.name, player.isYou, player.order])).toEqual([
+      ["QA Tester", true, 0],
+      ["Riley", false, 1],
+      ["Sam", false, 2],
     ]);
-    expect(result.body.otherPlayers[0].handCount).toBe(1);
-    expect(result.body.otherPlayers[1].handCount).toBe(4);
+    expect(result.body.otherPlayers[1].handCount).toBe(1);
+    expect(result.body.otherPlayers[2].handCount).toBe(4);
     expect(result.body.decks.map((deck) => deck.name)).toEqual(["Main", "Events"]);
     expect(result.body.decks[0]).toEqual({
       name: "Main",
@@ -146,12 +147,13 @@ describe("mock snapshot fixtures", () => {
       isYou: true,
       teamName: "🦀🦀",
     });
-    expect(result.body.otherPlayers.map((player) => [player.name, player.teamId, player.teamName])).toEqual([
-      ["Riley", "team-crab", "🦀🦀"],
-      ["Sam", "team-crab", "🦀🦀"],
-      ["Alex", "team-fish", "💪🐟"],
-      ["Jordan", "team-fish", "💪🐟"],
-      ["Casey", "team-fish", "💪🐟"],
+    expect(result.body.otherPlayers.map((player) => [player.name, player.teamId, player.teamName, player.isYou])).toEqual([
+      ["QA Tester", "team-crab", "🦀🦀", true],
+      ["Riley", "team-crab", "🦀🦀", false],
+      ["Sam", "team-crab", "🦀🦀", false],
+      ["Alex", "team-fish", "💪🐟", false],
+      ["Jordan", "team-fish", "💪🐟", false],
+      ["Casey", "team-fish", "💪🐟", false],
     ]);
     expect(JSON.stringify(result.body)).not.toContain("Alex Secret");
     expect(JSON.stringify(result.body)).not.toContain("Jordan Secret");

@@ -197,11 +197,13 @@ function copyCards(list) {
     .map((card) => ({ ...card }));
 }
 
+function playerOrder(player) {
+  return Number.isFinite(Number(player?.order)) ? Number(player.order) : 0;
+}
+
 function sortedPlayers(data) {
   const players = Array.isArray(data?.players) ? data.players : [];
-  return [...players].sort(
-    (a, b) => (Number(a?.order) || 0) - (Number(b?.order) || 0)
-  );
+  return [...players].sort((a, b) => playerOrder(a) - playerOrder(b));
 }
 
 function handCountsHidden(data) {
@@ -270,19 +272,22 @@ function teamRoster(data) {
     .filter((team) => team.name);
 }
 
-function otherPlayersSummary(data, userId, displays) {
+function tablePlayersSummary(data, userId, displays) {
   const uid = String(userId || "");
   return sortedPlayers(data)
-    .filter((player) => String(player?.userId || "") && String(player.userId) !== uid)
+    .filter((player) => String(player?.userId || ""))
     .map((player) => {
+      const id = String(player.userId);
       const { name, avatarUrl } = displayForPlayer(player, displays);
       return {
-        userId: String(player.userId),
+        userId: id,
         name,
         handCount: publicHandCount(data, player),
         avatarUrl,
         teamId: teamIdForPlayer(data, player),
         teamName: teamNameForPlayer(data, player),
+        order: playerOrder(player),
+        isYou: id === uid,
       };
     });
 }
@@ -350,7 +355,7 @@ function playerStatusRow(data, player, viewerId, displays) {
   return {
     userId: id,
     name,
-    order: Number.isFinite(Number(player?.order)) ? Number(player.order) : 0,
+    order: playerOrder(player),
     score: player?.score == null ? "" : String(player.score),
     handCount: publicHandCount(data, player),
     playAreaCount: Array.isArray(player?.playArea) ? player.playArea.length : 0,
@@ -523,7 +528,7 @@ function snapshotFromGameData(
     hand: copyCards(player?.hands?.main),
     playArea: copyCards(player?.playArea),
     gameBoard: snapshotBoard(data, hostBoardImages),
-    otherPlayers: otherPlayersSummary(data, uid, displays),
+    otherPlayers: tablePlayersSummary(data, uid, displays),
     decks: deckSummaries(data),
     status: statusSummary(data, uid, displays),
   };

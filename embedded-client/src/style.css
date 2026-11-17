@@ -448,6 +448,17 @@ body {
   min-width: 4.5rem;
 }
 
+.player-chip.is-you .player-avatar,
+.player-chip.is-you .player-initials {
+  box-shadow: 0 0 0 2px #16352c, 0 0 0 4px #f3d98c, var(--shadow);
+}
+
+.player-chip.is-you .player-name::after {
+  content: " (you)";
+  font-weight: 500;
+  color: var(--muted);
+}
+
 .player-avatar,
 .player-initials {
   width: 3.1rem;
