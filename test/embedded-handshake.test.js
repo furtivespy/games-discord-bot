@@ -1000,7 +1000,8 @@ describe("deck hover Deal and Draw", () => {
       require("path").join(__dirname, "..", "embedded-client", "src", "style.css"),
       "utf8"
     );
-    expect(css).toContain("scale(1.48)");
+    expect(css).toContain("--card-hover-scale: 1.48");
+    expect(css).toContain("scale(var(--card-hover-scale))");
     expect(css).not.toContain("scale(1.28)");
     expect(css).toMatch(/\.card-tile img[\s\S]*object-fit:\s*contain/);
     expect(css).toMatch(/\.hand-fan\s*\{[^}]*padding:\s*0\.45rem/);

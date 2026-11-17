@@ -11,6 +11,12 @@
   --tile-ink: #1c140c;
   --red: #c62828;
   --shadow: 0 10px 18px rgba(0, 0, 0, 0.35);
+  /* Resting tiles match the old hover-zoom (5.4×7.55rem × 1.48). Hover still
+     uses the same 1.48 scale from this new size. */
+  --card-width: 7.992rem;
+  --card-height: 11.174rem;
+  --card-hover-scale: 1.48;
+  --hand-overlap: 3.478rem;
 }
 
 html,
@@ -352,13 +358,16 @@ body {
   /* Cards from every zone share this stacking context so a raised tile can
      paint above later DOM zones. Do not put z-index/transform on .zone. */
   isolation: isolate;
+  container-type: size;
 }
 
 #table > * {
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-height: 0;
 }
 
 .hand-zone {
+  flex-shrink: 0;
   margin-top: auto;
 }
 
@@ -479,7 +488,7 @@ body {
 }
 
 .decks-zone {
-  min-width: 9.5rem;
+  min-width: calc(var(--card-width) + 4.1rem);
 }
 
 .decks {
@@ -494,8 +503,8 @@ body {
   gap: 0.5rem;
   overflow: visible;
   align-items: flex-end;
-  /* Empty zones stay a slim drop strip; tiles (7.55rem) grow a filled row.
-     Hover zoom and drag paint outside the row (overflow: visible). */
+  /* Empty zones stay a slim drop strip; tiles (var(--card-height)) grow a
+     filled row. Hover zoom and drag paint outside the row (overflow: visible). */
   min-height: 2.5rem;
 }
 
@@ -517,7 +526,7 @@ body {
 }
 
 .hand-fan .card-tile + .card-tile {
-  margin-left: -2.35rem;
+  margin-left: calc(-1 * var(--hand-overlap));
 }
 
 .card-tile,
@@ -525,8 +534,12 @@ body {
   position: relative;
   z-index: 1;
   box-sizing: border-box;
-  width: 5.4rem;
-  height: 7.55rem;
+  /* Prefer the FUR-251 resting size. 12rem leaves room for zone headings,
+     padding, the player rail, and gaps so 3 card rows stay on-screen. */
+  --card-fit-height: calc((100cqh - 12rem) / 3);
+  --card-used-height: min(var(--card-height), max(5.5rem, var(--card-fit-height)));
+  width: calc(var(--card-used-height) * 5.4 / 7.55);
+  height: var(--card-used-height);
   padding: 0;
   border: 0;
   background: transparent;
@@ -569,7 +582,7 @@ body {
   box-sizing: border-box;
   width: 100%;
   height: 100%;
-  border-radius: 0.55rem;
+  border-radius: 0.81rem;
   background: var(--tile);
   color: var(--tile-ink);
   border: 1px solid #d7c7a1;
@@ -577,14 +590,14 @@ body {
   display: grid;
   grid-template-rows: auto 1fr auto;
   justify-items: center;
-  padding: 0.28rem 0.28rem 0.32rem;
+  padding: 0.41rem 0.41rem 0.47rem;
   transform-origin: center bottom;
   transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
 
 .card-face.has-art {
   grid-template-rows: minmax(0, 1fr) auto;
-  padding: 0.2rem;
+  padding: 0.3rem;
   background: #1b1b1f;
   color: var(--ink);
 }
@@ -599,7 +612,7 @@ body {
 
 .card-tile:hover .card-face,
 .card-tile.dragging .card-face {
-  transform: translateY(-26px) scale(1.48);
+  transform: translateY(-38px) scale(var(--card-hover-scale));
   box-shadow: 0 22px 34px rgba(0, 0, 0, 0.5);
 }
 
@@ -610,10 +623,10 @@ body {
 
 .deck-actions {
   position: absolute;
-  left: 0.28rem;
-  right: 0.28rem;
+  left: 0.41rem;
+  right: 0.41rem;
   top: auto;
-  bottom: 1.35rem;
+  bottom: 2rem;
   display: flex;
   flex-direction: column;
   gap: 0.22rem;
@@ -631,12 +644,12 @@ body {
 
 .deck-action {
   font: inherit;
-  font-size: 0.62rem;
+  font-size: 0.92rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1.2;
-  padding: 0.2rem 0.3rem;
-  border-radius: 0.3rem;
+  padding: 0.3rem 0.44rem;
+  border-radius: 0.44rem;
   border: 1px solid rgba(230, 195, 92, 0.75);
   background: rgba(18, 12, 8, 0.88);
   color: #f8e7a1;
@@ -662,11 +675,11 @@ body {
 
 .card-index {
   justify-self: start;
-  font-size: 0.95rem;
+  font-size: 1.41rem;
 }
 
 .card-pip {
-  font-size: 1.7rem;
+  font-size: 2.52rem;
   align-self: center;
 }
 
@@ -674,7 +687,7 @@ body {
 .deck-name,
 .deck-count {
   text-align: center;
-  font-size: 0.62rem;
+  font-size: 0.92rem;
   font-weight: 700;
   line-height: 1.15;
   max-width: 100%;
@@ -684,11 +697,11 @@ body {
 .named-card {
   grid-template-rows: 1fr;
   place-items: center;
-  padding: 0.45rem 0.35rem;
+  padding: 0.67rem 0.52rem;
 }
 
 .card-name-full {
-  font-size: 0.78rem;
+  font-size: 1.15rem;
   align-self: center;
   display: -webkit-box;
   -webkit-line-clamp: 4;

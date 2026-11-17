@@ -457,6 +457,66 @@ describe("dropped cards snap back to their rest slot", () => {
   }, 30000);
 });
 
+function populatedTableHarness(css) {
+  const deck = (name, count) =>
+    `<article class="deck-tile" title="${name}"><div class="card-face deck-face"><span class="deck-name">${name}</span><span class="deck-count">${count}</span></div></article>`;
+  const player = (initials, name, count) =>
+    `<div class="player-chip"><div class="player-initials">${initials}</div><span class="player-name">${name}</span><span class="player-count">${count}</span></div>`;
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>${css}</style>
+  </head>
+  <body>
+    <div id="app" class="connected">
+      <aside id="side-panel"><p>status</p></aside>
+      <div id="table">
+        <section id="other-players" class="row players-row">
+          <h2>Players</h2>
+          <div id="other-players-list" class="players-rail">
+            ${player("R", "Riley", "1 card")}
+            ${player("S", "Sam", "4 cards")}
+          </div>
+        </section>
+        <section id="board-row" class="row board-row">
+          <section class="zone" data-zone="board">
+            <h2>Game Board</h2>
+            <div class="cards board-spread" id="board-cards">
+              ${namedTile("board-1", "Province")}
+              ${namedTile("board-2", "Duchy")}
+              ${namedTile("board-3", "Estate")}
+            </div>
+          </section>
+          <section class="zone decks-zone" data-zone="decks">
+            <h2>Decks</h2>
+            <div id="decks" class="decks">${deck("Main", "30")}${deck("Events", "8")}${deck("Chaos", "12")}</div>
+          </section>
+        </section>
+        <section class="zone" data-zone="play-area">
+          <h2>Play Area</h2>
+          <div class="cards board-spread" id="play-area-cards">
+            ${namedTile("play-1", "Village")}
+            ${namedTile("play-2", "Market")}
+          </div>
+        </section>
+        <section class="zone hand-zone" data-zone="hand">
+          <h2>Hand</h2>
+          <div class="cards hand-fan" id="hand-cards">
+            ${namedTile("hand-1", "Copper")}
+            ${namedTile("hand-2", "Queen of Diamonds")}
+            ${namedTile("hand-3", "Jack of Clubs")}
+            ${namedTile("hand-4", "10 of Spades")}
+            ${namedTile("hand-5", "Ace of Hearts")}
+          </div>
+        </section>
+      </div>
+    </div>
+    <script type="module" src="/harness.js"></script>
+  </body>
+</html>`;
+}
+
 const PIN_HARNESS_JS = `
 async function report(body) {
   await fetch("/result", {
@@ -466,23 +526,60 @@ async function report(body) {
   });
 }
 
+function frame() {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
 try {
-  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  await frame();
   const table = document.getElementById("table");
   const hand = document.querySelector(".hand-zone");
   const play = document.querySelector('[data-zone="play-area"]');
+  const tile = document.querySelector(".card-tile");
+  const face = tile && tile.querySelector(".card-face");
   const tableBox = table.getBoundingClientRect();
   const handBox = hand.getBoundingClientRect();
   const playBox = play.getBoundingClientRect();
+  const rest = face.getBoundingClientRect();
+  const root = getComputedStyle(document.documentElement);
+  const tableOverflow = table.scrollHeight > table.clientHeight + 1;
+  const handCards = [...document.querySelectorAll("#hand-cards .card-tile")].map((el) =>
+    el.getBoundingClientRect()
+  );
+  const handOverlaps =
+    handCards.length < 2 || handCards[1].left < handCards[0].right - 8;
+  const handLeft = handCards.length ? Math.min(...handCards.map((box) => box.left)) : tableBox.left;
+  const handRight = handCards.length ? Math.max(...handCards.map((box) => box.right)) : tableBox.right;
+  const sheet = document.styleSheets[0];
+  sheet.insertRule(
+    ".card-tile.measure-zoom .card-face { transform: translateY(-38px) scale(var(--card-hover-scale)); transition: none; }",
+    sheet.cssRules.length
+  );
+  tile.classList.add("measure-zoom");
+  await frame();
+  await frame();
+  const zoomed = face.getBoundingClientRect();
   await report({
+    viewportWidth: window.innerWidth,
     viewportHeight: window.innerHeight,
     tableHeight: tableBox.height,
     tableBottom: tableBox.bottom,
+    tableOverflow,
     handTop: handBox.top,
     handBottom: handBox.bottom,
     playBottom: playBox.bottom,
     gapBelowHand: tableBox.bottom - handBox.bottom,
     spaceAboveHand: handBox.top - playBox.bottom,
+    contentBottom: Math.max(tableBox.bottom, handBox.bottom),
+    handOverlaps,
+    handFitsTable: handLeft >= tableBox.left - 24 && handRight <= tableBox.right + 24,
+    cardWidth: rest.width,
+    cardHeight: rest.height,
+    zoomWidth: zoomed.width,
+    zoomHeight: zoomed.height,
+    hoverScale: Number.parseFloat(root.getPropertyValue("--card-hover-scale")),
+    cssCardWidth: root.getPropertyValue("--card-width").trim(),
+    cssCardHeight: root.getPropertyValue("--card-height").trim(),
   });
 } catch (error) {
   await report({ error: String(error && error.stack ? error.stack : error) });
@@ -495,7 +592,7 @@ describe("hand zone stays at the bottom of the table", () => {
   let chromeProc;
   let userDataDir;
 
-  afterEach(() => {
+  function cleanupLayoutRun() {
     try {
       chromeProc?.kill("SIGKILL");
     } catch {}
@@ -508,11 +605,14 @@ describe("hand zone stays at the bottom of the table", () => {
       fs.rmSync(userDataDir, { recursive: true, force: true });
       userDataDir = null;
     }
+  }
+
+  afterEach(() => {
+    cleanupLayoutRun();
   });
 
-  test.skipIf(!chrome)("QA: hand sits on the table bottom with slack above it", async () => {
-    const css = fs.readFileSync(STYLE_PATH, "utf8");
-
+  async function measureLayout(html, { width, height }) {
+    cleanupLayoutRun();
     let resolveResult;
     const resultPromise = new Promise((resolve) => {
       resolveResult = resolve;
@@ -532,7 +632,7 @@ describe("hand zone stays at the bottom of the table", () => {
             headers: { "Content-Type": "text/javascript; charset=utf-8" },
           });
         }
-        return new Response(stackingHarness(css), {
+        return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });
       },
@@ -548,19 +648,27 @@ describe("hand zone stays at the bottom of the table", () => {
         "--disable-dev-shm-usage",
         "--hide-scrollbars",
         "--no-first-run",
-        "--window-size=1280,800",
+        `--window-size=${width},${height}`,
         `--user-data-dir=${userDataDir}`,
         String(server.url),
       ],
       { stdio: "ignore" }
     );
 
-    const result = await Promise.race([
+    return Promise.race([
       resultPromise,
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error("timed out waiting for Chrome hand-pin result")), 20000)
       ),
     ]);
+  }
+
+  test.skipIf(!chrome)("QA: hand sits on the table bottom with slack above it", async () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const result = await measureLayout(stackingHarness(css), {
+      width: 1280,
+      height: 800,
+    });
 
     expect(result.error).toBeUndefined();
     expect(result.tableHeight).toBeGreaterThan(result.viewportHeight - 2);
@@ -570,6 +678,62 @@ describe("hand zone stays at the bottom of the table", () => {
     expect(result.handBottom).toBeGreaterThan(result.viewportHeight - 32);
     expect(result.gapBelowHand).toBeGreaterThanOrEqual(0);
     expect(result.gapBelowHand).toBeLessThan(24);
-    expect(result.spaceAboveHand).toBeGreaterThan(80);
+    expect(result.spaceAboveHand).toBeGreaterThan(24);
+    expect(result.cssCardWidth).toBe("7.992rem");
+    expect(result.cssCardHeight).toBe("11.174rem");
+    expect(result.cardWidth).toBeGreaterThan(96);
+    expect(result.cardHeight).toBeGreaterThan(132);
+    expect(result.hoverScale).toBeCloseTo(1.48, 2);
+    expect(result.zoomWidth / result.cardWidth).toBeCloseTo(1.48, 1);
+    expect(result.zoomHeight / result.cardHeight).toBeCloseTo(1.48, 1);
   }, 30000);
+
+  const overflowViewports = [
+    { width: 1280, height: 800 },
+    { width: 1280, height: 720 },
+    { width: 1024, height: 768 },
+    { width: 1920, height: 1080 },
+  ];
+
+  test.skipIf(!chrome)("QA: larger cards stay on-screen at common viewports", async () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const html = populatedTableHarness(css);
+
+    for (const viewport of overflowViewports) {
+      const result = await measureLayout(html, viewport);
+      const label = `${viewport.width}x${viewport.height}`;
+      expect({ label, error: result.error }).toEqual({ label, error: undefined });
+      expect({
+        label,
+        handBelowPlay: result.handBottom > result.playBottom,
+        handOnScreen: result.handBottom <= result.viewportHeight + 1,
+        handPinned: result.handBottom > result.viewportHeight - 32,
+        contentOnScreen: result.contentBottom <= result.viewportHeight + 1,
+        handOverlaps: result.handOverlaps,
+        handFitsTable: result.handFitsTable,
+      }).toEqual({
+        label,
+        handBelowPlay: true,
+        handOnScreen: true,
+        handPinned: true,
+        contentOnScreen: true,
+        handOverlaps: true,
+        handFitsTable: true,
+      });
+      expect(result.gapBelowHand).toBeGreaterThanOrEqual(0);
+      expect(result.gapBelowHand).toBeLessThan(24);
+      expect(result.spaceAboveHand).toBeGreaterThanOrEqual(0);
+      expect(result.hoverScale).toBeCloseTo(1.48, 2);
+      expect(result.zoomWidth / result.cardWidth).toBeCloseTo(1.48, 1);
+      expect(result.zoomHeight / result.cardHeight).toBeCloseTo(1.48, 1);
+      if (viewport.height >= 1080) {
+        expect(result.cardWidth).toBeGreaterThan(120);
+        expect(result.cardWidth).toBeLessThan(136);
+        expect(result.cardHeight).toBeGreaterThan(170);
+        expect(result.cardHeight).toBeLessThan(188);
+      } else {
+        expect(result.cardHeight).toBeGreaterThan(120);
+      }
+    }
+  }, 120000);
 });
