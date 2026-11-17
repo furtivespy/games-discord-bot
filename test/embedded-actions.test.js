@@ -243,6 +243,10 @@ describe("runVisualCardAction", () => {
     );
   }
 
+  function cloneGameDoc(data) {
+    return data == null ? null : JSON.parse(JSON.stringify(data));
+  }
+
   function clientForGame(gameData, { send } = {}) {
     const posted = [];
     const messages = new Map();
@@ -303,10 +307,11 @@ describe("runVisualCardAction", () => {
       },
     };
     const store = new Map();
-    store.set("guild-1:game:thread-game", gameData);
+    store.set("guild-1:game:thread-game", cloneGameDoc(gameData));
     return {
       posted,
       messages,
+      channel,
       pinnedStatusMessages() {
         return [...messages.values()].filter(
           (message) =>
@@ -322,10 +327,10 @@ describe("runVisualCardAction", () => {
           cache: { get: (id) => (id === "thread-game" ? channel : null) },
         },
         async getGameDataV2(guildId, collection, channelId) {
-          return store.get(`${guildId}:${collection}:${channelId}`) || null;
+          return cloneGameDoc(store.get(`${guildId}:${collection}:${channelId}`));
         },
         async setGameDataV2(guildId, collection, channelId, data) {
-          store.set(`${guildId}:${collection}:${channelId}`, data);
+          store.set(`${guildId}:${collection}:${channelId}`, cloneGameDoc(data));
         },
       },
     };
@@ -414,7 +419,7 @@ describe("runVisualCardAction", () => {
       },
     };
     const store = new Map();
-    store.set("guild-1:game:thread-game", gameData);
+    store.set("guild-1:game:thread-game", cloneGameDoc(gameData));
     const discordClient = {
       user: { id: "bot-1" },
       channels: {
@@ -438,10 +443,10 @@ describe("runVisualCardAction", () => {
         },
       },
       async getGameDataV2(guildId, collection, channelId) {
-        return store.get(`${guildId}:${collection}:${channelId}`) || null;
+        return cloneGameDoc(store.get(`${guildId}:${collection}:${channelId}`));
       },
       async setGameDataV2(guildId, collection, channelId, data) {
-        store.set(`${guildId}:${collection}:${channelId}`, data);
+        store.set(`${guildId}:${collection}:${channelId}`, cloneGameDoc(data));
       },
     };
     const result = await runVisualCardAction({
@@ -608,8 +613,7 @@ describe("runVisualCardAction", () => {
       "Will drew 1 cards from Main",
     ]);
     const chatPosts = posted.filter((payload) => !isPinnedStatusPayload(payload));
-    expect(chatPosts.length).toBeGreaterThanOrEqual(1);
-    expect(chatPosts.length).toBeLessThanOrEqual(2);
+    expect(chatPosts).toHaveLength(2);
     expect(
       chatPosts.every((payload) => payload.content === "Will drew 1 cards from Main")
     ).toBe(true);
@@ -652,8 +656,7 @@ describe("runVisualCardAction", () => {
       "Will dealt 2 cards from Main to all players",
     ]);
     const chatPosts = posted.filter((payload) => !isPinnedStatusPayload(payload));
-    expect(chatPosts.length).toBeGreaterThanOrEqual(1);
-    expect(chatPosts.length).toBeLessThanOrEqual(2);
+    expect(chatPosts).toHaveLength(2);
     expect(
       chatPosts.every((payload) => payload.content === "Dealt out a total of 2 cards from Main.")
     ).toBe(true);
@@ -836,7 +839,7 @@ describe("runVisualCardAction", () => {
     const posted = [];
     const gameData = gameWithDeck();
     const store = new Map();
-    store.set("guild-1:game:thread-game", gameData);
+    store.set("guild-1:game:thread-game", cloneGameDoc(gameData));
     const discordClient = {
       user: { id: "bot-1" },
       channels: {
@@ -870,11 +873,11 @@ describe("runVisualCardAction", () => {
         },
       },
       async getGameDataV2(guildId, collection, channelId) {
-        return store.get(`${guildId}:${collection}:${channelId}`) || null;
+        return cloneGameDoc(store.get(`${guildId}:${collection}:${channelId}`));
       },
       async setGameDataV2(guildId, collection, channelId, data, options = {}) {
         expect(options.skipPinnedRefresh).toBe(true);
-        store.set(`${guildId}:${collection}:${channelId}`, data);
+        store.set(`${guildId}:${collection}:${channelId}`, cloneGameDoc(data));
       },
     };
     const pending = runVisualCardAction({
@@ -956,7 +959,10 @@ describe("runVisualCardAction", () => {
     expect(posted).toHaveLength(0);
     releaseSend();
     await drainLockedVisualActions();
-    expect(posted).toHaveLength(2);
+    const chatPosts = posted.filter((payload) => !isPinnedStatusPayload(payload));
+    expect(chatPosts).toHaveLength(2);
+    const afterPosts = store.get("guild-1:game:thread-game");
+    expect(afterPosts.lastStatusMessageId).toBe("msg-2");
   });
 
   test("out-of-order send completion leaves one pin showing the latest board", async () => {
@@ -1023,14 +1029,16 @@ describe("runVisualCardAction", () => {
     expect(pins).toHaveLength(1);
     expect(pins[0].embeds[0].remaining).toBe(8);
     expect(pins[0].embeds[0].handSize).toBe(3);
-    expect(saved.pinnedStatusMessageId).toBe(pins[0].id);
+    const afterPosts = store.get("guild-1:game:thread-game");
+    expect(afterPosts.pinnedStatusMessageId).toBe(pins[0].id);
+    expect(afterPosts.lastStatusMessageId).toBeTruthy();
   });
 
   test("a burst of parallel draws leaves one pinned status reflecting final state", async () => {
     const burst = 8;
     const drawCount = 20;
     const game = gameWithPinnedDeck({ drawCount });
-    const { store, discordClient, pinnedStatusMessages } = clientForGame(game);
+    const { posted, store, discordClient, pinnedStatusMessages } = clientForGame(game);
     const draw = {
       action: "draw",
       deckName: "Main",
@@ -1054,11 +1062,150 @@ describe("runVisualCardAction", () => {
     const saved = store.get("guild-1:game:thread-game");
     expect(saved.players[0].hands.main).toHaveLength(1 + burst);
     expect(saved.decks[0].piles.draw.cards).toHaveLength(drawCount - burst);
+    const chatPosts = posted.filter((payload) => !isPinnedStatusPayload(payload));
+    expect(chatPosts).toHaveLength(burst);
     const pins = pinnedStatusMessages();
     expect(pins).toHaveLength(1);
     expect(pins[0].embeds[0].remaining).toBe(drawCount - burst);
     expect(pins[0].embeds[0].handSize).toBe(1 + burst);
     expect(saved.pinnedStatusMessageId).toBe(pins[0].id);
+  });
+
+  test("game delete mid-queue does not resurrect the document or re-pin", async () => {
+    let releaseSend;
+    const sendGate = new Promise((resolve) => {
+      releaseSend = resolve;
+    });
+    const game = gameWithPinnedDeck({ drawCount: 10 });
+    const { posted, store, discordClient, pinnedStatusMessages } = clientForGame(game, {
+      send: async (payload, postedMessages) => {
+        await sendGate;
+        postedMessages.push(payload);
+        return { id: `msg-${postedMessages.length}` };
+      },
+    });
+    const draw = {
+      action: "draw",
+      deckName: "Main",
+      count: 1,
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+    };
+    const first = await runVisualCardAction({ ...draw, requestId: "delete-mid-aaa" });
+    expect(first.status).toBe(200);
+    const second = await runVisualCardAction({ ...draw, requestId: "delete-mid-bbb" });
+    expect(second.status).toBe(200);
+
+    const key = "guild-1:game:thread-game";
+    const live = store.get(key);
+    store.set(
+      key,
+      cloneGameDoc({
+        ...live,
+        isdeleted: true,
+        pinnedStatusMessageId: null,
+        pinnedStatusChannelId: null,
+        pinnedStatusPinned: false,
+        lastStatusMessageId: null,
+        lastStatusMessageTimestamp: null,
+      })
+    );
+
+    releaseSend();
+    await drainLockedVisualActions();
+
+    const saved = store.get(key);
+    expect(saved.isdeleted).toBe(true);
+    expect(saved.pinnedStatusMessageId).toBeNull();
+    expect(saved.lastStatusMessageId).toBeNull();
+    expect(pinnedStatusMessages()).toHaveLength(0);
+    const chatPosts = posted.filter((payload) => !isPinnedStatusPayload(payload));
+    expect(chatPosts.length).toBeLessThanOrEqual(1);
+  });
+
+  test("channel delete mid-queue does not create a pin for the queued post", async () => {
+    let releaseSend;
+    const sendGate = new Promise((resolve) => {
+      releaseSend = resolve;
+    });
+    const game = gameWithPinnedDeck({ drawCount: 10 });
+    const { posted, store, discordClient, pinnedStatusMessages } = clientForGame(game, {
+      send: async (payload, postedMessages) => {
+        await sendGate;
+        postedMessages.push(payload);
+        return { id: `msg-${postedMessages.length}` };
+      },
+    });
+    const draw = {
+      action: "draw",
+      deckName: "Main",
+      count: 1,
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+    };
+    const first = await runVisualCardAction({ ...draw, requestId: "chan-del-aaa" });
+    expect(first.status).toBe(200);
+    const second = await runVisualCardAction({ ...draw, requestId: "chan-del-bbb" });
+    expect(second.status).toBe(200);
+
+    discordClient.channels.cache.get = () => null;
+
+    releaseSend();
+    await drainLockedVisualActions();
+
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.isdeleted).toBe(false);
+    expect(saved.players[0].hands.main.map((card) => card.name)).toEqual([
+      "Copper",
+      "Card1",
+      "Card2",
+    ]);
+    expect(pinnedStatusMessages()).toHaveLength(0);
+    const chatPosts = posted.filter((payload) => !isPinnedStatusPayload(payload));
+    expect(chatPosts.length).toBeLessThanOrEqual(1);
+  });
+
+  test("persistPinFields failure discards the extra pin", async () => {
+    const game = gameWithPinnedDeck({ drawCount: 5 });
+    const { store, discordClient, pinnedStatusMessages, messages } = clientForGame(game);
+    const originalSet = discordClient.setGameDataV2.bind(discordClient);
+    discordClient.setGameDataV2 = async (guildId, collection, channelId, data, options) => {
+      if (data?.pinnedStatusMessageId) {
+        throw new Error("pin persist failed");
+      }
+      return originalSet(guildId, collection, channelId, data, options);
+    };
+    const originalError = console.error;
+    console.error = () => {};
+    try {
+      const result = await runVisualCardAction({
+        action: "draw",
+        deckName: "Main",
+        count: 1,
+        user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+        guildId: "guild-1",
+        channelId: "thread-game",
+        discordClient,
+      });
+      expect(result.status).toBe(200);
+      await drainLockedVisualActions();
+    } finally {
+      console.error = originalError;
+    }
+
+    expect(pinnedStatusMessages()).toHaveLength(0);
+    const leftoverPins = [...messages.values()].filter(
+      (message) =>
+        typeof message.content === "string" &&
+        message.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)
+    );
+    expect(leftoverPins).toHaveLength(0);
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.pinnedStatusMessageId == null).toBe(true);
   });
 
   test("scores save uses applyPlayerScores, persists, and posts the scoreall message", async () => {
@@ -1155,7 +1302,7 @@ describe("runVisualCardAction", () => {
     const memberFetches = [];
     const posted = [];
     const store = new Map();
-    store.set("guild-1:game:thread-game", game);
+    store.set("guild-1:game:thread-game", cloneGameDoc(game));
     const channel = {
       id: "thread-game",
       guild: { id: "guild-1" },
@@ -1186,10 +1333,10 @@ describe("runVisualCardAction", () => {
         }),
       },
       async getGameDataV2(guildId, collection, channelId) {
-        return store.get(`${guildId}:${collection}:${channelId}`) || null;
+        return cloneGameDoc(store.get(`${guildId}:${collection}:${channelId}`));
       },
       async setGameDataV2(guildId, collection, channelId, data) {
-        store.set(`${guildId}:${collection}:${channelId}`, data);
+        store.set(`${guildId}:${collection}:${channelId}`, cloneGameDoc(data));
       },
     };
     const result = await runVisualScoreAction({

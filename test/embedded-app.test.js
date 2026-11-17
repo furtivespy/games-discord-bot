@@ -1885,8 +1885,7 @@ describe("POST /api/game/action", () => {
         "TableWill drew 1 cards from Main",
       ]);
       await drainLockedVisualActions();
-      expect(posted.length).toBeGreaterThanOrEqual(1);
-      expect(posted.length).toBeLessThanOrEqual(drawHistory.length);
+      expect(posted).toHaveLength(drawHistory.length);
       expect(
         posted.every((payload) =>
           postMatchesHistory(payload.content, drawHistory[drawHistory.length - 1])
@@ -1935,8 +1934,7 @@ describe("POST /api/game/action", () => {
         [GameDB.ACTION_TYPES.DEAL, GameDB.ACTION_TYPES.DRAW].sort()
       );
       await drainLockedVisualActions();
-      expect(posted.length).toBeGreaterThanOrEqual(1);
-      expect(posted.length).toBeLessThanOrEqual(history.length);
+      expect(posted).toHaveLength(history.length);
       const postedContents = posted.map((payload) => payload.content);
       const latest = history[history.length - 1];
       expect(
@@ -2062,7 +2060,7 @@ describe("POST /api/game/action", () => {
     const game = actionGame({ draw: drawCards });
     game.pinnedStatusEnabled = true;
     game.pinnedStatusMode = "on";
-    await withActionApp({ game }, async ({ url, store, pinnedStatusMessages }) => {
+    await withActionApp({ game }, async ({ url, posted, store, pinnedStatusMessages }) => {
       const results = await Promise.all(
         Array.from({ length: burst }, (_, i) =>
           postAction(url, {
@@ -2080,6 +2078,12 @@ describe("POST /api/game/action", () => {
       const saved = store.getSpecificGameData("guild-1", GAME_COLLECTION, "thread-game");
       expect(cardNames(saved.players[0].hands.main)).toHaveLength(1 + burst);
       expect(saved.decks[0].piles.draw.cards).toHaveLength(20 - burst);
+      const chatPosts = posted.filter(
+        (payload) =>
+          typeof payload?.content !== "string" ||
+          !payload.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)
+      );
+      expect(chatPosts).toHaveLength(burst);
       const pins = pinnedStatusMessages();
       expect(pins).toHaveLength(1);
       expect(pins[0].embeds[0].remaining).toBe(20 - burst);

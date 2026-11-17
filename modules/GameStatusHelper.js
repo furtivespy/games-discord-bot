@@ -12,11 +12,17 @@ const PINNED_STATUS_MODES = Object.freeze({
 });
 const loggedMissingPinPermission = new Set();
 
-function runOptionallyLocked(runLocked, fn) {
-  if (typeof runLocked === "function") {
-    return runLocked(fn);
+function withOptionalChannelLock(withChannelLock, fn) {
+  if (typeof withChannelLock === "function") {
+    return withChannelLock(fn);
   }
   return fn();
+}
+
+function shouldSkipPin(options = {}) {
+  return typeof options.skipPin === "function"
+    ? options.skipPin()
+    : Boolean(options.skipPin);
 }
 
 class GameStatusHelper {
@@ -287,14 +293,16 @@ class GameStatusHelper {
       await this.postCommandNaturalReplyToChannel(channel, options);
     }
 
-    await this.safeUpsertPinnedStatus(
-      channel,
-      client,
-      interaction,
-      gameData,
-      this.buildPinSnapshot(fullReply),
-      options
-    );
+    if (!shouldSkipPin(options)) {
+      await this.safeUpsertPinnedStatus(
+        channel,
+        client,
+        interaction,
+        gameData,
+        this.buildPinSnapshot(fullReply),
+        options
+      );
+    }
   }
 
   // Single choke point for building the full game status reply (table image,
@@ -324,26 +332,25 @@ class GameStatusHelper {
 
     // Chat-status metadata only — merge into the latest saved document so a
     // later persist cannot clobber a newer command write (same idea as
-    // persistPinFields). Swallow persist errors so they cannot leave a
-    // deferred slash reply unresolved after the chat message already posted.
-    // options.runLocked serializes this get-then-set with visual load/save
-    // without holding that lock through Discord send/pin REST.
+    // persistPinFields). Abort when the latest doc is gone or deleted so a
+    // queued visual post cannot resurrect isdeleted. Swallow persist errors
+    // so they cannot leave a deferred slash reply unresolved after the chat
+    // message already posted. options.withChannelLock serializes this
+    // get-then-set with visual load/save without holding that lock through
+    // Discord send/pin REST. Visual Deal/Draw posts are themselves serialized
+    // on the per-channel post queue, so lastStatusMessageId is last-writer
+    // among completed sends, not a timestamp race.
     try {
-      await runOptionallyLocked(options.runLocked, async () => {
+      await withOptionalChannelLock(options.withChannelLock, async () => {
         const guildId = interaction.guildId;
         const channelId = interaction.channelId;
         const fresh = await client.getGameDataV2(guildId, "game", channelId);
-        const toSave = fresh && !fresh.isdeleted ? fresh : gameData;
-        if (
-          typeof toSave.lastStatusMessageTimestamp === "number" &&
-          typeof gameData.lastStatusMessageTimestamp === "number" &&
-          gameData.lastStatusMessageTimestamp < toSave.lastStatusMessageTimestamp
-        ) {
+        if (!fresh || fresh.isdeleted) {
           return;
         }
-        toSave.lastStatusMessageId = gameData.lastStatusMessageId;
-        toSave.lastStatusMessageTimestamp = gameData.lastStatusMessageTimestamp;
-        await client.setGameDataV2(guildId, "game", channelId, toSave, {
+        fresh.lastStatusMessageId = gameData.lastStatusMessageId;
+        fresh.lastStatusMessageTimestamp = gameData.lastStatusMessageTimestamp;
+        await client.setGameDataV2(guildId, "game", channelId, fresh, {
           skipPinnedRefresh: true,
         });
       });
@@ -353,7 +360,7 @@ class GameStatusHelper {
   }
 
   static async persistPinFields(client, interaction, gameData, options = {}) {
-    await runOptionallyLocked(options.runLocked, async () => {
+    await withOptionalChannelLock(options.withChannelLock, async () => {
       const guildId = interaction.guildId;
       const channelId = interaction.channelId;
       const fresh = await client.getGameDataV2(guildId, "game", channelId);
@@ -439,8 +446,11 @@ class GameStatusHelper {
     }
     try {
       const load = () => client.getGameDataV2(guildId, "game", channelId);
-      const fresh = await runOptionallyLocked(options.runLocked, load);
-      if (fresh && !fresh.isdeleted) {
+      const fresh = await withOptionalChannelLock(options.withChannelLock, load);
+      if (fresh?.isdeleted) {
+        return null;
+      }
+      if (fresh) {
         return fresh;
       }
     } catch (error) {
@@ -478,13 +488,16 @@ class GameStatusHelper {
     }
 
     const latest = await this.latestGameForPin(client, interaction, gameData, options);
-    if (latest?.pinnedStatusMessageId) {
+    if (!latest || latest.isdeleted) {
+      return;
+    }
+    if (latest.pinnedStatusMessageId) {
       gameData.pinnedStatusMessageId = latest.pinnedStatusMessageId;
       gameData.pinnedStatusChannelId = latest.pinnedStatusChannelId;
       gameData.pinnedStatusPinned = latest.pinnedStatusPinned;
     }
 
-    const rebuildFromLatest = Boolean(options.pinFromLatest || options.runLocked);
+    const rebuildFromLatest = options.pinFromLatest === true;
     const pinSource = rebuildFromLatest ? latest : gameData;
     let snapshot = snapshotReply;
     if (rebuildFromLatest || !snapshot) {
@@ -529,9 +542,14 @@ class GameStatusHelper {
     gameData.pinnedStatusMessageId = sent.id;
     gameData.pinnedStatusChannelId = channel.id;
     await this.ensurePinned(sent, channel, client, gameData, { isNew: true });
-    await this.persistPinFields(client, interaction, gameData, options);
+    try {
+      await this.persistPinFields(client, interaction, gameData, options);
+    } catch (error) {
+      await this.discardSupersededPinnedMessage(sent);
+      throw error;
+    }
     const officialId = await this.readPinnedStatusMessageId(client, interaction, options);
-    if (officialId && officialId !== sent.id) {
+    if (officialId !== sent.id) {
       await this.discardSupersededPinnedMessage(sent);
     }
   }
@@ -546,7 +564,7 @@ class GameStatusHelper {
       return null;
     }
     try {
-      const fresh = await runOptionallyLocked(options.runLocked, () =>
+      const fresh = await withOptionalChannelLock(options.withChannelLock, () =>
         client.getGameDataV2(guildId, "game", channelId)
       );
       return fresh?.pinnedStatusMessageId || null;

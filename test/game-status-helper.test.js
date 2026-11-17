@@ -235,7 +235,7 @@ describe("GameStatusHelper pinned live status", () => {
     expect(harness.gameData.lastStatusMessageId).toBe("chat-1");
   });
 
-  test("persistStatusUpdate runs the metadata merge inside runLocked when provided", async () => {
+  test("persistStatusUpdate runs the metadata merge inside withChannelLock when provided", async () => {
     const harness = createHarness({
       gameData: createGameData({
         players: [{ userId: "p1", score: 0 }],
@@ -258,7 +258,7 @@ describe("GameStatusHelper pinned live status", () => {
         lastStatusMessageTimestamp: 456,
       },
       {
-        runLocked: async (fn) => {
+        withChannelLock: async (fn) => {
           duringLock = true;
           try {
             return await fn();
@@ -274,32 +274,29 @@ describe("GameStatusHelper pinned live status", () => {
     expect(harness.persistCalls[0][3].lastStatusMessageId).toBe("chat-locked");
   });
 
-  test("persistStatusUpdate does not clobber a newer chat status id", async () => {
+  test("persistStatusUpdate does not write chat metadata over a deleted game", async () => {
     const harness = createHarness({
       gameData: createGameData({
         players: [{ userId: "p1", score: 0 }],
+        isdeleted: false,
       }),
     });
-    harness.storedGame.lastStatusMessageId = "chat-newer";
-    harness.storedGame.lastStatusMessageTimestamp = 200;
+    harness.storedGame.isdeleted = true;
+    harness.storedGame.lastStatusMessageId = null;
 
     await GameStatusHelper.persistStatusUpdate(
       harness.client,
       harness.interaction,
+      harness.gameData,
       {
-        ...harness.gameData,
-        lastStatusMessageId: "chat-older",
-        lastStatusMessageTimestamp: 100,
-      },
-      {
-        lastStatusMessageId: "chat-older",
+        lastStatusMessageId: "chat-after-delete",
         lastStatusMessageTimestamp: 100,
       }
     );
 
     expect(harness.persistCalls).toHaveLength(0);
-    expect(harness.storedGame.lastStatusMessageId).toBe("chat-newer");
-    expect(harness.storedGame.lastStatusMessageTimestamp).toBe(200);
+    expect(harness.storedGame.isdeleted).toBe(true);
+    expect(harness.storedGame.lastStatusMessageId).toBeNull();
   });
 
   test("first status with pin enabled creates, pins, and persists a separate pin id", async () => {
@@ -388,6 +385,83 @@ describe("GameStatusHelper pinned live status", () => {
     expect(pinSends).toHaveLength(0);
     expect(harness.fetchCalls).toContain("pin-1");
     expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+  });
+
+  test("pinFromLatest paints the stored board, not the persist-time snapshot", async () => {
+    Formatter.createGameStatusReply = async (gameData, _guild, _clientUserId, options = {}) => ({
+      content: options.content ?? "📊",
+      embeds: [
+        {
+          title: "Game Status",
+          remaining: gameData?.decks?.[0]?.piles?.draw?.cards?.length ?? -1,
+          handSize: gameData?.players?.[0]?.hands?.main?.length ?? 0,
+        },
+      ],
+      files: [],
+    });
+    const harness = createHarness({
+      gameData: createGameData({
+        pinnedStatusEnabled: true,
+        pinnedStatusMessageId: "pin-1",
+        pinnedStatusChannelId: "channel-1",
+        pinnedStatusPinned: true,
+        decks: [{ piles: { draw: { cards: [{ id: "stale-1" }, { id: "stale-2" }, { id: "stale-3" }] } } }],
+        players: [{ hands: { main: [{ id: "h1" }] } }],
+      }),
+    });
+    harness.storedGame.decks = [{ piles: { draw: { cards: [{ id: "fresh-1" }] } } }];
+    harness.storedGame.players = [{ hands: { main: [{ id: "h1" }, { id: "h2" }, { id: "h3" }] } }];
+    harness.pinMessage.pinned = true;
+
+    await GameStatusHelper.sendPublicStatusUpdate(
+      harness.interaction,
+      harness.client,
+      harness.gameData,
+      { content: "Alice drew 2 cards", pinFromLatest: true }
+    );
+
+    const pinEdit = harness.editCalls.find(
+      (payload) =>
+        typeof payload.content === "string" &&
+        payload.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)
+    );
+    expect(pinEdit.embeds[0].remaining).toBe(1);
+    expect(pinEdit.embeds[0].handSize).toBe(3);
+  });
+
+  test("persistPinFields failure discards the pin that was just created", async () => {
+    const harness = createHarness({
+      gameData: createGameData({ pinnedStatusEnabled: true }),
+    });
+    let deleted = false;
+    harness.pinMessage.delete = async () => {
+      deleted = true;
+      harness.pinMessage.pinned = false;
+    };
+    const originalSet = harness.client.setGameDataV2.bind(harness.client);
+    harness.client.setGameDataV2 = async (...args) => {
+      const data = args[3];
+      if (data?.pinnedStatusMessageId) {
+        throw new Error("pin persist failed");
+      }
+      return originalSet(...args);
+    };
+    const originalError = console.error;
+    console.error = () => {};
+    try {
+      await GameStatusHelper.sendPublicStatusUpdate(
+        harness.interaction,
+        harness.client,
+        harness.gameData,
+        { content: "Alice drew 3 cards" }
+      );
+    } finally {
+      console.error = originalError;
+    }
+
+    expect(deleted).toBe(true);
+    expect(harness.unpinCalls).toContain("unpin");
+    expect(harness.pinMessage.pinned).toBe(false);
   });
 
   test("cleanUpPreviousMessage never fetches or edits the pinned id", async () => {

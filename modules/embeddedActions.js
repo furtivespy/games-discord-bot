@@ -202,7 +202,8 @@ async function postCommandToGameChannel({
   gameData,
   content,
   logger,
-  runLocked,
+  withChannelLock,
+  skipPin,
 }) {
   if (!discordClient) return false;
   const channel = await resolveDiscordChannel(discordClient, channelId);
@@ -226,7 +227,7 @@ async function postCommandToGameChannel({
     interaction,
     discordClient,
     gameData,
-    { content, runLocked, pinFromLatest: true }
+    { content, withChannelLock, pinFromLatest: true, skipPin }
   );
   return true;
 }
@@ -239,7 +240,8 @@ async function finishVisualCardAction({
   gameData,
   content,
   logger,
-  runLocked,
+  withChannelLock,
+  skipPin,
 }) {
   let posted = false;
   try {
@@ -252,7 +254,8 @@ async function finishVisualCardAction({
         gameData,
         content,
         logger,
-        runLocked,
+        withChannelLock,
+        skipPin,
       })
     );
   } catch (err) {
@@ -262,13 +265,15 @@ async function finishVisualCardAction({
     );
     posted = false;
   }
-  if (!posted) {
+  const skipPinnedRefresh =
+    typeof skipPin === "function" ? skipPin() : Boolean(skipPin);
+  if (!posted && !skipPinnedRefresh) {
     try {
       await GameStatusHelper.refreshPinnedStatusAfterGameSave(
         discordClient,
         { guildId, channelId },
         gameData,
-        { runLocked, pinFromLatest: true }
+        { withChannelLock, pinFromLatest: true }
       );
     } catch (err) {
       logger?.log?.(
@@ -286,32 +291,31 @@ async function loadLatestGameForVisualPost({
   gameStore,
   guildId,
   channelId,
-  runLocked,
+  withChannelLock,
 }) {
   const loader = resolveGetGameData({ getGameData, discordClient, gameStore });
   if (!loader) return null;
   const load = () => loader(guildId, GAME_COLLECTION, channelId);
-  if (typeof runLocked === "function") {
-    return runLocked(load);
+  if (typeof withChannelLock === "function") {
+    return withChannelLock(load);
   }
   return load();
 }
 
-async function postLatestVisualCardAction(args, { isSuperseded } = {}) {
-  let gameData = args.gameData;
+async function postLatestVisualCardAction(args, { shouldSkipPin } = {}) {
   try {
     const latest = await loadLatestGameForVisualPost(args);
-    if (latest && !latest.isdeleted) {
-      gameData = latest;
+    if (isMissingGame(latest)) {
+      return false;
     }
   } catch {
     // Keep the persist-time snapshot if a refresh read fails.
   }
-  if (typeof isSuperseded === "function" && isSuperseded()) {
-    return false;
-  }
-  if (!gameData || gameData.isdeleted) return false;
-  return finishVisualCardAction({ ...args, gameData });
+  if (!args.gameData || args.gameData.isdeleted) return false;
+  return finishVisualCardAction({
+    ...args,
+    skipPin: shouldSkipPin,
+  });
 }
 
 function applyVisualCardAction(gameData, { action, deckName, count, actor, userId }) {
@@ -411,8 +415,9 @@ async function playerNamesForScoreUpdate(gameData, scores, { discordClient, guil
  * Serialize load → mutate → save for one game document. Two Deal/Draw POSTs
  * with different requestIds must not both load the same snapshot. Channel
  * posts are best-effort on a second per-channel queue: a hung Discord send,
- * pin REST, or card-image loadImage must not stall the next persist. Posts
- * themselves stay serialized so concurrent sends cannot spawn leftover
+ * pin REST, or card-image loadImage must not stall the next persist. Chat
+ * action lines stay queued (best-effort); pin/status refresh coalesces to
+ * the latest persisted board so concurrent sends cannot spawn leftover
  * live-status pins. Status metadata merges re-enter the persist lock only
  * around the short get-then-set so they cannot clobber a later save. The HTTP
  * response is released as soon as persist and the visual snapshot finish.
@@ -439,11 +444,11 @@ function createGameChannelLock() {
 }
 
 /**
- * Best-effort Discord posts after the game lock. One worker per channel:
- * later enqueues replace a job that has not started sending (latest-wins),
- * and a job already in channel.send finishes then the worker posts the
- * latest persisted board. A hung send stalls this queue only, not mutations
- * or the HTTP response.
+ * Best-effort Discord posts after the game lock. One worker per channel
+ * serializes channel.send so leftover pins cannot race into existence.
+ * Every queued chat action line is posted; pin refresh is skipped when a
+ * later job is already waiting so only one official pin remains. A hung
+ * send stalls this queue only, not mutations or the HTTP response.
  */
 function createVisualChannelPostQueue() {
   const pending = new Map();
@@ -456,12 +461,21 @@ function createVisualChannelPostQueue() {
     else entry.resolve(value);
   }
 
+  function queueFor(key) {
+    const queue = pending.get(key);
+    return Array.isArray(queue) ? queue : [];
+  }
+
+  function hasPending(key) {
+    return queueFor(key).length > 0;
+  }
+
   function enqueue(guildId, channelId, job) {
     const key = `${guildId}:${channelId}`;
     return new Promise((resolve, reject) => {
-      const previous = pending.get(key);
-      if (previous) settle(previous, false);
-      pending.set(key, { job, resolve, reject, settled: false });
+      const queue = queueFor(key);
+      queue.push({ job, resolve, reject, settled: false });
+      pending.set(key, queue);
       if (!pumps.has(key)) {
         pumps.set(key, pump(key));
       }
@@ -470,12 +484,14 @@ function createVisualChannelPostQueue() {
 
   async function pump(key) {
     try {
-      while (pending.has(key)) {
-        const current = pending.get(key);
-        pending.delete(key);
+      while (hasPending(key)) {
+        const queue = queueFor(key);
+        const current = queue.shift();
+        if (queue.length === 0) pending.delete(key);
+        else pending.set(key, queue);
         try {
           const posted = await current.job({
-            isSuperseded: () => pending.has(key),
+            shouldSkipPin: () => hasPending(key),
           });
           settle(current, Boolean(posted));
         } catch (err) {
@@ -484,7 +500,7 @@ function createVisualChannelPostQueue() {
       }
     } finally {
       pumps.delete(key);
-      if (pending.has(key)) {
+      if (hasPending(key)) {
         const next = pump(key);
         pumps.set(key, next);
         await next;
@@ -684,7 +700,7 @@ async function runVisualCardAction({
       ? gameChannelLock
       : defaultGameChannelLock;
 
-  const runLocked = (fn) => lock.run(gid, cid, fn);
+  const withChannelLock = (fn) => lock.run(gid, cid, fn);
   const postQueue =
     channelPostQueue && typeof channelPostQueue.enqueue === "function"
       ? channelPostQueue
@@ -779,7 +795,7 @@ async function runVisualCardAction({
             gameData: pendingPost.gameData,
             content: pendingPost.content,
             logger,
-            runLocked,
+            withChannelLock,
           },
           queue
         )
