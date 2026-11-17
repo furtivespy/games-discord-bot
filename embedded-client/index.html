@@ -88,12 +88,52 @@
           </svg>
         </button>
       </form>
-      <div class="card-inspect-sheet">
-        <img id="card-inspect-art" class="card-inspect-art" alt="" hidden />
-        <div id="card-inspect-proxy" class="card-inspect-proxy" hidden></div>
-        <div id="card-inspect-meta" class="card-inspect-caption">
-          <p id="card-inspect-title" class="card-inspect-title"></p>
-          <p id="card-inspect-caption" class="card-inspect-description" hidden></p>
+      <div class="card-inspect-stage">
+        <button
+          type="button"
+          id="card-inspect-prev"
+          class="card-inspect-nav"
+          data-inspect-nav="prev"
+          aria-label="Previous card"
+          hidden
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+              d="M15 6l-6 6 6 6"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.25"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          id="card-inspect-next"
+          class="card-inspect-nav"
+          data-inspect-nav="next"
+          aria-label="Next card"
+          hidden
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+              d="M9 6l6 6-6 6"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.25"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+        <div class="card-inspect-sheet">
+          <img id="card-inspect-art" class="card-inspect-art" alt="" hidden />
+          <div id="card-inspect-proxy" class="card-inspect-proxy" hidden></div>
+          <div id="card-inspect-meta" class="card-inspect-caption">
+            <p id="card-inspect-title" class="card-inspect-title"></p>
+            <p id="card-inspect-caption" class="card-inspect-description" hidden></p>
+          </div>
         </div>
       </div>
     </dialog>
