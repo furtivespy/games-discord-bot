@@ -12,6 +12,7 @@ import {
   GAMES_LOADING_MESSAGE,
   GAMES_SELECT_PLACEHOLDER,
   SNAPSHOT_LOADING_MESSAGE,
+  SNAPSHOT_STALE_MESSAGE,
   gamesRequestUrl,
   helloGreeting,
   originLine,
@@ -19,7 +20,22 @@ import {
   snapshotRequestUrl,
   tokenRequestUrl,
   urlMappingsForApiHost,
+  versionRequestUrl,
 } from "./handshake";
+import {
+  HISTORY_CHANGED_CLASS,
+  HISTORY_FLASH_MS,
+  captureScrollTop,
+  clearHistoryFlash,
+  createSnapshotPoller,
+  etagFromVersion,
+  historyEntryKey,
+  isSnapshotPollBlocked,
+  newHistoryKeys,
+  restoreScrollTop,
+  retryAfterMsFromHeader,
+  type VersionPollResult,
+} from "./snapshotPoll";
 import {
   ACTION_COUNT_MAX,
   ACTION_COUNT_MIN,
@@ -38,7 +54,7 @@ import {
   visualActionErrorMessage,
   type DeckActionKind,
 } from "./visualActions";
-import { enableCardDrag, type CardOffset } from "./drag";
+import { SNAP_BACK_DURATION_MS, enableCardDrag, type CardOffset } from "./drag";
 import { closeCardInspect, enableCardInspectDialog, openCardInspect } from "./cardInspect";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
@@ -84,6 +100,15 @@ let activeSession: {
 let actionDialogBound = false;
 let actionInFlight = false;
 let actionRequestId: string | null = null;
+let appliedVersion = "";
+let appliedChannelId = "";
+let appliedHistoryKeys: string[] = [];
+let cardPositions = new Map<string, CardOffset>();
+let pendingSnapshot: { config: EmbeddedConfig; payload: GameSnapshot } | null = null;
+let historyFlashTimer: ReturnType<typeof setTimeout> | null = null;
+let snapshotPoller: ReturnType<typeof createSnapshotPoller> | null = null;
+let snapshotPollVisibilityBound = false;
+let snapshotApplyResumeBound = false;
 
 type EmbeddedConfig = {
   clientId: string;
@@ -114,6 +139,7 @@ type GameSnapshot = {
   status?: GameStatus;
   error?: string;
   channelPosted?: boolean;
+  version?: string;
 };
 
 type PickerGame = {
@@ -205,6 +231,9 @@ function setTableVisible(visible: boolean) {
   const table = document.getElementById("table");
   if (table) table.hidden = !visible;
   if (!visible) {
+    stopSnapshotPolling();
+    pendingSnapshot = null;
+    resetHistoryHighlightState();
     const status = document.getElementById("game-status");
     if (status) {
       status.hidden = true;
@@ -247,6 +276,156 @@ function liveSelectedChannelId(requestedChannelId: string): string {
 
 function cancelSnapshotLoad() {
   snapshotLoader.clear();
+  stopSnapshotPolling();
+  resetHistoryHighlightState();
+}
+
+function resetHistoryHighlightState() {
+  appliedVersion = "";
+  appliedChannelId = "";
+  appliedHistoryKeys = [];
+  cardPositions = new Map();
+  if (historyFlashTimer != null) {
+    clearTimeout(historyFlashTimer);
+    historyFlashTimer = null;
+  }
+}
+
+function snapshotPollHidden(): boolean {
+  if (typeof document === "undefined") return true;
+  if (document.visibilityState === "hidden") return true;
+  return Boolean(document.getElementById("table")?.hidden);
+}
+
+function snapshotPollBlocked(): boolean {
+  if (actionInFlight) return true;
+  if (snapshotLoader.isInFlight()) return true;
+  return isSnapshotPollBlocked(document);
+}
+
+function setTableStale(stale: boolean) {
+  document.getElementById("app")?.classList.toggle("is-stale", stale);
+  if (stale) setSnapshotStatus(SNAPSHOT_STALE_MESSAGE);
+}
+
+async function fetchSnapshotVersion(): Promise<VersionPollResult> {
+  const session = activeSession;
+  if (!session) return { kind: "error" };
+  const channelId = liveSelectedChannelId(session.config.channelId);
+  if (!channelId) return { kind: "error" };
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${session.accessToken}`,
+  };
+  if (appliedVersion) headers["If-None-Match"] = etagFromVersion(appliedVersion);
+  const response = await fetch(
+    versionRequestUrl(session.config.apiHost, window.location.protocol, {
+      fixture: session.config.mock ? readFixture() : undefined,
+      channelId,
+      guildId: session.guildId || session.config.guildId,
+    }),
+    { headers }
+  );
+  if (response.status === 304) return { kind: "unchanged" };
+  if (response.status === 401) return { kind: "unauthorized" };
+  if (response.status === 429) {
+    return {
+      kind: "rate_limited",
+      retryAfterMs: retryAfterMsFromHeader(response.headers.get("retry-after")),
+    };
+  }
+  if (!response.ok) return { kind: "error" };
+  let payload: { version?: string } = {};
+  try {
+    payload = (await response.json()) as { version?: string };
+  } catch {
+    return { kind: "error" };
+  }
+  const version = typeof payload.version === "string" ? payload.version.trim() : "";
+  if (!version) return { kind: "error" };
+  if (version === appliedVersion) return { kind: "unchanged" };
+  return { kind: "changed", version };
+}
+
+async function refreshSnapshotFromPoll(): Promise<boolean> {
+  const session = activeSession;
+  if (!session) return false;
+  const channelId = liveSelectedChannelId(session.config.channelId);
+  if (!channelId) return false;
+  return loadSnapshot(
+    session.config,
+    session.accessToken,
+    { channelId, guildId: session.guildId || session.config.guildId },
+    { silent: true }
+  );
+}
+
+function flushDeferredSnapshot() {
+  if (snapshotPollBlocked()) return;
+  const pending = pendingSnapshot;
+  if (pending) {
+    pendingSnapshot = null;
+    applySnapshot(pending.config, pending.payload);
+  }
+  void snapshotPoller?.pollNow();
+}
+
+function bindSnapshotApplyResume() {
+  if (snapshotApplyResumeBound || typeof document === "undefined") return;
+  snapshotApplyResumeBound = true;
+  document.addEventListener(
+    "pointerup",
+    () => {
+      window.setTimeout(() => {
+        flushDeferredSnapshot();
+      }, SNAP_BACK_DURATION_MS + 60);
+    },
+    true
+  );
+  document.addEventListener("pointercancel", () => {
+    window.setTimeout(() => {
+      flushDeferredSnapshot();
+    }, SNAP_BACK_DURATION_MS + 60);
+  });
+  document.addEventListener(
+    "close",
+    () => {
+      flushDeferredSnapshot();
+    },
+    true
+  );
+}
+
+function bindSnapshotPoller() {
+  if (snapshotPoller) return;
+  snapshotPoller = createSnapshotPoller({
+    fetchVersion: fetchSnapshotVersion,
+    refresh: refreshSnapshotFromPoll,
+    isHidden: snapshotPollHidden,
+    isBlocked: snapshotPollBlocked,
+    onUnauthorized: () => {
+      setTableStale(true);
+    },
+  });
+  bindSnapshotApplyResume();
+  if (snapshotPollVisibilityBound || typeof document === "undefined") return;
+  snapshotPollVisibilityBound = true;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void snapshotPoller?.pollNow();
+  });
+}
+
+function startSnapshotPolling(version?: string) {
+  bindSnapshotPoller();
+  if (typeof version === "string" && version) {
+    snapshotPoller?.setVersion(version);
+  } else if (appliedVersion) {
+    snapshotPoller?.setVersion(appliedVersion);
+  }
+  snapshotPoller?.start(version || appliedVersion);
+}
+
+function stopSnapshotPolling() {
+  snapshotPoller?.stop();
 }
 
 function showSelectedChannel(name: string | null) {
@@ -421,6 +600,7 @@ function bindActionDialog() {
     setActionDialogError(null);
     const { confirm } = actionDialogElements();
     if (confirm && !actionInFlight) confirm.disabled = false;
+    flushDeferredSnapshot();
   });
   els.form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -806,7 +986,11 @@ function appendStatusLines(parent: HTMLElement, lines: string[]) {
   }
 }
 
-function renderGameStatus(status: GameStatus | undefined, fallbackName: string) {
+function renderGameStatus(
+  status: GameStatus | undefined,
+  fallbackName: string,
+  highlightKeys: Set<string> = new Set()
+) {
   const root = document.getElementById("game-status");
   if (!root) return;
   root.replaceChildren();
@@ -892,6 +1076,11 @@ function renderGameStatus(status: GameStatus | undefined, fallbackName: string) 
     list.className = "status-history";
     for (const entry of history) {
       const item = document.createElement("li");
+      const key = historyEntryKey(entry);
+      if (key) item.dataset.historyKey = key;
+      if (key && highlightKeys.has(key)) {
+        item.className = HISTORY_CHANGED_CLASS;
+      }
       item.textContent = entry.summary || "";
       list.append(item);
     }
@@ -899,6 +1088,14 @@ function renderGameStatus(status: GameStatus | undefined, fallbackName: string) 
     root.append(block);
   }
   root.hidden = false;
+}
+
+function scheduleHistoryFlashClear(root: HTMLElement | null) {
+  if (historyFlashTimer != null) clearTimeout(historyFlashTimer);
+  historyFlashTimer = window.setTimeout(() => {
+    historyFlashTimer = null;
+    clearHistoryFlash(root);
+  }, HISTORY_FLASH_MS);
 }
 
 function snapshotErrorMessage(error: string | undefined, status: number): string {
@@ -914,11 +1111,19 @@ function snapshotErrorMessage(error: string | undefined, status: number): string
 async function loadSnapshot(
   config: EmbeddedConfig,
   accessToken: string,
-  ids: { channelId: string; guildId: string }
-) {
+  ids: { channelId: string; guildId: string },
+  options: { silent?: boolean } = {}
+): Promise<boolean> {
+  const silent = Boolean(options.silent);
   const outcome = await snapshotLoader.load(
     ids.channelId,
     async (signal) => {
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${accessToken}`,
+      };
+      if (silent && appliedVersion) {
+        headers["If-None-Match"] = etagFromVersion(appliedVersion);
+      }
       const response = await fetch(
         snapshotRequestUrl(config.apiHost, window.location.protocol, {
           fixture: config.mock ? readFixture() : undefined,
@@ -926,10 +1131,17 @@ async function loadSnapshot(
           guildId: ids.guildId,
         }),
         {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers,
           signal,
         }
       );
+      if (response.status === 304) {
+        return {
+          ok: true,
+          status: 304,
+          payload: { channelId: ids.channelId },
+        };
+      }
       let payload: GameSnapshot = {};
       try {
         payload = (await response.json()) as GameSnapshot;
@@ -947,49 +1159,96 @@ async function loadSnapshot(
     outcome.status === "stale" ||
     outcome.status === "cleared"
   ) {
-    return;
+    return false;
   }
 
   if (outcome.status === "failed") {
-    setTableVisible(false);
-    setSnapshotStatus(snapshotErrorMessage(undefined, 0));
-    return;
+    if (!silent) {
+      setTableVisible(false);
+      setSnapshotStatus(snapshotErrorMessage(undefined, 0));
+    }
+    return false;
+  }
+
+  if (outcome.result.status === 304) {
+    return true;
   }
 
   const payload = outcome.result.payload as GameSnapshot;
   if (liveSelectedChannelId(ids.channelId) !== ids.channelId) {
-    return;
+    return false;
   }
   if (
     typeof payload.channelId === "string" &&
     payload.channelId.trim() &&
     payload.channelId !== ids.channelId
   ) {
-    return;
+    return false;
   }
 
   if (outcome.status === "error") {
-    setTableVisible(false);
-    setSnapshotStatus(snapshotErrorMessage(payload.error, outcome.result.status));
-    return;
+    const gone =
+      outcome.result.status === 404 || outcome.result.status === 403;
+    if (!silent || gone) {
+      setTableVisible(false);
+      setSnapshotStatus(snapshotErrorMessage(payload.error, outcome.result.status));
+      stopSnapshotPolling();
+    }
+    return false;
   }
 
   applySnapshot(config, payload);
+  return true;
 }
 
 function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot) {
+  if (isSnapshotPollBlocked(document)) {
+    pendingSnapshot = { config, payload };
+    return;
+  }
+  pendingSnapshot = null;
+  setTableStale(false);
   setSnapshotStatus(null);
   closeCardInspect();
   if (payload.channelPosted !== false) setActionNotice(null);
-  const positions = new Map<string, CardOffset>();
+  const channelId =
+    typeof payload.channelId === "string" ? payload.channelId.trim() : "";
+  const history = asRecordList<StatusHistory>(payload.status?.history);
+  const nextKeys = history.map((entry) => historyEntryKey(entry)).filter(Boolean);
+  const highlightKeys =
+    channelId && channelId === appliedChannelId
+      ? newHistoryKeys(appliedHistoryKeys, history)
+      : new Set<string>();
+  if (channelId !== appliedChannelId) {
+    cardPositions = new Map();
+  }
+  appliedChannelId = channelId;
+  appliedHistoryKeys = nextKeys;
+  if (typeof payload.version === "string" && payload.version.trim()) {
+    appliedVersion = payload.version.trim();
+  }
+  const sidePanel = document.getElementById("side-panel");
+  const statusRoot = document.getElementById("game-status");
+  const historyList = statusRoot?.querySelector(".status-history");
+  const sideScroll = captureScrollTop(sidePanel);
+  const statusScroll = captureScrollTop(statusRoot);
+  const historyScroll = captureScrollTop(historyList);
   renderGameChannelLink(payload.guildId || config.guildId, payload.channelId);
-  renderGameStatus(payload.status, payload.gameName || "");
+  renderGameStatus(payload.status, payload.gameName || "", highlightKeys);
   renderOtherPlayers(config, payload.otherPlayers, payload.status?.teams);
   renderDecks(config, payload.decks);
-  renderCards(config, "board-cards", payload.gameBoard, positions);
-  renderCards(config, "play-area-cards", payload.playArea, positions);
-  renderCards(config, "hand-cards", payload.hand, positions);
+  renderCards(config, "board-cards", payload.gameBoard, cardPositions);
+  renderCards(config, "play-area-cards", payload.playArea, cardPositions);
+  renderCards(config, "hand-cards", payload.hand, cardPositions);
+  restoreScrollTop(document.getElementById("side-panel"), sideScroll);
+  restoreScrollTop(document.getElementById("game-status"), statusScroll);
+  restoreScrollTop(
+    document.getElementById("game-status")?.querySelector(".status-history"),
+    historyScroll
+  );
+  scheduleHistoryFlashClear(document.getElementById("game-status"));
   setTableVisible(true);
+  startSnapshotPolling(appliedVersion);
 }
 
 function createSdk(config: EmbeddedConfig) {

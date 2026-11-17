@@ -25,14 +25,17 @@ export function tokenRequestUrl(apiHost: string, protocol: string): string {
   return apiUrl(apiHost, protocol, "/api/token");
 }
 
-export function snapshotRequestUrl(
+type GameQuery = {
+  fixture?: string | null;
+  channelId?: string | null;
+  guildId?: string | null;
+};
+
+function gameRequestUrl(
   apiHost: string,
   protocol: string,
-  query: {
-    fixture?: string | null;
-    channelId?: string | null;
-    guildId?: string | null;
-  } = {}
+  path: string,
+  query: GameQuery = {}
 ): string {
   const params = new URLSearchParams();
   const fixture = String(query.fixture || "").trim();
@@ -42,11 +45,23 @@ export function snapshotRequestUrl(
   if (channelId) params.set("channelId", channelId);
   if (guildId) params.set("guildId", guildId);
   const qs = params.toString();
-  return apiUrl(
-    apiHost,
-    protocol,
-    `/api/game/snapshot${qs ? `?${qs}` : ""}`
-  );
+  return apiUrl(apiHost, protocol, `${path}${qs ? `?${qs}` : ""}`);
+}
+
+export function snapshotRequestUrl(
+  apiHost: string,
+  protocol: string,
+  query: GameQuery = {}
+): string {
+  return gameRequestUrl(apiHost, protocol, "/api/game/snapshot", query);
+}
+
+export function versionRequestUrl(
+  apiHost: string,
+  protocol: string,
+  query: GameQuery = {}
+): string {
+  return gameRequestUrl(apiHost, protocol, "/api/game/version", query);
 }
 
 export const CARD_IMAGE_PATH = "/api/card-image";
@@ -89,6 +104,8 @@ export const GAMES_ERROR_MESSAGE = "Could not load your games.";
 export const GAMES_LOADING_MESSAGE = "Loading your games…";
 export const GAMES_SELECT_PLACEHOLDER = "Select a game";
 export const SNAPSHOT_LOADING_MESSAGE = "Loading the table…";
+export const SNAPSHOT_STALE_MESSAGE =
+  "Session expired. Reopen visual mode to reconnect.";
 
 export function firstNonEmptyName(...values: unknown[]): string | null {
   for (const value of values) {

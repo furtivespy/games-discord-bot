@@ -1,5 +1,6 @@
 "use strict";
 
+const { createHash } = require("crypto");
 const { ChannelType, PermissionFlagsBits } = require("discord.js");
 const GameDB = require("../db/anygame");
 
@@ -425,10 +426,58 @@ function historySummaries(data) {
         entry.summary.trim()
     )
     .slice(-STATUS_HISTORY_LIMIT)
-    .map((entry) => ({
-      summary: entry.summary.trim(),
-      category: typeof entry.action?.category === "string" ? entry.action.category : "",
-    }));
+    .map((entry) => {
+      const row = {
+        summary: entry.summary.trim(),
+        category:
+          typeof entry.action?.category === "string" ? entry.action.category : "",
+      };
+      if (entry.id != null && String(entry.id).trim()) {
+        row.id = String(entry.id).trim();
+      }
+      if (typeof entry.timestamp === "string" && entry.timestamp.trim()) {
+        row.timestamp = entry.timestamp.trim();
+      }
+      return row;
+    });
+}
+
+function opaqueSnapshotHash(value) {
+  return createHash("sha256").update(String(value)).digest("hex");
+}
+
+/**
+ * Opaque fingerprint of the per-viewer snapshot. Hidden hands, secret piles,
+ * and other players' cards are not in the hash, so they cannot leak via ETag.
+ */
+function snapshotVersion(data, ids = {}) {
+  const opts = ids && typeof ids === "object" ? ids : { userId: ids };
+  try {
+    const visible = snapshotFromGameData(data, {
+      userId: String(opts.userId || ""),
+      channelId: String(opts.channelId || ""),
+      guildId: String(opts.guildId || ""),
+    });
+    return opaqueSnapshotHash(JSON.stringify(visible));
+  } catch {
+    return "";
+  }
+}
+
+function formatEtag(version) {
+  const raw = String(version || "");
+  return `"${raw.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function etagMatches(header, version) {
+  if (!version) return false;
+  const expected = formatEtag(version);
+  const tags = String(header || "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (tags.includes("*")) return true;
+  return tags.includes(expected) || tags.includes(`W/${expected}`);
 }
 
 function statusSummary(data, userId, displays) {
@@ -943,7 +992,7 @@ async function requiredDiscordAccessGuard({
   return { ok: true, member };
 }
 
-async function snapshotGameForUser({
+async function loadViewerGame({
   getGameData,
   discordClient,
   gameStore,
@@ -982,23 +1031,72 @@ async function snapshotGameForUser({
     return { status: 403, body: { error: "not_a_player" } };
   }
 
-  const userIds = Array.isArray(data.players)
-    ? data.players.map((player) => String(player?.userId || "")).filter(Boolean)
+  const version = snapshotVersion(data, {
+    channelId: cid,
+    guildId: gid,
+    userId: uid,
+  });
+  if (!version) {
+    return { status: 500, body: { error: "snapshot_failed" } };
+  }
+
+  return {
+    status: 200,
+    data,
+    version,
+    guildId: gid,
+    channelId: cid,
+    userId: uid,
+  };
+}
+
+async function versionGameForUser({ ifNoneMatch, ...opts } = {}) {
+  const loaded = await loadViewerGame(opts);
+  if (loaded.status !== 200) {
+    return { status: loaded.status, body: loaded.body };
+  }
+  if (etagMatches(ifNoneMatch, loaded.version)) {
+    return { status: 304, version: loaded.version };
+  }
+  return {
+    status: 200,
+    version: loaded.version,
+    body: { version: loaded.version },
+  };
+}
+
+async function snapshotGameForUser({ ifNoneMatch, ...opts } = {}) {
+  const loaded = await loadViewerGame(opts);
+  if (loaded.status !== 200) {
+    return { status: loaded.status, body: loaded.body };
+  }
+  if (etagMatches(ifNoneMatch, loaded.version)) {
+    return { status: 304, version: loaded.version };
+  }
+
+  const userIds = Array.isArray(loaded.data.players)
+    ? loaded.data.players
+        .map((player) => String(player?.userId || ""))
+        .filter(Boolean)
     : [];
   const playerDisplays = await resolvePlayerDisplays({
-    discordClient,
-    guildId: gid,
+    discordClient: opts.discordClient,
+    guildId: loaded.guildId,
     userIds,
   });
 
   return {
     status: 200,
-    body: snapshotFromGameData(data, {
-      channelId: cid,
-      guildId: gid,
-      userId: uid,
-      playerDisplays,
-    }),
+    version: loaded.version,
+    body: {
+      ...snapshotFromGameData(loaded.data, {
+        channelId: loaded.channelId,
+        guildId: loaded.guildId,
+        userId: loaded.userId,
+        playerDisplays,
+      }),
+      version: loaded.version,
+    },
   };
 }
 
@@ -1030,5 +1128,9 @@ module.exports = {
   resolvePlayerDisplays,
   snapshotFromGameData,
   snapshotGameForUser,
+  snapshotVersion,
+  etagMatches,
+  formatEtag,
   userIsPlayer,
+  versionGameForUser,
 };

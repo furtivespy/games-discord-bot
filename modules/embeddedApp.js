@@ -25,9 +25,12 @@ const {
   channelNameFromDiscordClient,
   createDiscordLookupCache,
   listActiveGamesForUser,
+  etagMatches,
+  formatEtag,
   optionalDiscordAccessGuard,
   requiredDiscordAccessGuard,
   snapshotGameForUser,
+  versionGameForUser,
 } = require("./embeddedGames");
 const {
   CARD_IMAGE_PATH,
@@ -38,6 +41,7 @@ const {
 
 const DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token";
 const DISCORD_ME_URL = "https://discord.com/api/v10/users/@me";
+const DISCORD_USER_CACHE_TTL_MS = 45_000;
 const DEFAULT_PORT = 3000;
 const CONFIG_PLACEHOLDER = "/*__GAMEBOT_EMBEDDED_CONFIG__*/";
 const DEFAULT_STATIC_DIR = path.join(__dirname, "..", "embedded-client", "dist");
@@ -174,6 +178,44 @@ async function fetchDiscordUser(accessToken, fetchImpl = fetch) {
   } catch {
     return null;
   }
+}
+
+async function resolveDiscordUser({
+  accessToken,
+  fetchImpl = fetch,
+  cache,
+  logger,
+} = {}) {
+  const token = String(accessToken || "");
+  if (!token) return null;
+  const key = `me:${token}`;
+  const cached = cache?.get?.(key);
+  if (cached) return cached;
+  if (cache?.inflight?.has?.(key)) return cache.inflight.get(key);
+
+  const load = (async () => {
+    try {
+      const user = await fetchDiscordUser(token, fetchImpl);
+      if (user?.id) cache?.set?.(key, user);
+      return user;
+    } catch (err) {
+      logger?.log?.(
+        `Discord users/@me lookup failed: ${err.message || err}`,
+        "warn"
+      );
+      return null;
+    }
+  })();
+
+  if (cache?.inflight) {
+    cache.inflight.set(key, load);
+    try {
+      return await load;
+    } finally {
+      cache.inflight.delete(key);
+    }
+  }
+  return load;
 }
 
 async function handleTokenExchange({
@@ -328,6 +370,9 @@ function createEmbeddedApp({
   const mockSession = mockEnabled ? createMockGameSession() : null;
   const actionIdempotency = createActionIdempotencyCache();
   const discordLookupCache = createDiscordLookupCache();
+  const discordUserCache = createDiscordLookupCache({
+    ttlMs: DISCORD_USER_CACHE_TTL_MS,
+  });
 
   const app = express();
   app.disable("x-powered-by");
@@ -386,15 +431,12 @@ function createEmbeddedApp({
       res.status(401).json({ error: "unauthorized" });
       return;
     }
-    let user = null;
-    try {
-      user = await fetchDiscordUser(accessToken, fetchImpl);
-    } catch (err) {
-      logger?.log?.(
-        `Discord users/@me lookup failed: ${err.message || err}`,
-        "warn"
-      );
-    }
+    const user = await resolveDiscordUser({
+      accessToken,
+      fetchImpl,
+      cache: discordUserCache,
+      logger,
+    });
     if (!user?.id) {
       res.status(401).json({ error: "unauthorized" });
       return;
@@ -416,15 +458,36 @@ function createEmbeddedApp({
 
   app.get(["/api/games", "/.proxy/api/games"], sendActiveGames);
 
-  function sendSnapshotResult(res, result) {
+  function sendVersionedResult(
+    res,
+    result,
+    { proxyImages = false, ifNoneMatch } = {}
+  ) {
+    const version = result.version || result.body?.version;
+    if (result.status === 200 && etagMatches(ifNoneMatch, version)) {
+      result = { status: 304, version };
+    }
+    res.set("Cache-Control", "no-store");
+    if (version) res.set("ETag", formatEtag(version));
+    if (result.status === 304) {
+      res.status(304).end();
+      return;
+    }
     const body =
-      result.status === 200
+      proxyImages && result.status === 200
         ? proxySnapshotImages(result.body, cardImageKey)
         : result.body;
     res.status(result.status).json(body);
   }
 
-  async function sendGameSnapshot(req, res) {
+  function sendSnapshotResult(res, result, req) {
+    sendVersionedResult(res, result, {
+      proxyImages: true,
+      ifNoneMatch: req?.get?.("if-none-match"),
+    });
+  }
+
+  async function authenticateEmbeddedGameRead(req) {
     const accessToken = bearerTokenFromHeader(req.get("authorization"));
     const requestedChannelId = sanitizeHostChannelId(
       firstQueryValue(req.query?.channelId)
@@ -432,43 +495,39 @@ function createEmbeddedApp({
     const requestedGuildId = sanitizeHostChannelId(
       firstQueryValue(req.query?.guildId)
     );
+    const fixture = firstQueryValue(req.query?.fixture);
+    const ifNoneMatch = req.get("if-none-match");
+
     if (mockEnabled) {
       if (accessToken !== MOCK_ACCESS_TOKEN) {
-        res.status(401).json({ error: "unauthorized" });
-        return;
+        return { ok: false, status: 401, body: { error: "unauthorized" } };
       }
-      const result = mockSession.getSnapshot({
-        fixture: firstQueryValue(req.query?.fixture),
-        channelId: requestedChannelId || resolvedMockChannelId,
-        guildId: requestedGuildId || resolvedMockGuildId,
-      });
-      sendSnapshotResult(res, result);
-      return;
+      return {
+        ok: true,
+        mock: true,
+        fixture,
+        requestedChannelId: requestedChannelId || resolvedMockChannelId,
+        requestedGuildId: requestedGuildId || resolvedMockGuildId,
+        ifNoneMatch,
+      };
     }
     if (!accessToken) {
-      res.status(401).json({ error: "unauthorized" });
-      return;
+      return { ok: false, status: 401, body: { error: "unauthorized" } };
     }
-    let user = null;
-    try {
-      user = await fetchDiscordUser(accessToken, fetchImpl);
-    } catch (err) {
-      logger?.log?.(
-        `Discord users/@me lookup failed: ${err.message || err}`,
-        "warn"
-      );
-    }
+    const user = await resolveDiscordUser({
+      accessToken,
+      fetchImpl,
+      cache: discordUserCache,
+      logger,
+    });
     if (!user?.id) {
-      res.status(401).json({ error: "unauthorized" });
-      return;
+      return { ok: false, status: 401, body: { error: "unauthorized" } };
     }
     if (!requestedGuildId) {
-      res.status(400).json({ error: "missing_guild" });
-      return;
+      return { ok: false, status: 400, body: { error: "missing_guild" } };
     }
     if (!requestedChannelId) {
-      res.status(400).json({ error: "missing_channel" });
-      return;
+      return { ok: false, status: 400, body: { error: "missing_channel" } };
     }
     const guard = await optionalDiscordAccessGuard({
       fetchImpl,
@@ -479,22 +538,77 @@ function createEmbeddedApp({
       userId: user.id,
     });
     if (!guard.ok) {
-      res.status(guard.status).json(guard.body);
+      return { ok: false, status: guard.status, body: guard.body };
+    }
+    return {
+      ok: true,
+      mock: false,
+      user,
+      requestedChannelId,
+      requestedGuildId,
+      ifNoneMatch,
+    };
+  }
+
+  async function sendGameSnapshot(req, res) {
+    const auth = await authenticateEmbeddedGameRead(req);
+    if (!auth.ok) {
+      res.status(auth.status).json(auth.body);
+      return;
+    }
+    if (auth.mock) {
+      const result = mockSession.getSnapshot({
+        fixture: auth.fixture,
+        channelId: auth.requestedChannelId,
+        guildId: auth.requestedGuildId,
+      });
+      sendSnapshotResult(res, result, req);
       return;
     }
     const result = await snapshotGameForUser({
       getGameData,
       discordClient,
       gameStore,
-      guildId: requestedGuildId,
-      channelId: requestedChannelId,
-      userId: user.id,
+      guildId: auth.requestedGuildId,
+      channelId: auth.requestedChannelId,
+      userId: auth.user.id,
       logger,
+      ifNoneMatch: auth.ifNoneMatch,
     });
-    sendSnapshotResult(res, result);
+    sendSnapshotResult(res, result, req);
   }
 
   app.get(["/api/game/snapshot", "/.proxy/api/game/snapshot"], sendGameSnapshot);
+
+  async function sendGameVersion(req, res) {
+    const auth = await authenticateEmbeddedGameRead(req);
+    if (!auth.ok) {
+      res.status(auth.status).json(auth.body);
+      return;
+    }
+    if (auth.mock) {
+      const result = mockSession.getVersion({
+        fixture: auth.fixture,
+        channelId: auth.requestedChannelId,
+        guildId: auth.requestedGuildId,
+      });
+      sendVersionedResult(res, result, { ifNoneMatch: auth.ifNoneMatch });
+      return;
+    }
+    const result = await versionGameForUser({
+      getGameData,
+      discordClient,
+      gameStore,
+      guildId: auth.requestedGuildId,
+      channelId: auth.requestedChannelId,
+      userId: auth.user.id,
+      logger,
+      ifNoneMatch: auth.ifNoneMatch,
+    });
+    sendVersionedResult(res, result, { ifNoneMatch: auth.ifNoneMatch });
+  }
+
+  app.get(["/api/game/version", "/.proxy/api/game/version"], sendGameVersion);
 
   async function sendGameAction(req, res) {
     const accessToken = bearerTokenFromHeader(req.get("authorization"));
@@ -525,7 +639,7 @@ function createEmbeddedApp({
         count: parsed.count,
         requestId: parsed.requestId,
       });
-      sendSnapshotResult(res, result);
+      sendSnapshotResult(res, result, req);
       return;
     }
     if (!accessToken) {
@@ -535,15 +649,12 @@ function createEmbeddedApp({
       });
       return;
     }
-    let user = null;
-    try {
-      user = await fetchDiscordUser(accessToken, fetchImpl);
-    } catch (err) {
-      logger?.log?.(
-        `Discord users/@me lookup failed: ${err.message || err}`,
-        "warn"
-      );
-    }
+    const user = await resolveDiscordUser({
+      accessToken,
+      fetchImpl,
+      cache: discordUserCache,
+      logger,
+    });
     if (!user?.id) {
       res.status(401).json({
         error: "unauthorized",
@@ -596,7 +707,7 @@ function createEmbeddedApp({
       requestId: parsed.requestId,
       idempotency: actionIdempotency,
     });
-    sendSnapshotResult(res, result);
+    sendSnapshotResult(res, result, req);
   }
 
   app.post(["/api/game/action", "/.proxy/api/game/action"], sendGameAction);
@@ -727,6 +838,7 @@ module.exports = {
   DEFAULT_PORT,
   DISCORD_ME_URL,
   DISCORD_TOKEN_URL,
+  DISCORD_USER_CACHE_TTL_MS,
   bearerTokenFromHeader,
   createEmbeddedApp,
   displayNameFromDiscordUser,

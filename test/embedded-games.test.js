@@ -20,7 +20,11 @@ const {
   MAX_VISIBLE_DECKS,
   snapshotFromGameData,
   snapshotGameForUser,
+  snapshotVersion,
+  formatEtag,
+  etagMatches,
   userIsPlayer,
+  versionGameForUser,
 } = require("../modules/embeddedGames");
 
 async function withStore(run) {
@@ -393,7 +397,10 @@ describe("snapshotGameForUser", () => {
         { guildId: "guild-a", collection: GAME_COLLECTION, channelId: "thread-game" },
       ]);
       expect(result.status).toBe(200);
-      expect(result.body).toEqual({
+      expect(result.body.version).toEqual(expect.any(String));
+      expect(result.version).toBe(result.body.version);
+      const { version: _version, ...body } = result.body;
+      expect(body).toEqual({
         gameName: "Friday Inis",
         channelId: "thread-game",
         guildId: "guild-a",
@@ -584,6 +591,162 @@ describe("snapshotGameForUser", () => {
     expect(result.body.status.players[0].name).toBe("WillOnServer");
     expect(result.body.otherPlayers[0].name).toBe("other-player");
     expect(result.body.otherPlayers[0].avatarUrl).toBeNull();
+  });
+
+  test("If-None-Match skips Discord member lookups and returns 304", async () => {
+    let memberFetches = 0;
+    const discordClient = {
+      getGameDataV2: async () => snapshotSeed(),
+      guilds: {
+        cache: {
+          get: () => {
+            memberFetches += 1;
+            return null;
+          },
+        },
+        fetch: async () => {
+          memberFetches += 1;
+          return {
+            members: {
+              cache: { get: () => null },
+              fetch: async () => ({ displayName: "WillOnServer" }),
+            },
+          };
+        },
+      },
+    };
+    const first = await snapshotGameForUser({
+      discordClient,
+      guildId: "guild-a",
+      channelId: "thread-game",
+      userId: "will",
+    });
+    expect(first.status).toBe(200);
+    expect(memberFetches).toBeGreaterThan(0);
+    const afterFirst = memberFetches;
+    const again = await snapshotGameForUser({
+      discordClient,
+      guildId: "guild-a",
+      channelId: "thread-game",
+      userId: "will",
+      ifNoneMatch: formatEtag(first.body.version),
+    });
+    expect(again).toEqual({ status: 304, version: first.body.version });
+    expect(memberFetches).toBe(afterFirst);
+  });
+});
+
+describe("versionGameForUser", () => {
+  test("returns a version without Discord member lookups and 304s when unchanged", async () => {
+    let memberFetches = 0;
+    const game = snapshotSeed();
+    const discordClient = {
+      getGameDataV2: async () => game,
+      guilds: {
+        cache: {
+          get: () => {
+            memberFetches += 1;
+            return null;
+          },
+        },
+        fetch: async () => {
+          memberFetches += 1;
+          throw new Error("version poll must not look up members");
+        },
+      },
+    };
+    const first = await versionGameForUser({
+      discordClient,
+      guildId: "guild-a",
+      channelId: "thread-game",
+      userId: "will",
+    });
+    expect(first.status).toBe(200);
+    expect(first.body).toEqual({
+      version: snapshotVersion(game, {
+        channelId: "thread-game",
+        guildId: "guild-a",
+        userId: "will",
+      }),
+    });
+    expect(memberFetches).toBe(0);
+
+    const cached = await versionGameForUser({
+      discordClient,
+      guildId: "guild-a",
+      channelId: "thread-game",
+      userId: "will",
+      ifNoneMatch: formatEtag(first.body.version),
+    });
+    expect(cached).toEqual({ status: 304, version: first.body.version });
+    expect(memberFetches).toBe(0);
+
+    game.gameBoard.push({ id: "board-2", name: "Duchy" });
+    const changed = await versionGameForUser({
+      discordClient,
+      guildId: "guild-a",
+      channelId: "thread-game",
+      userId: "will",
+      ifNoneMatch: formatEtag(first.body.version),
+    });
+    expect(changed.status).toBe(200);
+    expect(changed.body.version).not.toBe(first.body.version);
+
+    const star = await versionGameForUser({
+      discordClient,
+      guildId: "guild-a",
+      channelId: "thread-game",
+      userId: "will",
+      ifNoneMatch: "*",
+    });
+    expect(star).toEqual({ status: 304, version: changed.body.version });
+  });
+
+  test("fingerprint ignores another player's hidden cards", async () => {
+    const game = snapshotSeed();
+    const ids = {
+      channelId: "thread-game",
+      guildId: "guild-a",
+      userId: "will",
+    };
+    const first = await versionGameForUser({
+      discordClient: { getGameDataV2: async () => game },
+      ...ids,
+    });
+    expect(first.status).toBe(200);
+    expect(first.body.version).toMatch(/^[0-9a-f]{64}$/);
+    expect(first.body.version).not.toContain("|");
+    expect(first.body.version).not.toContain("Other Player Secret");
+    expect(snapshotVersion(game, ids)).toBe(first.body.version);
+
+    game.players[1].hands.main[0].name = "King";
+    game.players[1].hands.main[0].id = "other-secret-swapped";
+    const hiddenOnly = await versionGameForUser({
+      discordClient: { getGameDataV2: async () => game },
+      ...ids,
+      ifNoneMatch: formatEtag(first.body.version),
+    });
+    expect(hiddenOnly).toEqual({ status: 304, version: first.body.version });
+
+    game.gameBoard.push({ id: "board-2", name: "Duchy" });
+    const visible = await versionGameForUser({
+      discordClient: { getGameDataV2: async () => game },
+      ...ids,
+      ifNoneMatch: formatEtag(first.body.version),
+    });
+    expect(visible.status).toBe(200);
+    expect(visible.body.version).not.toBe(first.body.version);
+  });
+});
+
+describe("etagMatches", () => {
+  test("matches the formatted tag, weak tags, and *", () => {
+    const version = "abc|1";
+    expect(etagMatches(formatEtag(version), version)).toBe(true);
+    expect(etagMatches(`W/${formatEtag(version)}`, version)).toBe(true);
+    expect(etagMatches("*", version)).toBe(true);
+    expect(etagMatches('"other"', version)).toBe(false);
+    expect(etagMatches("*", "")).toBe(false);
   });
 });
 
@@ -779,6 +942,44 @@ describe("snapshotFromGameData", () => {
       ["Riley", "crab", "🦀🦀"],
       ["Alex", "fish", "💪🐟"],
       ["Solo", "", ""],
+    ]);
+  });
+
+  test("history rows keep id and timestamp so the client can flash new ones", () => {
+    const snapshot = snapshotFromGameData(
+      {
+        name: "Logged",
+        players: [{ userId: "will", hands: { main: [] } }],
+        history: [
+          {
+            id: "hist-1",
+            timestamp: "2026-11-16T21:00:00.000Z",
+            summary: "Will dealt 1 cards from Main",
+            action: { category: "card" },
+          },
+          {
+            id: 7,
+            timestamp: "2026-11-16T21:01:00.000Z",
+            summary: "Riley played Village",
+            action: { category: "card" },
+          },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(snapshot.status.history).toEqual([
+      {
+        id: "hist-1",
+        timestamp: "2026-11-16T21:00:00.000Z",
+        summary: "Will dealt 1 cards from Main",
+        category: "card",
+      },
+      {
+        id: "7",
+        timestamp: "2026-11-16T21:01:00.000Z",
+        summary: "Riley played Village",
+        category: "card",
+      },
     ]);
   });
 

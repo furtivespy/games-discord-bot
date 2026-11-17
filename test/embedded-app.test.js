@@ -6,6 +6,7 @@ const {
   CONFIG_PLACEHOLDER,
   DISCORD_ME_URL,
   DISCORD_TOKEN_URL,
+  DISCORD_USER_CACHE_TTL_MS,
   createEmbeddedApp,
   displayNameFromDiscordUser,
   handleTokenExchange,
@@ -19,7 +20,7 @@ const {
 const VisualLaunch = require("../modules/visualLaunch");
 const GameStore = require("../db/gameStore");
 const GameDB = require("../db/anygame");
-const { GAME_COLLECTION } = require("../modules/embeddedGames");
+const { DISCORD_API_BASE, GAME_COLLECTION } = require("../modules/embeddedGames");
 const {
   cardImagePath,
   deriveImageProxyKey,
@@ -845,6 +846,21 @@ describe("GET /api/game/snapshot", () => {
         );
         expect(proxied.status).toBe(200);
         expect((await proxied.json()).channelId).toBe("thread-game");
+        expect(typeof body.version).toBe("string");
+        expect(body.version.length).toBeGreaterThan(0);
+        expect(snapshot.headers.get("etag")).toBe(`"${body.version}"`);
+        expect(snapshot.headers.get("cache-control")).toBe("no-store");
+
+        const cached = await fetch(
+          `${url}/api/game/snapshot?guildId=guild-1&channelId=thread-game`,
+          {
+            headers: {
+              Authorization: `Bearer ${SECRET_TOKEN}`,
+              "If-None-Match": snapshot.headers.get("etag"),
+            },
+          }
+        );
+        expect(cached.status).toBe(304);
       } finally {
         server.close();
         fs.rmSync(staticDir, { recursive: true, force: true });
@@ -888,6 +904,236 @@ describe("GET /api/game/snapshot", () => {
         const body = await response.json();
         expect(body).toEqual({ error: "not_a_player" });
         expect(JSON.stringify(body)).not.toMatch(/Copper|Village|Province|Other Player Secret/);
+      } finally {
+        server.close();
+        fs.rmSync(staticDir, { recursive: true, force: true });
+      }
+    });
+  });
+});
+
+describe("GET /api/game/version", () => {
+  async function withStore(run) {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-ver-"));
+    const previous = process.env.GAMEBOT_DATA_DIR;
+    process.env.GAMEBOT_DATA_DIR = dataDir;
+    const store = new GameStore();
+    try {
+      return await run(store);
+    } finally {
+      try {
+        store.db.close();
+      } catch {}
+      if (previous === undefined) delete process.env.GAMEBOT_DATA_DIR;
+      else process.env.GAMEBOT_DATA_DIR = previous;
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  }
+
+  test("is a cheap version check that 304s until the game document changes", async () => {
+    await withStore(async (store) => {
+      const game = {
+        isdeleted: false,
+        name: "Friday Inis",
+        players: [{ userId: "snowflake-user", hands: { main: [] } }],
+        gameBoard: [{ id: "board-1", name: "Province" }],
+      };
+      store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", game);
+      const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-ver-http-"));
+      fs.writeFileSync(
+        path.join(staticDir, "index.html"),
+        `<!doctype html><html><head></head><body></body></html>`
+      );
+      const fetchCalls = [];
+      const app = createEmbeddedApp({
+        clientId: "client-123",
+        clientSecret: "server-secret",
+        staticDir,
+        gameStore: store,
+        fetchImpl: mockDiscordFetch({
+          calls: fetchCalls,
+          meBody: {
+            id: "snowflake-user",
+            username: "willsullivan",
+            global_name: "Will",
+          },
+        }),
+      });
+      const { server, url } = await listen(app);
+      const auth = { Authorization: `Bearer ${SECRET_TOKEN}` };
+      try {
+        expect(
+          (await fetch(`${url}/api/game/version?guildId=guild-1&channelId=thread-game`))
+            .status
+        ).toBe(401);
+
+        const first = await fetch(
+          `${url}/api/game/version?guildId=guild-1&channelId=thread-game`,
+          { headers: auth }
+        );
+        expect(first.status).toBe(200);
+        const firstBody = await first.json();
+        expect(firstBody.version).toEqual(expect.any(String));
+        expect(first.headers.get("etag")).toBe(`"${firstBody.version}"`);
+        expect(first.headers.get("cache-control")).toBe("no-store");
+        const meCallsAfterFirst = fetchCalls.filter(
+          (call) => call.url === DISCORD_ME_URL
+        ).length;
+        expect(meCallsAfterFirst).toBe(1);
+        expect(DISCORD_USER_CACHE_TTL_MS).toBe(45_000);
+
+        const cached = await fetch(
+          `${url}/.proxy/api/game/version?guildId=guild-1&channelId=thread-game`,
+          { headers: { ...auth, "If-None-Match": first.headers.get("etag") } }
+        );
+        expect(cached.status).toBe(304);
+        expect(
+          fetchCalls.filter((call) => call.url === DISCORD_ME_URL).length
+        ).toBe(meCallsAfterFirst);
+
+        const again = await fetch(
+          `${url}/api/game/version?guildId=guild-1&channelId=thread-game`,
+          { headers: auth }
+        );
+        expect(again.status).toBe(200);
+        expect(
+          fetchCalls.filter((call) => call.url === DISCORD_ME_URL)
+        ).toHaveLength(1);
+
+        game.gameBoard.push({ id: "board-2", name: "Duchy" });
+        store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", game);
+
+        const changed = await fetch(
+          `${url}/api/game/version?guildId=guild-1&channelId=thread-game`,
+          { headers: { ...auth, "If-None-Match": first.headers.get("etag") } }
+        );
+        expect(changed.status).toBe(200);
+        const changedBody = await changed.json();
+        expect(changedBody.version).not.toBe(firstBody.version);
+        expect(
+          fetchCalls.filter((call) => call.url === DISCORD_ME_URL).length
+        ).toBe(meCallsAfterFirst);
+      } finally {
+        server.close();
+        fs.rmSync(staticDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  test("version and snapshot deny a non-member before leaking no_game vs not_a_player", async () => {
+    await withStore(async (store) => {
+      store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", {
+        isdeleted: false,
+        name: "Friday Inis",
+        players: [{ userId: "snowflake-user", hands: { main: [] } }],
+      });
+      const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-ver-auth-"));
+      fs.writeFileSync(
+        path.join(staticDir, "index.html"),
+        `<!doctype html><html><head></head><body></body></html>`
+      );
+      const fetchImpl = async (url) => {
+        if (String(url) === DISCORD_ME_URL) {
+          return jsonResponse(200, {
+            id: "outsider",
+            username: "visitor",
+            global_name: "Visitor",
+          });
+        }
+        if (
+          String(url) === `${DISCORD_API_BASE}/guilds/guild-1/members/outsider`
+        ) {
+          return { status: 404, ok: false, json: async () => ({ message: "Unknown Member" }) };
+        }
+        if (String(url).startsWith(`${DISCORD_API_BASE}/channels/`)) {
+          return jsonResponse(200, { id: "thread-game" });
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      };
+      const app = createEmbeddedApp({
+        clientId: "client-123",
+        clientSecret: "server-secret",
+        staticDir,
+        gameStore: store,
+        botToken: "bot-token",
+        fetchImpl,
+      });
+      const { server, url } = await listen(app);
+      const auth = { Authorization: `Bearer ${SECRET_TOKEN}` };
+      const qs = "guildId=guild-1&channelId=thread-game";
+      const missingQs = "guildId=guild-1&channelId=no-such-thread";
+      try {
+        const versionHit = await fetch(`${url}/api/game/version?${qs}`, {
+          headers: auth,
+        });
+        const snapshotHit = await fetch(`${url}/api/game/snapshot?${qs}`, {
+          headers: auth,
+        });
+        const versionMiss = await fetch(`${url}/api/game/version?${missingQs}`, {
+          headers: auth,
+        });
+        const snapshotMiss = await fetch(`${url}/api/game/snapshot?${missingQs}`, {
+          headers: auth,
+        });
+        expect(await versionHit.json()).toEqual({ error: "not_a_player" });
+        expect(await snapshotHit.json()).toEqual({ error: "not_a_player" });
+        expect(await versionMiss.json()).toEqual({ error: "not_a_player" });
+        expect(await snapshotMiss.json()).toEqual({ error: "not_a_player" });
+        expect(versionHit.status).toBe(403);
+        expect(snapshotHit.status).toBe(403);
+        expect(versionMiss.status).toBe(403);
+        expect(snapshotMiss.status).toBe(403);
+      } finally {
+        server.close();
+        fs.rmSync(staticDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  test("guild non-member gets 403 without revealing whether a game exists", async () => {
+    await withStore(async (store) => {
+      store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", {
+        isdeleted: false,
+        name: "Friday Inis",
+        players: [{ userId: "someone-else", hands: { main: [] } }],
+        gameBoard: [{ id: "board-1", name: "Province" }],
+      });
+      const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-ver-403-"));
+      fs.writeFileSync(
+        path.join(staticDir, "index.html"),
+        `<!doctype html><html><head></head><body></body></html>`
+      );
+      const app = createEmbeddedApp({
+        clientId: "client-123",
+        clientSecret: "server-secret",
+        staticDir,
+        gameStore: store,
+        botToken: "bot-token",
+        fetchImpl: async (url) => {
+          if (String(url) === DISCORD_ME_URL) {
+            return jsonResponse(200, {
+              id: "snowflake-user",
+              username: "willsullivan",
+              global_name: "Will",
+            });
+          }
+          if (
+            String(url) ===
+            `${DISCORD_API_BASE}/guilds/guild-1/members/snowflake-user`
+          ) {
+            return jsonResponse(404, { message: "Unknown Member" });
+          }
+          throw new Error(`unexpected fetch ${url}`);
+        },
+      });
+      const { server, url } = await listen(app);
+      try {
+        const response = await fetch(
+          `${url}/api/game/version?guildId=guild-1&channelId=missing-thread`,
+          { headers: { Authorization: `Bearer ${SECRET_TOKEN}` } }
+        );
+        expect(response.status).toBe(403);
+        expect(await response.json()).toEqual({ error: "not_a_player" });
       } finally {
         server.close();
         fs.rmSync(staticDir, { recursive: true, force: true });

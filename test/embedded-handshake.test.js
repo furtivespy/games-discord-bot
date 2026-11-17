@@ -5,6 +5,7 @@ const {
   GAMES_EMPTY_MESSAGE,
   GAMES_SELECT_PLACEHOLDER,
   SNAPSHOT_LOADING_MESSAGE,
+  SNAPSHOT_STALE_MESSAGE,
   gamesRequestUrl,
   helloGreeting,
   isDiscordProxyHost,
@@ -14,6 +15,7 @@ const {
   snapshotRequestUrl,
   tokenRequestUrl,
   urlMappingsForApiHost,
+  versionRequestUrl,
 } = require("../embedded-client/src/handshake.ts");
 const {
   ACTION_COUNT_MAX,
@@ -102,6 +104,7 @@ describe("embedded client handshake URLs", () => {
   });
 
   test("in-place hello has no origin line; bridge hello includes the channel name", () => {
+    expect(SNAPSHOT_STALE_MESSAGE).toContain("Reopen visual mode");
     expect(helloGreeting("Will")).toBe("Hello, Will");
     expect(originLine(null)).toBeNull();
     expect(originLine("   ")).toBeNull();
@@ -147,6 +150,18 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("actionRequestUrl");
     expect(main).toContain("applySnapshot");
     expect(main).toContain("renderGameChannelLink");
+    expect(main).toContain("createSnapshotPoller");
+    expect(main).toContain("versionRequestUrl");
+    expect(main).toContain("HISTORY_CHANGED_CLASS");
+    expect(main).toContain("SNAPSHOT_STALE_MESSAGE");
+    expect(main).toContain("pendingSnapshot");
+    expect(main).toContain("scheduleHistoryFlashClear");
+    const embeddedApp = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "modules", "embeddedApp.js"),
+      "utf8"
+    );
+    expect(embeddedApp).toContain("authenticateEmbeddedGameRead");
+    expect(embeddedApp).toContain("resolveDiscordUser");
     expect(main).not.toContain("tabIndex");
     expect(main).toContain("autoSelectGameId");
     const requestSeq = require("fs").readFileSync(
@@ -175,6 +190,24 @@ describe("embedded client handshake URLs", () => {
       })
     ).toBe(
       "https://gamebot.example.com/api/game/snapshot?fixture=populated&channelId=ch-1&guildId=g-1"
+    );
+  });
+
+  test("version URL is same-origin inside Discord and carries fixture query params", () => {
+    expect(versionRequestUrl("", "https:")).toBe("/api/game/version");
+    expect(
+      versionRequestUrl("123.discordsays.com", "https:", {
+        fixture: "populated",
+      })
+    ).toBe("/api/game/version?fixture=populated");
+    expect(
+      versionRequestUrl("gamebot.example.com", "https:", {
+        fixture: "populated",
+        channelId: "ch-1",
+        guildId: "g-1",
+      })
+    ).toBe(
+      "https://gamebot.example.com/api/game/version?fixture=populated&channelId=ch-1&guildId=g-1"
     );
   });
 
@@ -955,6 +988,7 @@ describe("deck hover Deal and Draw", () => {
     expect(css).toMatch(/\.card-tile img[\s\S]*object-fit:\s*contain/);
     expect(css).toMatch(/\.hand-fan\s*\{[^}]*padding:\s*0\.45rem/);
     expect(css).not.toMatch(/\.hand-fan\s*\{[^}]*padding:\s*5\.6rem/);
+    expect(css).toContain("history-changed-flash");
     expect(css).not.toContain(".deck-tile:hover .card-face");
     expect(visualActionErrorMessage("not_a_player")).toBe(
       "You're not a player in this game."

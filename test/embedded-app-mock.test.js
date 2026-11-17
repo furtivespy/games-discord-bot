@@ -435,6 +435,15 @@ describe("mock embedded HTTP", () => {
         channelId: TEAM_GAME_CHANNEL_ID,
         gameName: TEAM_GAME_CHANNEL_NAME,
       });
+
+      expect(typeof body.version).toBe("string");
+      const versionRes = await fetch(`${url}/api/game/version`, { headers: auth });
+      expect(versionRes.status).toBe(200);
+      expect(await versionRes.json()).toEqual({ version: body.version });
+      const cached = await fetch(`${url}/.proxy/api/game/version`, {
+        headers: { ...auth, "If-None-Match": versionRes.headers.get("etag") },
+      });
+      expect(cached.status).toBe(304);
     } finally {
       server.close();
       fs.rmSync(staticDir, { recursive: true, force: true });
@@ -464,6 +473,7 @@ describe("mock embedded HTTP", () => {
       const beforeBody = await before.json();
       const handBefore = beforeBody.hand.length;
       const remainingBefore = Number(beforeBody.decks[0].remaining);
+      const versionBefore = beforeBody.version;
 
       const unauthorized = await fetch(`${url}/api/game/action`, {
         method: "POST",
@@ -497,6 +507,12 @@ describe("mock embedded HTTP", () => {
       expect(drawnBody.channelPosted).toBe(true);
       expect(drawnBody.status.history.at(-1).summary).toContain("drew 2 cards from Main");
       expect(Number(drawnBody.decks[0].remaining)).toBe(remainingBefore - 2);
+      expect(drawnBody.version).not.toBe(versionBefore);
+      const versionAfterDraw = await fetch(
+        `${url}/api/game/version?fixture=several-games&channelId=newest-thread&guildId=mock-guild`,
+        { headers: { Authorization: `Bearer ${MOCK_ACCESS_TOKEN}` } }
+      );
+      expect(await versionAfterDraw.json()).toEqual({ version: drawnBody.version });
 
       const snapshot = await fetch(
         `${url}/api/game/snapshot?fixture=several-games&channelId=newest-thread&guildId=mock-guild`,
