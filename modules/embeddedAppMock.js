@@ -175,7 +175,9 @@ function populatedSeed() {
           simultaneous: [fixtureCard("sim-1", "Simultaneous Only")],
         },
         playArea: [
-          fixtureCard("play-1", "Village"),
+          fixtureCard("play-1", "Village", {
+            description: "Worth 1 action. Draw a card.",
+          }),
           fixtureCard("play-2", "Market"),
         ],
       },

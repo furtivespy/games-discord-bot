@@ -33,6 +33,7 @@ const {
   visualActionErrorMessage,
 } = require("../embedded-client/src/visualActions.ts");
 const {
+  CLICK_SLOP_PX,
   SNAP_BACK_DURATION_MS,
   STACK_ABOVE_HOVER,
   applyCardOffset,
@@ -45,6 +46,11 @@ const {
   translateCss,
   visualOffset,
 } = require("../embedded-client/src/drag.ts");
+const {
+  inspectCardCaption,
+  inspectCardTitle,
+  inspectView,
+} = require("../embedded-client/src/cardInspect.ts");
 const {
   asCardList,
   createRequestSeq,
@@ -122,6 +128,10 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain('"several-games"');
     expect(main).toContain("loadSnapshot");
     expect(main).toContain("enableCardDrag");
+    expect(main).toContain("onInspect");
+    expect(main).toContain("openCardInspect");
+    expect(main).toContain("enableCardInspectDialog");
+    expect(main).toContain("closeCardInspect");
     expect(main).toContain("snapshotLoader");
     expect(main).toContain("createSnapshotLoader");
     expect(main).toContain("liveSelectedChannelId");
@@ -717,9 +727,9 @@ describe("client-only card drag", () => {
     });
 
     tile.ownerDocument.dispatchEvent(
-      pointerEvent("pointermove", { clientX: 23, clientY: -94 })
+      pointerEvent("pointermove", { clientX: 28, clientY: -89 })
     );
-    expect(tile.style.transform).toBe(translateCss(23, -94));
+    expect(tile.style.transform).toBe(translateCss(28, -89));
   });
 
   test("transitionend from a child does not end the snap early", () => {
@@ -731,7 +741,10 @@ describe("client-only card drag", () => {
     enableCardDrag(tile, "hand-5c", positions);
     tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 4, clientY: 4 }));
     tile.ownerDocument.dispatchEvent(
-      pointerEvent("pointerup", { clientX: 4, clientY: 4 })
+      pointerEvent("pointermove", { clientX: 20, clientY: 20 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 20, clientY: 20 })
     );
     expect(tile.classList.contains("snapping")).toBe(true);
 
@@ -804,6 +817,99 @@ describe("client-only card drag", () => {
     );
     expect(tile.style.transform).toBe(translateCss(12, 8));
   });
+
+  test("a click with no movement inspects the card and does not snap", () => {
+    const tile = createFakeTile();
+    const positions = new Map();
+    const inspected = [];
+    enableCardDrag(tile, "hand-inspect", positions, {
+      onInspect: (ctx) => inspected.push(ctx),
+    });
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: 10 + CLICK_SLOP_PX - 1, clientY: 10 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 10 + CLICK_SLOP_PX - 1, clientY: 10 })
+    );
+    expect(inspected).toEqual([{ cardId: "hand-inspect", tile }]);
+    expect(tile.classList.contains("dragging")).toBe(false);
+    expect(tile.classList.contains("snapping")).toBe(false);
+    expect(tile.style.transform).toBe("");
+    expect(positions.get("hand-inspect")).toEqual({ x: 0, y: 0 });
+  });
+
+  test("a pointerup that jumps past slop without pointermove does not inspect", () => {
+    const tile = createFakeTile();
+    const inspected = [];
+    enableCardDrag(tile, "hand-jump", new Map(), {
+      onInspect: (ctx) => inspected.push(ctx),
+    });
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: 40, clientY: 0 })
+    );
+    expect(inspected).toEqual([]);
+    expect(tile.classList.contains("dragging")).toBe(false);
+  });
+
+  test("dragging past the click slop does not inspect", () => {
+    const tile = createFakeTile();
+    const positions = new Map();
+    const inspected = [];
+    enableCardDrag(tile, "hand-drag", positions, {
+      onInspect: (ctx) => inspected.push(ctx),
+    });
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 0, clientY: 0 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointermove", { clientX: CLICK_SLOP_PX, clientY: 0 })
+    );
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointerup", { clientX: CLICK_SLOP_PX, clientY: 0 })
+    );
+    expect(inspected).toEqual([]);
+    expect(tile.classList.contains("dragging")).toBe(false);
+    expect(positions.get("hand-drag")).toEqual({ x: 0, y: 0 });
+  });
+
+  test("pointercancel without movement does not inspect", () => {
+    const tile = createFakeTile();
+    const inspected = [];
+    enableCardDrag(tile, "hand-cancel", new Map(), {
+      onInspect: (ctx) => inspected.push(ctx),
+    });
+    tile.dispatchEvent(pointerEvent("pointerdown", { clientX: 3, clientY: 3 }));
+    tile.ownerDocument.dispatchEvent(
+      pointerEvent("pointercancel", { clientX: 3, clientY: 3 })
+    );
+    expect(inspected).toEqual([]);
+    expect(tile.classList.contains("dragging")).toBe(false);
+  });
+});
+
+describe("card inspect modal content", () => {
+  test("uses the card name as title and description as caption", () => {
+    expect(inspectCardTitle({ name: "  Village  " })).toBe("Village");
+    expect(inspectCardTitle({})).toBe("Card");
+    expect(inspectCardCaption({ description: "  Worth 1 action.  " })).toBe(
+      "Worth 1 action."
+    );
+    expect(inspectCardCaption({ description: "" })).toBe("");
+    expect(inspectView({ name: "Province", description: "8 points" }, "/art.png")).toEqual({
+      title: "Province",
+      caption: "8 points",
+      showArt: true,
+      artSrc: "/art.png",
+      showProxy: false,
+    });
+    expect(inspectView({ name: "Copper" }, null)).toEqual({
+      title: "Copper",
+      caption: "",
+      showArt: false,
+      artSrc: null,
+      showProxy: true,
+    });
+  });
 });
 
 describe("deck hover Deal and Draw", () => {
@@ -872,6 +978,7 @@ describe("deck hover Deal and Draw", () => {
     expect(html).toContain('id="game-channel-link"');
     expect(html).toContain('id="action-dialog"');
     expect(html).toContain('id="action-count"');
+    expect(html).toContain('id="card-inspect"');
     const css = require("fs").readFileSync(
       require("path").join(__dirname, "..", "embedded-client", "src", "style.css"),
       "utf8"
@@ -879,7 +986,8 @@ describe("deck hover Deal and Draw", () => {
     expect(css).toContain("scale(1.48)");
     expect(css).not.toContain("scale(1.28)");
     expect(css).toMatch(/\.card-tile img[\s\S]*object-fit:\s*contain/);
-    expect(css).toMatch(/\.hand-fan\s*\{[^}]*padding:\s*5\.6rem/);
+    expect(css).toMatch(/\.hand-fan\s*\{[^}]*padding:\s*0\.45rem/);
+    expect(css).not.toMatch(/\.hand-fan\s*\{[^}]*padding:\s*5\.6rem/);
     expect(css).toContain("history-changed-flash");
     expect(css).not.toContain(".deck-tile:hover .card-face");
     expect(visualActionErrorMessage("not_a_player")).toBe(

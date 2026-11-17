@@ -72,6 +72,19 @@
         </div>
       </form>
     </dialog>
+    <dialog id="card-inspect" class="card-inspect-dialog" aria-labelledby="card-inspect-title">
+      <div class="card-inspect-sheet">
+        <form method="dialog">
+          <button type="submit" class="card-inspect-close" aria-label="Close">Close</button>
+        </form>
+        <img id="card-inspect-art" class="card-inspect-art" alt="" hidden />
+        <div id="card-inspect-proxy" class="card-inspect-proxy" hidden></div>
+        <div class="card-inspect-caption">
+          <p id="card-inspect-title" class="card-inspect-title"></p>
+          <p id="card-inspect-caption" class="card-inspect-description" hidden></p>
+        </div>
+      </div>
+    </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -33,7 +33,7 @@ jobs:
     uses: ./.github/workflows/_docker-build-push.yml
     with:
       semver_tag: ${{ needs.release.outputs.tag }}
-      # Build the exact commit that landed on master; it is baked in as GIT_SHA.
+      # Build the exact commit that landed on master; it is written into the image as /app/GIT_SHA.
       ref: ${{ github.event.pull_request.merge_commit_sha }}
       git_sha: ${{ github.event.pull_request.merge_commit_sha }}
     secrets:

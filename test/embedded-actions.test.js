@@ -329,10 +329,11 @@ describe("runVisualCardAction", () => {
     expect(store.get("guild-1:game:thread-game").players[0].hands.main).toHaveLength(2);
   });
 
-  test("concurrent draws with a slow nick lookup each persist a different card", async () => {
+  function concurrentActionClient() {
     const stored = JSON.parse(JSON.stringify(gameWithDeck()));
     const store = new Map();
     store.set("guild-1:game:race-thread", stored);
+    const posted = [];
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const discordClient = {
       user: { id: "bot-1" },
@@ -343,7 +344,11 @@ describe("runVisualCardAction", () => {
               ? {
                   id: "race-thread",
                   guild: { id: "guild-1" },
-                  send: async (payload) => payload,
+                  messages: { fetch: async () => null },
+                  send: async (payload) => {
+                    posted.push(payload);
+                    return { id: `msg-${posted.length}` };
+                  },
                 }
               : null,
         },
@@ -353,9 +358,11 @@ describe("runVisualCardAction", () => {
         fetch: async () => ({
           members: {
             cache: { get: () => null },
-            fetch: async () => {
-              await delay(40);
-              return { displayName: "WillOnServer" };
+            fetch: async (userId) => {
+              if (userId === "snowflake-user") await delay(150);
+              return {
+                displayName: userId === "snowflake-user" ? "WillOnServer" : "Riley",
+              };
             },
           },
         }),
@@ -372,6 +379,11 @@ describe("runVisualCardAction", () => {
         );
       },
     };
+    return { posted, store, discordClient };
+  }
+
+  test("concurrent draws with a slow nick lookup each persist a different card", async () => {
+    const { posted, store, discordClient } = concurrentActionClient();
     const draw = {
       action: "draw",
       deckName: "Main",
@@ -402,6 +414,89 @@ describe("runVisualCardAction", () => {
       second.body.hand.at(-1).name,
     ]);
     expect(lastDrawn).toEqual(new Set(["Ace", "King"]));
+    const drawHistory = saved.history
+      .filter((entry) => entry?.action?.type === GameDB.ACTION_TYPES.DRAW)
+      .map((entry) => entry.summary);
+    expect(drawHistory).toEqual([
+      "WillOnServer drew 1 cards from Main",
+      "WillOnServer drew 1 cards from Main",
+    ]);
+    expect(posted.map((payload) => payload.content)).toEqual(drawHistory);
+  });
+
+  test("concurrent deals with a slow nick lookup each persist a different pair", async () => {
+    const { posted, store, discordClient } = concurrentActionClient();
+    const deal = {
+      action: "deal",
+      deckName: "Main",
+      count: 1,
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "race-thread",
+      discordClient,
+    };
+    const [first, second] = await Promise.all([
+      runVisualCardAction({ ...deal, requestId: "race-deal-aaa" }),
+      runVisualCardAction({ ...deal, requestId: "race-deal-bbb" }),
+    ]);
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    const saved = store.get("guild-1:game:race-thread");
+    expect(saved.players[0].hands.main.map((card) => card.name)).toEqual([
+      "Copper",
+      "Ace",
+      "Queen",
+    ]);
+    expect(saved.players[1].hands.main.map((card) => card.name)).toEqual([
+      "King",
+      "Jack",
+    ]);
+    expect(saved.decks[0].piles.draw.cards).toEqual([]);
+    const dealHistory = saved.history
+      .filter((entry) => entry?.action?.type === GameDB.ACTION_TYPES.DEAL)
+      .map((entry) => entry.summary);
+    expect(dealHistory).toEqual([
+      "WillOnServer dealt 2 cards from Main to all players",
+      "WillOnServer dealt 2 cards from Main to all players",
+    ]);
+    expect(posted.map((payload) => payload.content)).toEqual([
+      "Dealt out a total of 2 cards from Main.",
+      "Dealt out a total of 2 cards from Main.",
+    ]);
+  });
+
+  test("loads an Enmap-only game through getGameDataV2 when sqlite has no row", async () => {
+    const gameData = gameWithDeck();
+    const result = await runVisualCardAction({
+      action: "draw",
+      deckName: "Main",
+      count: 1,
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      gameStore: {
+        getSpecificGameData() {
+          return null;
+        },
+        upsertGameData() {},
+      },
+      discordClient: {
+        user: { id: "bot-1" },
+        channels: { cache: { get: () => null } },
+        async getGameDataV2() {
+          return gameData;
+        },
+        async setGameDataV2(_guildId, _collection, _channelId, data) {
+          Object.assign(gameData, data);
+        },
+      },
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.hand.map((card) => card.name)).toEqual(["Copper", "Ace"]);
+    expect(gameData.players[0].hands.main.map((card) => card.name)).toEqual([
+      "Copper",
+      "Ace",
+    ]);
   });
 
   test("still returns the updated table if the follow-up snapshot load fails", async () => {
