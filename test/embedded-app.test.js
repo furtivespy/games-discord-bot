@@ -1050,7 +1050,7 @@ describe("GET /api/game/snapshot", () => {
         ]);
         expect(JSON.stringify(body)).not.toContain('"url"');
         expect(messageUrls).toEqual([
-          `${DISCORD_API_BASE}/channels/thread-game/messages?limit=50`,
+          `${DISCORD_API_BASE}/channels/thread-game/messages?limit=100`,
         ]);
 
         const version = await fetch(

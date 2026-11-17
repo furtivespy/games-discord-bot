@@ -4,9 +4,10 @@ const { createHash } = require("crypto");
 const { ChannelType, PermissionFlagsBits } = require("discord.js");
 const GameDB = require("../db/anygame");
 const {
+  HOST_IMAGE_MESSAGE_LIMIT,
+  collectHostBoardImages,
   gameHostUserId,
   hostImageMessagesPath,
-  loadHostBoardImages,
   shouldUseHostBoardImages,
 } = require("./embeddedHostImages");
 const DeckBack = require("./DeckBack");
@@ -1029,20 +1030,28 @@ async function resolveHostBoardImages(
 ) {
   if (!shouldUseHostBoardImages(data) || !gameHostUserId(data)) return [];
   const cid = String(channelId || "").trim();
-  const path = hostImageMessagesPath(cid);
   const token = String(botToken || discordClient?.token || "").trim();
-  if (!path || !token) return [];
+  if (!cid || !token) return [];
   const fetchFn = fetchImpl || fetch;
-  return loadHostBoardImages({
+  const headers = { Authorization: `Bot ${token}` };
+  return collectHostBoardImages({
     data,
-    listMessages: async () => {
+    fetchPage: async ({ before, remaining } = {}) => {
+      const path = hostImageMessagesPath(cid, {
+        before,
+        limit: Math.min(HOST_IMAGE_MESSAGE_LIMIT, remaining || HOST_IMAGE_MESSAGE_LIMIT),
+      });
+      if (!path) return [];
       const result = await discordBotGet({
         fetchFn,
-        headers: { Authorization: `Bot ${token}` },
+        headers,
         path,
         cache: hostImageCache,
         wait,
       });
+      if (result.status === 403 && hostImageCache) {
+        hostImageCache.set(path, { status: result.status, body: result.body });
+      }
       if (result.status !== 200 || !Array.isArray(result.body)) return [];
       return result.body;
     },

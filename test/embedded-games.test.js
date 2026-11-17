@@ -799,7 +799,7 @@ describe("versionGameForUser", () => {
     const first = await versionGameForUser(opts);
     expect(first.status).toBe(200);
     expect(urls).toEqual([
-      `${DISCORD_API_BASE}/channels/thread-game/messages?limit=50`,
+      `${DISCORD_API_BASE}/channels/thread-game/messages?limit=100`,
     ]);
     const hostBoardImages = [
       {

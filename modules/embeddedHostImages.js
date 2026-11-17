@@ -4,7 +4,10 @@ const GameDB = require("../db/anygame");
 
 /** Discord allows 10 files on one message. */
 const MAX_HOST_BOARD_IMAGES = 10;
-const HOST_IMAGE_MESSAGE_LIMIT = 50;
+/** Discord Get Channel Messages max `limit` is 100. */
+const HOST_IMAGE_MESSAGE_LIMIT = 100;
+/** Newest-first pages to scan so chat after a setup post still finds it. */
+const HOST_IMAGE_MESSAGE_SCAN_MAX = 300;
 const HOST_IMAGE_CACHE_TTL_MS = 10_000;
 const IMAGE_FILENAME = /\.(avif|bmp|gif|jpe?g|png|webp)$/i;
 
@@ -19,19 +22,10 @@ function parseTimestampMs(value) {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function asMessageList(messages) {
-  if (Array.isArray(messages)) return messages;
-  if (messages && typeof messages.values === "function") {
-    return [...messages.values()];
-  }
-  return [];
-}
-
-function asAttachmentList(message) {
-  const attachments = message?.attachments;
-  if (Array.isArray(attachments)) return attachments;
-  if (attachments && typeof attachments.values === "function") {
-    return [...attachments.values()];
+function asItemList(value) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value.values === "function") {
+    return [...value.values()];
   }
   return [];
 }
@@ -80,12 +74,10 @@ function isImageAttachment(attachment) {
   )
     .trim()
     .toLowerCase();
+  if (type.startsWith("video/") || type.startsWith("audio/")) return false;
   if (type.startsWith("image/")) return true;
   const name = String(attachment.filename || attachment.name || "");
-  if (IMAGE_FILENAME.test(name)) return true;
-  const width = Number(attachment.width);
-  const height = Number(attachment.height);
-  return Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0;
+  return IMAGE_FILENAME.test(name);
 }
 
 function attachmentImageUrl(attachment) {
@@ -129,7 +121,7 @@ function hostBoardCardFromAttachment(message, attachment) {
 
 function imageCardsFromMessage(message) {
   const cards = [];
-  for (const attachment of asAttachmentList(message)) {
+  for (const attachment of asItemList(message?.attachments)) {
     if (!isImageAttachment(attachment)) continue;
     const card = hostBoardCardFromAttachment(message, attachment);
     if (card) cards.push(card);
@@ -141,7 +133,7 @@ function imageCardsFromMessage(message) {
 function hostBoardImagesFromMessages(messages, hostUserId) {
   const hostId = String(hostUserId || "").trim();
   if (!hostId) return [];
-  const list = asMessageList(messages)
+  const list = asItemList(messages)
     .filter((message) => message && typeof message === "object")
     .sort((a, b) => messageSortKey(b).localeCompare(messageSortKey(a)));
   for (const message of list) {
@@ -152,29 +144,62 @@ function hostBoardImagesFromMessages(messages, hostUserId) {
   return [];
 }
 
-async function loadHostBoardImages({ data, listMessages } = {}) {
+async function collectHostBoardImages({ data, fetchPage } = {}) {
   if (!shouldUseHostBoardImages(data)) return [];
   const hostUserId = gameHostUserId(data);
-  if (!hostUserId || typeof listMessages !== "function") return [];
-  let messages;
+  if (!hostUserId || typeof fetchPage !== "function") return [];
+  const collected = [];
+  let before = "";
   try {
-    messages = await listMessages();
+    while (collected.length < HOST_IMAGE_MESSAGE_SCAN_MAX) {
+      const remaining = HOST_IMAGE_MESSAGE_SCAN_MAX - collected.length;
+      const page = await fetchPage({
+        before: before || undefined,
+        remaining,
+      });
+      if (!Array.isArray(page) || page.length === 0) break;
+      collected.push(...page);
+      const cards = hostBoardImagesFromMessages(collected, hostUserId);
+      if (cards.length) return cards;
+      const oldestId = String(page[page.length - 1]?.id || "").trim();
+      if (!oldestId || page.length < HOST_IMAGE_MESSAGE_LIMIT || oldestId === before) {
+        break;
+      }
+      before = oldestId;
+    }
   } catch {
     return [];
   }
-  return hostBoardImagesFromMessages(messages, hostUserId);
+  return [];
 }
 
-function hostImageMessagesPath(channelId) {
+async function loadHostBoardImages({ data, listMessages } = {}) {
+  if (typeof listMessages !== "function") return [];
+  return collectHostBoardImages({
+    data,
+    fetchPage: async ({ before } = {}) => (before ? [] : listMessages()),
+  });
+}
+
+function hostImageMessagesPath(channelId, { before, limit } = {}) {
   const cid = String(channelId || "").trim();
   if (!cid) return "";
-  return `/channels/${encodeURIComponent(cid)}/messages?limit=${HOST_IMAGE_MESSAGE_LIMIT}`;
+  const capped = Math.min(
+    HOST_IMAGE_MESSAGE_LIMIT,
+    Math.max(1, Number(limit) || HOST_IMAGE_MESSAGE_LIMIT)
+  );
+  const params = new URLSearchParams({ limit: String(capped) });
+  const beforeId = String(before || "").trim();
+  if (beforeId) params.set("before", beforeId);
+  return `/channels/${encodeURIComponent(cid)}/messages?${params}`;
 }
 
 module.exports = {
   HOST_IMAGE_CACHE_TTL_MS,
   HOST_IMAGE_MESSAGE_LIMIT,
+  HOST_IMAGE_MESSAGE_SCAN_MAX,
   MAX_HOST_BOARD_IMAGES,
+  collectHostBoardImages,
   gameBoardHasCards,
   gameHostUserId,
   hostBoardImagesFromMessages,

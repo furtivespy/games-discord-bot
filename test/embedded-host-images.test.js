@@ -2,7 +2,9 @@ const { describe, expect, test } = require("bun:test");
 const GameDB = require("../db/anygame");
 const {
   HOST_IMAGE_MESSAGE_LIMIT,
+  HOST_IMAGE_MESSAGE_SCAN_MAX,
   MAX_HOST_BOARD_IMAGES,
+  collectHostBoardImages,
   gameBoardHasCards,
   gameHostUserId,
   hostBoardImagesFromMessages,
@@ -107,9 +109,13 @@ describe("empty game board", () => {
 describe("host board images from messages", () => {
   test("Discord's per-message attachment cap is 10", () => {
     expect(MAX_HOST_BOARD_IMAGES).toBe(10);
-    expect(HOST_IMAGE_MESSAGE_LIMIT).toBe(50);
+    expect(HOST_IMAGE_MESSAGE_LIMIT).toBe(100);
+    expect(HOST_IMAGE_MESSAGE_SCAN_MAX).toBe(300);
     expect(hostImageMessagesPath("thread-1")).toBe(
-      "/channels/thread-1/messages?limit=50"
+      "/channels/thread-1/messages?limit=100"
+    );
+    expect(hostImageMessagesPath("thread-1", { before: "m-old", limit: 50 })).toBe(
+      "/channels/thread-1/messages?limit=50&before=m-old"
     );
   });
 
@@ -215,10 +221,19 @@ describe("host board images from messages", () => {
     ]);
   });
 
-  test("filename and pixel size still count when content type is missing", () => {
+  test("filename still counts when content type is missing; videos do not", () => {
     expect(
       isImageAttachment({ filename: "board.PNG", url: "https://cdn.example/a.PNG" })
     ).toBe(true);
+    expect(
+      isImageAttachment({
+        filename: "clip.mp4",
+        content_type: "video/mp4",
+        url: "https://cdn.example/clip.mp4",
+        width: 1920,
+        height: 1080,
+      })
+    ).toBe(false);
     expect(
       isImageAttachment({
         filename: "blob",
@@ -226,7 +241,7 @@ describe("host board images from messages", () => {
         width: 800,
         height: 600,
       })
-    ).toBe(true);
+    ).toBe(false);
     expect(
       isImageAttachment({
         filename: "notes.txt",
@@ -289,6 +304,36 @@ describe("loadHostBoardImages", () => {
         name: "setup",
         url: "https://cdn.discordapp.com/attachments/1/2/setup.png",
       },
+    ]);
+  });
+
+  test("walks older pages until the host's latest image post", async () => {
+    const pages = [];
+    const cards = await collectHostBoardImages({
+      data: emptyBoardGame,
+      fetchPage: async ({ before } = {}) => {
+        pages.push(before || null);
+        if (!before) {
+          return Array.from({ length: HOST_IMAGE_MESSAGE_LIMIT }, (_, i) =>
+            message({
+              id: String(900_000_000_000_000_000 + (HOST_IMAGE_MESSAGE_LIMIT - 1 - i)),
+              authorId: "chatter",
+              attachments: [],
+            })
+          );
+        }
+        return [
+          message({
+            id: "111111111111111111",
+            authorId: "host-1",
+            attachments: [attachment("setup", { filename: "setup.png" })],
+          }),
+        ];
+      },
+    });
+    expect(pages).toEqual([null, String(900_000_000_000_000_000)]);
+    expect(cards.map((card) => card.id)).toEqual([
+      "host-image:111111111111111111:setup",
     ]);
   });
 
