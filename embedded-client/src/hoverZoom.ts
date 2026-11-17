@@ -70,14 +70,21 @@ function clampAxis(start: number, size: number, min: number, max: number): numbe
   if (!(view > 0) || !Number.isFinite(start) || !Number.isFinite(size) || !(size > 0)) {
     return 0;
   }
-  if (size >= view) return min - start;
+  if (size >= view) {
+    // Cover the clip with the least shift. Overflow on the far edge is inevitable.
+    const lo = max - start - size;
+    const hi = min - start;
+    if (0 < lo) return lo;
+    if (0 > hi) return hi;
+    return 0;
+  }
   if (start < min) return min - start;
   const end = start + size;
   if (end > max) return max - end;
   return 0;
 }
 
-/** Translate a zoomed box so it stays inside `clip`. Oversized boxes pin to the clip origin. */
+/** Translate a zoomed box so it stays inside `clip`. Oversized boxes cover the clip with the least shift. */
 export function clampHoverShift(zoomed: HoverBox, clip: HoverBox): HoverShift {
   return {
     x: pixelShift(clampAxis(zoomed.left, boxWidth(zoomed), clip.left, clip.right)),
@@ -209,6 +216,8 @@ export function enableHoverZoomClamp(tile: HTMLElement) {
 
   const view = tile.ownerDocument?.defaultView;
   let listening = false;
+  let scrollParent: HTMLElement | null = null;
+  let disconnectObserver: MutationObserver | null = null;
 
   function apply() {
     if (tile.isConnected === false) {
@@ -223,21 +232,45 @@ export function enableHoverZoomClamp(tile: HTMLElement) {
     if (!listening) return;
     listening = false;
     view?.removeEventListener("resize", apply);
-    const scrollParent = queryClip(tile, "#table-main");
     scrollParent?.removeEventListener("scroll", apply);
+    scrollParent = null;
+    disconnectObserver?.disconnect();
+    disconnectObserver = null;
+  }
+
+  function watchDisconnect() {
+    const parent = tile.parentElement;
+    if (!parent || typeof MutationObserver !== "function") return;
+    try {
+      disconnectObserver = new MutationObserver(() => {
+        if (tile.isConnected === false) {
+          stopLayoutListeners();
+          clearHoverShift(tile);
+        }
+      });
+      disconnectObserver.observe(parent, { childList: true });
+    } catch {
+      disconnectObserver = null;
+    }
   }
 
   function startLayoutListeners() {
     if (listening) return;
     listening = true;
     view?.addEventListener("resize", apply);
-    const scrollParent = queryClip(tile, "#table-main");
+    scrollParent = queryClip(tile, "#table-main");
     scrollParent?.addEventListener("scroll", apply, { passive: true });
+    watchDisconnect();
   }
 
   function afterPointerRelease() {
-    // Drag listens on document; this runs after that handler removes `.dragging`.
-    queueMicrotask(apply);
+    if (!listening) return;
+    // Tile pointerup runs before drag.ts removes `.dragging` (document listener).
+    // Defer so an edge card that is still hovered reclamps instead of staying unshifted.
+    queueMicrotask(() => {
+      if (!listening) return;
+      apply();
+    });
   }
 
   tile.addEventListener("pointerenter", () => {

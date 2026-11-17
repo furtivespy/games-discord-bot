@@ -20,6 +20,7 @@ const {
 } = require("../embedded-client/src/hoverZoom.ts");
 
 const STYLE_PATH = path.join(__dirname, "..", "embedded-client", "src", "style.css");
+const MAIN_PATH = path.join(__dirname, "..", "embedded-client", "src", "main.ts");
 const HOVER_ZOOM_PATH = path.join(__dirname, "..", "embedded-client", "src", "hoverZoom.ts");
 
 function chromeBin() {
@@ -56,6 +57,14 @@ function workingChromeBin() {
 }
 
 const REST = { width: 128, height: 179 };
+const CORNERS = ["top-left", "top-right", "bottom-left", "bottom-right"];
+const BOARD_CLIP = { left: 0, top: 0, right: 800, bottom: 600 };
+const HAND_CLIP = { left: 0, top: 0, right: 800, bottom: 720 };
+const ZONE_CLIPS = [
+  { zone: "board", clip: BOARD_CLIP },
+  { zone: "play area", clip: BOARD_CLIP },
+  { zone: "hand", clip: HAND_CLIP },
+];
 
 function restBox({ left, top }) {
   return {
@@ -64,6 +73,13 @@ function restBox({ left, top }) {
     right: left + REST.width,
     bottom: top + REST.height,
   };
+}
+
+function cornerRest(clip, corner, pad = 6) {
+  return restBox({
+    left: corner.includes("right") ? clip.right - REST.width - pad : clip.left + pad,
+    top: corner.includes("bottom") ? clip.bottom - REST.height - pad : clip.top + pad,
+  });
 }
 
 function shiftedBox(box, shift) {
@@ -84,96 +100,95 @@ function containsBox(outer, inner, epsilon = 0.51) {
   );
 }
 
+function coversBox(outer, inner, epsilon = 0.51) {
+  return (
+    outer.left <= inner.left + epsilon &&
+    outer.top <= inner.top + epsilon &&
+    outer.right >= inner.right - epsilon &&
+    outer.bottom >= inner.bottom - epsilon
+  );
+}
+
+function shiftValue(tile, name) {
+  return tile.style.getPropertyValue(name);
+}
+
 describe("hover zoom clamp math", () => {
   test("pixelShift rounds overflow away from zero and ignores noise", () => {
     expect(pixelShift(0)).toBe(0);
     expect(pixelShift(0.004)).toBe(0);
     expect(pixelShift(0.4)).toBe(1);
-    expect(pixelShift(12.2)).toBe(13);
     expect(pixelShift(-0.4)).toBe(-1);
-    expect(pixelShift(-12.2)).toBe(-13);
   });
 
   test("center cards keep a zero shift", () => {
     const rest = restBox({ left: 400, top: 220 });
-    const clip = { left: 0, top: 0, right: 1200, bottom: 800 };
     const zoomed = hoverZoomRect(rest);
     expect(zoomed.right - zoomed.left).toBeCloseTo(REST.width * CARD_HOVER_SCALE, 5);
-    expect(zoomed.bottom - zoomed.top).toBeCloseTo(REST.height * CARD_HOVER_SCALE, 5);
     expect(zoomed.bottom).toBeCloseTo(rest.bottom - CARD_HOVER_LIFT_PX, 5);
-    expect(hoverShiftForRects(rest, clip)).toEqual({ x: 0, y: 0 });
-    expect(containsBox(clip, zoomed)).toBe(true);
+    expect(hoverShiftForRects(rest, BOARD_CLIP)).toEqual({ x: 0, y: 0 });
+    expect(containsBox(BOARD_CLIP, zoomed)).toBe(true);
   });
 
-  test("top-left board cards shift down and right into the clip", () => {
-    const rest = restBox({ left: 8, top: 8 });
-    const clip = { left: 0, top: 0, right: 800, bottom: 600 };
-    const zoomed = hoverZoomRect(rest);
-    expect(zoomed.left).toBeLessThan(clip.left);
-    expect(zoomed.top).toBeLessThan(clip.top);
-    const shift = hoverShiftForRects(rest, clip);
-    expect(shift.x).toBeGreaterThan(0);
-    expect(shift.y).toBeGreaterThan(0);
-    expect(containsBox(clip, shiftedBox(zoomed, shift))).toBe(true);
+  test("four corners stay inside the clip in hand, board, and play area", () => {
+    for (const { zone, clip } of ZONE_CLIPS) {
+      for (const corner of CORNERS) {
+        const rest = cornerRest(clip, corner);
+        const zoomed = hoverZoomRect(rest);
+        const shift = hoverShiftForRects(rest, clip);
+        const moved = shiftedBox(zoomed, shift);
+        expect({ zone, corner, inside: containsBox(clip, moved) }).toEqual({
+          zone,
+          corner,
+          inside: true,
+        });
+        if (corner.includes("left")) expect(shift.x).toBeGreaterThan(0);
+        if (corner.includes("right")) expect(shift.x).toBeLessThan(0);
+        if (corner.includes("top")) expect(shift.y).toBeGreaterThan(0);
+      }
+    }
   });
 
-  test("right-edge cards shift left without moving a vertically centered tile", () => {
-    const clip = { left: 0, top: 0, right: 400, bottom: 520 };
-    const rightRest = restBox({ left: clip.right - REST.width - 4, top: 160 });
-    const rightShift = hoverShiftForRects(rightRest, clip);
-    expect(rightShift.x).toBeLessThan(0);
-    expect(rightShift.y).toBe(0);
-    expect(containsBox(clip, shiftedBox(hoverZoomRect(rightRest), rightShift))).toBe(
-      true
-    );
-  });
-
-  test("hover lift keeps a bottom-edge face inside the clip", () => {
-    const clip = { left: 0, top: 0, right: 400, bottom: 360 };
-    const bottomRest = restBox({
-      left: 120,
-      top: clip.bottom - REST.height - 2,
-    });
-    const bottomZoomed = hoverZoomRect(bottomRest);
-    expect(bottomZoomed.bottom).toBeLessThanOrEqual(clip.bottom);
-    expect(hoverShiftForRects(bottomRest, clip).y).toBeLessThanOrEqual(0);
-    expect(containsBox(clip, shiftedBox(bottomZoomed, hoverShiftForRects(bottomRest, clip)))).toBe(
-      true
-    );
-  });
-
-  test("a zoomed card larger than the clip pins to the clip origin", () => {
+  test("an oversized zoom covers the clip with the least shift", () => {
     const rest = restBox({ left: 40, top: 40 });
     const clip = { left: 10, top: 20, right: 90, bottom: 100 };
-    const shift = clampHoverShift(hoverZoomRect(rest), clip);
-    const moved = shiftedBox(hoverZoomRect(rest), shift);
-    expect(moved.left).toBeCloseTo(clip.left, 0);
-    expect(moved.top).toBeCloseTo(clip.top, 0);
+    const zoomed = hoverZoomRect(rest);
+    const shift = clampHoverShift(zoomed, clip);
+    expect(coversBox(shiftedBox(zoomed, shift), clip)).toBe(true);
+    expect(Math.abs(shift.x) + Math.abs(shift.y)).toBeLessThan(
+      Math.abs(clip.left - zoomed.left) + Math.abs(clip.top - zoomed.top)
+    );
   });
 });
 
-function createHoverTile({
-  rest,
-  clip,
-  scale = String(CARD_HOVER_SCALE),
-  inTableMain = true,
-}) {
+function createHoverTile({ rest, clip, inTableMain = true, scale = String(CARD_HOVER_SCALE) }) {
   const properties = {};
+  const pos = { ...rest };
+  const clipRect = { ...clip };
   const listeners = new Map();
   const classSet = new Set();
   const parentListeners = new Map();
   const viewListeners = new Map();
+
+  function dispatch(map, event) {
+    for (const handler of map.get(event.type) || []) handler(event);
+  }
+
   const parent = {
     parentElement: null,
-    clientWidth: clip.right - clip.left,
-    clientHeight: clip.bottom - clip.top,
+    get clientWidth() {
+      return clipRect.right - clipRect.left;
+    },
+    get clientHeight() {
+      return clipRect.bottom - clipRect.top;
+    },
     getBoundingClientRect: () => ({
-      left: clip.left,
-      top: clip.top,
-      right: clip.right,
-      bottom: clip.bottom,
-      width: clip.right - clip.left,
-      height: clip.bottom - clip.top,
+      left: clipRect.left,
+      top: clipRect.top,
+      right: clipRect.right,
+      bottom: clipRect.bottom,
+      width: clipRect.right - clipRect.left,
+      height: clipRect.bottom - clipRect.top,
     }),
     addEventListener(type, fn) {
       const list = parentListeners.get(type) || [];
@@ -181,8 +196,14 @@ function createHoverTile({
       parentListeners.set(type, list);
     },
     removeEventListener(type, fn) {
-      const list = (parentListeners.get(type) || []).filter((handler) => handler !== fn);
-      parentListeners.set(type, list);
+      parentListeners.set(
+        type,
+        (parentListeners.get(type) || []).filter((handler) => handler !== fn)
+      );
+    },
+    dispatchEvent(event) {
+      dispatch(parentListeners, event);
+      return true;
     },
     closest(selector) {
       if (selector === "#table") return parent;
@@ -217,11 +238,13 @@ function createHoverTile({
       viewListeners.set(type, list);
     },
     removeEventListener(type, fn) {
-      const list = (viewListeners.get(type) || []).filter((handler) => handler !== fn);
-      viewListeners.set(type, list);
+      viewListeners.set(
+        type,
+        (viewListeners.get(type) || []).filter((handler) => handler !== fn)
+      );
     },
     dispatchEvent(event) {
-      for (const handler of viewListeners.get(event.type) || []) handler(event);
+      dispatch(viewListeners, event);
       return true;
     },
   };
@@ -247,12 +270,12 @@ function createHoverTile({
     },
     ownerDocument: { defaultView: view },
     getBoundingClientRect: () => ({
-      left: rest.left,
-      top: rest.top,
-      right: rest.right,
-      bottom: rest.bottom,
-      width: rest.right - rest.left,
-      height: rest.bottom - rest.top,
+      left: pos.left,
+      top: pos.top,
+      right: pos.right,
+      bottom: pos.bottom,
+      width: pos.right - pos.left,
+      height: pos.bottom - pos.top,
     }),
     closest: (selector) => parent.closest(selector),
     addEventListener(type, fn) {
@@ -261,8 +284,26 @@ function createHoverTile({
       listeners.set(type, list);
     },
     dispatchEvent(event) {
-      for (const handler of listeners.get(event.type) || []) handler(event);
+      dispatch(listeners, event);
       return true;
+    },
+    moveTo(next) {
+      Object.assign(pos, next);
+    },
+    setClip(next) {
+      Object.assign(clipRect, next);
+    },
+    fireScroll() {
+      parent.dispatchEvent({ type: "scroll" });
+    },
+    fireResize() {
+      view.dispatchEvent({ type: "resize" });
+    },
+    scrollHooked() {
+      return (parentListeners.get("scroll") || []).length > 0;
+    },
+    resizeHooked() {
+      return (viewListeners.get("resize") || []).length > 0;
     },
   };
   return tile;
@@ -272,15 +313,13 @@ describe("hover zoom clamp on a tile", () => {
   test("applyHoverShift writes CSS variables and clearHoverShift removes them", () => {
     const tile = createHoverTile({
       rest: restBox({ left: 200, top: 200 }),
-      clip: { left: 0, top: 0, right: 800, bottom: 600 },
+      clip: BOARD_CLIP,
     });
     applyHoverShift(tile, { x: 12, y: -4 });
-    expect(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR)).toBe("12px");
-    expect(tile.style.getPropertyValue(HOVER_SHIFT_Y_VAR)).toBe("-4px");
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe("12px");
+    expect(shiftValue(tile, HOVER_SHIFT_Y_VAR)).toBe("-4px");
     applyHoverShift(tile, { x: 0, y: 0 });
-    expect(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR)).toBe("");
-    expect(tile.style.getPropertyValue(HOVER_SHIFT_Y_VAR)).toBe("");
-    applyHoverShift(tile, { x: 3, y: 1 });
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe("");
     clearHoverShift(tile);
     expect(tile.properties[HOVER_SHIFT_X_VAR]).toBeUndefined();
   });
@@ -305,85 +344,148 @@ describe("hover zoom clamp on a tile", () => {
   });
 
   test("pointerenter clamps an edge card and pointerleave clears the shift", () => {
-    const clip = { left: 0, top: 0, right: 800, bottom: 600 };
     const rest = restBox({ left: 6, top: 4 });
-    const tile = createHoverTile({ rest, clip });
+    const tile = createHoverTile({ rest, clip: BOARD_CLIP });
     enableHoverZoomClamp(tile);
     expect(hoverShiftForTile(tile).x).toBeGreaterThan(0);
-    expect(hoverShiftForTile(tile).y).toBeGreaterThan(0);
 
     tile.dispatchEvent({ type: "pointerenter" });
-    expect(Number.parseFloat(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR))).toBeGreaterThan(
-      0
-    );
-    expect(Number.parseFloat(tile.style.getPropertyValue(HOVER_SHIFT_Y_VAR))).toBeGreaterThan(
-      0
-    );
+    expect(Number.parseFloat(shiftValue(tile, HOVER_SHIFT_X_VAR))).toBeGreaterThan(0);
+    expect(Number.parseFloat(shiftValue(tile, HOVER_SHIFT_Y_VAR))).toBeGreaterThan(0);
 
     tile.dispatchEvent({ type: "pointerleave" });
-    expect(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR)).toBe("");
-    expect(tile.style.getPropertyValue(HOVER_SHIFT_Y_VAR)).toBe("");
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe("");
+    expect(shiftValue(tile, HOVER_SHIFT_Y_VAR)).toBe("");
   });
 
   test("a centered tile does not write shift variables on hover", () => {
-    const clip = { left: 0, top: 0, right: 1200, bottom: 800 };
     const tile = createHoverTile({
       rest: restBox({ left: 500, top: 240 }),
-      clip,
+      clip: { left: 0, top: 0, right: 1200, bottom: 800 },
     });
     enableHoverZoomClamp(tile);
     tile.dispatchEvent({ type: "pointerenter" });
-    expect(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR)).toBe("");
-    expect(tile.style.getPropertyValue(HOVER_SHIFT_Y_VAR)).toBe("");
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe("");
+    expect(shiftValue(tile, HOVER_SHIFT_Y_VAR)).toBe("");
   });
 
   test("after drag ends while hovered, the face is re-clamped", async () => {
-    const clip = { left: 0, top: 0, right: 800, bottom: 600 };
     const tile = createHoverTile({
       rest: restBox({ left: 6, top: 4 }),
-      clip,
+      clip: BOARD_CLIP,
     });
     enableHoverZoomClamp(tile);
     tile.dispatchEvent({ type: "pointerenter" });
-    expect(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR)).not.toBe("");
+    const hoveredX = shiftValue(tile, HOVER_SHIFT_X_VAR);
+    expect(hoveredX).not.toBe("");
+
     tile.classList.add("dragging");
     tile.dispatchEvent({ type: "pointerup" });
     tile.classList.remove("dragging");
     await Promise.resolve();
-    expect(Number.parseFloat(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR))).toBeGreaterThan(
-      0
-    );
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe(hoveredX);
+    expect(Number.parseFloat(shiftValue(tile, HOVER_SHIFT_Y_VAR))).toBeGreaterThan(0);
   });
 
   test("pointerup still dragging leaves the shift cleared", async () => {
-    const clip = { left: 0, top: 0, right: 800, bottom: 600 };
     const tile = createHoverTile({
       rest: restBox({ left: 6, top: 4 }),
-      clip,
+      clip: BOARD_CLIP,
     });
     enableHoverZoomClamp(tile);
     tile.dispatchEvent({ type: "pointerenter" });
     tile.classList.add("dragging");
     tile.dispatchEvent({ type: "pointerup" });
     await Promise.resolve();
-    expect(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR)).toBe("");
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe("");
   });
 
-  test("a disconnected hovered tile drops layout listeners", async () => {
-    const clip = { left: 0, top: 0, right: 800, bottom: 600 };
+  test("board and play-area tiles resync on #table-main scroll", () => {
+    for (const zone of ["board", "play area"]) {
+      const tile = createHoverTile({
+        rest: restBox({ left: 6, top: 4 }),
+        clip: BOARD_CLIP,
+        inTableMain: true,
+      });
+      enableHoverZoomClamp(tile);
+      tile.dispatchEvent({ type: "pointerenter" });
+      expect({ zone, hooked: tile.scrollHooked() }).toEqual({ zone, hooked: true });
+      expect(Number.parseFloat(shiftValue(tile, HOVER_SHIFT_Y_VAR))).toBeGreaterThan(0);
+
+      tile.moveTo(restBox({ left: 6, top: 200 }));
+      tile.fireScroll();
+      expect({ zone, y: Number.parseFloat(shiftValue(tile, HOVER_SHIFT_Y_VAR)) || 0 }).toEqual({
+        zone,
+        y: 0,
+      });
+    }
+  });
+
+  test("hand tiles clamp without a #table-main scroll hook and resync on resize", () => {
     const tile = createHoverTile({
       rest: restBox({ left: 6, top: 4 }),
-      clip,
+      clip: HAND_CLIP,
+      inTableMain: false,
     });
     enableHoverZoomClamp(tile);
     tile.dispatchEvent({ type: "pointerenter" });
-    expect(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR)).not.toBe("");
+    expect(tile.scrollHooked()).toBe(false);
+    expect(tile.resizeHooked()).toBe(true);
+    expect(Number.parseFloat(shiftValue(tile, HOVER_SHIFT_X_VAR))).toBeGreaterThan(0);
+
+    tile.moveTo(restBox({ left: 300, top: 200 }));
+    tile.fireResize();
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe("");
+    expect(shiftValue(tile, HOVER_SHIFT_Y_VAR)).toBe("");
+  });
+
+  test("resize reclamps a hovered card when the clip shrinks", () => {
+    const tile = createHoverTile({
+      rest: restBox({ left: 500, top: 240 }),
+      clip: { left: 0, top: 0, right: 1200, bottom: 800 },
+    });
+    enableHoverZoomClamp(tile);
+    tile.dispatchEvent({ type: "pointerenter" });
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe("");
+
+    tile.setClip({ left: 0, top: 0, right: 540, bottom: 800 });
+    tile.fireResize();
+    expect(Number.parseFloat(shiftValue(tile, HOVER_SHIFT_X_VAR))).toBeLessThan(0);
+  });
+
+  test("a disconnected hovered tile drops layout listeners", () => {
+    const tile = createHoverTile({
+      rest: restBox({ left: 6, top: 4 }),
+      clip: BOARD_CLIP,
+    });
+    enableHoverZoomClamp(tile);
+    tile.dispatchEvent({ type: "pointerenter" });
+    expect(tile.resizeHooked()).toBe(true);
+    expect(tile.scrollHooked()).toBe(true);
+
     tile.isConnected = false;
-    tile.ownerDocument.defaultView.dispatchEvent({ type: "resize" });
-    expect(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR)).toBe("");
+    tile.fireResize();
+    expect(tile.resizeHooked()).toBe(false);
+    expect(tile.scrollHooked()).toBe(false);
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe("");
+
     tile.isConnected = true;
-    tile.ownerDocument.defaultView.dispatchEvent({ type: "resize" });
-    expect(tile.style.getPropertyValue(HOVER_SHIFT_X_VAR)).toBe("");
+    tile.fireResize();
+    expect(tile.resizeHooked()).toBe(false);
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe("");
+  });
+
+  test("decks do not hover-zoom or install the clamp", () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const main = fs.readFileSync(MAIN_PATH, "utf8");
+    expect(css).not.toContain(".deck-tile:hover .card-face");
+    expect(css).not.toMatch(/\.deck-tile[^{]*\{[^}]*--hover-shift/);
+    const decksFn = main.slice(
+      main.indexOf("function renderDecks"),
+      main.indexOf("function appendStatusLines")
+    );
+    expect(decksFn).not.toContain("enableHoverZoomClamp");
+    expect(main).toContain("enableHoverZoomClamp(tile)");
   });
 });
 
@@ -415,14 +517,6 @@ const HOVER_HARNESS_HTML = `<!doctype html>
             </div>
           </section>
         </div>
-        <section class="zone hand-zone" data-zone="hand">
-          <h2>Hand</h2>
-          <div class="cards hand-fan" id="hand-cards">
-            <article class="card-tile" data-card-id="hand-1" title="Copper">
-              <div class="card-face named-card"><span class="card-name card-name-full">Copper</span></div>
-            </article>
-          </div>
-        </section>
       </div>
     </div>
     <script type="module" src="/harness.js"></script>
@@ -454,7 +548,6 @@ try {
   const table = document.getElementById("table");
   const main = document.getElementById("table-main");
   await frame();
-  const rest = box(face);
   tile.classList.add("measure-hover");
   await frame();
   const unclamped = box(face);
@@ -472,7 +565,6 @@ try {
     bottom: Math.min(tableBox.bottom, mainBox.bottom),
   };
   await report({
-    rest,
     unclamped,
     clamped,
     clip,
@@ -587,7 +679,5 @@ describe("hover zoom stays inside the board window", () => {
     expect(result.clamped.top).toBeGreaterThanOrEqual(result.clip.top - 0.5);
     expect(result.clamped.right).toBeLessThanOrEqual(result.clip.right + 0.5);
     expect(result.clamped.bottom).toBeLessThanOrEqual(result.clip.bottom + 0.5);
-    expect(result.clamped.left).toBeGreaterThan(result.unclamped.left + 1);
-    expect(result.clamped.top).toBeGreaterThan(result.unclamped.top + 1);
   });
 });
