@@ -13,7 +13,7 @@ on:
         required: true
         type: string
       git_sha:
-        description: "Full commit SHA baked into the image as GIT_SHA (served by GET /health)."
+        description: "Full commit SHA written into the image as /app/GIT_SHA (served by GET /health)."
         required: true
         type: string
       extra_tag:
