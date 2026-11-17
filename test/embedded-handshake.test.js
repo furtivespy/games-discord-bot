@@ -83,6 +83,7 @@ const {
   statusPlayerScoreLabel,
   statusPlayerSeatName,
   suitGlyph,
+  playerSeatOrder,
   tablePlayersInSeatOrder,
   visibleDecks,
 } = require("../embedded-client/src/tableLayout.ts");
@@ -147,6 +148,7 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("renderGameStatus");
     expect(main).toContain("renderOtherPlayers");
     expect(main).toContain("tablePlayersInSeatOrder");
+    expect(main).toContain("const seated = tablePlayersInSeatOrder");
     expect(main).toContain("dataset.userId");
     expect(main).toContain("renderDecks");
     expect(main).toContain("renderDeckActions");
@@ -345,6 +347,8 @@ describe("visual table layout helpers", () => {
   });
 
   test("compact sidebar player lines, initials, suits, and mock auto-select", () => {
+    expect(playerSeatOrder({ order: Infinity })).toBe(0);
+    expect(playerSeatOrder({ order: "nope" })).toBe(0);
     expect(tablePlayersInSeatOrder([
       { name: "Third", order: 2 },
       { name: "Will", order: 0, isYou: true },
@@ -354,6 +358,12 @@ describe("visual table layout helpers", () => {
       ["Second", undefined],
       ["Third", undefined],
     ]);
+    expect(
+      tablePlayersInSeatOrder([
+        { name: "Inf", order: Infinity },
+        { name: "Second", order: 1 },
+      ]).map((player) => player.name)
+    ).toEqual(["Inf", "Second"]);
     expect(statusPlayerSeatName({ name: "QA Tester", order: 0 })).toBe("(1) QA Tester");
     expect(statusPlayerScoreLabel({ score: "12" })).toBe("12");
     expect(statusPlayerScoreLabel({ score: "" })).toBe("—");

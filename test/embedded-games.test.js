@@ -977,6 +977,21 @@ describe("snapshotFromGameData", () => {
       ["Second", false],
       ["Will", true],
     ]);
+
+    const reversed = snapshotFromGameData(
+      {
+        name: "Seats",
+        reverseOrder: true,
+        players: [
+          { userId: "third", name: "Third", order: 2, hands: { main: [{}] } },
+          { userId: "will", name: "Will", order: 0, hands: { main: [{}] } },
+          { userId: "second", name: "Second", order: 1, hands: { main: [{}] } },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(reversed.status.reverseOrder).toBe(true);
+    expect(reversed.otherPlayers.map((row) => row.name)).toEqual(["Will", "Second", "Third"]);
   });
 
   test("other players expose name and hand count, never their cards", () => {

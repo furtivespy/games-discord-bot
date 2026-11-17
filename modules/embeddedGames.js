@@ -272,7 +272,7 @@ function teamRoster(data) {
     .filter((team) => team.name);
 }
 
-function otherPlayersSummary(data, userId, displays) {
+function tablePlayersSummary(data, userId, displays) {
   const uid = String(userId || "");
   return sortedPlayers(data)
     .filter((player) => String(player?.userId || ""))
@@ -528,7 +528,7 @@ function snapshotFromGameData(
     hand: copyCards(player?.hands?.main),
     playArea: copyCards(player?.playArea),
     gameBoard: snapshotBoard(data, hostBoardImages),
-    otherPlayers: otherPlayersSummary(data, uid, displays),
+    otherPlayers: tablePlayersSummary(data, uid, displays),
     decks: deckSummaries(data),
     status: statusSummary(data, uid, displays),
   };

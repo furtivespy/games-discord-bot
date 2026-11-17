@@ -271,11 +271,17 @@ export function asRecordList<T extends object>(value: unknown): T[] {
   ) as T[];
 }
 
+export function playerSeatOrder(
+  player: { order?: unknown } | null | undefined
+): number {
+  return Number.isFinite(Number(player?.order)) ? Number(player.order) : 0;
+}
+
 export function tablePlayersInSeatOrder(
   players: OtherPlayer[] | null | undefined
 ): OtherPlayer[] {
   return [...asRecordList<OtherPlayer>(players)].sort(
-    (a, b) => (Number(a?.order) || 0) - (Number(b?.order) || 0)
+    (a, b) => playerSeatOrder(a) - playerSeatOrder(b)
   );
 }
 

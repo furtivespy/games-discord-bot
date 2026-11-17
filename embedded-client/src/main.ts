@@ -932,16 +932,16 @@ function renderOtherPlayers(
   const list = document.getElementById("other-players-list");
   if (!row || !list) return;
   list.replaceChildren();
-  const others = tablePlayersInSeatOrder(players);
-  if (!others.length) {
+  const seated = tablePlayersInSeatOrder(players);
+  if (!seated.length) {
     list.classList.remove("has-teams");
     row.hidden = true;
     return;
   }
-  const groups = groupPlayersByTeam(others, teams);
+  const groups = groupPlayersByTeam(seated, teams);
   if (!groups) {
     list.classList.remove("has-teams");
-    for (const player of others) {
+    for (const player of seated) {
       appendPlayerChip(config, list, player);
     }
   } else {
