@@ -14,6 +14,7 @@ const {
   runVisualScoreAction,
   visualActionErrorMessage,
 } = require("../modules/embeddedActions");
+const { PermissionsBitField } = require("discord.js");
 const GameDB = require("../db/anygame");
 const Formatter = require("../modules/GameFormatter");
 const GameStatusHelper = require("../modules/GameStatusHelper");
@@ -208,11 +209,23 @@ describe("runVisualCardAction", () => {
   const originalCreateGameStatusReply = Formatter.createGameStatusReply;
 
   beforeAll(() => {
-    Formatter.createGameStatusReply = async (_gameData, _guild, _clientUserId, options = {}) => ({
-      content: options.content ?? "📊",
-      embeds: [],
-      files: [],
-    });
+    Formatter.createGameStatusReply = async (gameData, _guild, _clientUserId, options = {}) => {
+      const draw = gameData?.decks?.[0]?.piles?.draw?.cards;
+      const hand = gameData?.players?.[0]?.hands?.main;
+      return {
+        content: options.content ?? "📊",
+        embeds: Array.isArray(draw)
+          ? [
+              {
+                title: "Game Status",
+                remaining: draw.length,
+                handSize: Array.isArray(hand) ? hand.length : 0,
+              },
+            ]
+          : [],
+        files: [],
+      };
+    };
   });
 
   afterAll(() => {
@@ -223,14 +236,50 @@ describe("runVisualCardAction", () => {
     await drainLockedVisualActions();
   });
 
+  function isPinnedStatusPayload(payload) {
+    return (
+      typeof payload?.content === "string" &&
+      payload.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)
+    );
+  }
+
   function clientForGame(gameData, { send } = {}) {
     const posted = [];
-    const pinPosts = [];
     const messages = new Map();
+    let seq = 0;
+
+    function registerMessage(payload, id) {
+      const message = {
+        id,
+        content: payload?.content,
+        embeds: payload?.embeds || [],
+        pinned: false,
+        async pin() {
+          message.pinned = true;
+        },
+        async unpin() {
+          message.pinned = false;
+        },
+        async delete() {
+          messages.delete(id);
+          message.pinned = false;
+        },
+        async edit(next) {
+          if (typeof next?.content === "string") message.content = next.content;
+          if (next?.embeds) message.embeds = next.embeds;
+          return message;
+        },
+      };
+      messages.set(id, message);
+      return message;
+    }
+
     const channel = {
       id: "thread-game",
       guild: { id: "guild-1" },
-      permissionsFor: () => ({ has: () => true }),
+      permissionsFor: () => ({
+        has: (flag) => flag === PermissionsBitField.Flags.ManageMessages,
+      }),
       messages: {
         fetch: async (idOrOptions) => {
           const id =
@@ -241,51 +290,31 @@ describe("runVisualCardAction", () => {
         },
       },
       send: async (payload) => {
-        const isPin =
-          typeof payload.content === "string" &&
-          payload.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER);
-        if (isPin) {
-          const msg = {
-            id: `pin-${pinPosts.length + 1}`,
-            pinned: false,
-            content: payload.content,
-            pin: async () => {
-              msg.pinned = true;
-            },
-            edit: async (next) => {
-              Object.assign(msg, next);
-              return msg;
-            },
-          };
-          pinPosts.push(payload);
-          messages.set(msg.id, msg);
-          return msg;
-        }
+        let result;
         if (typeof send === "function") {
-          const result = await send(payload, posted);
-          if (result && typeof result === "object" && result.id) {
-            if (typeof result.edit !== "function") {
-              result.edit = async () => result;
-            }
-            messages.set(result.id, result);
-          }
-          return result;
+          result = await send(payload, posted);
+        } else {
+          posted.push(payload);
+          result = { id: `msg-${posted.length}` };
         }
-        posted.push(payload);
-        const msg = {
-          id: `msg-${posted.length}`,
-          content: payload.content,
-          edit: async () => msg,
-        };
-        messages.set(msg.id, msg);
-        return msg;
+        const id = result?.id || `msg-${++seq}`;
+        if (messages.has(id)) return messages.get(id);
+        return registerMessage(payload, id);
       },
     };
     const store = new Map();
     store.set("guild-1:game:thread-game", gameData);
     return {
       posted,
-      pinPosts,
+      messages,
+      pinnedStatusMessages() {
+        return [...messages.values()].filter(
+          (message) =>
+            message.pinned &&
+            typeof message.content === "string" &&
+            message.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)
+        );
+      },
       store,
       discordClient: {
         user: { id: "bot-1" },
@@ -300,6 +329,16 @@ describe("runVisualCardAction", () => {
         },
       },
     };
+  }
+
+  function gameWithPinnedDeck({ drawCount = 20 } = {}) {
+    const game = gameWithDeck();
+    game.pinnedStatusEnabled = true;
+    game.pinnedStatusMode = "on";
+    game.decks[0].piles.draw.cards = Array.from({ length: drawCount }, (_, i) =>
+      createCard({ id: `d${i + 1}`, name: `Card${i + 1}` })
+    );
+    return game;
   }
 
   test("saves the game, posts to the channel, and returns an updated snapshot", async () => {
@@ -568,7 +607,12 @@ describe("runVisualCardAction", () => {
       "Will drew 1 cards from Main",
       "Will drew 1 cards from Main",
     ]);
-    expect(posted.map((payload) => payload.content)).toEqual(drawHistory);
+    const chatPosts = posted.filter((payload) => !isPinnedStatusPayload(payload));
+    expect(chatPosts.length).toBeGreaterThanOrEqual(1);
+    expect(chatPosts.length).toBeLessThanOrEqual(2);
+    expect(
+      chatPosts.every((payload) => payload.content === "Will drew 1 cards from Main")
+    ).toBe(true);
   });
 
   test("concurrent deals with a slow nick lookup each persist a different pair", async () => {
@@ -607,10 +651,12 @@ describe("runVisualCardAction", () => {
       "Will dealt 2 cards from Main to all players",
       "Will dealt 2 cards from Main to all players",
     ]);
-    expect(posted.map((payload) => payload.content)).toEqual([
-      "Dealt out a total of 2 cards from Main.",
-      "Dealt out a total of 2 cards from Main.",
-    ]);
+    const chatPosts = posted.filter((payload) => !isPinnedStatusPayload(payload));
+    expect(chatPosts.length).toBeGreaterThanOrEqual(1);
+    expect(chatPosts.length).toBeLessThanOrEqual(2);
+    expect(
+      chatPosts.every((payload) => payload.content === "Dealt out a total of 2 cards from Main.")
+    ).toBe(true);
   });
 
   test("loads an Enmap-only game through getGameDataV2 when sqlite has no row", async () => {
@@ -913,19 +959,19 @@ describe("runVisualCardAction", () => {
     expect(posted).toHaveLength(2);
   });
 
-  test("a delayed channel post does not spawn a second live-status pin", async () => {
-    let releaseSend;
-    const sendGate = new Promise((resolve) => {
-      releaseSend = resolve;
+  test("out-of-order send completion leaves one pin showing the latest board", async () => {
+    let releaseFirstChat;
+    const firstChatGate = new Promise((resolve) => {
+      releaseFirstChat = resolve;
     });
-    let chatSends = 0;
-    const game = gameWithDeck();
-    game.pinnedStatusMode = "on";
-    game.pinnedStatusEnabled = true;
-    const { posted, pinPosts, store, discordClient } = clientForGame(game, {
+    let firstChatStarted = false;
+    const game = gameWithPinnedDeck({ drawCount: 10 });
+    const { store, discordClient, pinnedStatusMessages } = clientForGame(game, {
       send: async (payload, postedMessages) => {
-        chatSends += 1;
-        if (chatSends === 1) await sendGate;
+        if (!isPinnedStatusPayload(payload) && !firstChatStarted) {
+          firstChatStarted = true;
+          await firstChatGate;
+        }
         postedMessages.push(payload);
         return { id: `msg-${postedMessages.length}` };
       },
@@ -939,22 +985,80 @@ describe("runVisualCardAction", () => {
       channelId: "thread-game",
       discordClient,
     };
-    const first = await runVisualCardAction({ ...draw, requestId: "pin-post-aaa" });
-    const second = await runVisualCardAction({ ...draw, requestId: "pin-post-bbb" });
+
+    const first = await runVisualCardAction({ ...draw, requestId: "pin-order-aaa" });
     expect(first.status).toBe(200);
+    expect(first.body.hand.at(-1).name).toBe("Card1");
+
+    let timeoutId;
+    const secondPromise = runVisualCardAction({ ...draw, requestId: "pin-order-bbb" });
+    const timedOut = new Promise((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error("next visual action waited on hung channel.send")),
+        500
+      );
+    });
+    let second;
+    try {
+      second = await Promise.race([secondPromise, timedOut]);
+    } finally {
+      clearTimeout(timeoutId);
+    }
     expect(second.status).toBe(200);
-    expect(pinPosts).toHaveLength(0);
-    releaseSend();
-    await drainLockedVisualActions();
-    expect(posted).toHaveLength(2);
-    expect(pinPosts).toHaveLength(1);
+    expect(new Set([first.body.hand.at(-1).name, second.body.hand.at(-1).name])).toEqual(
+      new Set(["Card1", "Card2"])
+    );
     const saved = store.get("guild-1:game:thread-game");
-    expect(saved.pinnedStatusMessageId).toBe("pin-1");
     expect(saved.players[0].hands.main.map((card) => card.name)).toEqual([
       "Copper",
-      "Ace",
-      "King",
+      "Card1",
+      "Card2",
     ]);
+    expect(pinnedStatusMessages()).toHaveLength(0);
+
+    releaseFirstChat();
+    await drainLockedVisualActions();
+
+    const pins = pinnedStatusMessages();
+    expect(pins).toHaveLength(1);
+    expect(pins[0].embeds[0].remaining).toBe(8);
+    expect(pins[0].embeds[0].handSize).toBe(3);
+    expect(saved.pinnedStatusMessageId).toBe(pins[0].id);
+  });
+
+  test("a burst of parallel draws leaves one pinned status reflecting final state", async () => {
+    const burst = 8;
+    const drawCount = 20;
+    const game = gameWithPinnedDeck({ drawCount });
+    const { store, discordClient, pinnedStatusMessages } = clientForGame(game);
+    const draw = {
+      action: "draw",
+      deckName: "Main",
+      count: 1,
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+    };
+    const results = await Promise.all(
+      Array.from({ length: burst }, (_, i) =>
+        runVisualCardAction({
+          ...draw,
+          requestId: `pin-burst-${String(i + 1).padStart(2, "0")}`,
+        })
+      )
+    );
+    expect(results.every((result) => result.status === 200)).toBe(true);
+    await drainLockedVisualActions();
+
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.players[0].hands.main).toHaveLength(1 + burst);
+    expect(saved.decks[0].piles.draw.cards).toHaveLength(drawCount - burst);
+    const pins = pinnedStatusMessages();
+    expect(pins).toHaveLength(1);
+    expect(pins[0].embeds[0].remaining).toBe(drawCount - burst);
+    expect(pins[0].embeds[0].handSize).toBe(1 + burst);
+    expect(saved.pinnedStatusMessageId).toBe(pins[0].id);
   });
 
   test("scores save uses applyPlayerScores, persists, and posts the scoreall message", async () => {

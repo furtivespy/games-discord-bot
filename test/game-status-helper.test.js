@@ -274,6 +274,34 @@ describe("GameStatusHelper pinned live status", () => {
     expect(harness.persistCalls[0][3].lastStatusMessageId).toBe("chat-locked");
   });
 
+  test("persistStatusUpdate does not clobber a newer chat status id", async () => {
+    const harness = createHarness({
+      gameData: createGameData({
+        players: [{ userId: "p1", score: 0 }],
+      }),
+    });
+    harness.storedGame.lastStatusMessageId = "chat-newer";
+    harness.storedGame.lastStatusMessageTimestamp = 200;
+
+    await GameStatusHelper.persistStatusUpdate(
+      harness.client,
+      harness.interaction,
+      {
+        ...harness.gameData,
+        lastStatusMessageId: "chat-older",
+        lastStatusMessageTimestamp: 100,
+      },
+      {
+        lastStatusMessageId: "chat-older",
+        lastStatusMessageTimestamp: 100,
+      }
+    );
+
+    expect(harness.persistCalls).toHaveLength(0);
+    expect(harness.storedGame.lastStatusMessageId).toBe("chat-newer");
+    expect(harness.storedGame.lastStatusMessageTimestamp).toBe(200);
+  });
+
   test("first status with pin enabled creates, pins, and persists a separate pin id", async () => {
     const harness = createHarness({
       gameData: createGameData({ pinnedStatusEnabled: true }),

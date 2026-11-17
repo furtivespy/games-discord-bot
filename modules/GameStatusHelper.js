@@ -334,6 +334,13 @@ class GameStatusHelper {
         const channelId = interaction.channelId;
         const fresh = await client.getGameDataV2(guildId, "game", channelId);
         const toSave = fresh && !fresh.isdeleted ? fresh : gameData;
+        if (
+          typeof toSave.lastStatusMessageTimestamp === "number" &&
+          typeof gameData.lastStatusMessageTimestamp === "number" &&
+          gameData.lastStatusMessageTimestamp < toSave.lastStatusMessageTimestamp
+        ) {
+          return;
+        }
         toSave.lastStatusMessageId = gameData.lastStatusMessageId;
         toSave.lastStatusMessageTimestamp = gameData.lastStatusMessageTimestamp;
         await client.setGameDataV2(guildId, "game", channelId, toSave, {
@@ -421,7 +428,7 @@ class GameStatusHelper {
     }
   }
 
-  static async latestGameForPin(client, interaction, gameData) {
+  static async latestGameForPin(client, interaction, gameData, options = {}) {
     if (!client || typeof client.getGameDataV2 !== "function") {
       return gameData;
     }
@@ -431,7 +438,8 @@ class GameStatusHelper {
       return gameData;
     }
     try {
-      const fresh = await client.getGameDataV2(guildId, "game", channelId);
+      const load = () => client.getGameDataV2(guildId, "game", channelId);
+      const fresh = await runOptionallyLocked(options.runLocked, load);
       if (fresh && !fresh.isdeleted) {
         return fresh;
       }
@@ -439,6 +447,26 @@ class GameStatusHelper {
       console.error("Could not load latest game for pinned status.", error);
     }
     return gameData;
+  }
+
+  static async discardSupersededPinnedMessage(message) {
+    if (!message) {
+      return;
+    }
+    try {
+      if (message.pinned && typeof message.unpin === "function") {
+        await message.unpin();
+      }
+    } catch (error) {
+      console.error("Could not unpin superseded live status message.", error);
+    }
+    try {
+      if (typeof message.delete === "function") {
+        await message.delete();
+      }
+    } catch (error) {
+      console.error("Could not delete superseded live status message.", error);
+    }
   }
 
   static async upsertPinnedStatus(channel, client, interaction, gameData, snapshotReply = null, options = {}) {
@@ -449,16 +477,17 @@ class GameStatusHelper {
       return;
     }
 
-    const latest = await this.latestGameForPin(client, interaction, gameData);
+    const latest = await this.latestGameForPin(client, interaction, gameData, options);
     if (latest?.pinnedStatusMessageId) {
       gameData.pinnedStatusMessageId = latest.pinnedStatusMessageId;
       gameData.pinnedStatusChannelId = latest.pinnedStatusChannelId;
       gameData.pinnedStatusPinned = latest.pinnedStatusPinned;
     }
 
-    const pinSource = options.pinFromLatest ? latest : gameData;
+    const rebuildFromLatest = Boolean(options.pinFromLatest || options.runLocked);
+    const pinSource = rebuildFromLatest ? latest : gameData;
     let snapshot = snapshotReply;
-    if (options.pinFromLatest || !snapshot) {
+    if (rebuildFromLatest || !snapshot) {
       snapshot = await this.buildStatusReplyOptions(pinSource, channel.guild, client.user.id, {});
     }
 
@@ -501,6 +530,30 @@ class GameStatusHelper {
     gameData.pinnedStatusChannelId = channel.id;
     await this.ensurePinned(sent, channel, client, gameData, { isNew: true });
     await this.persistPinFields(client, interaction, gameData, options);
+    const officialId = await this.readPinnedStatusMessageId(client, interaction, options);
+    if (officialId && officialId !== sent.id) {
+      await this.discardSupersededPinnedMessage(sent);
+    }
+  }
+
+  static async readPinnedStatusMessageId(client, interaction, options = {}) {
+    if (typeof client?.getGameDataV2 !== "function") {
+      return null;
+    }
+    const guildId = interaction?.guildId;
+    const channelId = interaction?.channelId;
+    if (!guildId || !channelId) {
+      return null;
+    }
+    try {
+      const fresh = await runOptionallyLocked(options.runLocked, () =>
+        client.getGameDataV2(guildId, "game", channelId)
+      );
+      return fresh?.pinnedStatusMessageId || null;
+    } catch (error) {
+      console.error("Could not read pinned status id after create.", error);
+      return null;
+    }
   }
 
   static canManageMessages(channel, client) {

@@ -280,6 +280,40 @@ async function finishVisualCardAction({
   return posted;
 }
 
+async function loadLatestGameForVisualPost({
+  getGameData,
+  discordClient,
+  gameStore,
+  guildId,
+  channelId,
+  runLocked,
+}) {
+  const loader = resolveGetGameData({ getGameData, discordClient, gameStore });
+  if (!loader) return null;
+  const load = () => loader(guildId, GAME_COLLECTION, channelId);
+  if (typeof runLocked === "function") {
+    return runLocked(load);
+  }
+  return load();
+}
+
+async function postLatestVisualCardAction(args, { isSuperseded } = {}) {
+  let gameData = args.gameData;
+  try {
+    const latest = await loadLatestGameForVisualPost(args);
+    if (latest && !latest.isdeleted) {
+      gameData = latest;
+    }
+  } catch {
+    // Keep the persist-time snapshot if a refresh read fails.
+  }
+  if (typeof isSuperseded === "function" && isSuperseded()) {
+    return false;
+  }
+  if (!gameData || gameData.isdeleted) return false;
+  return finishVisualCardAction({ ...args, gameData });
+}
+
 function applyVisualCardAction(gameData, { action, deckName, count, actor, userId }) {
   const deckResult = GameHelper.resolveDeckOption(gameData, deckName);
   if (deckResult.unspecified) {
@@ -404,8 +438,77 @@ function createGameChannelLock() {
   return { run };
 }
 
+/**
+ * Best-effort Discord posts after the game lock. One worker per channel:
+ * later enqueues replace a job that has not started sending (latest-wins),
+ * and a job already in channel.send finishes then the worker posts the
+ * latest persisted board. A hung send stalls this queue only, not mutations
+ * or the HTTP response.
+ */
+function createVisualChannelPostQueue() {
+  const pending = new Map();
+  const pumps = new Map();
+
+  function settle(entry, value, error) {
+    if (!entry || entry.settled) return;
+    entry.settled = true;
+    if (error) entry.reject(error);
+    else entry.resolve(value);
+  }
+
+  function enqueue(guildId, channelId, job) {
+    const key = `${guildId}:${channelId}`;
+    return new Promise((resolve, reject) => {
+      const previous = pending.get(key);
+      if (previous) settle(previous, false);
+      pending.set(key, { job, resolve, reject, settled: false });
+      if (!pumps.has(key)) {
+        pumps.set(key, pump(key));
+      }
+    });
+  }
+
+  async function pump(key) {
+    try {
+      while (pending.has(key)) {
+        const current = pending.get(key);
+        pending.delete(key);
+        try {
+          const posted = await current.job({
+            isSuperseded: () => pending.has(key),
+          });
+          settle(current, Boolean(posted));
+        } catch (err) {
+          settle(current, false, err);
+        }
+      }
+    } finally {
+      pumps.delete(key);
+      if (pending.has(key)) {
+        const next = pump(key);
+        pumps.set(key, next);
+        await next;
+      }
+    }
+  }
+
+  async function drain() {
+    for (;;) {
+      const inFlight = [...pumps.values()];
+      if (inFlight.length === 0 && pending.size === 0) return;
+      if (inFlight.length === 0) {
+        await Promise.resolve();
+        continue;
+      }
+      await Promise.all(inFlight);
+    }
+  }
+
+  return { enqueue, drain };
+}
+
 const defaultGameChannelLock = createGameChannelLock();
-const defaultGamePostLock = createGameChannelLock();
+const defaultVisualChannelPostQueue = createVisualChannelPostQueue();
 const pendingLockedVisualActions = new Set();
 
 function trackLockedVisualAction(work) {
@@ -418,8 +521,15 @@ function trackLockedVisualAction(work) {
 }
 
 async function drainLockedVisualActions() {
-  while (pendingLockedVisualActions.size > 0) {
-    await Promise.all([...pendingLockedVisualActions]);
+  for (;;) {
+    const pending = [...pendingLockedVisualActions];
+    const queueDrain = defaultVisualChannelPostQueue.drain();
+    if (pending.length === 0) {
+      await queueDrain;
+      if (pendingLockedVisualActions.size === 0) return;
+      continue;
+    }
+    await Promise.all([...pending, queueDrain]);
   }
 }
 
@@ -548,6 +658,7 @@ async function runVisualCardAction({
   requestId,
   idempotency,
   gameChannelLock,
+  channelPostQueue,
   fetchImpl,
   botToken,
   hostImageCache,
@@ -572,9 +683,12 @@ async function runVisualCardAction({
     gameChannelLock && typeof gameChannelLock.run === "function"
       ? gameChannelLock
       : defaultGameChannelLock;
-  const postLock = defaultGamePostLock;
 
   const runLocked = (fn) => lock.run(gid, cid, fn);
+  const postQueue =
+    channelPostQueue && typeof channelPostQueue.enqueue === "function"
+      ? channelPostQueue
+      : defaultVisualChannelPostQueue;
 
   const execute = () => {
     let releaseHttp;
@@ -653,17 +767,22 @@ async function runVisualCardAction({
         return false;
       }
       if (!pendingPost) return false;
-      return postLock.run(gid, cid, () =>
-        finishVisualCardAction({
-          discordClient,
-          guildId: gid,
-          channelId: cid,
-          actor,
-          gameData: pendingPost.gameData,
-          content: pendingPost.content,
-          logger,
-          runLocked,
-        })
+      return postQueue.enqueue(gid, cid, (queue) =>
+        postLatestVisualCardAction(
+          {
+            discordClient,
+            gameStore,
+            getGameData,
+            guildId: gid,
+            channelId: cid,
+            actor,
+            gameData: pendingPost.gameData,
+            content: pendingPost.content,
+            logger,
+            runLocked,
+          },
+          queue
+        )
       );
     });
     return httpReady;
@@ -873,6 +992,7 @@ module.exports = {
   applyVisualScoreAction,
   createActionIdempotencyCache,
   createGameChannelLock,
+  createVisualChannelPostQueue,
   drainLockedVisualActions,
   parseVisualActionBody,
   parseVisualActionRequestId,
