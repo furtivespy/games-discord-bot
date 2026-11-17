@@ -1,3 +1,5 @@
+import { SNAP_BACK_DURATION_MS } from "./drag";
+
 /** Matches `--card-hover-scale` on `:root`. */
 export const CARD_HOVER_SCALE = 1.48;
 
@@ -194,12 +196,14 @@ export function hoverShiftForTile(tile: HTMLElement): HoverShift {
   );
 }
 
-function isDragging(tile: HTMLElement): boolean {
-  return Boolean(tile.classList?.contains("dragging"));
+function isHeldOff(tile: HTMLElement): boolean {
+  return Boolean(
+    tile.classList?.contains("dragging") || tile.classList?.contains("snapping")
+  );
 }
 
 function syncHoverShift(tile: HTMLElement) {
-  if (isDragging(tile)) {
+  if (isHeldOff(tile)) {
     clearHoverShift(tile);
     return;
   }
@@ -218,6 +222,7 @@ export function enableHoverZoomClamp(tile: HTMLElement) {
   let listening = false;
   let scrollParent: HTMLElement | null = null;
   let disconnectObserver: MutationObserver | null = null;
+  let snapTimer: ReturnType<typeof setTimeout> | null = null;
 
   function apply() {
     if (tile.isConnected === false) {
@@ -228,6 +233,19 @@ export function enableHoverZoomClamp(tile: HTMLElement) {
     syncHoverShift(tile);
   }
 
+  function clearSnapTimer() {
+    if (snapTimer == null) return;
+    clearTimeout(snapTimer);
+    snapTimer = null;
+  }
+
+  function onTileTransitionEnd(event: Event) {
+    if (event.target && event.target !== tile) return;
+    const property = (event as TransitionEvent).propertyName;
+    if (property && property !== "transform") return;
+    apply();
+  }
+
   function stopLayoutListeners() {
     if (!listening) return;
     listening = false;
@@ -236,6 +254,8 @@ export function enableHoverZoomClamp(tile: HTMLElement) {
     scrollParent = null;
     disconnectObserver?.disconnect();
     disconnectObserver = null;
+    tile.removeEventListener?.("transitionend", onTileTransitionEnd);
+    clearSnapTimer();
   }
 
   function watchDisconnect() {
@@ -260,17 +280,26 @@ export function enableHoverZoomClamp(tile: HTMLElement) {
     view?.addEventListener("resize", apply);
     scrollParent = queryClip(tile, "#table-main");
     scrollParent?.addEventListener("scroll", apply, { passive: true });
+    tile.addEventListener("transitionend", onTileTransitionEnd);
     watchDisconnect();
   }
 
   function afterPointerRelease() {
     if (!listening) return;
     // Tile pointerup runs before drag.ts removes `.dragging` (document listener).
-    // Defer so an edge card that is still hovered reclamps instead of staying unshifted.
+    // The microtask covers click-to-inspect. Snap-back still has the tile away
+    // from its rest slot then, so also reclamp after the snap duration and on
+    // the tile's transform transitionend.
     queueMicrotask(() => {
       if (!listening) return;
       apply();
     });
+    clearSnapTimer();
+    snapTimer = setTimeout(() => {
+      snapTimer = null;
+      if (!listening) return;
+      apply();
+    }, SNAP_BACK_DURATION_MS + 50);
   }
 
   tile.addEventListener("pointerenter", () => {

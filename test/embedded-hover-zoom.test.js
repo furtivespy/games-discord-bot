@@ -18,6 +18,7 @@ const {
   hoverZoomRect,
   pixelShift,
 } = require("../embedded-client/src/hoverZoom.ts");
+const { SNAP_BACK_DURATION_MS } = require("../embedded-client/src/drag.ts");
 
 const STYLE_PATH = path.join(__dirname, "..", "embedded-client", "src", "style.css");
 const MAIN_PATH = path.join(__dirname, "..", "embedded-client", "src", "main.ts");
@@ -283,6 +284,12 @@ function createHoverTile({ rest, clip, inTableMain = true, scale = String(CARD_H
       list.push(fn);
       listeners.set(type, list);
     },
+    removeEventListener(type, fn) {
+      listeners.set(
+        type,
+        (listeners.get(type) || []).filter((handler) => handler !== fn)
+      );
+    },
     dispatchEvent(event) {
       dispatch(listeners, event);
       return true;
@@ -398,6 +405,53 @@ describe("hover zoom clamp on a tile", () => {
     tile.dispatchEvent({ type: "pointerup" });
     await Promise.resolve();
     expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe("");
+  });
+
+  test("after snap-back while hovered, transitionend reclamps at rest", async () => {
+    const rest = restBox({ left: 6, top: 4 });
+    const tile = createHoverTile({ rest, clip: BOARD_CLIP });
+    enableHoverZoomClamp(tile);
+    tile.dispatchEvent({ type: "pointerenter" });
+    const hoveredX = shiftValue(tile, HOVER_SHIFT_X_VAR);
+    expect(hoveredX).not.toBe("");
+
+    tile.moveTo(restBox({ left: 300, top: 200 }));
+    tile.classList.add("dragging");
+    tile.dispatchEvent({ type: "pointerup" });
+    tile.classList.remove("dragging");
+    tile.classList.add("snapping");
+    await Promise.resolve();
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe("");
+
+    tile.moveTo(rest);
+    tile.classList.remove("snapping");
+    tile.dispatchEvent({
+      type: "transitionend",
+      target: tile,
+      propertyName: "transform",
+    });
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe(hoveredX);
+  });
+
+  test("after snap-back while hovered, the snap timeout reclamps if transitionend is missed", async () => {
+    const rest = restBox({ left: 6, top: 4 });
+    const tile = createHoverTile({ rest, clip: BOARD_CLIP });
+    enableHoverZoomClamp(tile);
+    tile.dispatchEvent({ type: "pointerenter" });
+    const hoveredX = shiftValue(tile, HOVER_SHIFT_X_VAR);
+    expect(hoveredX).not.toBe("");
+
+    tile.moveTo(restBox({ left: 300, top: 200 }));
+    tile.classList.add("dragging");
+    tile.dispatchEvent({ type: "pointerup" });
+    tile.classList.remove("dragging");
+    tile.classList.add("snapping");
+    await Promise.resolve();
+    tile.moveTo(rest);
+    tile.classList.remove("snapping");
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe("");
+    await new Promise((resolve) => setTimeout(resolve, SNAP_BACK_DURATION_MS + 80));
+    expect(shiftValue(tile, HOVER_SHIFT_X_VAR)).toBe(hoveredX);
   });
 
   test("board and play-area tiles resync on #table-main scroll", () => {
