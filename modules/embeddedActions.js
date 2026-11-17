@@ -71,25 +71,9 @@ function parseVisualScoreMap(value) {
   for (const [userId, score] of Object.entries(value)) {
     const id = String(userId || "").trim();
     if (!id) continue;
-    scores[id] = score == null ? "" : String(score);
+    scores[id] = PlayerScores.scoreValue(score);
   }
   return scores;
-}
-
-function playerNamesFromGame(gameData, displays = {}) {
-  const names = {};
-  const players = Array.isArray(gameData?.players) ? gameData.players : [];
-  for (const player of players) {
-    const id = String(player?.userId || "");
-    if (!id) continue;
-    const fromDisplay = displays[id]?.name;
-    if (typeof fromDisplay === "string" && fromDisplay.trim()) {
-      names[id] = fromDisplay.trim();
-    } else if (typeof player?.name === "string" && player.name.trim()) {
-      names[id] = player.name.trim();
-    }
-  }
-  return names;
 }
 
 function scoresIdempotencyKey(scores) {
@@ -288,13 +272,55 @@ function applyVisualScoreAction(gameData, { scores, actor, playerNames } = {}) {
     scores,
     actor,
     actorDisplayName: actor?.displayName,
-    playerNames: playerNames || playerNamesFromGame(gameData),
+    playerNames,
   });
   return {
     ok: true,
     content: result.content,
     changed: result.changed,
   };
+}
+
+function pendingScoreUserIds(gameData, scores) {
+  const ids = [];
+  const updates = scores && typeof scores === "object" ? scores : {};
+  const players = Array.isArray(gameData?.players) ? gameData.players : [];
+  for (const player of players) {
+    const id = String(player?.userId || "");
+    if (!id) continue;
+    if (
+      !Object.prototype.hasOwnProperty.call(updates, id) &&
+      !Object.prototype.hasOwnProperty.call(updates, player.userId)
+    ) {
+      continue;
+    }
+    const raw = Object.prototype.hasOwnProperty.call(updates, id)
+      ? updates[id]
+      : updates[player.userId];
+    const newScore = PlayerScores.scoreValue(raw);
+    if (newScore && player.score !== newScore) ids.push(id);
+  }
+  return ids;
+}
+
+async function playerNamesForScoreUpdate(gameData, scores, { discordClient, guildId }) {
+  const userIds = pendingScoreUserIds(gameData, scores);
+  const playerNames = {};
+  if (!userIds.length) return playerNames;
+  const displays = await resolvePlayerDisplays({
+    discordClient,
+    guildId,
+    userIds,
+    fetchMissing: true,
+  });
+  for (const userId of userIds) {
+    const name = displays[userId]?.name;
+    playerNames[userId] =
+      typeof name === "string" && name.trim()
+        ? name.trim()
+        : `Player ${userId}`;
+  }
+  return playerNames;
 }
 
 /**
@@ -361,8 +387,9 @@ async function enrichActorDisplayName(actor, { discordClient, guildId, userId })
 
 /**
  * Per-process in-memory TTL map. A second instance still runs the same
- * requestId. The key includes action, deck, and count so a reused id for a
- * different Deal/Draw is not swallowed.
+ * requestId. The key includes action plus a per-action detail (deck:count for
+ * Deal/Draw, the score map for scores) so a reused id for a different action
+ * is not swallowed.
  */
 function createActionIdempotencyCache({
   ttlMs = 5 * 60 * 1000,
@@ -371,8 +398,8 @@ function createActionIdempotencyCache({
   const completed = new Map();
   const inflight = new Map();
 
-  function cacheKey(userId, guildId, channelId, requestId, action, deckName, count) {
-    return `${userId}:${guildId}:${channelId}:${requestId}:${action}:${deckName}:${count}`;
+  function cacheKey(userId, guildId, channelId, requestId, action, detail) {
+    return `${userId}:${guildId}:${channelId}:${requestId}:${action}:${detail}`;
   }
 
   function remember(key, result) {
@@ -388,9 +415,8 @@ function createActionIdempotencyCache({
     const id = parseVisualActionRequestId(requestId);
     if (!id) return fn();
     const action = String(actionParts.action || "");
-    const deckName = String(actionParts.deckName || "");
-    const count = String(actionParts.count ?? "");
-    const key = cacheKey(userId, guildId, channelId, id, action, deckName, count);
+    const detail = String(actionParts.detail ?? "");
+    const key = cacheKey(userId, guildId, channelId, id, action, detail);
     const cached = completed.get(key);
     if (cached) return cached;
     if (inflight.has(key)) return inflight.get(key);
@@ -470,6 +496,7 @@ async function runVisualCardAction({
   fetchImpl,
   botToken,
   hostImageCache,
+  idempotencyDetail,
   mutateOnce,
 } = {}) {
   const gid = String(guildId || "").trim();
@@ -600,8 +627,10 @@ async function runVisualCardAction({
   if (idempotency && typeof idempotency.run === "function") {
     return idempotency.run(requestId, uid, gid, cid, execute, {
       action,
-      deckName,
-      count,
+      detail:
+        idempotencyDetail != null
+          ? String(idempotencyDetail)
+          : `${deckName}:${count}`,
     });
   }
   return execute();
@@ -682,6 +711,7 @@ async function runVisualScoreActionOnce({
   actor,
   guildId,
   channelId,
+  userId,
   getGameData,
   discordClient,
   gameStore,
@@ -707,28 +737,24 @@ async function runVisualScoreActionOnce({
     return errorBody("no_game", 404);
   }
 
-  const userIds = Array.isArray(gameData?.players)
-    ? gameData.players.map((player) => String(player?.userId || "")).filter(Boolean)
-    : [];
-  let displays = {};
-  try {
-    displays = await resolvePlayerDisplays({
-      discordClient,
-      guildId,
-      userIds,
-      fetchMissing: false,
-    });
-  } catch {
-    displays = {};
+  if (!userIsPlayer(gameData, userId)) {
+    return errorBody("not_a_player", 403);
   }
 
-  const applied = applyVisualScoreAction(gameData, {
-    scores,
-    actor,
-    playerNames: playerNamesFromGame(gameData, displays),
+  const playerNames = await playerNamesForScoreUpdate(gameData, scores, {
+    discordClient,
+    guildId,
   });
-  if (!applied.ok) {
-    return errorBody(applied.error, applied.status, applied.content);
+
+  let applied;
+  try {
+    applied = applyVisualScoreAction(gameData, { scores, actor, playerNames });
+  } catch (err) {
+    logger?.log?.(
+      `Failed to apply visual-mode scores: ${err.message || err}`,
+      "error"
+    );
+    return errorBody("action_failed", 500);
   }
 
   if (applied.changed) {
@@ -771,8 +797,6 @@ async function runVisualScoreAction({
 } = {}) {
   return runVisualCardAction({
     action: "scores",
-    deckName: scoresIdempotencyKey(scores),
-    count: "",
     user,
     member,
     guildId,
@@ -787,6 +811,7 @@ async function runVisualScoreAction({
     fetchImpl,
     botToken,
     hostImageCache,
+    idempotencyDetail: scoresIdempotencyKey(scores),
     mutateOnce: (ctx) =>
       runVisualScoreActionOnce({
         scores,

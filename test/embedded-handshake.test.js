@@ -37,6 +37,9 @@ const {
   EDIT_SCORES_LABEL,
   SAVE_SCORES_LABEL,
   SCORE_EDITING_CLASS,
+  SCORE_MAX_LENGTH,
+  baselineScores,
+  changedScores,
   collectScoreInputs,
   visualScoreBody,
 } = require("../embedded-client/src/scoreEdit.ts");
@@ -376,6 +379,8 @@ describe("visual table layout helpers", () => {
     expect(scoreEdit).toContain("statusPlayerSeatName");
     expect(scoreEdit).toContain("EDIT_SCORES_LABEL");
     expect(scoreEdit).toContain("SAVE_SCORES_LABEL");
+    expect(scoreEdit).toContain("changedScores");
+    expect(scoreEdit).toContain("SCORE_MAX_LENGTH");
   });
 
   test("groups board players by roster team and keeps a flat row without teams", () => {
@@ -1094,6 +1099,19 @@ describe("deck hover Deal and Draw", () => {
         },
       })
     ).toEqual({ "mock-user-1": "21", "other-player-2": "9" });
+    expect(SCORE_MAX_LENGTH).toBe(4000);
+    expect(
+      baselineScores([
+        { userId: "mock-user-1", score: "10" },
+        { userId: "other-player-2", score: "7" },
+      ])
+    ).toEqual({ "mock-user-1": "10", "other-player-2": "7" });
+    expect(
+      changedScores(
+        { "mock-user-1": "21", "other-player-2": "7" },
+        { "mock-user-1": "10", "other-player-2": "7" }
+      )
+    ).toEqual({ "mock-user-1": "21" });
   });
 
   test("game channel link uses the selected guild and channel ids", () => {

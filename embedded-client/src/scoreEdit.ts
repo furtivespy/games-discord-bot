@@ -7,6 +7,8 @@ export const SCORE_EDITING_CLASS = "status-scores-editing";
 export const SCORE_EDIT_BUTTON_CLASS = "status-edit-scores";
 export const SCORE_INPUT_CLASS = "status-player-score-input";
 export const SCORE_ERROR_CLASS = "status-scores-error";
+// Discord Short text-input maximum used by `/players scoreall`.
+export const SCORE_MAX_LENGTH = 4000;
 
 export type ScoreMap = Record<string, string>;
 
@@ -48,6 +50,31 @@ export function collectScoreInputs(
     scores[userId] = input.value;
   }
   return scores;
+}
+
+export function baselineScores(players: StatusPlayer[] | null | undefined): ScoreMap {
+  const scores: ScoreMap = {};
+  for (const player of players || []) {
+    const userId = String(player?.userId || "").trim();
+    if (!userId) continue;
+    scores[userId] = scoreInputValue(player);
+  }
+  return scores;
+}
+
+export function changedScores(
+  current: ScoreMap | null | undefined,
+  baseline: ScoreMap | null | undefined
+): ScoreMap {
+  const next: ScoreMap = {};
+  const loaded = baseline && typeof baseline === "object" ? baseline : {};
+  for (const [userId, value] of Object.entries(current || {})) {
+    const id = String(userId || "").trim();
+    if (!id) continue;
+    if (String(value) === String(loaded[id] ?? "")) continue;
+    next[id] = String(value);
+  }
+  return next;
 }
 
 export function isScoreEditOpen(doc: Document | null | undefined): boolean {
@@ -98,6 +125,7 @@ function fillScoreInputs(block: HTMLElement, players: StatusPlayer[]): void {
     input.className = SCORE_INPUT_CLASS;
     input.dataset.userId = userId;
     input.value = scoreInputValue(player);
+    input.maxLength = SCORE_MAX_LENGTH;
     input.setAttribute("aria-label", `${statusPlayerSeatName(player)} score`);
     input.autocomplete = "off";
     scoreSlot.replaceChildren(input);
@@ -155,7 +183,9 @@ export function renderPlayerScoreBlock(
       enterEdit();
       return;
     }
-    void options.onSave(collectScoreInputs(block));
+    void options.onSave(
+      changedScores(collectScoreInputs(block), baselineScores(players))
+    );
   });
 
   block.addEventListener("keydown", (event) => {
@@ -164,7 +194,9 @@ export function renderPlayerScoreBlock(
     if (!(event.target instanceof HTMLInputElement)) return;
     event.preventDefault();
     if (edit.disabled) return;
-    void options.onSave(collectScoreInputs(block));
+    void options.onSave(
+      changedScores(collectScoreInputs(block), baselineScores(players))
+    );
   });
 
   block.addEventListener("submit", (event) => {

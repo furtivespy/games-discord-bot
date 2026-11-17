@@ -4,6 +4,8 @@ const GameDB = require("../../db/anygame.js");
 const GameHelper = require("../GlobalGameHelper");
 
 const SCOREALL_UPDATED_CONTENT = "Player scores updated successfully.";
+// Discord Short text inputs (scoreall modal) cap at 4000; visual inputs match.
+const SCORE_MAX_LENGTH = 4000;
 
 function actorDisplayName(actor, fallback) {
   const explicit =
@@ -53,9 +55,38 @@ function findPlayer(gameData, userId) {
   );
 }
 
+function isNonFiniteScoreText(text) {
+  const trimmed = String(text).trim();
+  if (!trimmed) return false;
+  if (/^[+-]?(nan|infinity)$/i.test(trimmed)) return true;
+  if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed)) return false;
+  return !Number.isFinite(Number(trimmed));
+}
+
+/**
+ * Coerce a score to the string slash/modal/visual all store.
+ * Non-finite numbers, NaN/Infinity text, and oversized values become ""
+ * (skipped by scoreall / visual Save, same as an empty field).
+ */
 function scoreValue(value) {
   if (value == null) return "";
-  return String(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return "";
+    return String(value);
+  }
+  const text = String(value);
+  if (text.length > SCORE_MAX_LENGTH) return "";
+  if (isNonFiniteScoreText(text)) return "";
+  return text;
+}
+
+function rawScoreFromMap(updates, player) {
+  const id = String(player?.userId || "");
+  if (Object.prototype.hasOwnProperty.call(updates, id)) return updates[id];
+  if (Object.prototype.hasOwnProperty.call(updates, player?.userId)) {
+    return updates[player.userId];
+  }
+  return undefined;
 }
 
 /**
@@ -105,9 +136,9 @@ function setPlayerScore(
         targetPlayer: {
           userId: String(targetUserId),
           username:
-            (typeof targetUsername === "string" && targetUsername.trim()
+            typeof targetUsername === "string" && targetUsername.trim()
               ? targetUsername
-              : targetName),
+              : targetName,
         },
         oldScore,
         newScore,
@@ -123,26 +154,30 @@ function setPlayerScore(
 
 /**
  * `/players scoreall` modal submit and visual Edit Scores save.
- * Empty values are skipped; unchanged values are skipped; one history entry
- * covers every change. Callers persist only when `changed` is true.
+ * Empty / invalid values are skipped; omitted ids are left untouched;
+ * unchanged values are skipped; one history entry covers every change.
+ * Callers persist only when `changed` is true. `recordMove` is not caught:
+ * a history failure must not look like a successful scoreall submit.
  */
 function applyPlayerScores(
   gameData,
   { scores, actor, actorDisplayName: actorName, playerNames } = {}
 ) {
-  const updates = scores && typeof scores === "object" ? scores : {};
+  const updates =
+    scores && typeof scores === "object" && !Array.isArray(scores) ? scores : {};
   const players = Array.isArray(gameData?.players) ? gameData.players : [];
   const changes = [];
 
   for (const player of players) {
     const id = String(player?.userId || "");
     if (!id) continue;
-    const raw = Object.prototype.hasOwnProperty.call(updates, id)
-      ? updates[id]
-      : Object.prototype.hasOwnProperty.call(updates, player.userId)
-        ? updates[player.userId]
-        : "";
-    const newScore = scoreValue(raw);
+    if (
+      !Object.prototype.hasOwnProperty.call(updates, id) &&
+      !Object.prototype.hasOwnProperty.call(updates, player.userId)
+    ) {
+      continue;
+    }
+    const newScore = scoreValue(rawScoreFromMap(updates, player));
     if (newScore && player.score !== newScore) {
       const oldScore = player.score;
       player.score = newScore;
@@ -185,6 +220,8 @@ function applyPlayerScores(
 
 module.exports = {
   SCOREALL_UPDATED_CONTENT,
+  SCORE_MAX_LENGTH,
   applyPlayerScores,
+  scoreValue,
   setPlayerScore,
 };

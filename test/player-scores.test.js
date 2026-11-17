@@ -105,4 +105,98 @@ describe("gameLogic playerScores", () => {
       "Alice updated player scores:\nAlice's score changed from 0 to 8\nBob's score changed from 0 to 2"
     );
   });
+
+  test("applyPlayerScores only writes ids the client sent, so an untouched seat keeps a concurrent change", () => {
+    const gameData = createActiveGame({
+      players: [
+        createPlayer({ userId: "user-1", name: "Alice", order: 0, score: "10" }),
+        createPlayer({ userId: "user-2", name: "Bob", order: 1, score: "20" }),
+      ],
+    });
+    const result = PlayerScores.applyPlayerScores(gameData, {
+      scores: { "user-1": "21" },
+      actor,
+    });
+    expect(result.changed).toBe(true);
+    expect(gameData.players[0].score).toBe("21");
+    expect(gameData.players[1].score).toBe("20");
+    expect(gameData.history.at(-1).summary).toBe(
+      "Alice updated player scores:\nAlice's score changed from 10 to 21"
+    );
+  });
+
+  test("applyPlayerScores skips NaN, Infinity, and oversized text", () => {
+    const gameData = createActiveGame({
+      players: [
+        createPlayer({ userId: "user-1", name: "Alice", order: 0, score: "10" }),
+        createPlayer({ userId: "user-2", name: "Bob", order: 1, score: "7" }),
+        createPlayer({ userId: "user-3", name: "Cara", order: 2, score: "3" }),
+      ],
+    });
+    const result = PlayerScores.applyPlayerScores(gameData, {
+      scores: {
+        "user-1": Number.NaN,
+        "user-2": Number.POSITIVE_INFINITY,
+        "user-3": "1e309",
+      },
+      actor,
+    });
+    expect(result.changed).toBe(false);
+    expect(gameData.players.map((player) => player.score)).toEqual(["10", "7", "3"]);
+    expect(gameData.history).toEqual([]);
+
+    const strings = PlayerScores.applyPlayerScores(gameData, {
+      scores: {
+        "user-1": "NaN",
+        "user-2": "Infinity",
+        "user-3": "x".repeat(PlayerScores.SCORE_MAX_LENGTH + 1),
+      },
+      actor,
+    });
+    expect(strings.changed).toBe(false);
+    expect(gameData.players.map((player) => player.score)).toEqual(["10", "7", "3"]);
+  });
+
+  test("applyPlayerScores lets a recordMove failure surface instead of reporting success with no history", () => {
+    const GameHelper = require("../modules/GlobalGameHelper");
+    const gameData = createActiveGame();
+    const original = GameHelper.recordMove;
+    GameHelper.recordMove = () => {
+      throw new Error("history down");
+    };
+    try {
+      expect(() =>
+        PlayerScores.applyPlayerScores(gameData, {
+          scores: { "user-1": "8" },
+          actor,
+        })
+      ).toThrow("history down");
+      expect(gameData.players[0].score).toBe("8");
+      expect(gameData.history).toEqual([]);
+    } finally {
+      GameHelper.recordMove = original;
+    }
+  });
+
+  test("setPlayerScore still keeps the write if history recording fails", () => {
+    const GameHelper = require("../modules/GlobalGameHelper");
+    const gameData = createActiveGame();
+    const original = GameHelper.recordMove;
+    GameHelper.recordMove = () => {
+      throw new Error("history down");
+    };
+    try {
+      const result = PlayerScores.setPlayerScore(gameData, {
+        targetUserId: "user-2",
+        score: "17",
+        actor,
+        targetDisplayName: "Bob",
+      });
+      expect(result.ok).toBe(true);
+      expect(gameData.players[1].score).toBe("17");
+      expect(gameData.history).toEqual([]);
+    } finally {
+      GameHelper.recordMove = original;
+    }
+  });
 });

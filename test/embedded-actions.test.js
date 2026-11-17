@@ -98,6 +98,16 @@ describe("parseVisualActionBody", () => {
       scores: { "user-1": "12", "user-2": "7" },
       requestId: "req-score-1",
     });
+    expect(
+      parseVisualActionBody({
+        action: "scores",
+        scores: [{ userId: "user-1", score: "12" }],
+      })
+    ).toEqual({
+      action: "scores",
+      scores: {},
+      requestId: null,
+    });
     expect(parseVisualActionBody({ action: "deal", deck: "Main", count: 0 })).toEqual({
       error: "invalid_count",
       status: 400,
@@ -860,6 +870,93 @@ describe("runVisualCardAction", () => {
     expect(posted[0].content).toContain("Player scores updated successfully.");
     expect(result.body.status.history.at(-1).summary).toBe(
       "WillOnServer updated player scores:\nWillOnServer's score changed from 1 to 21\nRileyOnServer's score changed from 0 to 9"
+    );
+  });
+
+  test("scores from a non-player is 403 not_a_player and does not rewrite seats", async () => {
+    const game = gameWithDeck();
+    game.players[0].score = "1";
+    const { store, discordClient } = clientForGame(game);
+    const result = await runVisualScoreAction({
+      scores: { "snowflake-user": "99", "other-player": "88" },
+      user: { id: "spectator", username: "eve", global_name: "Eve" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+    });
+    await drainLockedVisualActions();
+
+    expect(result.status).toBe(403);
+    expect(result.body).toMatchObject({
+      error: "not_a_player",
+      message: "You're not a player in this game.",
+    });
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.players[0].score).toBe("1");
+    expect(saved.players[1].score).toBe("");
+    expect(saved.history).toEqual([]);
+  });
+
+  test("scores history uses guild display names from members.fetch", async () => {
+    const game = gameWithDeck();
+    game.players[0].score = "1";
+    const memberFetches = [];
+    const posted = [];
+    const store = new Map();
+    store.set("guild-1:game:thread-game", game);
+    const channel = {
+      id: "thread-game",
+      guild: { id: "guild-1" },
+      messages: { fetch: async () => null },
+      send: async (payload) => {
+        posted.push(payload);
+        return { id: "msg-1" };
+      },
+    };
+    const discordClient = {
+      user: { id: "bot-1" },
+      channels: {
+        cache: { get: (id) => (id === "thread-game" ? channel : null) },
+      },
+      guilds: {
+        cache: { get: () => null },
+        fetch: async () => ({
+          members: {
+            cache: { get: () => null },
+            fetch: async (userId) => {
+              memberFetches.push(userId);
+              return {
+                displayName:
+                  userId === "snowflake-user" ? "WillOnServer" : "RileyOnServer",
+              };
+            },
+          },
+        }),
+      },
+      async getGameDataV2(guildId, collection, channelId) {
+        return store.get(`${guildId}:${collection}:${channelId}`) || null;
+      },
+      async setGameDataV2(guildId, collection, channelId, data) {
+        store.set(`${guildId}:${collection}:${channelId}`, data);
+      },
+    };
+    const result = await runVisualScoreAction({
+      scores: { "snowflake-user": "21", "other-player": "9" },
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      member: { displayName: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+    });
+    await drainLockedVisualActions();
+
+    expect(result.status).toBe(200);
+    expect(memberFetches).toEqual(
+      expect.arrayContaining(["snowflake-user", "other-player"])
+    );
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.history.at(-1).summary).toBe(
+      "Will updated player scores:\nWillOnServer's score changed from 1 to 21\nRileyOnServer's score changed from 0 to 9"
     );
   });
 });
