@@ -72,6 +72,7 @@ import {
   initialsFromName,
   statusPlayerScoreLabel,
   statusPlayerSeatName,
+  tablePlayersInSeatOrder,
   suitColorClass,
   suitGlyph,
   visibleDecks,
@@ -889,7 +890,12 @@ function appendPlayerChip(
   player: OtherPlayer
 ) {
   const chip = document.createElement("article");
-  chip.className = "player-chip";
+  chip.className = `player-chip${player.isYou ? " is-you" : ""}`;
+  const userId =
+    typeof player.userId === "string" && player.userId.trim()
+      ? player.userId.trim()
+      : "";
+  if (userId) chip.dataset.userId = userId;
   const name =
     typeof player.name === "string" && player.name.trim()
       ? player.name.trim()
@@ -926,7 +932,7 @@ function renderOtherPlayers(
   const list = document.getElementById("other-players-list");
   if (!row || !list) return;
   list.replaceChildren();
-  const others = asRecordList<OtherPlayer>(players);
+  const others = tablePlayersInSeatOrder(players);
   if (!others.length) {
     list.classList.remove("has-teams");
     row.hidden = true;

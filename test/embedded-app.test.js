@@ -927,12 +927,24 @@ describe("GET /api/game/snapshot", () => {
           gameBoard: [{ id: "board-1", name: "Province" }],
           otherPlayers: [
             {
+              userId: "snowflake-user",
+              name: "snowflake-user",
+              handCount: 2,
+              avatarUrl: null,
+              teamId: "",
+              teamName: "",
+              order: 0,
+              isYou: true,
+            },
+            {
               userId: "other-player",
               name: "other-player",
               handCount: 1,
               avatarUrl: null,
               teamId: "",
               teamName: "",
+              order: 0,
+              isYou: false,
             },
           ],
         });

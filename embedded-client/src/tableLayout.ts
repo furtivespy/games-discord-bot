@@ -32,6 +32,8 @@ export type OtherPlayer = {
   avatarUrl?: string | null;
   teamId?: string;
   teamName?: string;
+  order?: number;
+  isYou?: boolean;
 };
 
 export type StatusPlayer = {
@@ -267,6 +269,14 @@ export function asRecordList<T extends object>(value: unknown): T[] {
   return value.filter(
     (item) => item && typeof item === "object" && !Array.isArray(item)
   ) as T[];
+}
+
+export function tablePlayersInSeatOrder(
+  players: OtherPlayer[] | null | undefined
+): OtherPlayer[] {
+  return [...asRecordList<OtherPlayer>(players)].sort(
+    (a, b) => (Number(a?.order) || 0) - (Number(b?.order) || 0)
+  );
 }
 
 export function autoSelectGameId(search: string, mock: boolean): string {
