@@ -15,6 +15,8 @@ const {
   pollBackoffMs,
   restoreScrollTop,
   retryAfterMsFromHeader,
+  snapshotRefreshResult,
+  shouldStampKnownVersion,
 } = require("../embedded-client/src/snapshotPoll.ts");
 const { createSnapshotLoader } = require("../embedded-client/src/requestSeq.ts");
 
@@ -149,6 +151,63 @@ describe("createSnapshotPoller", () => {
     resolveVersion({ kind: "changed", version: "v2" });
     await pending;
     expect(refreshes).toEqual([]);
+  });
+
+  test("deferred apply does not stamp knownVersion, so a later identical version still refreshes", async () => {
+    let paint = false;
+    const refreshes = [];
+    const poller = createSnapshotPoller({
+      fetchVersion: async () => ({ kind: "changed", version: "v2" }),
+      refresh: async () => {
+        refreshes.push("go");
+        return paint ? true : "deferred";
+      },
+      isHidden: () => false,
+      isBlocked: () => false,
+      ...idleTimers(),
+    });
+    poller.start("v1");
+    await poller.pollNow();
+    expect(refreshes).toEqual(["go"]);
+    expect(poller.peekVersion()).toBe("v1");
+    await poller.pollNow();
+    expect(refreshes).toEqual(["go", "go"]);
+    expect(poller.peekVersion()).toBe("v1");
+    paint = true;
+    await poller.pollNow();
+    expect(refreshes).toEqual(["go", "go", "go"]);
+    expect(poller.peekVersion()).toBe("v2");
+    poller.stop();
+  });
+
+  test("deferred apply does not back off", async () => {
+    const delays = [];
+    const poller = createSnapshotPoller({
+      fetchVersion: async () => ({ kind: "changed", version: "v2" }),
+      refresh: async () => "deferred",
+      isHidden: () => false,
+      isBlocked: () => false,
+      setTimeoutFn: (_fn, ms) => {
+        delays.push(ms);
+        return 0;
+      },
+      clearTimeoutFn: () => {},
+    });
+    poller.start("v1");
+    expect(delays[0]).toBe(SNAPSHOT_POLL_INTERVAL_MS);
+    await poller.pollNow();
+    poller.stop();
+    expect(delays.at(-1)).toBe(SNAPSHOT_POLL_INTERVAL_MS);
+    expect(poller.peekVersion()).toBe("v1");
+  });
+
+  test("snapshotRefreshResult is stamped only after paint", () => {
+    expect(snapshotRefreshResult(true)).toBe(true);
+    expect(snapshotRefreshResult(false)).toBe("deferred");
+    expect(shouldStampKnownVersion(true)).toBe(true);
+    expect(shouldStampKnownVersion("deferred")).toBe(false);
+    expect(shouldStampKnownVersion(false)).toBe(false);
+    expect(Boolean("deferred")).toBe(true);
   });
 
   test("a failed silent refresh does not mark the version current and retries", async () => {

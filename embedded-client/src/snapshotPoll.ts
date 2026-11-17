@@ -95,11 +95,27 @@ export function isSnapshotPollBlocked(doc: Document | null | undefined): boolean
   return false;
 }
 
+/**
+ * Poller refresh outcome. `true` means the table painted; `"deferred"` means
+ * apply parked a pending snapshot (drag/dialog) and must not stamp knownVersion.
+ * `false` is a failed refresh that should retry with backoff.
+ */
+export type SnapshotRefreshResult = boolean | "deferred";
+
+/** Silent poll refresh succeeded only if the table actually painted. */
+export function snapshotRefreshResult(didPaint: boolean): SnapshotRefreshResult {
+  return didPaint ? true : "deferred";
+}
+
+export function shouldStampKnownVersion(result: SnapshotRefreshResult): boolean {
+  return result === true;
+}
+
 export type SnapshotPollerOptions = {
   intervalMs?: number;
   maxBackoffMs?: number;
   fetchVersion: () => Promise<VersionPollResult>;
-  refresh: () => Promise<boolean>;
+  refresh: () => Promise<SnapshotRefreshResult>;
   isHidden: () => boolean;
   isBlocked: () => boolean;
   onUnauthorized?: () => void;
@@ -166,9 +182,12 @@ export function createSnapshotPoller(opts: SnapshotPollerOptions) {
       if (opts.isHidden() || opts.isBlocked()) return;
       const applied = await opts.refresh();
       if (stopped || gen !== generation) return;
-      if (applied) {
+      // Parked pendingSnapshot is not painted yet. Keep knownVersion on the
+      // last painted snapshot so dropping pending (hide table) can still
+      // refresh this version later.
+      if (shouldStampKnownVersion(applied)) {
         knownVersion = result.version;
-      } else {
+      } else if (applied !== "deferred") {
         noteError();
       }
     } catch {

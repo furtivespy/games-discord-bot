@@ -34,6 +34,8 @@ import {
   newHistoryKeys,
   restoreScrollTop,
   retryAfterMsFromHeader,
+  snapshotRefreshResult,
+  type SnapshotRefreshResult,
   type VersionPollResult,
 } from "./snapshotPoll";
 import {
@@ -346,7 +348,7 @@ async function fetchSnapshotVersion(): Promise<VersionPollResult> {
   return { kind: "changed", version };
 }
 
-async function refreshSnapshotFromPoll(): Promise<boolean> {
+async function refreshSnapshotFromPoll(): Promise<SnapshotRefreshResult> {
   const session = activeSession;
   if (!session) return false;
   const channelId = liveSelectedChannelId(session.config.channelId);
@@ -1113,7 +1115,7 @@ async function loadSnapshot(
   accessToken: string,
   ids: { channelId: string; guildId: string },
   options: { silent?: boolean } = {}
-): Promise<boolean> {
+): Promise<SnapshotRefreshResult> {
   const silent = Boolean(options.silent);
   const outcome = await snapshotLoader.load(
     ids.channelId,
@@ -1197,14 +1199,13 @@ async function loadSnapshot(
     return false;
   }
 
-  applySnapshot(config, payload);
-  return true;
+  return snapshotRefreshResult(applySnapshot(config, payload));
 }
 
-function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot) {
+function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot): boolean {
   if (isSnapshotPollBlocked(document)) {
     pendingSnapshot = { config, payload };
-    return;
+    return false;
   }
   pendingSnapshot = null;
   setTableStale(false);
@@ -1249,6 +1250,7 @@ function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot) {
   scheduleHistoryFlashClear(document.getElementById("game-status"));
   setTableVisible(true);
   startSnapshotPolling(appliedVersion);
+  return true;
 }
 
 function createSdk(config: EmbeddedConfig) {
