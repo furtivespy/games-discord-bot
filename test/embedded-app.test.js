@@ -19,6 +19,8 @@ const {
 } = require("../modules/embeddedApp");
 const VisualLaunch = require("../modules/visualLaunch");
 const { drainLockedVisualActions } = require("../modules/embeddedActions");
+const GameStatusHelper = require("../modules/GameStatusHelper");
+const { PermissionsBitField } = require("discord.js");
 const GameStore = require("../db/gameStore");
 const GameDB = require("../db/anygame");
 const { DISCORD_API_BASE, GAME_COLLECTION } = require("../modules/embeddedGames");
@@ -1477,25 +1479,89 @@ describe("POST /api/game/action", () => {
     } = {},
     run
   ) {
-    Formatter.createGameStatusReply = async (_gameData, _guild, _clientUserId, options = {}) => ({
-      content: options.content ?? "📊",
-      embeds: [],
-      files: [],
-    });
+    Formatter.createGameStatusReply = async (gameData, _guild, _clientUserId, options = {}) => {
+      const draw = gameData?.decks?.[0]?.piles?.draw?.cards;
+      const hand = gameData?.players?.[0]?.hands?.main;
+      return {
+        content: options.content ?? "📊",
+        embeds: Array.isArray(draw)
+          ? [
+              {
+                title: "Game Status",
+                remaining: draw.length,
+                handSize: Array.isArray(hand) ? hand.length : 0,
+              },
+            ]
+          : [],
+        files: [],
+      };
+    };
     try {
       await withStore(async (store) => {
         store.upsertGameData("guild-1", GAME_COLLECTION, "thread-game", game);
         const posted = [];
+        const messages = new Map();
+        let seq = 0;
+        function registerMessage(payload, id) {
+          const message = {
+            id,
+            content: payload?.content,
+            embeds: payload?.embeds || [],
+            pinned: false,
+            async pin() {
+              message.pinned = true;
+            },
+            async unpin() {
+              message.pinned = false;
+            },
+            async delete() {
+              messages.delete(id);
+              message.pinned = false;
+            },
+            async edit(next) {
+              if (typeof next?.content === "string") message.content = next.content;
+              if (next?.embeds) message.embeds = next.embeds;
+              return message;
+            },
+          };
+          messages.set(id, message);
+          return message;
+        }
         const channel = {
           id: "thread-game",
           guild: { id: "guild-1" },
-          messages: { fetch: async () => null },
+          permissionsFor: () => ({
+            has: (flag) => flag === PermissionsBitField.Flags.ManageMessages,
+          }),
+          messages: {
+            fetch: async (idOrOptions) => {
+              const id =
+                typeof idOrOptions === "object" && idOrOptions
+                  ? idOrOptions.message || idOrOptions.id
+                  : idOrOptions;
+              return messages.get(id) || null;
+            },
+          },
           send: async (payload) => {
-            if (typeof send === "function") return send(payload, posted);
-            posted.push(payload);
-            return { id: `msg-${posted.length}` };
+            let result;
+            if (typeof send === "function") {
+              result = await send(payload, posted);
+            } else {
+              posted.push(payload);
+              result = { id: `msg-${posted.length}` };
+            }
+            const id = result?.id || `msg-${++seq}`;
+            if (messages.has(id)) return messages.get(id);
+            return registerMessage(payload, id);
           },
         };
+        const pinnedStatusMessages = () =>
+          [...messages.values()].filter(
+            (message) =>
+              message.pinned &&
+              typeof message.content === "string" &&
+              message.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)
+          );
         const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-action-http-"));
         fs.writeFileSync(
           path.join(staticDir, "index.html"),
@@ -1541,7 +1607,7 @@ describe("POST /api/game/action", () => {
         });
         const { server, url } = await listen(app);
         try {
-          await run({ url, posted, store });
+          await run({ url, posted, store, pinnedStatusMessages, messages });
         } finally {
           await drainLockedVisualActions();
           server.close();
@@ -1818,10 +1884,13 @@ describe("POST /api/game/action", () => {
         "TableWill drew 1 cards from Main",
         "TableWill drew 1 cards from Main",
       ]);
-      await waitFor(() => posted.length === drawHistory.length);
-      posted.forEach((payload, index) => {
-        expect(postMatchesHistory(payload.content, drawHistory[index])).toBe(true);
-      });
+      await drainLockedVisualActions();
+      expect(posted).toHaveLength(drawHistory.length);
+      expect(
+        posted.every((payload) =>
+          postMatchesHistory(payload.content, drawHistory[drawHistory.length - 1])
+        )
+      ).toBe(true);
     });
   });
 
@@ -1864,13 +1933,13 @@ describe("POST /api/game/action", () => {
       expect(history.map((entry) => entry.action.type).sort()).toEqual(
         [GameDB.ACTION_TYPES.DEAL, GameDB.ACTION_TYPES.DRAW].sort()
       );
-      await waitFor(() => posted.length === history.length);
+      await drainLockedVisualActions();
+      expect(posted).toHaveLength(history.length);
       const postedContents = posted.map((payload) => payload.content);
-      for (const entry of history) {
-        expect(
-          postedContents.some((content) => postMatchesHistory(content, entry))
-        ).toBe(true);
-      }
+      const latest = history[history.length - 1];
+      expect(
+        postedContents.some((content) => postMatchesHistory(content, latest))
+      ).toBe(true);
     });
   });
 
@@ -1919,6 +1988,108 @@ describe("POST /api/game/action", () => {
         expect(posted[0].content).toContain("Dealt out a total of 2 cards from Main.");
       }
     );
+  });
+
+  test("a hung channel send does not stall the next same-channel Deal/Draw POST", async () => {
+    let releaseSend;
+    const sendGate = new Promise((resolve) => {
+      releaseSend = resolve;
+    });
+    await withActionApp(
+      {
+        send: async (payload, posted) => {
+          await sendGate;
+          posted.push(payload);
+          return { id: `msg-${posted.length}` };
+        },
+      },
+      async ({ url, posted, store }) => {
+        try {
+          const firstRes = await postAction(url, {
+            action: "draw",
+            deck: "Main",
+            count: 1,
+            requestId: "hung-post-aaa",
+          });
+          expect(firstRes.status).toBe(200);
+          const first = await firstRes.json();
+
+          let timeoutId;
+          const secondPromise = postAction(url, {
+            action: "draw",
+            deck: "Main",
+            count: 1,
+            requestId: "hung-post-bbb",
+          });
+          const timedOut = new Promise((_, reject) => {
+            timeoutId = setTimeout(
+              () => reject(new Error("next visual POST waited on hung channel.send")),
+              500
+            );
+          });
+          let secondRes;
+          try {
+            secondRes = await Promise.race([secondPromise, timedOut]);
+          } finally {
+            clearTimeout(timeoutId);
+          }
+
+          expect(secondRes.status).toBe(200);
+          const second = await secondRes.json();
+          expect(new Set([first.hand.at(-1).name, second.hand.at(-1).name])).toEqual(
+            new Set(["Ace", "King"])
+          );
+          const saved = store.getSpecificGameData("guild-1", GAME_COLLECTION, "thread-game");
+          expect(cardNames(saved.players[0].hands.main)).toEqual(["Copper", "Ace", "King"]);
+          expect(posted).toHaveLength(0);
+        } finally {
+          releaseSend();
+        }
+        await waitFor(() => posted.length === 2);
+      }
+    );
+  });
+
+  test("a burst of parallel draws leaves one HTTP pin reflecting the final board", async () => {
+    const burst = 8;
+    const drawCards = Array.from({ length: 20 }, (_, i) => ({
+      id: `d${i + 1}`,
+      name: `Card${i + 1}`,
+      url: null,
+    }));
+    const game = actionGame({ draw: drawCards });
+    game.pinnedStatusEnabled = true;
+    game.pinnedStatusMode = "on";
+    await withActionApp({ game }, async ({ url, posted, store, pinnedStatusMessages }) => {
+      const results = await Promise.all(
+        Array.from({ length: burst }, (_, i) =>
+          postAction(url, {
+            action: "draw",
+            deck: "Main",
+            count: 1,
+            requestId: `http-pin-burst-${String(i + 1).padStart(2, "0")}`,
+          })
+        )
+      );
+      expect(results.every((res) => res.status === 200)).toBe(true);
+      const bodies = await Promise.all(results.map((res) => res.json()));
+      expect(new Set(bodies.map((body) => body.hand.at(-1).name)).size).toBe(burst);
+      await drainLockedVisualActions();
+      const saved = store.getSpecificGameData("guild-1", GAME_COLLECTION, "thread-game");
+      expect(cardNames(saved.players[0].hands.main)).toHaveLength(1 + burst);
+      expect(saved.decks[0].piles.draw.cards).toHaveLength(20 - burst);
+      const chatPosts = posted.filter(
+        (payload) =>
+          typeof payload?.content !== "string" ||
+          !payload.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)
+      );
+      expect(chatPosts).toHaveLength(burst);
+      const pins = pinnedStatusMessages();
+      expect(pins).toHaveLength(1);
+      expect(pins[0].embeds[0].remaining).toBe(20 - burst);
+      expect(pins[0].embeds[0].handSize).toBe(1 + burst);
+      expect(saved.pinnedStatusMessageId).toBe(pins[0].id);
+    });
   });
 
   test("scores updates player scores like the scoreall modal and posts that message", async () => {

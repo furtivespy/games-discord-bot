@@ -202,6 +202,8 @@ async function postCommandToGameChannel({
   gameData,
   content,
   logger,
+  withChannelLock,
+  skipPin,
 }) {
   if (!discordClient) return false;
   const channel = await resolveDiscordChannel(discordClient, channelId);
@@ -225,9 +227,95 @@ async function postCommandToGameChannel({
     interaction,
     discordClient,
     gameData,
-    { content }
+    { content, withChannelLock, pinFromLatest: true, skipPin }
   );
   return true;
+}
+
+async function finishVisualCardAction({
+  discordClient,
+  guildId,
+  channelId,
+  actor,
+  gameData,
+  content,
+  logger,
+  withChannelLock,
+  skipPin,
+}) {
+  let posted = false;
+  try {
+    posted = Boolean(
+      await postCommandToGameChannel({
+        discordClient,
+        guildId,
+        channelId,
+        actor,
+        gameData,
+        content,
+        logger,
+        withChannelLock,
+        skipPin,
+      })
+    );
+  } catch (err) {
+    logger?.log?.(
+      `Failed to post visual-mode action to Discord: ${err.message || err}`,
+      "warn"
+    );
+    posted = false;
+  }
+  const skipPinnedRefresh =
+    typeof skipPin === "function" ? skipPin() : Boolean(skipPin);
+  if (!posted && !skipPinnedRefresh) {
+    try {
+      await GameStatusHelper.refreshPinnedStatusAfterGameSave(
+        discordClient,
+        { guildId, channelId },
+        gameData,
+        { withChannelLock, pinFromLatest: true }
+      );
+    } catch (err) {
+      logger?.log?.(
+        `Pinned status refresh after visual-mode action failed: ${err.message || err}`,
+        "warn"
+      );
+    }
+  }
+  return posted;
+}
+
+async function loadLatestGameForVisualPost({
+  getGameData,
+  discordClient,
+  gameStore,
+  guildId,
+  channelId,
+  withChannelLock,
+}) {
+  const loader = resolveGetGameData({ getGameData, discordClient, gameStore });
+  if (!loader) return null;
+  const load = () => loader(guildId, GAME_COLLECTION, channelId);
+  if (typeof withChannelLock === "function") {
+    return withChannelLock(load);
+  }
+  return load();
+}
+
+async function postLatestVisualCardAction(args, { shouldSkipPin } = {}) {
+  try {
+    const latest = await loadLatestGameForVisualPost(args);
+    if (isMissingGame(latest)) {
+      return false;
+    }
+  } catch {
+    // Keep the persist-time snapshot if a refresh read fails.
+  }
+  if (!args.gameData || args.gameData.isdeleted) return false;
+  return finishVisualCardAction({
+    ...args,
+    skipPin: shouldSkipPin,
+  });
 }
 
 function applyVisualCardAction(gameData, { action, deckName, count, actor, userId }) {
@@ -325,9 +413,14 @@ async function playerNamesForScoreUpdate(gameData, scores, { discordClient, guil
 
 /**
  * Serialize load → mutate → save for one game document. Two Deal/Draw POSTs
- * with different requestIds must not both load the same snapshot. The Discord
- * channel post stays on this lock so persistStatusUpdate cannot clobber a
- * later save. The HTTP response is released as soon as persist finishes.
+ * with different requestIds must not both load the same snapshot. Channel
+ * posts are best-effort on a second per-channel queue: a hung Discord send,
+ * pin REST, or card-image loadImage must not stall the next persist. Chat
+ * action lines stay queued (best-effort); pin/status refresh coalesces to
+ * the latest persisted board so concurrent sends cannot spawn leftover
+ * live-status pins. Status metadata merges re-enter the persist lock only
+ * around the short get-then-set so they cannot clobber a later save. The HTTP
+ * response is released as soon as persist and the visual snapshot finish.
  */
 function createGameChannelLock() {
   const tails = new Map();
@@ -350,7 +443,88 @@ function createGameChannelLock() {
   return { run };
 }
 
+/**
+ * Best-effort Discord posts after the game lock. One worker per channel
+ * serializes channel.send so leftover pins cannot race into existence.
+ * Every queued chat action line is posted; pin refresh is skipped when a
+ * later job is already waiting so only one official pin remains. A hung
+ * send stalls this queue only, not mutations or the HTTP response.
+ */
+function createVisualChannelPostQueue() {
+  const pending = new Map();
+  const pumps = new Map();
+
+  function settle(entry, value, error) {
+    if (!entry || entry.settled) return;
+    entry.settled = true;
+    if (error) entry.reject(error);
+    else entry.resolve(value);
+  }
+
+  function queueFor(key) {
+    const queue = pending.get(key);
+    return Array.isArray(queue) ? queue : [];
+  }
+
+  function hasPending(key) {
+    return queueFor(key).length > 0;
+  }
+
+  function enqueue(guildId, channelId, job) {
+    const key = `${guildId}:${channelId}`;
+    return new Promise((resolve, reject) => {
+      const queue = queueFor(key);
+      queue.push({ job, resolve, reject, settled: false });
+      pending.set(key, queue);
+      if (!pumps.has(key)) {
+        pumps.set(key, pump(key));
+      }
+    });
+  }
+
+  async function pump(key) {
+    try {
+      while (hasPending(key)) {
+        const queue = queueFor(key);
+        const current = queue.shift();
+        if (queue.length === 0) pending.delete(key);
+        else pending.set(key, queue);
+        try {
+          const posted = await current.job({
+            shouldSkipPin: () => hasPending(key),
+          });
+          settle(current, Boolean(posted));
+        } catch (err) {
+          settle(current, false, err);
+        }
+      }
+    } finally {
+      pumps.delete(key);
+      if (hasPending(key)) {
+        const next = pump(key);
+        pumps.set(key, next);
+        await next;
+      }
+    }
+  }
+
+  async function drain() {
+    for (;;) {
+      const inFlight = [...pumps.values()];
+      if (inFlight.length === 0 && pending.size === 0) return;
+      if (inFlight.length === 0) {
+        await Promise.resolve();
+        continue;
+      }
+      await Promise.all(inFlight);
+    }
+  }
+
+  return { enqueue, drain };
+}
+
 const defaultGameChannelLock = createGameChannelLock();
+const defaultVisualChannelPostQueue = createVisualChannelPostQueue();
 const pendingLockedVisualActions = new Set();
 
 function trackLockedVisualAction(work) {
@@ -363,8 +537,15 @@ function trackLockedVisualAction(work) {
 }
 
 async function drainLockedVisualActions() {
-  while (pendingLockedVisualActions.size > 0) {
-    await Promise.all([...pendingLockedVisualActions]);
+  for (;;) {
+    const pending = [...pendingLockedVisualActions];
+    const queueDrain = defaultVisualChannelPostQueue.drain();
+    if (pending.length === 0) {
+      await queueDrain;
+      if (pendingLockedVisualActions.size === 0) return;
+      continue;
+    }
+    await Promise.all([...pending, queueDrain]);
   }
 }
 
@@ -493,6 +674,7 @@ async function runVisualCardAction({
   requestId,
   idempotency,
   gameChannelLock,
+  channelPostQueue,
   fetchImpl,
   botToken,
   hostImageCache,
@@ -518,109 +700,107 @@ async function runVisualCardAction({
       ? gameChannelLock
       : defaultGameChannelLock;
 
+  const withChannelLock = (fn) => lock.run(gid, cid, fn);
+  const postQueue =
+    channelPostQueue && typeof channelPostQueue.enqueue === "function"
+      ? channelPostQueue
+      : defaultVisualChannelPostQueue;
+
   const execute = () => {
     let releaseHttp;
     const httpReady = new Promise((resolve, reject) => {
       releaseHttp = { resolve, reject };
     });
-    trackLockedVisualAction(() =>
-      lock.run(gid, cid, async () => {
-        try {
-          const persisted = await (typeof mutateOnce === "function"
-            ? mutateOnce({
-                actor,
-                guildId: gid,
-                channelId: cid,
-                userId: uid,
-                getGameData,
-                discordClient,
-                gameStore,
-                logger,
-              })
-            : runVisualCardActionOnce({
-                action,
-                deckName,
-                count,
-                actor,
-                guildId: gid,
-                channelId: cid,
-                userId: uid,
-                getGameData,
-                discordClient,
-                gameStore,
-                logger,
-              }));
-          if (persisted.status !== 200) {
-            releaseHttp.resolve(persisted);
-            return persisted;
-          }
-          const snapshot = await snapshotFromCurrentGame({
-            gameData: persisted.gameData,
-            discordClient,
-            guildId: gid,
-            channelId: cid,
-            userId: uid,
-            fetchImpl,
-            botToken,
-            hostImageCache,
-          });
-          const snapshotBody = snapshot.body;
-          const version = snapshotVersion(persisted.gameData, {
-            channelId: cid,
-            guildId: gid,
-            userId: uid,
-            hostBoardImages: snapshot.hostBoardImages,
-          });
-          releaseHttp.resolve({
-            status: 200,
-            version,
-            body: {
-              ...snapshotBody,
-              version,
-              message: persisted.applied.content,
-            },
-          });
-          let posted = false;
+    trackLockedVisualAction(async () => {
+      let pendingPost = null;
+      try {
+        pendingPost = await lock.run(gid, cid, async () => {
           try {
-            posted = Boolean(
-              await postCommandToGameChannel({
-                discordClient,
-                guildId: gid,
-                channelId: cid,
-                actor,
-                gameData: persisted.gameData,
-                content: persisted.applied.content,
-                logger,
-              })
-            );
-          } catch (err) {
-            logger?.log?.(
-              `Failed to post visual-mode action to Discord: ${err.message || err}`,
-              "warn"
-            );
-            posted = false;
-          }
-          if (!posted) {
-            try {
-              await GameStatusHelper.refreshPinnedStatusAfterGameSave(
-                discordClient,
-                { guildId: gid, channelId: cid },
-                persisted.gameData
-              );
-            } catch (err) {
-              logger?.log?.(
-                `Pinned status refresh after visual-mode action failed: ${err.message || err}`,
-                "warn"
-              );
+            const persisted = await (typeof mutateOnce === "function"
+              ? mutateOnce({
+                  actor,
+                  guildId: gid,
+                  channelId: cid,
+                  userId: uid,
+                  getGameData,
+                  discordClient,
+                  gameStore,
+                  logger,
+                })
+              : runVisualCardActionOnce({
+                  action,
+                  deckName,
+                  count,
+                  actor,
+                  guildId: gid,
+                  channelId: cid,
+                  userId: uid,
+                  getGameData,
+                  discordClient,
+                  gameStore,
+                  logger,
+                }));
+            if (persisted.status !== 200) {
+              releaseHttp.resolve(persisted);
+              return null;
             }
+            const snapshot = await snapshotFromCurrentGame({
+              gameData: persisted.gameData,
+              discordClient,
+              guildId: gid,
+              channelId: cid,
+              userId: uid,
+              fetchImpl,
+              botToken,
+              hostImageCache,
+            });
+            const snapshotBody = snapshot.body;
+            const version = snapshotVersion(persisted.gameData, {
+              channelId: cid,
+              guildId: gid,
+              userId: uid,
+              hostBoardImages: snapshot.hostBoardImages,
+            });
+            releaseHttp.resolve({
+              status: 200,
+              version,
+              body: {
+                ...snapshotBody,
+                version,
+                message: persisted.applied.content,
+              },
+            });
+            return {
+              gameData: persisted.gameData,
+              content: persisted.applied.content,
+            };
+          } catch (err) {
+            releaseHttp.reject(err);
+            throw err;
           }
-          return posted;
-        } catch (err) {
-          releaseHttp.reject(err);
-          throw err;
-        }
-      })
-    );
+        });
+      } catch {
+        return false;
+      }
+      if (!pendingPost) return false;
+      return postQueue.enqueue(gid, cid, (queue) =>
+        postLatestVisualCardAction(
+          {
+            discordClient,
+            gameStore,
+            getGameData,
+            guildId: gid,
+            channelId: cid,
+            actor,
+            gameData: pendingPost.gameData,
+            content: pendingPost.content,
+            logger,
+            withChannelLock,
+          },
+          queue
+        )
+      );
+    });
     return httpReady;
   };
 
@@ -828,6 +1008,7 @@ module.exports = {
   applyVisualScoreAction,
   createActionIdempotencyCache,
   createGameChannelLock,
+  createVisualChannelPostQueue,
   drainLockedVisualActions,
   parseVisualActionBody,
   parseVisualActionRequestId,

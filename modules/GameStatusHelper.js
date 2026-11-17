@@ -12,6 +12,19 @@ const PINNED_STATUS_MODES = Object.freeze({
 });
 const loggedMissingPinPermission = new Set();
 
+function withOptionalChannelLock(withChannelLock, fn) {
+  if (typeof withChannelLock === "function") {
+    return withChannelLock(fn);
+  }
+  return fn();
+}
+
+function shouldSkipPin(options = {}) {
+  return typeof options.skipPin === "function"
+    ? options.skipPin()
+    : Boolean(options.skipPin);
+}
+
 class GameStatusHelper {
 
   static isValidPinnedStatusMode(mode) {
@@ -229,7 +242,7 @@ class GameStatusHelper {
           lastStatusMessageTimestamp: Date.now()
       } : null;
       
-      await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult);
+      await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult, options);
     } else {
       // Keep the command's natural reply (content + additionalEmbeds/files)
       // and skip the table/image. Do not record this as lastStatusMessageId
@@ -242,7 +255,8 @@ class GameStatusHelper {
       client,
       interaction,
       gameData,
-      this.buildPinSnapshot(fullReply)
+      this.buildPinSnapshot(fullReply),
+      options
     );
   }
 
@@ -271,7 +285,7 @@ class GameStatusHelper {
           lastStatusMessageId: sentMessage.id,
           lastStatusMessageTimestamp: Date.now()
       };
-      await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult);
+      await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult, options);
     } else if (options.resolveDeferredReply) {
       await this.resolveInteractionWithoutFullStatus(interaction, options);
     } else {
@@ -279,13 +293,16 @@ class GameStatusHelper {
       await this.postCommandNaturalReplyToChannel(channel, options);
     }
 
-    await this.safeUpsertPinnedStatus(
-      channel,
-      client,
-      interaction,
-      gameData,
-      this.buildPinSnapshot(fullReply)
-    );
+    if (!shouldSkipPin(options)) {
+      await this.safeUpsertPinnedStatus(
+        channel,
+        client,
+        interaction,
+        gameData,
+        this.buildPinSnapshot(fullReply),
+        options
+      );
+    }
   }
 
   // Single choke point for building the full game status reply (table image,
@@ -305,7 +322,7 @@ class GameStatusHelper {
     }
   }
 
-  static async persistStatusUpdate(client, interaction, gameData, publicUpdateResult) {
+  static async persistStatusUpdate(client, interaction, gameData, publicUpdateResult, options = {}) {
     if (!publicUpdateResult) {
       return;
     }
@@ -315,35 +332,47 @@ class GameStatusHelper {
 
     // Chat-status metadata only — merge into the latest saved document so a
     // later persist cannot clobber a newer command write (same idea as
-    // persistPinFields). Swallow persist errors so they cannot leave a
-    // deferred slash reply unresolved after the chat message already posted.
+    // persistPinFields). Abort when the latest doc is gone or deleted so a
+    // queued visual post cannot resurrect isdeleted. Swallow persist errors
+    // so they cannot leave a deferred slash reply unresolved after the chat
+    // message already posted. options.withChannelLock serializes this
+    // get-then-set with visual load/save without holding that lock through
+    // Discord send/pin REST. Visual Deal/Draw posts are themselves serialized
+    // on the per-channel post queue, so lastStatusMessageId is last-writer
+    // among completed sends, not a timestamp race.
     try {
-      const guildId = interaction.guildId;
-      const channelId = interaction.channelId;
-      const fresh = await client.getGameDataV2(guildId, "game", channelId);
-      const toSave = fresh && !fresh.isdeleted ? fresh : gameData;
-      toSave.lastStatusMessageId = gameData.lastStatusMessageId;
-      toSave.lastStatusMessageTimestamp = gameData.lastStatusMessageTimestamp;
-      await client.setGameDataV2(guildId, "game", channelId, toSave, {
-        skipPinnedRefresh: true,
+      await withOptionalChannelLock(options.withChannelLock, async () => {
+        const guildId = interaction.guildId;
+        const channelId = interaction.channelId;
+        const fresh = await client.getGameDataV2(guildId, "game", channelId);
+        if (!fresh || fresh.isdeleted) {
+          return;
+        }
+        fresh.lastStatusMessageId = gameData.lastStatusMessageId;
+        fresh.lastStatusMessageTimestamp = gameData.lastStatusMessageTimestamp;
+        await client.setGameDataV2(guildId, "game", channelId, fresh, {
+          skipPinnedRefresh: true,
+        });
       });
     } catch (error) {
       console.error("Failed to persist chat status metadata.", error);
     }
   }
 
-  static async persistPinFields(client, interaction, gameData) {
-    const guildId = interaction.guildId;
-    const channelId = interaction.channelId;
-    const fresh = await client.getGameDataV2(guildId, "game", channelId);
-    if (!fresh || fresh.isdeleted) {
-      return;
-    }
+  static async persistPinFields(client, interaction, gameData, options = {}) {
+    await withOptionalChannelLock(options.withChannelLock, async () => {
+      const guildId = interaction.guildId;
+      const channelId = interaction.channelId;
+      const fresh = await client.getGameDataV2(guildId, "game", channelId);
+      if (!fresh || fresh.isdeleted) {
+        return;
+      }
 
-    fresh.pinnedStatusMessageId = gameData.pinnedStatusMessageId;
-    fresh.pinnedStatusChannelId = gameData.pinnedStatusChannelId;
-    fresh.pinnedStatusPinned = gameData.pinnedStatusPinned;
-    await client.setGameDataV2(guildId, "game", channelId, fresh, { skipPinnedRefresh: true });
+      fresh.pinnedStatusMessageId = gameData.pinnedStatusMessageId;
+      fresh.pinnedStatusChannelId = gameData.pinnedStatusChannelId;
+      fresh.pinnedStatusPinned = gameData.pinnedStatusPinned;
+      await client.setGameDataV2(guildId, "game", channelId, fresh, { skipPinnedRefresh: true });
+    });
   }
 
   // After a successful channel-game persist, keep the live pin in sync when
@@ -371,7 +400,7 @@ class GameStatusHelper {
       channelId: context?.channelId || channel.id,
     };
 
-    await this.safeUpsertPinnedStatus(channel, client, interaction, gameData);
+    await this.safeUpsertPinnedStatus(channel, client, interaction, gameData, null, options);
   }
 
   static async resolveChannelForPinnedRefresh(client, context) {
@@ -398,15 +427,59 @@ class GameStatusHelper {
     return null;
   }
 
-  static async safeUpsertPinnedStatus(channel, client, interaction, gameData, snapshotReply) {
+  static async safeUpsertPinnedStatus(channel, client, interaction, gameData, snapshotReply, options = {}) {
     try {
-      await this.upsertPinnedStatus(channel, client, interaction, gameData, snapshotReply);
+      await this.upsertPinnedStatus(channel, client, interaction, gameData, snapshotReply, options);
     } catch (error) {
       console.error("Pinned status update failed.", error);
     }
   }
 
-  static async upsertPinnedStatus(channel, client, interaction, gameData, snapshotReply = null) {
+  static async latestGameForPin(client, interaction, gameData, options = {}) {
+    if (!client || typeof client.getGameDataV2 !== "function") {
+      return gameData;
+    }
+    const guildId = interaction?.guildId;
+    const channelId = interaction?.channelId;
+    if (!guildId || !channelId) {
+      return gameData;
+    }
+    try {
+      const load = () => client.getGameDataV2(guildId, "game", channelId);
+      const fresh = await withOptionalChannelLock(options.withChannelLock, load);
+      if (fresh?.isdeleted) {
+        return null;
+      }
+      if (fresh) {
+        return fresh;
+      }
+    } catch (error) {
+      console.error("Could not load latest game for pinned status.", error);
+    }
+    return gameData;
+  }
+
+  static async discardSupersededPinnedMessage(message) {
+    if (!message) {
+      return;
+    }
+    try {
+      if (message.pinned && typeof message.unpin === "function") {
+        await message.unpin();
+      }
+    } catch (error) {
+      console.error("Could not unpin superseded live status message.", error);
+    }
+    try {
+      if (typeof message.delete === "function") {
+        await message.delete();
+      }
+    } catch (error) {
+      console.error("Could not delete superseded live status message.", error);
+    }
+  }
+
+  static async upsertPinnedStatus(channel, client, interaction, gameData, snapshotReply = null, options = {}) {
     if (!this.isPinnedStatusEnabled(gameData)) {
       return;
     }
@@ -414,9 +487,21 @@ class GameStatusHelper {
       return;
     }
 
+    const latest = await this.latestGameForPin(client, interaction, gameData, options);
+    if (!latest || latest.isdeleted) {
+      return;
+    }
+    if (latest.pinnedStatusMessageId) {
+      gameData.pinnedStatusMessageId = latest.pinnedStatusMessageId;
+      gameData.pinnedStatusChannelId = latest.pinnedStatusChannelId;
+      gameData.pinnedStatusPinned = latest.pinnedStatusPinned;
+    }
+
+    const rebuildFromLatest = options.pinFromLatest === true;
+    const pinSource = rebuildFromLatest ? latest : gameData;
     let snapshot = snapshotReply;
-    if (!snapshot) {
-      snapshot = await this.buildStatusReplyOptions(gameData, channel.guild, client.user.id, {});
+    if (rebuildFromLatest || !snapshot) {
+      snapshot = await this.buildStatusReplyOptions(pinSource, channel.guild, client.user.id, {});
     }
 
     const pinPayload = {
@@ -440,7 +525,7 @@ class GameStatusHelper {
           // Pin ids are already stored. Rewriting the whole game doc here can
           // clobber a newer chat status persist from a concurrent command.
           if (gameData.pinnedStatusPinned !== pinnedBefore) {
-            await this.persistPinFields(client, interaction, gameData);
+            await this.persistPinFields(client, interaction, gameData, options);
           }
           return;
         }
@@ -457,7 +542,36 @@ class GameStatusHelper {
     gameData.pinnedStatusMessageId = sent.id;
     gameData.pinnedStatusChannelId = channel.id;
     await this.ensurePinned(sent, channel, client, gameData, { isNew: true });
-    await this.persistPinFields(client, interaction, gameData);
+    try {
+      await this.persistPinFields(client, interaction, gameData, options);
+    } catch (error) {
+      await this.discardSupersededPinnedMessage(sent);
+      throw error;
+    }
+    const officialId = await this.readPinnedStatusMessageId(client, interaction, options);
+    if (officialId !== sent.id) {
+      await this.discardSupersededPinnedMessage(sent);
+    }
+  }
+
+  static async readPinnedStatusMessageId(client, interaction, options = {}) {
+    if (typeof client?.getGameDataV2 !== "function") {
+      return null;
+    }
+    const guildId = interaction?.guildId;
+    const channelId = interaction?.channelId;
+    if (!guildId || !channelId) {
+      return null;
+    }
+    try {
+      const fresh = await withOptionalChannelLock(options.withChannelLock, () =>
+        client.getGameDataV2(guildId, "game", channelId)
+      );
+      return fresh?.pinnedStatusMessageId || null;
+    } catch (error) {
+      console.error("Could not read pinned status id after create.", error);
+      return null;
+    }
   }
 
   static canManageMessages(channel, client) {
