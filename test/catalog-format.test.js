@@ -19,6 +19,7 @@ const {
   autocompleteTemplates,
   catalogEmbed,
   formatLayoutLabel,
+  formatDeckBackLine,
   formatTemplateListLine,
   replyEphemeralEmbeds,
 } = require("../subcommands/catalog/shared.js");
@@ -115,6 +116,13 @@ describe("catalog format helpers", () => {
         created_by: "seed",
       })
     ).toBe("Mixed (mixed): 2 cards, Layouts A/C");
+  });
+
+  test("deck back line reports default or the stored URL", () => {
+    expect(formatDeckBackLine(null)).toBe("Deck back: default");
+    expect(formatDeckBackLine("https://example.test/back.png")).toBe(
+      "Deck back: https://example.test/back.png"
+    );
   });
 
   test("layout label defaults to A when cards are missing", () => {

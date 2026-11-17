@@ -1,7 +1,8 @@
 const GameDB = require('../../db/anygame.js')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
 const GameHelper = require('../../modules/GlobalGameHelper')
-const { ActionRowBuilder, SelectMenuBuilder } = require('discord.js');
+const DeckBack = require('../../modules/DeckBack')
+const { ActionRowBuilder, EmbedBuilder, SelectMenuBuilder } = require('discord.js');
 
 class Configure {
     async execute(interaction, client) {
@@ -29,7 +30,12 @@ class Configure {
             if (!deck){
                 await interaction.editReply({ content: `No deck found.`})
                 return
-            } 
+            }
+
+            if (configType === 'deckback') {
+                await this.applyDeckBack(interaction, client, gameData, deck)
+                return
+            }
             
             let row
             let action
@@ -131,6 +137,67 @@ class Configure {
               { content: `Configured ${deck.name}` }
             );
         }
+    }
+
+    async applyDeckBack(interaction, client, gameData, deck) {
+        const parsed = DeckBack.parseBackUrlInput(interaction.options.getString('url'))
+        if (parsed.error) {
+            await interaction.editReply({ content: parsed.error })
+            return
+        }
+
+        const originalValue = DeckBack.canonicalBackUrl(deck)
+        if (!parsed.present) {
+            const payload = {
+                content: originalValue
+                    ? `${deck.name} uses a custom deck back. Pass url to set an image, or url:clear for the default.`
+                    : `${deck.name} uses ${DeckBack.DEFAULT_LABEL}. Pass url to set an image, or url:clear for the default.`,
+            }
+            if (originalValue) {
+                payload.embeds = [
+                    new EmbedBuilder().setTitle(`${deck.name} deck back`).setImage(originalValue),
+                ]
+            }
+            await interaction.editReply(payload)
+            return
+        }
+
+        DeckBack.applyBackUrl(deck, parsed.backUrl)
+
+        try {
+            const actorDisplayName = interaction.member?.displayName || interaction.user.username
+            const newValue = DeckBack.describeBackUrl(parsed.backUrl)
+            GameHelper.recordMove(
+                gameData,
+                interaction.user,
+                GameDB.ACTION_CATEGORIES.CARD,
+                GameDB.ACTION_TYPES.MODIFY,
+                `${actorDisplayName} configured ${deck.name} deck back: ${DeckBack.describeBackUrl(originalValue)} → ${newValue}`,
+                {
+                    deckName: deck.name,
+                    configType: 'deckback',
+                    originalValue: originalValue,
+                    newValue: parsed.backUrl,
+                    configCategory: 'deck back image'
+                }
+            )
+        } catch (error) {
+            console.warn('Failed to record deck configuration in history:', error)
+        }
+
+        await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+
+        const additionalEmbeds = parsed.backUrl
+            ? [new EmbedBuilder().setTitle(`${deck.name} deck back`).setImage(parsed.backUrl)]
+            : []
+        const content = parsed.backUrl
+            ? `Set ${deck.name} deck back.`
+            : `Cleared ${deck.name} deck back; using ${DeckBack.DEFAULT_LABEL}.`
+
+        await GameStatusHelper.sendGameStatus(interaction, client, gameData, {
+            content,
+            additionalEmbeds,
+        })
     }
 }
 

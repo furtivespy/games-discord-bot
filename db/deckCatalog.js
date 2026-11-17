@@ -74,7 +74,7 @@ class DeckCatalog {
   listTemplates() {
     const rows = this.db
       .query(
-        `SELECT id, name, enabled, created_by, created_at, updated_at, cards
+        `SELECT id, name, enabled, created_by, created_at, updated_at, cards, back_url
          FROM deck_templates
          ORDER BY name`
       )
@@ -93,7 +93,7 @@ class DeckCatalog {
   getTemplate(id) {
     const row = this.db
       .query(
-        `SELECT id, name, enabled, created_by, created_at, updated_at, cards
+        `SELECT id, name, enabled, created_by, created_at, updated_at, cards, back_url
          FROM deck_templates
          WHERE id = ?`
       )
@@ -120,18 +120,20 @@ class DeckCatalog {
     cards,
     createdBy = "seed",
     enabled = 1,
+    backUrl = null,
   }) {
     this.db
       .query(
-        `INSERT INTO deck_templates (id, name, enabled, created_by, created_at, updated_at, cards)
-         VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), ?)`
+        `INSERT INTO deck_templates (id, name, enabled, created_by, created_at, updated_at, cards, back_url)
+         VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), ?, ?)`
       )
       .run(
         id,
         canonicalDisplayName(name),
         normalizeEnabled(enabled),
         createdBy,
-        JSON.stringify(cards)
+        JSON.stringify(cards),
+        normalizeStoredBackUrl(backUrl)
       );
   }
 
@@ -143,6 +145,17 @@ class DeckCatalog {
          WHERE id = ?`
       )
       .run(normalizeEnabled(enabled), id);
+  }
+
+  setBackUrl(id, backUrl) {
+    const result = this.db
+      .query(
+        `UPDATE deck_templates
+         SET back_url = ?, updated_at = datetime('now')
+         WHERE id = ?`
+      )
+      .run(normalizeStoredBackUrl(backUrl), id);
+    return result.changes > 0;
   }
 
   transaction(fn) {
@@ -247,6 +260,12 @@ function parseCardsJson(raw) {
   return { cards: parsed, cardsError: null };
 }
 
+function normalizeStoredBackUrl(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
 function parseTemplateRow(row) {
   const { cards, cardsError } = parseCardsJson(row.cards);
   const template = {
@@ -257,6 +276,7 @@ function parseTemplateRow(row) {
     created_at: row.created_at,
     updated_at: row.updated_at,
     cards,
+    backUrl: normalizeStoredBackUrl(row.back_url),
   };
   if (cardsError) template.cardsError = cardsError;
   return template;
@@ -330,14 +350,27 @@ function openDeckCatalogDatabase(dbPath) {
       created_by TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      cards TEXT NOT NULL
+      cards TEXT NOT NULL,
+      back_url TEXT
     );
   `);
+  ensureBackUrlColumn(db);
   // idx_deck_templates_name_nocase is created by seedDeckCatalog /migrate
   // after collision detection. Old name TEXT UNIQUE is BINARY, so "Foo" and
   // "foo" can already coexist; creating the index here would throw and make
   // every command/autocomplete open treat the catalog as unreadable.
   return db;
+}
+
+function ensureBackUrlColumn(db) {
+  const columns = db.query(`PRAGMA table_info(deck_templates)`).all();
+  if (columns.some((column) => column.name === "back_url")) return;
+  try {
+    db.exec(`ALTER TABLE deck_templates ADD COLUMN back_url TEXT`);
+  } catch (error) {
+    const message = String(error?.message || error);
+    if (!/duplicate column name:\s*back_url/i.test(message)) throw error;
+  }
 }
 
 module.exports = DeckCatalog;

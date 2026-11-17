@@ -508,6 +508,161 @@ describe("/cards command handlers", () => {
     );
   });
 
+  test("deck new stores an optional backurl on a custom deck", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "new",
+          strings: {
+            name: "Custom",
+            cardset: "custom-csv",
+            customlist: "Ace, King",
+            backurl: "https://example.test/back.png",
+          },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        const saved = await harness.getSavedGame();
+        expect(saved.decks[0].backUrl).toBe("https://example.test/back.png");
+        expect(harness.lastContent()).toContain("Added and shuffled the new deck: Custom");
+      }
+    );
+  });
+
+  test("deck new rejects an invalid backurl without creating the deck", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "new",
+          strings: {
+            name: "Custom",
+            cardset: "custom-csv",
+            customlist: "Ace",
+            backurl: "not-a-url",
+          },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent()).toContain("Deck back URL must be a valid http or https URL");
+        expect((await harness.getSavedGame()).decks).toHaveLength(0);
+      }
+    );
+  });
+
+  test("deck new copies a catalog template back and lets backurl override it", async () => {
+    await withHarness(
+      {
+        gameData: createActiveGame(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "new",
+          strings: { name: "Table", cardset: "alpha-set" },
+        },
+      },
+      async (harness) => {
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        catalog.insertTemplate({
+          id: "alpha-set",
+          name: "Alpha Set",
+          cards: [{ name: "Ace", description: "", type: "", suit: "", value: "", url: null, format: "A" }],
+          backUrl: "https://example.test/catalog-back.png",
+        });
+        catalog.close();
+
+        await runCards(harness);
+        let saved = await harness.getSavedGame();
+        expect(saved.decks[0].backUrl).toBe("https://example.test/catalog-back.png");
+
+        harness.interaction.options.getString = (name) => {
+          if (name === "name") return "Override";
+          if (name === "cardset") return "alpha-set";
+          if (name === "backurl") return "https://example.test/override.png";
+          return null;
+        };
+        await runCards(harness);
+        saved = await harness.getSavedGame();
+        expect(saved.decks.find((deck) => deck.name === "Override").backUrl).toBe(
+          "https://example.test/override.png"
+        );
+      }
+    );
+  });
+
+  test("deck configure sets, inspects, and clears a deck back on an existing deck", async () => {
+    await withHarness(
+      {
+        gameData: gameWithDeck(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "configure",
+          strings: {
+            config: "deckback",
+            deck: "Main",
+            url: "https://example.test/existing.png",
+          },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        let saved = await harness.getSavedGame();
+        expect(saved.decks[0].backUrl).toBe("https://example.test/existing.png");
+        expect(harness.lastContent()).toContain("Set Main deck back");
+        expect(saved.history.at(-1).action.type).toBe("modify");
+
+        harness.interaction.options.getString = (name) => {
+          if (name === "config") return "deckback";
+          if (name === "deck") return "Main";
+          return null;
+        };
+        await runCards(harness);
+        expect(harness.lastContent()).toContain("uses a custom deck back");
+        expect(harness.calls.editReply.at(-1).embeds[0].data.image.url).toBe(
+          "https://example.test/existing.png"
+        );
+        saved = await harness.getSavedGame();
+        expect(saved.decks[0].backUrl).toBe("https://example.test/existing.png");
+
+        harness.interaction.options.getString = (name) => {
+          if (name === "config") return "deckback";
+          if (name === "deck") return "Main";
+          if (name === "url") return "clear";
+          return null;
+        };
+        await runCards(harness);
+        saved = await harness.getSavedGame();
+        expect(saved.decks[0].backUrl).toBeNull();
+        expect(harness.lastContent()).toContain("Cleared Main deck back");
+      }
+    );
+  });
+
+  test("deck configure reply stays within Discord content limits for a long back URL", async () => {
+    const url = `https://example.test/${"a".repeat(2000)}.png`;
+    expect(url.length).toBeGreaterThan(2000);
+    await withHarness(
+      {
+        gameData: gameWithDeck(),
+        options: {
+          subcommandGroup: "deck",
+          subcommand: "configure",
+          strings: { config: "deckback", deck: "Main", url },
+        },
+      },
+      async (harness) => {
+        await runCards(harness);
+        expect(harness.lastContent().length).toBeLessThanOrEqual(2000);
+        expect(harness.lastContent()).toContain("Set Main deck back");
+        expect((await harness.getSavedGame()).decks[0].backUrl).toBe(url);
+      }
+    );
+  });
+
   test("deck draw moves the top card into the caller's hand", async () => {
     const top = createCard({ id: "top", name: "Queen", origin: "Main" });
     const next = createCard({ id: "next", name: "King", origin: "Main" });

@@ -5,6 +5,7 @@ const { publishToCatalog } = require("../../db/catalogPublish.js");
 const { buildCardListEmbeds } = require("../../modules/DiscordEmbeds");
 const {
   formatLayoutLabel,
+  formatDeckBackLine,
   catalogUnavailableReply,
   openReadyCatalog,
   replyEphemeral,
@@ -63,10 +64,13 @@ class CatalogPublish {
 
       const count = result.template.cards.length;
       const header = [
-        `Published \`${result.template.id}\``,
-        `${count} cards`,
-        formatLayoutLabel(result.template.cards),
-      ].join(" · ");
+        [
+          `Published \`${result.template.id}\``,
+          `${count} cards`,
+          formatLayoutLabel(result.template.cards),
+        ].join(" · "),
+        formatDeckBackLine(result.template.backUrl),
+      ].join("\n");
 
       await replyEphemeralEmbeds(
         interaction,

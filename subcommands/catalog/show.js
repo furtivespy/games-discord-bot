@@ -6,6 +6,7 @@ const {
   deferCatalogReply,
   formatLayoutLabel,
   formatCreatorName,
+  formatDeckBackLine,
   catalogUnavailableReply,
   openReadyCatalog,
   replyEphemeral,
@@ -65,14 +66,17 @@ class CatalogShow {
       );
       const creator = formatCreatorName(template.created_by, creatorNames);
       const header = [
-        `\`${template.id}\``,
-        enabledHeading(template.enabled),
-        `${count} cards`,
-        formatLayoutLabel(cards),
-        creator ? `by ${creator}` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ");
+        [
+          `\`${template.id}\``,
+          enabledHeading(template.enabled),
+          `${count} cards`,
+          formatLayoutLabel(cards),
+          creator ? `by ${creator}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        formatDeckBackLine(template.backUrl),
+      ].join("\n");
 
       await replyEphemeralEmbeds(
         interaction,
