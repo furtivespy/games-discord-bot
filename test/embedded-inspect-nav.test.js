@@ -184,6 +184,22 @@ class FakeHTMLElement extends FakeElement {}
 class FakeHTMLImageElement extends FakeHTMLElement {
   constructor(id) {
     super("IMG", id);
+    this.naturalWidth = 0;
+    this.naturalHeight = 0;
+    this.complete = false;
+    this.boundingRect = { left: 0, top: 0, width: 0, height: 0 };
+  }
+
+  getBoundingClientRect() {
+    const rect = this.boundingRect;
+    return {
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+      right: rect.left + rect.width,
+      bottom: rect.top + rect.height,
+    };
   }
 }
 class FakeHTMLDialogElement extends FakeHTMLElement {
@@ -290,6 +306,24 @@ function dispatchKey(document, key, target) {
   const event = keyEvent(key, target ?? document);
   document.dispatchEvent(event);
   return event;
+}
+
+function clickEvent(target, clientX = 0, clientY = 0) {
+  return {
+    type: "click",
+    target,
+    clientX,
+    clientY,
+    preventDefault() {},
+    stopPropagation() {},
+  };
+}
+
+function sizePhotoArt(art, { naturalWidth, naturalHeight, box }) {
+  art.naturalWidth = naturalWidth;
+  art.naturalHeight = naturalHeight;
+  art.complete = true;
+  art.boundingRect = box;
 }
 
 function handSequence() {
@@ -410,6 +444,73 @@ describe("inspect overlay keyboard navigation", () => {
     const ignored = dispatchKey(document, "ArrowRight", input);
     expect(ignored.wasPrevented()).toBe(false);
     expect(title.textContent).toBe("Silver");
+  });
+});
+
+describe("inspect overlay click-outside", () => {
+  const photoBox = { left: 50, top: 40, width: 200, height: 200 };
+
+  test("a click on the dialog margin closes the overlay", () => {
+    const { document, dialog } = installInspectDocument();
+    const photo = { id: "host-image:m1:a1", name: "Image" };
+    openCardInspect(photo, "/photo.png", makeTile("Image"));
+    expect(dialog.open).toBe(true);
+
+    dialog.dispatchEvent(clickEvent(dialog, 10, 10));
+    expect(dialog.open).toBe(false);
+  });
+
+  test("letterbox pixels on the photo close; painted pixels do not", () => {
+    const { document, dialog } = installInspectDocument();
+    const art = document.getElementById("card-inspect-art");
+    const photo = { id: "host-image:m1:a1", name: "Image" };
+    openCardInspect(photo, "/photo.png", makeTile("Image"));
+    sizePhotoArt(art, { naturalWidth: 400, naturalHeight: 100, box: photoBox });
+    expect(dialog.classList.contains("is-photo")).toBe(true);
+    expect(dialog.open).toBe(true);
+
+    dialog.dispatchEvent(clickEvent(art, 150, 140));
+    expect(dialog.open).toBe(true);
+
+    dialog.dispatchEvent(clickEvent(art, 150, 50));
+    expect(dialog.open).toBe(false);
+  });
+
+  test("an unloaded photo click does not close, and X/nav are not treated as outside", () => {
+    const { document, dialog, next } = installInspectDocument();
+    const art = document.getElementById("card-inspect-art");
+    const photos = [
+      { card: { id: "host-image:m1:a1", name: "One" }, imageSrc: "/one.png", tile: makeTile("One") },
+      { card: { id: "host-image:m1:a2", name: "Two" }, imageSrc: "/two.png", tile: makeTile("Two") },
+    ];
+    openCardInspect(photos[0].card, photos[0].imageSrc, photos[0].tile, photos);
+    sizePhotoArt(art, { naturalWidth: 0, naturalHeight: 0, box: photoBox });
+    expect(dialog.open).toBe(true);
+    expect(next.hidden).toBe(false);
+
+    dialog.dispatchEvent(clickEvent(art, 150, 50));
+    expect(dialog.open).toBe(true);
+
+    const closeBtn = new FakeHTMLElement("BUTTON");
+    closeBtn.classList.add("card-inspect-close");
+    dialog.dispatchEvent(clickEvent(closeBtn, 190, 20));
+    expect(dialog.open).toBe(true);
+
+    dialog.dispatchEvent(clickEvent(next, 230, 140));
+    expect(dialog.open).toBe(true);
+    expect(art.src).toBe("/two.png");
+  });
+
+  test("card inspect art clicks do not close even with letterboxed math", () => {
+    const { document, dialog } = installInspectDocument();
+    const art = document.getElementById("card-inspect-art");
+    const { copper, tiles } = handSequence();
+    openCardInspect(copper, "/copper.png", tiles[0]);
+    sizePhotoArt(art, { naturalWidth: 400, naturalHeight: 100, box: photoBox });
+    expect(dialog.classList.contains("is-photo")).toBe(false);
+
+    dialog.dispatchEvent(clickEvent(art, 150, 50));
+    expect(dialog.open).toBe(true);
   });
 });
 
