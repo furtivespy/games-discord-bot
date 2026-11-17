@@ -809,6 +809,63 @@ describe("runVisualCardAction", () => {
     expect(posted[0].content).toContain("Dealt out a total of 2 cards from Main.");
   });
 
+  test("a hung channel post does not stall the next same-channel Deal/Draw", async () => {
+    let releaseSend;
+    const sendGate = new Promise((resolve) => {
+      releaseSend = resolve;
+    });
+    const { posted, store, discordClient } = clientForGame(gameWithDeck(), {
+      send: async (payload, postedMessages) => {
+        await sendGate;
+        postedMessages.push(payload);
+        return { id: `msg-${postedMessages.length}` };
+      },
+    });
+    const draw = {
+      action: "draw",
+      deckName: "Main",
+      count: 1,
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+    };
+    const first = await runVisualCardAction({ ...draw, requestId: "hung-post-aaa" });
+    expect(first.status).toBe(200);
+    expect(first.body.hand.at(-1).name).toBe("Ace");
+    expect(posted).toHaveLength(0);
+
+    let timeoutId;
+    const secondPromise = runVisualCardAction({ ...draw, requestId: "hung-post-bbb" });
+    const timedOut = new Promise((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error("next visual action waited on hung channel.send")),
+        500
+      );
+    });
+    let second;
+    try {
+      second = await Promise.race([secondPromise, timedOut]);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    expect(second.status).toBe(200);
+    expect(new Set([first.body.hand.at(-1).name, second.body.hand.at(-1).name])).toEqual(
+      new Set(["Ace", "King"])
+    );
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.players[0].hands.main.map((card) => card.name)).toEqual([
+      "Copper",
+      "Ace",
+      "King",
+    ]);
+    expect(posted).toHaveLength(0);
+    releaseSend();
+    await drainLockedVisualActions();
+    expect(posted).toHaveLength(2);
+  });
+
   test("scores save uses applyPlayerScores, persists, and posts the scoreall message", async () => {
     const game = gameWithDeck();
     game.players[0].score = "1";

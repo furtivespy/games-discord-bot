@@ -12,6 +12,13 @@ const PINNED_STATUS_MODES = Object.freeze({
 });
 const loggedMissingPinPermission = new Set();
 
+function runOptionallyLocked(runLocked, fn) {
+  if (typeof runLocked === "function") {
+    return runLocked(fn);
+  }
+  return fn();
+}
+
 class GameStatusHelper {
 
   static isValidPinnedStatusMode(mode) {
@@ -229,7 +236,7 @@ class GameStatusHelper {
           lastStatusMessageTimestamp: Date.now()
       } : null;
       
-      await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult);
+      await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult, options);
     } else {
       // Keep the command's natural reply (content + additionalEmbeds/files)
       // and skip the table/image. Do not record this as lastStatusMessageId
@@ -242,7 +249,8 @@ class GameStatusHelper {
       client,
       interaction,
       gameData,
-      this.buildPinSnapshot(fullReply)
+      this.buildPinSnapshot(fullReply),
+      options
     );
   }
 
@@ -271,7 +279,7 @@ class GameStatusHelper {
           lastStatusMessageId: sentMessage.id,
           lastStatusMessageTimestamp: Date.now()
       };
-      await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult);
+      await this.persistStatusUpdate(client, interaction, gameData, statusUpdateResult, options);
     } else if (options.resolveDeferredReply) {
       await this.resolveInteractionWithoutFullStatus(interaction, options);
     } else {
@@ -284,7 +292,8 @@ class GameStatusHelper {
       client,
       interaction,
       gameData,
-      this.buildPinSnapshot(fullReply)
+      this.buildPinSnapshot(fullReply),
+      options
     );
   }
 
@@ -305,7 +314,7 @@ class GameStatusHelper {
     }
   }
 
-  static async persistStatusUpdate(client, interaction, gameData, publicUpdateResult) {
+  static async persistStatusUpdate(client, interaction, gameData, publicUpdateResult, options = {}) {
     if (!publicUpdateResult) {
       return;
     }
@@ -317,33 +326,39 @@ class GameStatusHelper {
     // later persist cannot clobber a newer command write (same idea as
     // persistPinFields). Swallow persist errors so they cannot leave a
     // deferred slash reply unresolved after the chat message already posted.
+    // options.runLocked serializes this get-then-set with visual load/save
+    // without holding that lock through Discord send/pin REST.
     try {
-      const guildId = interaction.guildId;
-      const channelId = interaction.channelId;
-      const fresh = await client.getGameDataV2(guildId, "game", channelId);
-      const toSave = fresh && !fresh.isdeleted ? fresh : gameData;
-      toSave.lastStatusMessageId = gameData.lastStatusMessageId;
-      toSave.lastStatusMessageTimestamp = gameData.lastStatusMessageTimestamp;
-      await client.setGameDataV2(guildId, "game", channelId, toSave, {
-        skipPinnedRefresh: true,
+      await runOptionallyLocked(options.runLocked, async () => {
+        const guildId = interaction.guildId;
+        const channelId = interaction.channelId;
+        const fresh = await client.getGameDataV2(guildId, "game", channelId);
+        const toSave = fresh && !fresh.isdeleted ? fresh : gameData;
+        toSave.lastStatusMessageId = gameData.lastStatusMessageId;
+        toSave.lastStatusMessageTimestamp = gameData.lastStatusMessageTimestamp;
+        await client.setGameDataV2(guildId, "game", channelId, toSave, {
+          skipPinnedRefresh: true,
+        });
       });
     } catch (error) {
       console.error("Failed to persist chat status metadata.", error);
     }
   }
 
-  static async persistPinFields(client, interaction, gameData) {
-    const guildId = interaction.guildId;
-    const channelId = interaction.channelId;
-    const fresh = await client.getGameDataV2(guildId, "game", channelId);
-    if (!fresh || fresh.isdeleted) {
-      return;
-    }
+  static async persistPinFields(client, interaction, gameData, options = {}) {
+    await runOptionallyLocked(options.runLocked, async () => {
+      const guildId = interaction.guildId;
+      const channelId = interaction.channelId;
+      const fresh = await client.getGameDataV2(guildId, "game", channelId);
+      if (!fresh || fresh.isdeleted) {
+        return;
+      }
 
-    fresh.pinnedStatusMessageId = gameData.pinnedStatusMessageId;
-    fresh.pinnedStatusChannelId = gameData.pinnedStatusChannelId;
-    fresh.pinnedStatusPinned = gameData.pinnedStatusPinned;
-    await client.setGameDataV2(guildId, "game", channelId, fresh, { skipPinnedRefresh: true });
+      fresh.pinnedStatusMessageId = gameData.pinnedStatusMessageId;
+      fresh.pinnedStatusChannelId = gameData.pinnedStatusChannelId;
+      fresh.pinnedStatusPinned = gameData.pinnedStatusPinned;
+      await client.setGameDataV2(guildId, "game", channelId, fresh, { skipPinnedRefresh: true });
+    });
   }
 
   // After a successful channel-game persist, keep the live pin in sync when
@@ -371,7 +386,7 @@ class GameStatusHelper {
       channelId: context?.channelId || channel.id,
     };
 
-    await this.safeUpsertPinnedStatus(channel, client, interaction, gameData);
+    await this.safeUpsertPinnedStatus(channel, client, interaction, gameData, null, options);
   }
 
   static async resolveChannelForPinnedRefresh(client, context) {
@@ -398,15 +413,15 @@ class GameStatusHelper {
     return null;
   }
 
-  static async safeUpsertPinnedStatus(channel, client, interaction, gameData, snapshotReply) {
+  static async safeUpsertPinnedStatus(channel, client, interaction, gameData, snapshotReply, options = {}) {
     try {
-      await this.upsertPinnedStatus(channel, client, interaction, gameData, snapshotReply);
+      await this.upsertPinnedStatus(channel, client, interaction, gameData, snapshotReply, options);
     } catch (error) {
       console.error("Pinned status update failed.", error);
     }
   }
 
-  static async upsertPinnedStatus(channel, client, interaction, gameData, snapshotReply = null) {
+  static async upsertPinnedStatus(channel, client, interaction, gameData, snapshotReply = null, options = {}) {
     if (!this.isPinnedStatusEnabled(gameData)) {
       return;
     }
@@ -440,7 +455,7 @@ class GameStatusHelper {
           // Pin ids are already stored. Rewriting the whole game doc here can
           // clobber a newer chat status persist from a concurrent command.
           if (gameData.pinnedStatusPinned !== pinnedBefore) {
-            await this.persistPinFields(client, interaction, gameData);
+            await this.persistPinFields(client, interaction, gameData, options);
           }
           return;
         }
@@ -457,7 +472,7 @@ class GameStatusHelper {
     gameData.pinnedStatusMessageId = sent.id;
     gameData.pinnedStatusChannelId = channel.id;
     await this.ensurePinned(sent, channel, client, gameData, { isNew: true });
-    await this.persistPinFields(client, interaction, gameData);
+    await this.persistPinFields(client, interaction, gameData, options);
   }
 
   static canManageMessages(channel, client) {

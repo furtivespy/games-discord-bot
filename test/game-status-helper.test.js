@@ -235,6 +235,45 @@ describe("GameStatusHelper pinned live status", () => {
     expect(harness.gameData.lastStatusMessageId).toBe("chat-1");
   });
 
+  test("persistStatusUpdate runs the metadata merge inside runLocked when provided", async () => {
+    const harness = createHarness({
+      gameData: createGameData({
+        players: [{ userId: "p1", score: 0 }],
+      }),
+    });
+    let duringLock = false;
+    let sawDuringLock = false;
+    const originalSet = harness.client.setGameDataV2.bind(harness.client);
+    harness.client.setGameDataV2 = async (...args) => {
+      sawDuringLock = duringLock;
+      return originalSet(...args);
+    };
+
+    await GameStatusHelper.persistStatusUpdate(
+      harness.client,
+      harness.interaction,
+      harness.gameData,
+      {
+        lastStatusMessageId: "chat-locked",
+        lastStatusMessageTimestamp: 456,
+      },
+      {
+        runLocked: async (fn) => {
+          duringLock = true;
+          try {
+            return await fn();
+          } finally {
+            duringLock = false;
+          }
+        },
+      }
+    );
+
+    expect(sawDuringLock).toBe(true);
+    expect(harness.persistCalls).toHaveLength(1);
+    expect(harness.persistCalls[0][3].lastStatusMessageId).toBe("chat-locked");
+  });
+
   test("first status with pin enabled creates, pins, and persists a separate pin id", async () => {
     const harness = createHarness({
       gameData: createGameData({ pinnedStatusEnabled: true }),

@@ -1921,6 +1921,66 @@ describe("POST /api/game/action", () => {
     );
   });
 
+  test("a hung channel send does not stall the next same-channel Deal/Draw POST", async () => {
+    let releaseSend;
+    const sendGate = new Promise((resolve) => {
+      releaseSend = resolve;
+    });
+    await withActionApp(
+      {
+        send: async (payload, posted) => {
+          await sendGate;
+          posted.push(payload);
+          return { id: `msg-${posted.length}` };
+        },
+      },
+      async ({ url, posted, store }) => {
+        try {
+          const firstRes = await postAction(url, {
+            action: "draw",
+            deck: "Main",
+            count: 1,
+            requestId: "hung-post-aaa",
+          });
+          expect(firstRes.status).toBe(200);
+          const first = await firstRes.json();
+
+          let timeoutId;
+          const secondPromise = postAction(url, {
+            action: "draw",
+            deck: "Main",
+            count: 1,
+            requestId: "hung-post-bbb",
+          });
+          const timedOut = new Promise((_, reject) => {
+            timeoutId = setTimeout(
+              () => reject(new Error("next visual POST waited on hung channel.send")),
+              500
+            );
+          });
+          let secondRes;
+          try {
+            secondRes = await Promise.race([secondPromise, timedOut]);
+          } finally {
+            clearTimeout(timeoutId);
+          }
+
+          expect(secondRes.status).toBe(200);
+          const second = await secondRes.json();
+          expect(new Set([first.hand.at(-1).name, second.hand.at(-1).name])).toEqual(
+            new Set(["Ace", "King"])
+          );
+          const saved = store.getSpecificGameData("guild-1", GAME_COLLECTION, "thread-game");
+          expect(cardNames(saved.players[0].hands.main)).toEqual(["Copper", "Ace", "King"]);
+          expect(posted).toHaveLength(0);
+        } finally {
+          releaseSend();
+        }
+        await waitFor(() => posted.length === 2);
+      }
+    );
+  });
+
   test("scores updates player scores like the scoreall modal and posts that message", async () => {
     await withActionApp({}, async ({ url, posted, store }) => {
       const res = await postAction(url, {

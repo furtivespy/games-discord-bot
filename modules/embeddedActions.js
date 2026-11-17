@@ -202,6 +202,7 @@ async function postCommandToGameChannel({
   gameData,
   content,
   logger,
+  runLocked,
 }) {
   if (!discordClient) return false;
   const channel = await resolveDiscordChannel(discordClient, channelId);
@@ -225,9 +226,58 @@ async function postCommandToGameChannel({
     interaction,
     discordClient,
     gameData,
-    { content }
+    { content, runLocked }
   );
   return true;
+}
+
+async function finishVisualCardAction({
+  discordClient,
+  guildId,
+  channelId,
+  actor,
+  gameData,
+  content,
+  logger,
+  runLocked,
+}) {
+  let posted = false;
+  try {
+    posted = Boolean(
+      await postCommandToGameChannel({
+        discordClient,
+        guildId,
+        channelId,
+        actor,
+        gameData,
+        content,
+        logger,
+        runLocked,
+      })
+    );
+  } catch (err) {
+    logger?.log?.(
+      `Failed to post visual-mode action to Discord: ${err.message || err}`,
+      "warn"
+    );
+    posted = false;
+  }
+  if (!posted) {
+    try {
+      await GameStatusHelper.refreshPinnedStatusAfterGameSave(
+        discordClient,
+        { guildId, channelId },
+        gameData,
+        { runLocked }
+      );
+    } catch (err) {
+      logger?.log?.(
+        `Pinned status refresh after visual-mode action failed: ${err.message || err}`,
+        "warn"
+      );
+    }
+  }
+  return posted;
 }
 
 function applyVisualCardAction(gameData, { action, deckName, count, actor, userId }) {
@@ -325,9 +375,12 @@ async function playerNamesForScoreUpdate(gameData, scores, { discordClient, guil
 
 /**
  * Serialize load → mutate → save for one game document. Two Deal/Draw POSTs
- * with different requestIds must not both load the same snapshot. The Discord
- * channel post stays on this lock so persistStatusUpdate cannot clobber a
- * later save. The HTTP response is released as soon as persist finishes.
+ * with different requestIds must not both load the same snapshot. Channel
+ * posts are best-effort after this lock: a hung Discord send, pin REST, or
+ * card-image loadImage must not stall the next visual action. Status metadata
+ * merges re-enter the lock only around the short get-then-set so they cannot
+ * clobber a later save. The HTTP response is released as soon as persist and
+ * the visual snapshot finish.
  */
 function createGameChannelLock() {
   const tails = new Map();
@@ -518,109 +571,96 @@ async function runVisualCardAction({
       ? gameChannelLock
       : defaultGameChannelLock;
 
+  const runLocked = (fn) => lock.run(gid, cid, fn);
+
   const execute = () => {
     let releaseHttp;
     const httpReady = new Promise((resolve, reject) => {
       releaseHttp = { resolve, reject };
     });
-    trackLockedVisualAction(() =>
-      lock.run(gid, cid, async () => {
-        try {
-          const persisted = await (typeof mutateOnce === "function"
-            ? mutateOnce({
-                actor,
-                guildId: gid,
-                channelId: cid,
-                userId: uid,
-                getGameData,
-                discordClient,
-                gameStore,
-                logger,
-              })
-            : runVisualCardActionOnce({
-                action,
-                deckName,
-                count,
-                actor,
-                guildId: gid,
-                channelId: cid,
-                userId: uid,
-                getGameData,
-                discordClient,
-                gameStore,
-                logger,
-              }));
-          if (persisted.status !== 200) {
-            releaseHttp.resolve(persisted);
-            return persisted;
-          }
-          const snapshot = await snapshotFromCurrentGame({
-            gameData: persisted.gameData,
-            discordClient,
-            guildId: gid,
-            channelId: cid,
-            userId: uid,
-            fetchImpl,
-            botToken,
-            hostImageCache,
-          });
-          const snapshotBody = snapshot.body;
-          const version = snapshotVersion(persisted.gameData, {
-            channelId: cid,
-            guildId: gid,
-            userId: uid,
-            hostBoardImages: snapshot.hostBoardImages,
-          });
-          releaseHttp.resolve({
-            status: 200,
-            version,
-            body: {
-              ...snapshotBody,
-              version,
-              message: persisted.applied.content,
-            },
-          });
-          let posted = false;
+    trackLockedVisualAction(async () => {
+      let pendingPost = null;
+      try {
+        pendingPost = await lock.run(gid, cid, async () => {
           try {
-            posted = Boolean(
-              await postCommandToGameChannel({
-                discordClient,
-                guildId: gid,
-                channelId: cid,
-                actor,
-                gameData: persisted.gameData,
-                content: persisted.applied.content,
-                logger,
-              })
-            );
-          } catch (err) {
-            logger?.log?.(
-              `Failed to post visual-mode action to Discord: ${err.message || err}`,
-              "warn"
-            );
-            posted = false;
-          }
-          if (!posted) {
-            try {
-              await GameStatusHelper.refreshPinnedStatusAfterGameSave(
-                discordClient,
-                { guildId: gid, channelId: cid },
-                persisted.gameData
-              );
-            } catch (err) {
-              logger?.log?.(
-                `Pinned status refresh after visual-mode action failed: ${err.message || err}`,
-                "warn"
-              );
+            const persisted = await (typeof mutateOnce === "function"
+              ? mutateOnce({
+                  actor,
+                  guildId: gid,
+                  channelId: cid,
+                  userId: uid,
+                  getGameData,
+                  discordClient,
+                  gameStore,
+                  logger,
+                })
+              : runVisualCardActionOnce({
+                  action,
+                  deckName,
+                  count,
+                  actor,
+                  guildId: gid,
+                  channelId: cid,
+                  userId: uid,
+                  getGameData,
+                  discordClient,
+                  gameStore,
+                  logger,
+                }));
+            if (persisted.status !== 200) {
+              releaseHttp.resolve(persisted);
+              return null;
             }
+            const snapshot = await snapshotFromCurrentGame({
+              gameData: persisted.gameData,
+              discordClient,
+              guildId: gid,
+              channelId: cid,
+              userId: uid,
+              fetchImpl,
+              botToken,
+              hostImageCache,
+            });
+            const snapshotBody = snapshot.body;
+            const version = snapshotVersion(persisted.gameData, {
+              channelId: cid,
+              guildId: gid,
+              userId: uid,
+              hostBoardImages: snapshot.hostBoardImages,
+            });
+            releaseHttp.resolve({
+              status: 200,
+              version,
+              body: {
+                ...snapshotBody,
+                version,
+                message: persisted.applied.content,
+              },
+            });
+            return {
+              gameData: persisted.gameData,
+              content: persisted.applied.content,
+            };
+          } catch (err) {
+            releaseHttp.reject(err);
+            throw err;
           }
-          return posted;
-        } catch (err) {
-          releaseHttp.reject(err);
-          throw err;
-        }
-      })
-    );
+        });
+      } catch {
+        return false;
+      }
+      if (!pendingPost) return false;
+      return finishVisualCardAction({
+        discordClient,
+        guildId: gid,
+        channelId: cid,
+        actor,
+        gameData: pendingPost.gameData,
+        content: pendingPost.content,
+        logger,
+        runLocked,
+      });
+    });
     return httpReady;
   };
 
