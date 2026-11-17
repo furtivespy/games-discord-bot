@@ -738,6 +738,117 @@ describe("versionGameForUser", () => {
     expect(visible.status).toBe(200);
     expect(visible.body.version).not.toBe(first.body.version);
   });
+
+  test("empty-board version includes the host's latest images and uses the message cache", async () => {
+    const game = {
+      isdeleted: false,
+      name: "No board",
+      players: [{ userId: "will", hands: { main: [] } }],
+      gameBoard: [],
+      history: [
+        {
+          timestamp: "2026-11-17T12:00:00.000Z",
+          actor: { userId: "host-1" },
+          action: {
+            category: GameDB.ACTION_CATEGORIES.GAME,
+            type: GameDB.ACTION_TYPES.CREATE,
+          },
+        },
+      ],
+    };
+    const ids = {
+      channelId: "thread-game",
+      guildId: "guild-a",
+      userId: "will",
+    };
+    const cache = createDiscordLookupCache({ ttlMs: 60_000 });
+    const urls = [];
+    const messages = [
+      {
+        id: "m-host",
+        author: { id: "host-1" },
+        attachments: [
+          {
+            id: "a1",
+            filename: "map.png",
+            content_type: "image/png",
+            url: "https://cdn.discordapp.com/attachments/1/2/map.png",
+          },
+          {
+            id: "a2",
+            filename: "ref.jpg",
+            content_type: "image/jpeg",
+            url: "https://cdn.discordapp.com/attachments/1/2/ref.jpg",
+          },
+        ],
+      },
+    ];
+    const fetchImpl = async (url) => {
+      urls.push(String(url));
+      return {
+        status: 200,
+        json: async () => messages,
+      };
+    };
+    const opts = {
+      discordClient: { getGameDataV2: async () => game, token: "bot-token" },
+      fetchImpl,
+      hostImageCache: cache,
+      ...ids,
+    };
+    const first = await versionGameForUser(opts);
+    expect(first.status).toBe(200);
+    expect(urls).toEqual([
+      `${DISCORD_API_BASE}/channels/thread-game/messages?limit=100`,
+    ]);
+    const hostBoardImages = [
+      {
+        id: "host-image:m-host:a1",
+        name: "map",
+        url: "https://cdn.discordapp.com/attachments/1/2/map.png",
+      },
+      {
+        id: "host-image:m-host:a2",
+        name: "ref",
+        url: "https://cdn.discordapp.com/attachments/1/2/ref.jpg",
+      },
+    ];
+    expect(first.body.version).toBe(
+      snapshotVersion(game, { ...ids, hostBoardImages })
+    );
+    expect(first.body.version).not.toBe(snapshotVersion(game, ids));
+
+    const cached = await versionGameForUser({
+      ...opts,
+      ifNoneMatch: formatEtag(first.body.version),
+    });
+    expect(cached).toEqual({ status: 304, version: first.body.version });
+    expect(urls).toHaveLength(1);
+
+    const snapshot = await snapshotGameForUser(opts);
+    expect(snapshot.status).toBe(200);
+    expect(snapshot.body.gameBoard).toEqual(hostBoardImages);
+    expect(urls).toHaveLength(1);
+  });
+
+  test("does not fetch channel messages when the card board is in use", async () => {
+    let fetched = false;
+    const result = await versionGameForUser({
+      discordClient: {
+        getGameDataV2: async () => snapshotSeed(),
+        token: "bot-token",
+      },
+      fetchImpl: async () => {
+        fetched = true;
+        throw new Error("should not list messages");
+      },
+      guildId: "guild-a",
+      channelId: "thread-game",
+      userId: "will",
+    });
+    expect(result.status).toBe(200);
+    expect(fetched).toBe(false);
+  });
 });
 
 describe("etagMatches", () => {
@@ -1007,6 +1118,35 @@ describe("snapshotFromGameData", () => {
         category: "card",
       },
     ]);
+  });
+
+  test("fills an empty board from hostBoardImages and ignores them when cards exist", () => {
+    const hostBoardImages = [
+      {
+        id: "host-image:m1:a1",
+        name: "map",
+        url: "https://cdn.discordapp.com/attachments/1/2/map.png",
+      },
+    ];
+    const empty = snapshotFromGameData(
+      {
+        name: "No board",
+        players: [{ userId: "will", hands: { main: [] } }],
+        gameBoard: [],
+      },
+      { channelId: "ch", guildId: "g", userId: "will", hostBoardImages }
+    );
+    expect(empty.gameBoard).toEqual(hostBoardImages);
+
+    const occupied = snapshotFromGameData(
+      {
+        name: "Board in use",
+        players: [{ userId: "will", hands: { main: [] } }],
+        gameBoard: [{ id: "b1", name: "Province", url: null }],
+      },
+      { channelId: "ch", guildId: "g", userId: "will", hostBoardImages }
+    );
+    expect(occupied.gameBoard).toEqual([{ id: "b1", name: "Province", url: null }]);
   });
 
   test("matches player teamId to roster id after stringifying", () => {

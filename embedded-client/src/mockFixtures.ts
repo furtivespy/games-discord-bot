@@ -12,6 +12,7 @@ export const DEFAULT_MOCK_GUILD_ID = "mock-guild";
 export const SNAPSHOT_FIXTURES = [
   "populated",
   "team-game",
+  "host-images",
   "no-game",
   "not-a-player",
 ] as const;

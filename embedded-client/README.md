@@ -37,12 +37,13 @@ Open:
 | Several games (newest first; default) | http://127.0.0.1:3000/ or `?fixture=several-games` or `?fixture=populated` |
 | Single game | http://127.0.0.1:3000/?fixture=one-game |
 | Team game (6 players, 🦀🦀 vs 💪🐟) | http://127.0.0.1:3000/?fixture=team-game&game=team-thread |
+| Empty board showing the host's latest posted images | http://127.0.0.1:3000/?fixture=host-images |
 | No games (empty picker) | http://127.0.0.1:3000/?fixture=no-games |
 | Snapshot: no game in this channel | http://127.0.0.1:3000/?fixture=no-game |
 | Snapshot: not a player | http://127.0.0.1:3000/?fixture=not-a-player |
 | Table layout after picking Friday Inis | http://127.0.0.1:3000/?fixture=several-games&game=newest-thread |
 
-The default mock URL and `?fixture=populated` are picker-only until you choose a game. Selecting a game loads that game’s status panel, other players, decks, board, play area, and hand (`GET /api/game/snapshot?channelId=<selected>&guildId=<sdk guild id>`). In mock mode, `?game=<channelId>` auto-selects that picker option so screenshots can skip the click. Snapshot URLs `no-game` and `not-a-player` skip the picker and show those errors. `/api/games?fixture=no-game` and `?fixture=not-a-player` return `{ games: [] }` so they stay consistent with `no-games`.
+The default mock URL and `?fixture=populated` are picker-only until you choose a game. Selecting a game loads that game’s status panel, other players, decks, board, play area, and hand (`GET /api/game/snapshot?channelId=<selected>&guildId=<sdk guild id>`). In mock mode, `?game=<channelId>` auto-selects that picker option so screenshots can skip the click. Snapshot URLs `no-game`, `not-a-player`, and `host-images` skip the picker. `/api/games?fixture=no-game` and `?fixture=not-a-player` return `{ games: [] }` so they stay consistent with `no-games`.
 
 Card art is never loaded straight from the card's URL: Discord's Activity CSP blocks other hosts. The snapshot replaces each card `url` with a signed `imageUrl` (`/api/card-image?u=…&s=…`) and the bot fetches the image server-side. Only URLs the bot signed are served (the key is derived from `CLIENT_SECRET`), private/internal addresses are refused on every redirect hop, and only `image/*` responses up to 10 MB are returned.
 

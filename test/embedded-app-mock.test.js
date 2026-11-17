@@ -22,7 +22,9 @@ const {
   TEAM_GAME_FIXTURE,
   getMockGames,
   getMockSnapshot,
+  hostImagesSeed,
   isEmbeddedAppMockEnabled,
+  MOCK_HOST_BOARD_IMAGES,
   otherPlayerHand,
   populatedSeed,
   snapshotFromSeed,
@@ -154,6 +156,20 @@ describe("mock snapshot fixtures", () => {
     expect(JSON.stringify(result.body)).not.toContain("Alex Secret");
     expect(JSON.stringify(result.body)).not.toContain("Jordan Secret");
     expect(teamGameSeed().players).toHaveLength(6);
+  });
+
+  test("host-images fixture puts the host's latest photos on an empty board", () => {
+    const result = getMockSnapshot({ fixture: "host-images" });
+    expect(result.status).toBe(200);
+    expect(hostImagesSeed().gameBoard).toEqual([]);
+    expect(result.body.gameBoard).toEqual(
+      MOCK_HOST_BOARD_IMAGES.map((card) => ({ ...card }))
+    );
+    expect(result.body.gameBoard.map((card) => card.imageUrl)).toEqual([
+      "/mock-host-setup.svg",
+      "/mock-host-reference.svg",
+    ]);
+    expect(result.body.hand).toHaveLength(5);
   });
 
 
@@ -403,6 +419,15 @@ describe("mock embedded HTTP", () => {
       expect(body.guildId).toBe("guild-9");
       expect(body.hand).toHaveLength(5);
       expect(JSON.stringify(body)).not.toContain("Other Player Secret");
+
+      const hostImages = await fetch(`${url}/api/game/snapshot?fixture=host-images`, {
+        headers: auth,
+      });
+      expect(hostImages.status).toBe(200);
+      expect((await hostImages.json()).gameBoard.map((card) => card.name)).toEqual([
+        "Table setup",
+        "Reference",
+      ]);
 
       const noGame = await fetch(`${url}/api/game/snapshot?fixture=no-game`, {
         headers: auth,

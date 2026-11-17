@@ -5,7 +5,7 @@ import {
 } from "@discord/embedded-app-sdk";
 import {
   actionRequestUrl,
-  cardImageRequestUrl,
+  resolveCardImageUrl,
   firstNonEmptyName,
   GAMES_EMPTY_MESSAGE,
   GAMES_ERROR_MESSAGE,
@@ -787,7 +787,12 @@ async function loadGames(
 }
 
 function cardImageSrc(config: EmbeddedConfig, imageUrl: unknown): string | null {
-  const src = cardImageRequestUrl(config.apiHost, window.location.protocol, imageUrl);
+  const src = resolveCardImageUrl(
+    config.apiHost,
+    window.location.protocol,
+    imageUrl,
+    config.mock
+  );
   if (!src || !activeUrlMappings.length) return src;
   return attemptRemap({
     url: new URL(src, window.location.href),

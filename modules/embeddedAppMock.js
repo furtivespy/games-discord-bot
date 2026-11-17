@@ -18,6 +18,7 @@ const MOCK_OAUTH_CODE = "mock-oauth-code";
 const MOCK_FIXTURE_NAMES = Object.freeze([
   "populated",
   "team-game",
+  "host-images",
   "no-game",
   "not-a-player",
 ]);
@@ -248,6 +249,43 @@ function populatedSeed() {
   };
 }
 
+const MOCK_HOST_BOARD_IMAGES = Object.freeze([
+  Object.freeze({
+    id: "host-image:host-msg-1:att-1",
+    name: "Table setup",
+    imageUrl: "/mock-host-setup.svg",
+  }),
+  Object.freeze({
+    id: "host-image:host-msg-1:att-2",
+    name: "Reference",
+    imageUrl: "/mock-host-reference.svg",
+  }),
+]);
+
+function hostImagesSeed() {
+  const seed = populatedSeed();
+  seed.gameBoard = [];
+  seed.history = [
+    {
+      id: "create-1",
+      timestamp: "2026-11-17T12:00:00.000Z",
+      actor: {
+        userId: MOCK_USER.id,
+        username: MOCK_USER.username,
+        displayName: MOCK_USER.global_name,
+      },
+      action: { category: "game", type: "create" },
+      summary: "QA Tester created new game",
+    },
+    ...seed.history,
+  ];
+  return seed;
+}
+
+function hostBoardImagesForFixture(name) {
+  return name === "host-images" ? MOCK_HOST_BOARD_IMAGES.map((card) => ({ ...card })) : undefined;
+}
+
 function teamGameSeed() {
   const seed = populatedSeed();
   seed.name = TEAM_GAME_CHANNEL_NAME;
@@ -309,11 +347,12 @@ function teamGameSeed() {
   return seed;
 }
 
-function snapshotFromSeed(seed, { channelId, guildId } = {}) {
+function snapshotFromSeed(seed, { channelId, guildId, hostBoardImages } = {}) {
   return snapshotFromGameData(seed, {
     channelId,
     guildId,
     userId: MOCK_USER.id,
+    hostBoardImages,
   });
 }
 
@@ -380,7 +419,9 @@ function createMockGameSession() {
   }
 
   function loadSeed(name) {
-    return name === "team-game" ? teamGameSeed() : populatedSeed();
+    if (name === "team-game") return teamGameSeed();
+    if (name === "host-images") return hostImagesSeed();
+    return populatedSeed();
   }
 
   function getGame(name, channelId, guildId) {
@@ -405,10 +446,12 @@ function createMockGameSession() {
     const cid = channelId || DEFAULT_MOCK_CHANNEL_ID;
     const gid = guildId || DEFAULT_MOCK_GUILD_ID;
     const seed = getGame(name, cid, gid);
+    const hostBoardImages = hostBoardImagesForFixture(name);
     const version = snapshotVersion(seed, {
       channelId: cid,
       guildId: gid,
       userId: MOCK_USER.id,
+      hostBoardImages,
     });
     return {
       status: 200,
@@ -417,6 +460,7 @@ function createMockGameSession() {
         ...snapshotFromSeed(seed, {
           channelId: cid,
           guildId: gid,
+          hostBoardImages,
         }),
         version,
       },
@@ -481,16 +525,18 @@ function createMockGameSession() {
           },
         };
       }
+      const hostBoardImages = hostBoardImagesForFixture(name);
       const version = snapshotVersion(gameData, {
         channelId: cid,
         guildId: gid,
         userId: MOCK_USER.id,
+        hostBoardImages,
       });
       return {
         status: 200,
         version,
         body: {
-          ...snapshotFromSeed(gameData, { channelId: cid, guildId: gid }),
+          ...snapshotFromSeed(gameData, { channelId: cid, guildId: gid, hostBoardImages }),
           version,
           message: applied.content,
           channelPosted: true,
@@ -553,6 +599,7 @@ module.exports = {
   GAME_LIST_FIXTURE_NAMES,
   MOCK_ACCESS_TOKEN,
   MOCK_FIXTURE_NAMES,
+  MOCK_HOST_BOARD_IMAGES,
   MOCK_OAUTH_CODE,
   MOCK_USER,
   ONE_GAME_FIXTURE,
@@ -567,6 +614,7 @@ module.exports = {
   getMockGames,
   getMockSnapshot,
   handleMockTokenExchange,
+  hostImagesSeed,
   isEmbeddedAppMockEnabled,
   isEmbeddedAppMockRequested,
   isProductionEnv,

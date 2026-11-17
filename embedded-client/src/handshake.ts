@@ -77,6 +77,22 @@ export function cardImageRequestUrl(
   return apiUrl(apiHost, protocol, imageUrl);
 }
 
+/** Mock QA fixtures may use same-origin static files; Discord still uses the proxy. */
+export function resolveCardImageUrl(
+  apiHost: string,
+  protocol: string,
+  imageUrl: unknown,
+  mock = false
+): string | null {
+  if (mock && typeof imageUrl === "string") {
+    const path = imageUrl.trim();
+    if (path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/api/")) {
+      return path;
+    }
+  }
+  return cardImageRequestUrl(apiHost, protocol, imageUrl);
+}
+
 export function actionRequestUrl(apiHost: string, protocol: string): string {
   return apiUrl(apiHost, protocol, "/api/game/action");
 }

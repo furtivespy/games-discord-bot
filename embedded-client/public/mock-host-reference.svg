@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 350" role="img" aria-label="Reference card">
+  <rect width="250" height="350" rx="18" fill="#2b241c"/>
+  <rect x="14" y="14" width="222" height="322" rx="12" fill="#f7f1e3"/>
+  <rect x="28" y="32" width="194" height="36" rx="6" fill="#8c2f39"/>
+  <text x="125" y="56" text-anchor="middle" fill="#f7f1e3" font-family="Georgia, serif" font-size="16">Reference</text>
+  <rect x="36" y="86" width="178" height="16" rx="4" fill="#d7c7a1"/>
+  <rect x="36" y="114" width="146" height="16" rx="4" fill="#d7c7a1"/>
+  <rect x="36" y="142" width="164" height="16" rx="4" fill="#d7c7a1"/>
+  <rect x="36" y="178" width="178" height="110" rx="10" fill="#e8d9b0"/>
+  <circle cx="80" cy="233" r="22" fill="#8c2f39"/>
+  <circle cx="125" cy="233" r="22" fill="#2f5d8c"/>
+  <circle cx="170" cy="233" r="22" fill="#2f8c5d"/>
+  <rect x="36" y="302" width="178" height="16" rx="4" fill="#d7c7a1"/>
+</svg>
