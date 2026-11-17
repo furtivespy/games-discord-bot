@@ -10,7 +10,7 @@ Only the daily friction sweep exists today. Docs freshness and the weekly legacy
 - It opens PRs; it never merges, approves, or force-pushes. A person runs the `ship-pr` loop ([skill](../.agents/skills/ship-pr/SKILL.md)) on each PR. Merging stays manual for now.
 - It follows [AGENTS.md](../AGENTS.md), the [ADRs](adr/), and [merge-policy](merge-policy.md): default to "no" on the hesitate list, no change to data scope without a migration path, no behavior beyond the issue.
 - `bun run verify` passes before it opens the PR.
-- It does not edit: `.github/`, `Dockerfile`, `db/`, `scripts/migrate*`, `docs/adr/`, `docs/merge-policy.md`, `.agents/skills/ship-pr/`, `.cursor/`. A fix that needs one of these becomes a `needs-decision` issue instead.
+- It does not edit: `.github/`, `Dockerfile`, `db/`, `scripts/migrate*`, `scripts/pr-risk.js`, `docs/adr/`, `docs/merge-policy.md`, `.agents/skills/ship-pr/`, `.cursor/`. The merge-gate files in that list are also high risk by path in [merge-policy](merge-policy.md), so a person merges them regardless.
 
 The VM is prepared by [`.cursor/environment.json`](../.cursor/environment.json), which runs [`scripts/cloud-agent-install.sh`](../scripts/cloud-agent-install.sh): Bun at the pinned version, the native libraries `canvas` needs, and `bun install --frozen-lockfile`. Keep that script in step with `.github/workflows/test.yml`.
 

@@ -18,7 +18,10 @@ decisions live in `.github/ship-pr.json`. This skill only runs the loop.
    `For you to test`, `User call-out`. It must rewrite the block after every new
    commit.
 3. **Pick the risk tier** from [docs/merge-policy.md](../../../docs/merge-policy.md)
-   (`low`, `medium`, `high`). A `User call-out` that is not `none` makes it high.
+   (`low`, `medium`, `high`). First run
+   `gh pr diff <n> --name-only | node scripts/pr-risk.js`: if it prints `high`,
+   the tier is high, whatever the PR says. Otherwise judge the rest of the
+   policy yourself. A `User call-out` that is not `none` also makes it high.
 4. **Gather state and ask for the next step:**
 
    ```sh
