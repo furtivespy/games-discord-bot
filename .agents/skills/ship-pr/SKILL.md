@@ -45,9 +45,24 @@ decisions live in `.github/ship-pr.json`. This skill only runs the loop.
    reply with why), resolve conflicts, mark ready, wait, or merge. Reviewers
    check every changed test expectation against the intent. Then repeat step 4
    with fresh state.
-6. **Merge** only when the step is `merge`, using a merge commit
-   (`gh pr merge <n> --merge`). `high` risk always parks for the owner. Stale
-   QA Head and `For you to test` not `none` also park (step 4).
+6. **Merge** only when the step is `merge` **and the PR has exactly one release
+   label**, using a merge commit (`gh pr merge <n> --merge`). `release.yml`
+   tags and builds from that label, and with no tag it skips the image build
+   and deploy check, so an unlabeled merge never ships. Check first:
+
+   ```sh
+   gh pr view <n> --json labels --jq '[.labels[].name | select(. == "patch" or . == "minor" or . == "major")]'
+   ```
+
+   - Exactly one: go on.
+   - None: add the one that matches the risk tier (`low` is `patch`, `medium`
+     is `minor`) with `gh pr edit <n> --add-label <label>`, unless the diff
+     clearly calls for a different one.
+   - More than one, or `major`: park for the owner. `major` makes the PR `high`
+     (see [docs/merge-policy.md](../../../docs/merge-policy.md)).
+
+   `high` risk always parks for the owner. Stale QA Head and `For you to test`
+   not `none` also park (step 4).
 7. **After merge**, `release.yml` builds the image and its `verify-deploy` job
    waits for `/health` to report the merge commit. To check by hand:
    `SHIP_PR_SHA=<merge-sha> node scripts/check-deployed-version.js`.

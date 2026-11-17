@@ -15,9 +15,13 @@ An agent may merge a PR (`ship-pr --merge`, see
    PR's current head SHA. A new commit makes an old PASS stale.
 3. `For you to test` is `none`.
 4. The risk tier is **low** or **medium** (below).
+5. The PR has exactly one release label: `patch`, `minor`, or `major`.
+   `release.yml` reads it to pick the next version tag; with no label there is
+   no tag, so the image is not built or deployed. `major` is high risk, so an
+   agent never merges it.
 
 The Cursor QA review is not a GitHub check, so GitHub cannot require it. The
-`ship-pr` loop enforces rules 2 and 3 instead.
+`ship-pr` loop enforces rules 2, 3, and 5 instead.
 
 ## Risk tiers
 
