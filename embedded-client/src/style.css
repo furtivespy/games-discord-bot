@@ -358,16 +358,13 @@ body {
   /* Cards from every zone share this stacking context so a raised tile can
      paint above later DOM zones. Do not put z-index/transform on .zone. */
   isolation: isolate;
-  container-type: size;
 }
 
 #table > * {
-  flex-shrink: 1;
-  min-height: 0;
+  flex-shrink: 0;
 }
 
 .hand-zone {
-  flex-shrink: 0;
   margin-top: auto;
 }
 
@@ -534,12 +531,8 @@ body {
   position: relative;
   z-index: 1;
   box-sizing: border-box;
-  /* Prefer the FUR-251 resting size. 12rem leaves room for zone headings,
-     padding, the player rail, and gaps so 3 card rows stay on-screen. */
-  --card-fit-height: calc((100cqh - 12rem) / 3);
-  --card-used-height: min(var(--card-height), max(5.5rem, var(--card-fit-height)));
-  width: calc(var(--card-used-height) * 5.4 / 7.55);
-  height: var(--card-used-height);
+  width: var(--card-width);
+  height: var(--card-height);
   padding: 0;
   border: 0;
   background: transparent;

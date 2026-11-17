@@ -530,6 +530,15 @@ function frame() {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+function boxes(selector) {
+  return [...document.querySelectorAll(selector)].map((el) => el.getBoundingClientRect());
+}
+
+function overlapPx(upper, lower) {
+  if (!upper.length || !lower.length) return 0;
+  return Math.max(...upper.map((box) => box.bottom)) - Math.min(...lower.map((box) => box.top));
+}
+
 try {
   await frame();
   const table = document.getElementById("table");
@@ -542,21 +551,18 @@ try {
   const playBox = play.getBoundingClientRect();
   const rest = face.getBoundingClientRect();
   const root = getComputedStyle(document.documentElement);
-  const tableOverflow = table.scrollHeight > table.clientHeight + 1;
-  const handCards = [...document.querySelectorAll("#hand-cards .card-tile")].map((el) =>
-    el.getBoundingClientRect()
-  );
+  const boardTiles = boxes("#board-cards .card-tile");
+  const playTiles = boxes("#play-area-cards .card-tile");
+  const handCards = boxes("#hand-cards .card-tile");
   const handOverlaps =
     handCards.length < 2 || handCards[1].left < handCards[0].right - 8;
   const handLeft = handCards.length ? Math.min(...handCards.map((box) => box.left)) : tableBox.left;
   const handRight = handCards.length ? Math.max(...handCards.map((box) => box.right)) : tableBox.right;
-  const sheet = document.styleSheets[0];
-  sheet.insertRule(
-    ".card-tile.measure-zoom .card-face { transform: translateY(-38px) scale(var(--card-hover-scale)); transition: none; }",
-    sheet.cssRules.length
+  const hoverRule = [...document.styleSheets[0].cssRules].find((rule) =>
+    (rule.selectorText || "").includes(".card-tile:hover .card-face")
   );
-  tile.classList.add("measure-zoom");
-  await frame();
+  face.style.transition = "none";
+  if (hoverRule) face.style.transform = hoverRule.style.transform;
   await frame();
   const zoomed = face.getBoundingClientRect();
   await report({
@@ -564,15 +570,15 @@ try {
     viewportHeight: window.innerHeight,
     tableHeight: tableBox.height,
     tableBottom: tableBox.bottom,
-    tableOverflow,
     handTop: handBox.top,
     handBottom: handBox.bottom,
     playBottom: playBox.bottom,
     gapBelowHand: tableBox.bottom - handBox.bottom,
     spaceAboveHand: handBox.top - playBox.bottom,
-    contentBottom: Math.max(tableBox.bottom, handBox.bottom),
     handOverlaps,
     handFitsTable: handLeft >= tableBox.left - 24 && handRight <= tableBox.right + 24,
+    boardPlayOverlap: overlapPx(boardTiles, playTiles),
+    playHandOverlap: overlapPx(playTiles, handCards),
     cardWidth: rest.width,
     cardHeight: rest.height,
     zoomWidth: zoomed.width,
@@ -678,62 +684,132 @@ describe("hand zone stays at the bottom of the table", () => {
     expect(result.handBottom).toBeGreaterThan(result.viewportHeight - 32);
     expect(result.gapBelowHand).toBeGreaterThanOrEqual(0);
     expect(result.gapBelowHand).toBeLessThan(24);
-    expect(result.spaceAboveHand).toBeGreaterThan(24);
-    expect(result.cssCardWidth).toBe("7.992rem");
-    expect(result.cssCardHeight).toBe("11.174rem");
-    expect(result.cardWidth).toBeGreaterThan(96);
-    expect(result.cardHeight).toBeGreaterThan(132);
-    expect(result.hoverScale).toBeCloseTo(1.48, 2);
-    expect(result.zoomWidth / result.cardWidth).toBeCloseTo(1.48, 1);
-    expect(result.zoomHeight / result.cardHeight).toBeCloseTo(1.48, 1);
+    expect(result.spaceAboveHand).toBeGreaterThan(0);
+    expect(result.boardPlayOverlap).toBeLessThan(8);
+    expect(result.playHandOverlap).toBeLessThan(8);
   }, 30000);
+});
 
-  const overflowViewports = [
+describe("visual-mode cards rest at hover-zoom size", () => {
+  const chrome = workingChromeBin();
+  let server;
+  let chromeProc;
+  let userDataDir;
+
+  function cleanupLayoutRun() {
+    try {
+      chromeProc?.kill("SIGKILL");
+    } catch {}
+    chromeProc = null;
+    try {
+      server?.stop(true);
+    } catch {}
+    server = null;
+    if (userDataDir) {
+      fs.rmSync(userDataDir, { recursive: true, force: true });
+      userDataDir = null;
+    }
+  }
+
+  afterEach(() => {
+    cleanupLayoutRun();
+  });
+
+  async function measureLayout(html, { width, height }) {
+    cleanupLayoutRun();
+    let resolveResult;
+    const resultPromise = new Promise((resolve) => {
+      resolveResult = resolve;
+    });
+
+    server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const url = new URL(req.url);
+        if (req.method === "POST" && url.pathname === "/result") {
+          resolveResult(await req.json());
+          return new Response("ok");
+        }
+        if (url.pathname === "/harness.js") {
+          return new Response(PIN_HARNESS_JS, {
+            headers: { "Content-Type": "text/javascript; charset=utf-8" },
+          });
+        }
+        return new Response(html, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      },
+    });
+
+    userDataDir = fs.mkdtempSync(path.join(require("os").tmpdir(), "card-size-"));
+    chromeProc = spawn(
+      chrome,
+      [
+        "--headless=new",
+        "--disable-gpu",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--hide-scrollbars",
+        "--no-first-run",
+        `--window-size=${width},${height}`,
+        `--user-data-dir=${userDataDir}`,
+        String(server.url),
+      ],
+      { stdio: "ignore" }
+    );
+
+    return Promise.race([
+      resultPromise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("timed out waiting for Chrome card-size result")), 20000)
+      ),
+    ]);
+  }
+
+  const sizeViewports = [
     { width: 1280, height: 800 },
     { width: 1280, height: 720 },
     { width: 1024, height: 768 },
     { width: 1920, height: 1080 },
   ];
 
-  test.skipIf(!chrome)("QA: larger cards stay on-screen at common viewports", async () => {
+  test.skipIf(!chrome)("QA: resting tiles match the old hover-zoom size", async () => {
     const css = fs.readFileSync(STYLE_PATH, "utf8");
     const html = populatedTableHarness(css);
 
-    for (const viewport of overflowViewports) {
+    for (const viewport of sizeViewports) {
       const result = await measureLayout(html, viewport);
       const label = `${viewport.width}x${viewport.height}`;
       expect({ label, error: result.error }).toEqual({ label, error: undefined });
-      expect({
-        label,
-        handBelowPlay: result.handBottom > result.playBottom,
-        handOnScreen: result.handBottom <= result.viewportHeight + 1,
-        handPinned: result.handBottom > result.viewportHeight - 32,
-        contentOnScreen: result.contentBottom <= result.viewportHeight + 1,
-        handOverlaps: result.handOverlaps,
-        handFitsTable: result.handFitsTable,
-      }).toEqual({
-        label,
-        handBelowPlay: true,
-        handOnScreen: true,
-        handPinned: true,
-        contentOnScreen: true,
-        handOverlaps: true,
-        handFitsTable: true,
-      });
-      expect(result.gapBelowHand).toBeGreaterThanOrEqual(0);
-      expect(result.gapBelowHand).toBeLessThan(24);
-      expect(result.spaceAboveHand).toBeGreaterThanOrEqual(0);
+      expect(result.cssCardWidth).toBe("7.992rem");
+      expect(result.cssCardHeight).toBe("11.174rem");
+      expect(result.cardWidth).toBeGreaterThan(120);
+      expect(result.cardWidth).toBeLessThan(136);
+      expect(result.cardHeight).toBeGreaterThan(170);
+      expect(result.cardHeight).toBeLessThan(188);
       expect(result.hoverScale).toBeCloseTo(1.48, 2);
       expect(result.zoomWidth / result.cardWidth).toBeCloseTo(1.48, 1);
       expect(result.zoomHeight / result.cardHeight).toBeCloseTo(1.48, 1);
-      if (viewport.height >= 1080) {
-        expect(result.cardWidth).toBeGreaterThan(120);
-        expect(result.cardWidth).toBeLessThan(136);
-        expect(result.cardHeight).toBeGreaterThan(170);
-        expect(result.cardHeight).toBeLessThan(188);
-      } else {
-        expect(result.cardHeight).toBeGreaterThan(120);
-      }
+      expect(result.handOverlaps).toBe(true);
+      expect(result.handFitsTable).toBe(true);
+      expect(result.boardPlayOverlap).toBeLessThan(8);
+      expect(result.playHandOverlap).toBeLessThan(8);
     }
   }, 120000);
+
+  test.skipIf(!chrome)("QA: tall viewport keeps the hand pinned under larger cards", async () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const result = await measureLayout(populatedTableHarness(css), {
+      width: 1920,
+      height: 1080,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.handBottom).toBeGreaterThan(result.playBottom);
+    expect(result.handBottom).toBeLessThanOrEqual(result.viewportHeight);
+    expect(result.handBottom).toBeGreaterThan(result.viewportHeight - 32);
+    expect(result.gapBelowHand).toBeGreaterThanOrEqual(0);
+    expect(result.gapBelowHand).toBeLessThan(24);
+    expect(result.spaceAboveHand).toBeGreaterThan(0);
+  }, 30000);
 });
