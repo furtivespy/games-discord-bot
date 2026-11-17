@@ -51,11 +51,13 @@ const {
   HOST_IMAGE_ID_PREFIX,
   INSPECT_PHOTO_CLASS,
   INSPECT_PHOTO_LABEL,
+  INSPECT_NEXT_LABEL,
+  INSPECT_PREV_LABEL,
   inspectCardCaption,
   inspectCardTitle,
   inspectKeyDirection,
-  inspectKeyShouldIgnoreTarget,
   inspectNavDirectionFromDataset,
+  isInspectTypingTarget,
   inspectNavIndex,
   inspectNavState,
   inspectSequenceIndex,
@@ -1047,14 +1049,12 @@ describe("card inspect sequence navigation", () => {
     expect(inspectKeyDirection({ key: "ArrowRight", ctrlKey: true })).toBeNull();
     expect(inspectKeyDirection({ key: "ArrowRight", metaKey: true })).toBeNull();
     expect(inspectKeyDirection({ key: "ArrowLeft", shiftKey: true })).toBeNull();
-    expect(inspectKeyShouldIgnoreTarget({ tagName: "INPUT" })).toBe(true);
-    expect(inspectKeyShouldIgnoreTarget({ tagName: "textarea" })).toBe(true);
-    expect(inspectKeyShouldIgnoreTarget({ tagName: "SELECT" })).toBe(true);
-    expect(inspectKeyShouldIgnoreTarget({ tagName: "BUTTON", isContentEditable: true })).toBe(
-      true
-    );
-    expect(inspectKeyShouldIgnoreTarget({ tagName: "BUTTON" })).toBe(false);
-    expect(inspectKeyShouldIgnoreTarget(null)).toBe(false);
+    expect(isInspectTypingTarget({ tagName: "INPUT" })).toBe(true);
+    expect(isInspectTypingTarget({ tagName: "textarea" })).toBe(true);
+    expect(isInspectTypingTarget({ tagName: "SELECT" })).toBe(true);
+    expect(isInspectTypingTarget({ tagName: "BUTTON", isContentEditable: true })).toBe(true);
+    expect(isInspectTypingTarget({ tagName: "BUTTON" })).toBe(false);
+    expect(isInspectTypingTarget(null)).toBe(false);
     expect(inspectNavDirectionFromDataset("prev")).toBe("prev");
     expect(inspectNavDirectionFromDataset("next")).toBe("next");
     expect(inspectNavDirectionFromDataset("close")).toBeNull();
@@ -1092,23 +1092,16 @@ describe("card inspect sequence navigation", () => {
   });
 
   test("overlay markup hides nav buttons until a neighbor exists", () => {
-    const inspectSrc = require("fs").readFileSync(
-      require("path").join(__dirname, "..", "embedded-client", "src", "cardInspect.ts"),
-      "utf8"
-    );
-    expect(inspectSrc).toContain("inspectKeyDirection");
-    expect(inspectSrc).toContain("syncInspectNav");
-    expect(inspectSrc).toContain("data-inspect-nav");
-    expect(inspectSrc).toContain("prev.hidden = !nav.hasPrev");
-    expect(inspectSrc).toContain("next.hidden = !nav.hasNext");
+    expect(INSPECT_PREV_LABEL).toBe("Previous card");
+    expect(INSPECT_NEXT_LABEL).toBe("Next card");
     const html = require("fs").readFileSync(
       require("path").join(__dirname, "..", "embedded-client", "index.html"),
       "utf8"
     );
     expect(html).toContain('id="card-inspect-prev"');
     expect(html).toContain('id="card-inspect-next"');
-    expect(html).toContain('aria-label="Previous card"');
-    expect(html).toContain('aria-label="Next card"');
+    expect(html).toContain(`aria-label="${INSPECT_PREV_LABEL}"`);
+    expect(html).toContain(`aria-label="${INSPECT_NEXT_LABEL}"`);
     expect(html).toContain('data-inspect-nav="prev"');
     expect(html).toContain('data-inspect-nav="next"');
     expect(html).toMatch(/<button\s+type="button"\s+id="card-inspect-prev"/);
@@ -1121,11 +1114,11 @@ describe("card inspect sequence navigation", () => {
     );
     expect(css).toContain(".card-inspect-stage");
     expect(css).toContain(".card-inspect-nav[hidden]");
-    expect(css).toContain("#card-inspect-prev");
-    expect(css).toContain("#card-inspect-next");
     expect(css).toMatch(/#card-inspect-prev\s*\{[^}]*left:\s*0\.7rem/);
     expect(css).toMatch(/#card-inspect-next\s*\{[^}]*right:\s*0\.7rem/);
+    expect(css).toMatch(/\.card-inspect-sheet\s*\{[^}]*padding:\s*0\.7rem 3\.4rem 1rem/);
     expect(css).not.toContain("calc(-100% - 0.7rem)");
+    expect(css).not.toContain("calc(100% + 0.7rem)");
     expect(css).not.toContain(".card-inspect-dialog.is-photo #card-inspect-prev");
     const main = require("fs").readFileSync(
       require("path").join(__dirname, "..", "embedded-client", "src", "main.ts"),

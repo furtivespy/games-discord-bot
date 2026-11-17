@@ -881,7 +881,7 @@ body {
   background: #1b1711;
   border: 1px solid var(--panel-edge);
   border-radius: 16px;
-  padding: 0.7rem 1rem 1rem;
+  padding: 0.7rem 3.4rem 1rem;
   display: grid;
   justify-items: center;
   gap: 0.65rem;

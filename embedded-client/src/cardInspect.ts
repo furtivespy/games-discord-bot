@@ -39,6 +39,8 @@ export type InspectSession = {
 export const HOST_IMAGE_ID_PREFIX = "host-image:";
 export const INSPECT_PHOTO_CLASS = "is-photo";
 export const INSPECT_PHOTO_LABEL = "Enlarged photo";
+export const INSPECT_PREV_LABEL = "Previous card";
+export const INSPECT_NEXT_LABEL = "Next card";
 
 const DIALOG_ID = "card-inspect";
 const ART_ID = "card-inspect-art";
@@ -49,7 +51,7 @@ const META_ID = "card-inspect-meta";
 const PREV_ID = "card-inspect-prev";
 const NEXT_ID = "card-inspect-next";
 
-let inspectBound = false;
+let inspectBoundDocument: Document | null = null;
 let inspectItems: InspectSequenceItem[] = [];
 let inspectIndex = 0;
 
@@ -133,20 +135,42 @@ export function inspectKeyDirection(event: {
   return null;
 }
 
+const TYPING_TARGET_SELECTOR =
+  "input, textarea, select, [contenteditable]:not([contenteditable='false'])";
+
+export function isInspectTypingTarget(target: EventTarget | null | undefined): boolean {
+  if (!target || typeof target !== "object") return false;
+  const node = target as Partial<HTMLElement> & {
+    closest?: (selector: string) => Element | null;
+  };
+  if (typeof node.closest === "function") {
+    return Boolean(node.closest(TYPING_TARGET_SELECTOR));
+  }
+  const tag = typeof node.tagName === "string" ? node.tagName.toUpperCase() : "";
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return node.isContentEditable === true;
+}
+
+export function inspectKeyCommand(
+  event: {
+    key?: string;
+    altKey?: boolean;
+    ctrlKey?: boolean;
+    metaKey?: boolean;
+    shiftKey?: boolean;
+    target?: EventTarget | null;
+  },
+  overlayOpen: boolean
+): InspectNavDirection | null {
+  if (!overlayOpen) return null;
+  if (isInspectTypingTarget(event.target)) return null;
+  return inspectKeyDirection(event);
+}
+
 export function inspectNavDirectionFromDataset(
   value: string | null | undefined
 ): InspectNavDirection | null {
   return value === "prev" || value === "next" ? value : null;
-}
-
-export function inspectKeyShouldIgnoreTarget(target: {
-  tagName?: string;
-  isContentEditable?: boolean;
-} | null | undefined): boolean {
-  if (!target) return false;
-  const tag = typeof target.tagName === "string" ? target.tagName.toUpperCase() : "";
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  return Boolean(target.isContentEditable);
 }
 
 export function inspectSequenceIndex(
@@ -154,6 +178,7 @@ export function inspectSequenceIndex(
   tile: HTMLElement
 ): number {
   const list = Array.isArray(sequence) ? sequence : [];
+  if (!list.length) return -1;
   return list.findIndex((item) => item?.tile === tile);
 }
 
@@ -207,18 +232,29 @@ function stepInspect(direction: InspectNavDirection) {
   showInspectItem(next);
 }
 
+function inspectOverlayOpen(): boolean {
+  return isInspectOpen(dialogEl()) && inspectItems.length > 0;
+}
+
 function syncInspectNav() {
   const nav = inspectNavState(inspectItems.length, inspectIndex);
   const prev = document.getElementById(PREV_ID);
   const next = document.getElementById(NEXT_ID);
-  if (prev) prev.hidden = !nav.hasPrev;
-  if (next) next.hidden = !nav.hasNext;
+  if (prev) {
+    prev.hidden = !nav.hasPrev;
+    prev.setAttribute("aria-label", INSPECT_PREV_LABEL);
+  }
+  if (next) {
+    next.hidden = !nav.hasNext;
+    next.setAttribute("aria-label", INSPECT_NEXT_LABEL);
+  }
 }
 
 export function enableCardInspectDialog() {
   const dialog = dialogEl();
-  if (!dialog || inspectBound) return;
-  inspectBound = true;
+  if (!dialog) return;
+  if (inspectBoundDocument === document) return;
+  inspectBoundDocument = document;
   dialog.addEventListener("click", (event) => {
     const target = event.target;
     if (target === dialog) {
@@ -238,9 +274,7 @@ export function enableCardInspectDialog() {
     resetInspectSession();
   });
   document.addEventListener("keydown", (event) => {
-    if (!isInspectOpen(dialogEl())) return;
-    if (inspectKeyShouldIgnoreTarget(event.target as HTMLElement | null)) return;
-    const direction = inspectKeyDirection(event);
+    const direction = inspectKeyCommand(event, inspectOverlayOpen());
     if (!direction) return;
     event.preventDefault();
     stepInspect(direction);
