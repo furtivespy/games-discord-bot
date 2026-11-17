@@ -57,7 +57,12 @@ import {
 } from "./visualActions";
 import { SNAP_BACK_DURATION_MS, enableCardDrag, type CardOffset } from "./drag";
 import { enableHoverZoomClamp } from "./hoverZoom";
-import { closeCardInspect, enableCardInspectDialog, openCardInspect } from "./cardInspect";
+import {
+  closeCardInspect,
+  enableCardInspectDialog,
+  openCardInspect,
+  type InspectSequenceItem,
+} from "./cardInspect";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
 import { asCardList, createSnapshotLoader, shouldApplySnapshot } from "./requestSeq";
@@ -859,6 +864,7 @@ function renderCards(
   const container = document.getElementById(containerId);
   if (!container) return;
   container.replaceChildren();
+  const sequence: InspectSequenceItem[] = [];
   for (const card of asCardList(cards) as SnapshotCard[]) {
     const tile = document.createElement("article");
     tile.className = "card-tile";
@@ -870,13 +876,14 @@ function renderCards(
     const name =
       typeof nameValue === "string" && nameValue.trim() ? nameValue.trim() : "Card";
     tile.title = name;
+    const imageSrc = mappedImageSrc(config, card.imageUrl);
     tile.append(renderCardFace(config, card));
     enableHoverZoomClamp(tile);
+    sequence.push({ card, imageSrc, tile });
     if (cardId) {
       // No drop targets yet: enableCardDrag snaps back unless a later hook consumes the drop.
       enableCardDrag(tile, cardId, positions, {
-        onInspect: () =>
-          openCardInspect(card, mappedImageSrc(config, card.imageUrl), tile),
+        onInspect: () => openCardInspect(card, imageSrc, tile, sequence),
       });
     }
     container.append(tile);

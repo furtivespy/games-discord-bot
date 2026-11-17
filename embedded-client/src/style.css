@@ -825,6 +825,62 @@ body {
   background: rgba(12, 10, 8, 0.92);
 }
 
+.card-inspect-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.card-inspect-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: var(--ink);
+  background: rgba(12, 10, 8, 0.72);
+  cursor: pointer;
+}
+
+.card-inspect-nav[hidden] {
+  display: none;
+}
+
+#card-inspect-prev {
+  left: 0;
+  transform: translate(calc(-100% - 0.7rem), -50%);
+}
+
+#card-inspect-next {
+  right: 0;
+  transform: translate(calc(100% + 0.7rem), -50%);
+}
+
+.card-inspect-dialog.is-photo #card-inspect-prev {
+  transform: translate(0.7rem, -50%);
+}
+
+.card-inspect-dialog.is-photo #card-inspect-next {
+  transform: translate(calc(-100% - 0.7rem), -50%);
+}
+
+.card-inspect-nav svg {
+  display: block;
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.card-inspect-nav:hover,
+.card-inspect-nav:focus-visible {
+  color: #fff;
+  background: rgba(12, 10, 8, 0.92);
+}
+
 .card-inspect-sheet {
   box-sizing: border-box;
   width: min(32rem, calc(100vw - 1.5rem));

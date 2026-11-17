@@ -397,6 +397,10 @@ describe("embedded HTTP origin", () => {
     expect(html).toContain('id="card-inspect-meta"');
     expect(html).toContain('class="card-inspect-close-form"');
     expect(html).toContain('class="card-inspect-close"');
+    expect(html).toContain('id="card-inspect-prev"');
+    expect(html).toContain('id="card-inspect-next"');
+    expect(html).toContain('aria-label="Previous card"');
+    expect(html).toContain('aria-label="Next card"');
     expect(html).toContain('aria-label="Close"');
     expect(html).toContain('viewBox="0 0 24 24"');
     expect(html).not.toMatch(/class="card-inspect-close"[^>]*>\s*Close\s*</);
@@ -437,6 +441,12 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain(".card-inspect-dialog");
     expect(css).toContain(".card-inspect-description");
     expect(css).toContain(".card-inspect-close-form");
+    expect(css).toContain(".card-inspect-stage");
+    expect(css).toContain(".card-inspect-nav");
+    expect(css).toContain(".card-inspect-nav[hidden]");
+    expect(css).toContain("#card-inspect-prev");
+    expect(css).toContain("#card-inspect-next");
+    expect(html).toContain('class="card-inspect-stage"');
     expect(css).toContain(".card-inspect-dialog.is-photo");
     expect(css).toMatch(
       /\.card-inspect-close-form\s*\{[^}]*top:\s*0\.7rem[^}]*right:\s*0\.7rem/

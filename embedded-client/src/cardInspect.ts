@@ -16,9 +16,31 @@ export type InspectView = {
   layout: InspectLayout;
 };
 
+export type InspectNavDirection = "prev" | "next";
+
+export type InspectNavState = {
+  index: number;
+  hasPrev: boolean;
+  hasNext: boolean;
+};
+
+export type InspectSequenceItem = {
+  card: InspectableCard;
+  imageSrc: string | null;
+  tile: HTMLElement;
+};
+
+export type InspectSession = {
+  items: InspectSequenceItem[];
+  index: number;
+  nav: InspectNavState;
+};
+
 export const HOST_IMAGE_ID_PREFIX = "host-image:";
 export const INSPECT_PHOTO_CLASS = "is-photo";
 export const INSPECT_PHOTO_LABEL = "Enlarged photo";
+export const INSPECT_PREV_LABEL = "Previous card";
+export const INSPECT_NEXT_LABEL = "Next card";
 
 const DIALOG_ID = "card-inspect";
 const ART_ID = "card-inspect-art";
@@ -26,8 +48,12 @@ const PROXY_ID = "card-inspect-proxy";
 const TITLE_ID = "card-inspect-title";
 const CAPTION_ID = "card-inspect-caption";
 const META_ID = "card-inspect-meta";
+const PREV_ID = "card-inspect-prev";
+const NEXT_ID = "card-inspect-next";
 
 let inspectBound = false;
+let inspectItems: InspectSequenceItem[] = [];
+let inspectIndex = 0;
 
 export function isHostThreadImage(card: InspectableCard | null | undefined): boolean {
   const id = typeof card?.id === "string" ? card.id.trim() : "";
@@ -73,12 +99,104 @@ export function inspectView(
   };
 }
 
+export function inspectNavState(count: number, index: number): InspectNavState {
+  const total = Number.isFinite(count) ? Math.trunc(count) : 0;
+  if (total <= 0) return { index: 0, hasPrev: false, hasNext: false };
+  const raw = Number.isFinite(index) ? Math.trunc(index) : 0;
+  const clamped = Math.min(Math.max(0, raw), total - 1);
+  return {
+    index: clamped,
+    hasPrev: clamped > 0,
+    hasNext: clamped < total - 1,
+  };
+}
+
+export function inspectNavIndex(
+  count: number,
+  index: number,
+  direction: InspectNavDirection
+): number | null {
+  const nav = inspectNavState(count, index);
+  if (direction === "prev") return nav.hasPrev ? nav.index - 1 : null;
+  if (direction === "next") return nav.hasNext ? nav.index + 1 : null;
+  return null;
+}
+
+export function inspectKeyDirection(event: {
+  key?: string;
+  altKey?: boolean;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  shiftKey?: boolean;
+}): InspectNavDirection | null {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return null;
+  if (event.key === "ArrowLeft") return "prev";
+  if (event.key === "ArrowRight") return "next";
+  return null;
+}
+
+export function inspectNavDirectionFromDataset(
+  value: string | null | undefined
+): InspectNavDirection | null {
+  return value === "prev" || value === "next" ? value : null;
+}
+
+function cardId(card: InspectableCard | null | undefined): string {
+  return typeof card?.id === "string" ? card.id.trim() : "";
+}
+
+export function inspectSequenceIndex(
+  sequence: InspectSequenceItem[] | null | undefined,
+  card: InspectableCard,
+  tile: HTMLElement
+): number {
+  const list = Array.isArray(sequence) ? sequence : [];
+  if (!list.length) return -1;
+  const byTile = list.findIndex((item) => item?.tile === tile);
+  if (byTile >= 0) return byTile;
+  const id = cardId(card);
+  if (id) {
+    const byId = list.findIndex((item) => cardId(item?.card) === id);
+    if (byId >= 0) return byId;
+  }
+  return list.findIndex((item) => item?.card === card);
+}
+
+export function resolveInspectSession(
+  card: InspectableCard,
+  imageSrc: string | null,
+  tile: HTMLElement,
+  sequence?: InspectSequenceItem[] | null
+): InspectSession {
+  const list = Array.isArray(sequence) ? sequence.filter(Boolean) : [];
+  const index = inspectSequenceIndex(list, card, tile);
+  const items = index >= 0 ? list : [{ card, imageSrc, tile }];
+  const resolvedIndex = index >= 0 ? index : 0;
+  return {
+    items,
+    index: resolvedIndex,
+    nav: inspectNavState(items.length, resolvedIndex),
+  };
+}
+
 function dialogEl(): HTMLDialogElement | null {
   const node = document.getElementById(DIALOG_ID);
   return node instanceof HTMLDialogElement ? node : null;
 }
 
+function isInspectOpen(dialog: HTMLDialogElement | null): boolean {
+  if (!dialog) return false;
+  return Boolean(dialog.open) || dialog.hasAttribute("open");
+}
+
+function resetInspectSession() {
+  inspectItems = [];
+  inspectIndex = 0;
+  syncInspectNav();
+}
+
 export function closeCardInspect() {
+  resetInspectSession();
   const dialog = dialogEl();
   if (!dialog) return;
   if (typeof dialog.close === "function" && dialog.open) {
@@ -88,12 +206,48 @@ export function closeCardInspect() {
   dialog.removeAttribute("open");
 }
 
+function stepInspect(direction: InspectNavDirection) {
+  const next = inspectNavIndex(inspectItems.length, inspectIndex, direction);
+  if (next == null) return;
+  showInspectItem(next);
+}
+
+function syncInspectNav() {
+  const nav = inspectNavState(inspectItems.length, inspectIndex);
+  const prev = document.getElementById(PREV_ID);
+  const next = document.getElementById(NEXT_ID);
+  if (prev) prev.hidden = !nav.hasPrev;
+  if (next) next.hidden = !nav.hasNext;
+}
+
 export function enableCardInspectDialog() {
   const dialog = dialogEl();
   if (!dialog || inspectBound) return;
   inspectBound = true;
   dialog.addEventListener("click", (event) => {
-    if (event.target === dialog) closeCardInspect();
+    const target = event.target;
+    if (target === dialog) {
+      closeCardInspect();
+      return;
+    }
+    const button =
+      target instanceof Element ? target.closest("[data-inspect-nav]") : null;
+    if (!(button instanceof HTMLElement)) return;
+    const direction = inspectNavDirectionFromDataset(button.dataset.inspectNav);
+    if (!direction) return;
+    event.preventDefault();
+    event.stopPropagation();
+    stepInspect(direction);
+  });
+  dialog.addEventListener("close", () => {
+    resetInspectSession();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (!isInspectOpen(dialogEl())) return;
+    const direction = inspectKeyDirection(event);
+    if (!direction) return;
+    event.preventDefault();
+    stepInspect(direction);
   });
 }
 
@@ -149,16 +303,28 @@ function fillInspectDom(
   }
 }
 
+function showInspectItem(index: number) {
+  const item = inspectItems[index];
+  if (!item) return;
+  inspectIndex = index;
+  const face = item.tile?.querySelector?.(".card-face");
+  fillInspectDom(item.card, item.imageSrc, face instanceof HTMLElement ? face : null);
+  syncInspectNav();
+}
+
 export function openCardInspect(
   card: InspectableCard,
   imageSrc: string | null,
-  tile: HTMLElement
+  tile: HTMLElement,
+  sequence?: InspectSequenceItem[] | null
 ) {
   enableCardInspectDialog();
   const dialog = dialogEl();
   if (!dialog) return;
-  const face = tile.querySelector(".card-face");
-  fillInspectDom(card, imageSrc, face instanceof HTMLElement ? face : null);
+  const session = resolveInspectSession(card, imageSrc, tile, sequence);
+  inspectItems = session.items;
+  inspectIndex = session.index;
+  showInspectItem(inspectIndex);
   try {
     if (!dialog.open) dialog.showModal();
   } catch {
