@@ -308,22 +308,13 @@ describe("slash command definition contracts", () => {
     ]);
   });
 
-  test("/visual is a guild-only launch command with an optional bridge channel", () => {
-    const { ChannelType } = require("discord.js");
+  test("/visual is a guild-only launch command with no options", () => {
     const Visual = require("../slashcommands/genericgame/visual");
     const command = new Visual(stubClient);
     const json = command.data.toJSON();
     expect(json.name).toBe("visual");
     expect(json.dm_permission).toBe(false);
-    expect(json.options).toHaveLength(1);
-    expect(json.options[0]).toMatchObject({
-      name: "channel",
-      required: false,
-    });
-    expect(json.options[0].channel_types).toEqual([
-      ChannelType.GuildText,
-      ChannelType.GuildAnnouncement,
-    ]);
+    expect(json.options ?? []).toHaveLength(0);
   });
 
   test("/winshare gamechannel accepts text channels, threads, and forum posts", () => {
