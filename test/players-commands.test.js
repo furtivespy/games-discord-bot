@@ -89,6 +89,8 @@ describe("/players command handlers", () => {
         expect(saved.players[0].score).toBe("17");
         expect(saved.players[1].score).toBe("");
         expect(harness.lastContent()).toContain("score to: 17");
+        expect(saved.history.at(-1).action.type).toBe("score");
+        expect(saved.history.at(-1).summary).toContain("score to 17");
       }
     );
   });

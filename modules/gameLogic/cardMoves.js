@@ -1,8 +1,8 @@
 "use strict";
 
-const GameDB = require("../db/anygame.js");
-const GameHelper = require("./GlobalGameHelper");
-const Shuffle = require("../subcommands/cards/shuffle");
+const GameDB = require("../../db/anygame.js");
+const GameHelper = require("../GlobalGameHelper");
+const Shuffle = require("../../subcommands/cards/shuffle");
 
 function actorDisplayName(actor) {
   const display =

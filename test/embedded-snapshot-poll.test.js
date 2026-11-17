@@ -56,6 +56,7 @@ describe("isSnapshotPollBlocked", () => {
       isSnapshotPollBlocked(fakeDoc([".card-tile.dragging, .card-tile.snapping"]))
     ).toBe(true);
     expect(isSnapshotPollBlocked(fakeDoc(["dialog[open]"]))).toBe(true);
+    expect(isSnapshotPollBlocked(fakeDoc([".status-scores-editing"]))).toBe(true);
     expect(isSnapshotPollBlocked(fakeDoc(["[data-zoom-modal]"]))).toBe(false);
     expect(isSnapshotPollBlocked(fakeDoc([".card-zoom-modal"]))).toBe(false);
   });

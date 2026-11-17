@@ -8,8 +8,10 @@ const {
   applyVisualCardAction,
   createActionIdempotencyCache,
   drainLockedVisualActions,
+  applyVisualScoreAction,
   parseVisualActionBody,
   runVisualCardAction,
+  runVisualScoreAction,
   visualActionErrorMessage,
 } = require("../modules/embeddedActions");
 const GameDB = require("../db/anygame");
@@ -78,12 +80,23 @@ describe("parseVisualActionBody", () => {
     expect(parseVisualActionBody({ action: "shuffle", deck: "Main", count: 1 })).toEqual({
       error: "invalid_action",
       status: 400,
-      message: "Deal and Draw are the only visual actions.",
+      message: "Deal, Draw, and Edit Scores are the only visual actions.",
     });
     expect(parseVisualActionBody({ action: "deal", count: 1 })).toEqual({
       error: "missing_deck",
       status: 400,
       message: "Pick a deck first.",
+    });
+    expect(
+      parseVisualActionBody({
+        action: "scores",
+        scores: { "user-1": "12", "user-2": 7 },
+        requestId: "req-score-1",
+      })
+    ).toEqual({
+      action: "scores",
+      scores: { "user-1": "12", "user-2": "7" },
+      requestId: "req-score-1",
     });
     expect(parseVisualActionBody({ action: "deal", deck: "Main", count: 0 })).toEqual({
       error: "invalid_count",
@@ -143,6 +156,27 @@ describe("applyVisualCardAction", () => {
       status: 403,
       error: "not_a_player",
     });
+  });
+});
+
+describe("applyVisualScoreAction", () => {
+  test("follows /players scoreall modal submit using shared playerScores logic", () => {
+    const game = gameWithDeck();
+    game.players[0].score = "1";
+    game.players[1].score = "";
+    const applied = applyVisualScoreAction(game, {
+      scores: { "snowflake-user": "21", "other-player": "9" },
+      actor,
+    });
+    expect(applied.ok).toBe(true);
+    expect(applied.changed).toBe(true);
+    expect(applied.content).toBe("Player scores updated successfully.");
+    expect(game.players[0].score).toBe("21");
+    expect(game.players[1].score).toBe("9");
+    expect(game.history.at(-1).summary).toBe(
+      "Will updated player scores:\nWill's score changed from 1 to 21\nRiley's score changed from 0 to 9"
+    );
+    expect(game.history.at(-1).action).toEqual({ category: "player", type: "score" });
   });
 });
 
@@ -749,6 +783,32 @@ describe("runVisualCardAction", () => {
     await drainLockedVisualActions();
     expect(posted).toHaveLength(1);
     expect(posted[0].content).toContain("Dealt out a total of 2 cards from Main.");
+  });
+
+  test("scores save uses applyPlayerScores, persists, and posts the scoreall message", async () => {
+    const game = gameWithDeck();
+    game.players[0].score = "1";
+    const { posted, store, discordClient } = clientForGame(game);
+    const result = await runVisualScoreAction({
+      scores: { "snowflake-user": "21", "other-player": "9" },
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+    });
+    await drainLockedVisualActions();
+
+    expect(result.status).toBe(200);
+    expect(result.body.message).toBe("Player scores updated successfully.");
+    expect(result.body.status.players.map((player) => player.score)).toEqual([
+      "21",
+      "9",
+    ]);
+    expect(posted[0].content).toContain("Player scores updated successfully.");
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.players[0].score).toBe("21");
+    expect(saved.players[1].score).toBe("9");
+    expect(saved.history.at(-1).action.type).toBe("score");
   });
 });
 

@@ -2,6 +2,7 @@ const GameHelper = require('../modules/GlobalGameHelper');
 const GameDB = require('../db/anygame.js');
 const GameStatusHelper = require('../modules/GameStatusHelper');
 const DeckEditCardModal = require('../modules/DeckEditCardModal');
+const PlayerScores = require('../modules/gameLogic/playerScores');
 const { cloneDeep } = require('lodash');
 const { nanoid } = require('nanoid');
 
@@ -72,38 +73,30 @@ module.exports = {
                 return;
             }
 
-            let changes = [];
-
+            const scores = {};
+            const playerNames = {};
             for (const player of gameData.players) {
                 const newScore = interaction.fields.getTextInputValue(`score-${player.userId}`);
+                scores[player.userId] = newScore;
                 if (newScore && player.score !== newScore) {
-                    const oldScore = player.score;
-                    player.score = newScore;
                     const member = await interaction.guild.members.fetch(player.userId);
-                    const playerName = member ? member.displayName : `Player ${player.userId}`;
-                    changes.push({ playerName, oldScore, newScore });
+                    playerNames[player.userId] = member ? member.displayName : `Player ${player.userId}`;
                 }
             }
 
-            if (changes.length > 0) {
-                const actorDisplayName = interaction.member?.displayName || interaction.user.username;
-                let historyMessage = `${actorDisplayName} updated player scores:\n`;
-                historyMessage += changes.map(c => `${c.playerName}'s score changed from ${c.oldScore || '0'} to ${c.newScore}`).join('\n');
+            const result = PlayerScores.applyPlayerScores(gameData, {
+                scores,
+                actor: interaction.user,
+                actorDisplayName: interaction.member?.displayName || interaction.user.username,
+                playerNames,
+            });
 
-                GameHelper.recordMove(
-                    gameData,
-                    interaction.user,
-                    GameDB.ACTION_CATEGORIES.PLAYER,
-                    GameDB.ACTION_TYPES.SCORE,
-                    historyMessage,
-                    { changes }
-                );
-
+            if (result.changed) {
                 await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
             }
 
             await GameStatusHelper.sendGameStatus(interaction, interaction.client, gameData, {
-                content: `Player scores updated successfully.`
+                content: result.content
             });
         } else if (interaction.customId === 'team-roster-modal') {
             const [, gameData] = await Promise.all([

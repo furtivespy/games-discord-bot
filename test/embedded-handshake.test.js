@@ -34,6 +34,13 @@ const {
   visualActionErrorMessage,
 } = require("../embedded-client/src/visualActions.ts");
 const {
+  EDIT_SCORES_LABEL,
+  SAVE_SCORES_LABEL,
+  SCORE_EDITING_CLASS,
+  collectScoreInputs,
+  visualScoreBody,
+} = require("../embedded-client/src/scoreEdit.ts");
+const {
   CLICK_SLOP_PX,
   SNAP_BACK_DURATION_MS,
   STACK_ABOVE_HOVER,
@@ -153,6 +160,8 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("onDeckActionButtonClick");
     expect(main).toContain("openActionDialog");
     expect(main).toContain("submitDeckAction");
+    expect(main).toContain("submitScoreEdits");
+    expect(main).toContain("visualScoreBody");
     const submitDeckAction = main.slice(
       main.indexOf("async function submitDeckAction"),
       main.indexOf("function bindActionDialog")
@@ -358,8 +367,15 @@ describe("visual table layout helpers", () => {
     expect(main).not.toContain("statusGameTitle");
     expect(main).not.toContain("status-title");
     expect(main).not.toContain("status-player-meta");
-    expect(main).toContain("statusPlayerSeatName");
+    expect(main).toContain("renderPlayerScoreBlock");
     expect(main).toContain("groupPlayersByTeam");
+    const scoreEdit = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "embedded-client", "src", "scoreEdit.ts"),
+      "utf8"
+    );
+    expect(scoreEdit).toContain("statusPlayerSeatName");
+    expect(scoreEdit).toContain("EDIT_SCORES_LABEL");
+    expect(scoreEdit).toContain("SAVE_SCORES_LABEL");
   });
 
   test("groups board players by roster team and keeps a flat row without teams", () => {
@@ -1046,6 +1062,38 @@ describe("deck hover Deal and Draw", () => {
     expect(actionRequestUrl("gamebot.example.com", "https:")).toBe(
       "https://gamebot.example.com/api/game/action"
     );
+  });
+
+  test("Edit Scores posts the shared scores action body", () => {
+    expect(EDIT_SCORES_LABEL).toBe("Edit Scores");
+    expect(SAVE_SCORES_LABEL).toBe("Save");
+    expect(SCORE_EDITING_CLASS).toBe("status-scores-editing");
+    expect(
+      visualScoreBody({
+        scores: { "mock-user-1": "21", "other-player-2": "9" },
+        channelId: "newest-thread",
+        guildId: "mock-guild",
+        requestId: "req-score-123",
+        fixture: "several-games",
+      })
+    ).toEqual({
+      action: "scores",
+      scores: { "mock-user-1": "21", "other-player-2": "9" },
+      channelId: "newest-thread",
+      guildId: "mock-guild",
+      requestId: "req-score-123",
+      fixture: "several-games",
+    });
+    expect(
+      collectScoreInputs({
+        querySelectorAll() {
+          return [
+            { dataset: { userId: "mock-user-1" }, value: "21" },
+            { dataset: { userId: "other-player-2" }, value: "9" },
+          ];
+        },
+      })
+    ).toEqual({ "mock-user-1": "21", "other-player-2": "9" });
   });
 
   test("game channel link uses the selected guild and channel ids", () => {

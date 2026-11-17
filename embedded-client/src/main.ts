@@ -58,6 +58,13 @@ import {
 import { SNAP_BACK_DURATION_MS, enableCardDrag, type CardOffset } from "./drag";
 import { enableHoverZoomClamp } from "./hoverZoom";
 import { closeCardInspect, enableCardInspectDialog, openCardInspect } from "./cardInspect";
+import {
+  clearScoreEditLock,
+  renderPlayerScoreBlock,
+  visualScoreBody,
+  type PlayerScoreBlock,
+  type ScoreMap,
+} from "./scoreEdit";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
 import { asCardList, createSnapshotLoader, shouldApplySnapshot } from "./requestSeq";
@@ -70,8 +77,6 @@ import {
   groupPlayersByTeam,
   handCountLabel,
   initialsFromName,
-  statusPlayerScoreLabel,
-  statusPlayerSeatName,
   suitColorClass,
   suitGlyph,
   visibleDecks,
@@ -107,6 +112,7 @@ let appliedChannelId = "";
 let appliedHistoryKeys: string[] = [];
 let cardPositions = new Map<string, CardOffset>();
 let pendingSnapshot: { config: EmbeddedConfig; payload: GameSnapshot } | null = null;
+let playerScoreBlock: PlayerScoreBlock | null = null;
 let historyFlashTimer: ReturnType<typeof setTimeout> | null = null;
 let snapshotPoller: ReturnType<typeof createSnapshotPoller> | null = null;
 let snapshotPollVisibilityBound = false;
@@ -224,6 +230,11 @@ function setDeckActionsLocked(locked: boolean) {
   document.querySelectorAll<HTMLButtonElement>("button.deck-action").forEach((button) => {
     button.disabled = locked;
   });
+  document
+    .querySelectorAll<HTMLButtonElement>("button.status-edit-scores")
+    .forEach((button) => {
+      button.disabled = locked;
+    });
   const select = document.getElementById("game-select") as HTMLSelectElement | null;
   if (select) select.disabled = locked;
   const { confirm } = actionDialogElements();
@@ -604,6 +615,82 @@ async function submitDeckAction(kind: DeckActionKind, deckName: string, count: n
     setActionNotice(payload.channelPosted === false ? CHANNEL_POST_FAILED_NOTICE : null);
   } catch {
     reopenWithError(visualActionErrorMessage("action_failed"));
+  } finally {
+    actionRequestId = null;
+    setDeckActionsLocked(false);
+  }
+}
+
+async function submitScoreEdits(scores: ScoreMap) {
+  const session = activeSession;
+  const block = playerScoreBlock;
+  if (!session) {
+    block?.setError("Could not reach the game.");
+    return;
+  }
+  if (actionInFlight) return;
+  const channelId = liveSelectedChannelId(session.config.channelId);
+  const guildId = session.guildId || session.config.guildId;
+  actionRequestId = newActionRequestId();
+  setDeckActionsLocked(true);
+  block?.setSaving(true);
+  block?.setError(null);
+  const stillThisGame = () =>
+    shouldApplySnapshot({
+      isCurrent: true,
+      selectedChannelId: liveSelectedChannelId(session.config.channelId),
+      requestedChannelId: channelId,
+    });
+  const failWith = (message: string) => {
+    if (!stillThisGame()) return;
+    setDeckActionsLocked(false);
+    block?.setSaving(false);
+    block?.setError(message);
+  };
+  try {
+    const response = await fetch(
+      actionRequestUrl(session.config.apiHost, window.location.protocol),
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(
+          visualScoreBody({
+            scores,
+            channelId,
+            guildId,
+            requestId: actionRequestId,
+            fixture: session.config.mock ? readFixture() : undefined,
+          })
+        ),
+      }
+    );
+    let payload: GameSnapshot & {
+      message?: string;
+      error?: string;
+      channelPosted?: boolean;
+    } = {};
+    try {
+      payload = (await response.json()) as GameSnapshot & {
+        message?: string;
+        error?: string;
+        channelPosted?: boolean;
+      };
+    } catch {
+      payload = {};
+    }
+    if (!response.ok) {
+      failWith(visualActionErrorMessage(payload.error, payload.message));
+      return;
+    }
+    if (!stillThisGame()) return;
+    clearScoreEditLock(document);
+    applySnapshot(session.config, payload);
+    setActionNotice(payload.channelPosted === false ? CHANNEL_POST_FAILED_NOTICE : null);
+  } catch {
+    failWith(visualActionErrorMessage("action_failed"));
   } finally {
     actionRequestId = null;
     setDeckActionsLocked(false);
@@ -1032,28 +1119,12 @@ function renderGameStatus(
   }
 
   const players = asRecordList<StatusPlayer>(data.players);
+  playerScoreBlock = null;
   if (players.length) {
-    const block = document.createElement("section");
-    block.className = "status-block";
-    const heading = document.createElement("h3");
-    heading.textContent = "Players";
-    block.append(heading);
-    for (const player of players) {
-      const row = document.createElement("div");
-      row.className = `status-player${player.isYou ? " is-you" : ""}`;
-      if (player.color) {
-        row.style.borderLeft = `4px solid ${player.color}`;
-        row.style.paddingLeft = "0.45rem";
-      }
-      const name = document.createElement("div");
-      name.className = "status-player-name";
-      name.textContent = statusPlayerSeatName(player);
-      const score = document.createElement("p");
-      score.className = "status-player-score";
-      score.textContent = statusPlayerScoreLabel(player);
-      row.append(name, score);
-      block.append(row);
-    }
+    const block = renderPlayerScoreBlock(players, {
+      onSave: submitScoreEdits,
+    });
+    playerScoreBlock = block;
     root.append(block);
   }
 
@@ -1231,6 +1302,11 @@ async function loadSnapshot(
 }
 
 function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot): boolean {
+  const incomingChannelId =
+    typeof payload.channelId === "string" ? payload.channelId.trim() : "";
+  if (incomingChannelId && incomingChannelId !== appliedChannelId) {
+    clearScoreEditLock(document);
+  }
   if (isSnapshotPollBlocked(document)) {
     pendingSnapshot = { config, payload };
     return false;
@@ -1240,8 +1316,7 @@ function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot): boolean {
   setSnapshotStatus(null);
   closeCardInspect();
   if (payload.channelPosted !== false) setActionNotice(null);
-  const channelId =
-    typeof payload.channelId === "string" ? payload.channelId.trim() : "";
+  const channelId = incomingChannelId;
   const history = asRecordList<StatusHistory>(payload.status?.history);
   const nextKeys = history.map((entry) => historyEntryKey(entry)).filter(Boolean);
   const highlightKeys =

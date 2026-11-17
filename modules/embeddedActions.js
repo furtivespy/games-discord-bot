@@ -4,7 +4,8 @@ const { cloneDeep } = require("lodash");
 const GameDB = require("../db/anygame");
 const GameHelper = require("./GlobalGameHelper");
 const GameStatusHelper = require("./GameStatusHelper");
-const CardMoves = require("./cardMoves");
+const CardMoves = require("./gameLogic/cardMoves");
+const PlayerScores = require("./gameLogic/playerScores");
 const { parseActionCount } = require("./actionCount");
 const {
   ACTION_ERROR_MESSAGES: SHARED_ACTION_ERROR_MESSAGES,
@@ -20,7 +21,7 @@ const {
   userIsPlayer,
 } = require("./embeddedGames");
 
-const VISUAL_ACTIONS = new Set(["deal", "draw"]);
+const VISUAL_ACTIONS = new Set(["deal", "draw", "scores"]);
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 const ACTION_IDEMPOTENCY_MAX = 500;
 const ACTION_ERROR_MESSAGES = Object.freeze({
@@ -64,6 +65,34 @@ function displayNameFromGuildMember(member) {
   return displayNameFromDiscordUser(member.user);
 }
 
+function parseVisualScoreMap(value) {
+  const scores = {};
+  if (Array.isArray(value)) {
+    for (const row of value) {
+      if (!row || typeof row !== "object") continue;
+      const id = String(row.userId || "").trim();
+      if (!id) continue;
+      scores[id] = row.score == null ? "" : String(row.score);
+    }
+    return scores;
+  }
+  if (!value || typeof value !== "object") return scores;
+  for (const [userId, score] of Object.entries(value)) {
+    const id = String(userId || "").trim();
+    if (!id) continue;
+    scores[id] = score == null ? "" : String(score);
+  }
+  return scores;
+}
+
+function scoresIdempotencyKey(scores) {
+  const map = parseVisualScoreMap(scores);
+  return Object.keys(map)
+    .sort()
+    .map((id) => `${id}=${map[id]}`)
+    .join("&");
+}
+
 function parseVisualActionBody(body = {}) {
   const action = String(body.action || "").trim().toLowerCase();
   if (!VISUAL_ACTIONS.has(action)) {
@@ -71,6 +100,14 @@ function parseVisualActionBody(body = {}) {
       error: "invalid_action",
       status: 400,
       message: ACTION_ERROR_MESSAGES.invalid_action,
+    };
+  }
+  const requestId = parseVisualActionRequestId(body.requestId);
+  if (action === "scores") {
+    return {
+      action,
+      scores: parseVisualScoreMap(body.scores),
+      requestId,
     };
   }
   const deckName = typeof body.deck === "string" ? body.deck.trim() : "";
@@ -93,7 +130,7 @@ function parseVisualActionBody(body = {}) {
     action,
     deckName,
     count,
-    requestId: parseVisualActionRequestId(body.requestId),
+    requestId,
   };
 }
 
@@ -237,6 +274,19 @@ function applyVisualCardAction(gameData, { action, deckName, count, actor, userI
     return { ok: false, status, error: result.error, content: result.content };
   }
   return { ok: true, content: result.content };
+}
+
+function applyVisualScoreAction(gameData, { scores, actor } = {}) {
+  const result = PlayerScores.applyPlayerScores(gameData, {
+    scores,
+    actor,
+    actorDisplayName: actor?.displayName,
+  });
+  return {
+    ok: true,
+    content: result.content,
+    changed: result.changed,
+  };
 }
 
 /**
@@ -412,6 +462,7 @@ async function runVisualCardAction({
   fetchImpl,
   botToken,
   hostImageCache,
+  mutateOnce,
 } = {}) {
   const gid = String(guildId || "").trim();
   const cid = String(channelId || "").trim();
@@ -440,19 +491,30 @@ async function runVisualCardAction({
     trackLockedVisualAction(() =>
       lock.run(gid, cid, async () => {
         try {
-          const persisted = await runVisualCardActionOnce({
-            action,
-            deckName,
-            count,
-            actor,
-            guildId: gid,
-            channelId: cid,
-            userId: uid,
-            getGameData,
-            discordClient,
-            gameStore,
-            logger,
-          });
+          const persisted = await (typeof mutateOnce === "function"
+            ? mutateOnce({
+                actor,
+                guildId: gid,
+                channelId: cid,
+                userId: uid,
+                getGameData,
+                discordClient,
+                gameStore,
+                logger,
+              })
+            : runVisualCardActionOnce({
+                action,
+                deckName,
+                count,
+                actor,
+                guildId: gid,
+                channelId: cid,
+                userId: uid,
+                getGameData,
+                discordClient,
+                gameStore,
+                logger,
+              }));
           if (persisted.status !== 200) {
             releaseHttp.resolve(persisted);
             return persisted;
@@ -607,17 +669,119 @@ async function runVisualCardActionOnce({
   return { status: 200, gameData, applied };
 }
 
+async function runVisualScoreActionOnce({
+  scores,
+  actor,
+  guildId,
+  channelId,
+  getGameData,
+  discordClient,
+  gameStore,
+  logger,
+}) {
+  const loader = resolveGetGameData({ getGameData, discordClient, gameStore });
+  if (!loader) {
+    return errorBody("no_game", 404);
+  }
+
+  let gameData = null;
+  try {
+    gameData = await loader(guildId, GAME_COLLECTION, channelId);
+  } catch (err) {
+    logger?.log?.(
+      `Failed to load game for visual-mode action: ${err.message || err}`,
+      "error"
+    );
+    return errorBody("action_failed", 500);
+  }
+
+  if (isMissingGame(gameData)) {
+    return errorBody("no_game", 404);
+  }
+
+  const applied = applyVisualScoreAction(gameData, { scores, actor });
+  if (!applied.ok) {
+    return errorBody(applied.error, applied.status, applied.content);
+  }
+
+  if (applied.changed) {
+    try {
+      await persistGameData({
+        discordClient,
+        gameStore,
+        guildId,
+        channelId,
+        gameData,
+      });
+    } catch (err) {
+      logger?.log?.(
+        `Failed to save visual-mode action: ${err.message || err}`,
+        "error"
+      );
+      return errorBody("action_failed", 500);
+    }
+  }
+
+  return { status: 200, gameData, applied };
+}
+
+async function runVisualScoreAction({
+  scores,
+  user,
+  member,
+  guildId,
+  channelId,
+  getGameData,
+  discordClient,
+  gameStore,
+  logger,
+  requestId,
+  idempotency,
+  gameChannelLock,
+  fetchImpl,
+  botToken,
+  hostImageCache,
+} = {}) {
+  return runVisualCardAction({
+    action: "scores",
+    deckName: scoresIdempotencyKey(scores),
+    count: "",
+    user,
+    member,
+    guildId,
+    channelId,
+    getGameData,
+    discordClient,
+    gameStore,
+    logger,
+    requestId,
+    idempotency,
+    gameChannelLock,
+    fetchImpl,
+    botToken,
+    hostImageCache,
+    mutateOnce: (ctx) =>
+      runVisualScoreActionOnce({
+        scores,
+        ...ctx,
+      }),
+  });
+}
+
 module.exports = {
   ACTION_ERROR_MESSAGES,
   ACTION_IDEMPOTENCY_MAX,
   actorFromDiscordUser,
   applyVisualCardAction,
+  applyVisualScoreAction,
   createActionIdempotencyCache,
   createGameChannelLock,
   drainLockedVisualActions,
   parseVisualActionBody,
   parseVisualActionRequestId,
   postCommandToGameChannel,
+  scoresIdempotencyKey,
   runVisualCardAction,
+  runVisualScoreAction,
   visualActionErrorMessage,
 };
