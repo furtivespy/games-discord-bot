@@ -87,6 +87,7 @@ function materializeDeck(instanceDeckName, templateId, options = {}) {
     ok: true,
     name: template.name,
     cards: cardsFromTemplate(instanceDeckName, template),
+    backUrl: template.backUrl || null,
   };
 }
 

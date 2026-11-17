@@ -145,6 +145,7 @@ describe("help catalog (FUR-95)", () => {
     expect(catalog.toLowerCase()).toContain("owner-only");
     expect(catalog).toContain("/catalog list");
     expect(catalog).toContain("/catalog publish");
+    expect(catalog).toContain("/catalog setback");
   });
 
   test("admin commands are labeled", () => {
@@ -206,6 +207,9 @@ describe("help catalog (FUR-95)", () => {
     expect(decks).toContain("/cards deck addlist");
     expect(decks).toContain("/cards deck editcard");
     expect(decks).toContain("/cards deck new");
+    expect(decks).toContain("/cards deck configure");
+    expect(decks).toContain("Deck Back Image");
+    expect(decks).toContain("/catalog setback");
     expect(decks).not.toContain("Not Avaialbe Yet");
     expect(decks.toLowerCase()).not.toMatch(/editcard[^\n]*coming soon/);
   });

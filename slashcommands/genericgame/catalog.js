@@ -5,6 +5,8 @@ const Show = require("../../subcommands/catalog/show.js");
 const Disable = require("../../subcommands/catalog/disable.js");
 const Enable = require("../../subcommands/catalog/enable.js");
 const Publish = require("../../subcommands/catalog/publish.js");
+const SetBack = require("../../subcommands/catalog/setback.js");
+const DeckBack = require("../../modules/DeckBack");
 const {
   catalogEmbed,
   isBotOwner,
@@ -92,6 +94,25 @@ class Catalog extends SlashCommand {
               .setMinLength(1)
               .setMaxLength(100)
           )
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName("setback")
+          .setDescription("Set or clear a catalog template's deck back image")
+          .addStringOption((option) =>
+            option
+              .setName("id")
+              .setDescription("Catalog template id")
+              .setRequired(true)
+              .setAutocomplete(true)
+          )
+          .addStringOption((option) =>
+            option
+              .setName("url")
+              .setDescription("https image URL, or clear for the default back")
+              .setRequired(true)
+              .setMaxLength(DeckBack.IMAGE_URL_MAX)
+          )
       );
   }
 
@@ -119,6 +140,9 @@ class Catalog extends SlashCommand {
           break;
         case "publish":
           await Publish.execute(interaction, this.client);
+          break;
+        case "setback":
+          await SetBack.execute(interaction, this.client);
           break;
         default:
           await interaction.reply({

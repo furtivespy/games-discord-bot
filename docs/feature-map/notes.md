@@ -30,7 +30,7 @@ Deck, hand, draft, pile, play area, game board and deck-builder actions for the 
 
 ## /catalog
 
-Bot Owner tools for the shared deck catalog: list, show, publish, enable and disable decks.
+Bot Owner tools for the shared deck catalog: list, show, publish, setback, enable and disable decks.
 
 - Seed: catalog rows in the bot-wide store; `publish` also needs a game with a deck.
 - Reach: `test/catalog-commands.test.js` shows how the catalog store is seeded. Bot Owner gating is checked against `client.config.botOwnerId`.

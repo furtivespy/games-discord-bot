@@ -309,6 +309,7 @@ describe("/catalog command handlers", () => {
         expect(text).toContain("Enabled");
         expect(text).toContain("52 cards");
         expect(text).toContain("Layout A");
+        expect(text).toContain("Deck back: default");
         expect(text).toContain("• A of ♣");
         expect(text).toContain("• K of ♠");
         expect(harness.calls.deferReply).toHaveLength(1);
@@ -446,6 +447,145 @@ describe("/catalog command handlers", () => {
 
         await runCatalog(harness);
         expect(harness.lastContent()).toContain("already exists");
+      }
+    );
+  });
+
+  test("publish copies an in-game deck back onto the new template", async () => {
+    const cards = [createCard({ id: "c1", name: "Ace", origin: "Main" })];
+    const gameData = gameWithDeck(cards);
+    gameData.decks[0].backUrl = "https://example.test/published-back.png";
+    await withHarness(
+      {
+        user: OWNER,
+        gameData,
+        options: {
+          subcommand: "publish",
+          strings: {
+            deck: "Main",
+            id: "backed-set",
+            name: "Backed Set",
+          },
+        },
+      },
+      async (harness) => {
+        insertSeededCatalogFixtures();
+        await runCatalog(harness);
+        expect(harness.lastContent()).toContain("Published `backed-set`");
+        expect(harness.lastContent()).toContain(
+          "Deck back: https://example.test/published-back.png"
+        );
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        try {
+          expect(catalog.getTemplate("backed-set").backUrl).toBe(
+            "https://example.test/published-back.png"
+          );
+        } finally {
+          catalog.close();
+        }
+      }
+    );
+  });
+
+  test("setback sets and clears a catalog template back without rewriting cards", async () => {
+    await withHarness(
+      {
+        user: OWNER,
+        options: {
+          subcommand: "setback",
+          strings: {
+            id: "standard",
+            url: "https://example.test/standard-back.png",
+          },
+        },
+      },
+      async (harness) => {
+        insertSeededCatalogFixtures();
+        let before;
+        {
+          const snapshot = new DeckCatalog({ dataDir: harness.dataDir });
+          before = snapshot.getTemplate("standard");
+          snapshot.close();
+        }
+
+        await runCatalog(harness);
+        expect(harness.lastContent()).toContain("Set `standard` deck back");
+        expect(harness.lastContent()).toContain("https://example.test/standard-back.png");
+        expect(harness.lastContent()).toContain("Live games are unchanged");
+
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        try {
+          const updated = catalog.getTemplate("standard");
+          expect(updated.backUrl).toBe("https://example.test/standard-back.png");
+          expect(updated.cards).toEqual(before.cards);
+          expect(updated.name).toBe(before.name);
+        } finally {
+          catalog.close();
+        }
+
+        harness.interaction.options.getSubcommand = () => "show";
+        harness.interaction.options.getString = (name) =>
+          name === "id" ? "standard" : null;
+        await runCatalog(harness);
+        expect(harness.lastContent()).toContain(
+          "Deck back: https://example.test/standard-back.png"
+        );
+
+        harness.interaction.options.getSubcommand = () => "setback";
+        harness.interaction.options.getString = (name) => {
+          if (name === "id") return "standard";
+          if (name === "url") return "clear";
+          return null;
+        };
+        await runCatalog(harness);
+        expect(harness.lastContent()).toContain("Cleared `standard`");
+        const after = new DeckCatalog({ dataDir: harness.dataDir });
+        try {
+          expect(after.getTemplate("standard").backUrl).toBeNull();
+          expect(after.getTemplate("standard").cards).toEqual(before.cards);
+        } finally {
+          after.close();
+        }
+      }
+    );
+  });
+
+  test("setback rejects an unknown id and an invalid url", async () => {
+    await withHarness(
+      {
+        user: OWNER,
+        options: {
+          subcommand: "setback",
+          strings: { id: "missing", url: "https://example.test/back.png" },
+        },
+      },
+      async (harness) => {
+        insertSeededCatalogFixtures();
+        await runCatalog(harness);
+        expect(harness.lastContent()).toContain('No catalog template with id "missing"');
+      }
+    );
+
+    await withHarness(
+      {
+        user: OWNER,
+        options: {
+          subcommand: "setback",
+          strings: { id: "standard", url: "ftp://example.test/back.png" },
+        },
+      },
+      async (harness) => {
+        insertSeededCatalogFixtures();
+        await runCatalog(harness);
+        expect(harness.lastContent()).toContain(
+          "Deck back URL must be a valid http or https URL"
+        );
+        const catalog = new DeckCatalog({ dataDir: harness.dataDir });
+        try {
+          expect(catalog.getTemplate("standard").backUrl).toBeNull();
+        } finally {
+          catalog.close();
+        }
       }
     );
   });

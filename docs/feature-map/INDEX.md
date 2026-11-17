@@ -30,7 +30,7 @@ Inspect and publish global deck catalog templates (Bot Owner)
 - Permission: Bot Owner
 - Handlers: `subcommands/catalog/`
 - Tests: `test/catalog-commands.test.js`, `test/slash-command-contracts.test.js`
-- Subcommands: `list`, `show`, `disable`, `enable`, `publish`
+- Subcommands: `list`, `show`, `disable`, `enable`, `publish`, `setback`
 
 ## /choose
 

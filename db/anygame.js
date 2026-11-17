@@ -89,6 +89,7 @@ class GameDatabase {
         allCards: [],
         shuffleStyle: "standard",
         hiddenInfo: "visible",
+        backUrl: null,
         piles: {
             draw: { cards: [], viewable: false },
             discard: { cards: [], viewable: true },

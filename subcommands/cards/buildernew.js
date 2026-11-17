@@ -3,6 +3,7 @@ const GameHelper = require('../../modules/GlobalGameHelper')
 const { find, cloneDeep, shuffle } = require('lodash')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
 const { materializeDeck, readEnabledTemplate, UNKNOWN_OR_DISABLED_CARD_SET } = require('../../db/catalogDecks.js')
+const DeckBack = require('../../modules/DeckBack')
 const haiku = require('haikunator')
 
 class builderNew {
@@ -49,6 +50,7 @@ class builderNew {
           return
         }
         newDeck.allCards = playerCards.cards;
+        DeckBack.applyBackUrl(newDeck, playerCards.backUrl);
         newDeck.piles.draw.cards = cloneDeep(shuffle(newDeck.allCards));
         gameData.decks.push(newDeck);
       }
@@ -64,6 +66,7 @@ class builderNew {
         return
       }
       newDeck.allCards = supplyCards.cards;
+      DeckBack.applyBackUrl(newDeck, supplyCards.backUrl);
       newDeck.piles.draw.cards = cloneDeep(shuffle(newDeck.allCards));
       gameData.decks.push(newDeck);
 

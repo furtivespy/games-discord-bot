@@ -7,6 +7,7 @@ const {
   canonicalDisplayName,
   sqliteUniqueField,
 } = require("./deckCatalog.js");
+const DeckBack = require("../modules/DeckBack");
 
 const CATALOG_ID_PATTERN = /^[a-z0-9-]{1,100}$/;
 
@@ -152,6 +153,7 @@ function buildPublishPayload({ id, name, allCards, deck, players, createdBy }) {
       cards: cardsCheck.cards,
       createdBy: createdBy == null ? "" : String(createdBy),
       enabled: 1,
+      backUrl: DeckBack.readBackUrl(deck),
     },
   };
 }
@@ -203,6 +205,7 @@ function publishToCatalog(catalog, input) {
       cards: built.payload.cards,
       createdBy: built.payload.createdBy,
       enabled: 1,
+      backUrl: built.payload.backUrl,
     });
 
     return {

@@ -157,6 +157,7 @@ describe("slash command definition contracts", () => {
       "disable",
       "enable",
       "publish",
+      "setback",
     ]);
     expect(subcommands.show.options.find((option) => option.name === "id")).toMatchObject({
       required: true,
@@ -177,6 +178,12 @@ describe("slash command definition contracts", () => {
     expect(
       subcommands.publish.options.find((option) => option.name === "name").required
     ).toBe(true);
+    expect(
+      subcommands.setback.options.find((option) => option.name === "id")
+    ).toMatchObject({ required: true, autocomplete: true });
+    expect(
+      subcommands.setback.options.find((option) => option.name === "url")
+    ).toMatchObject({ required: true, max_length: 2048 });
   });
 
   test("/players registers add, remove, score, and first", () => {
@@ -223,6 +230,24 @@ describe("slash command definition contracts", () => {
     const cardset = deckNew.options.find((option) => option.name === "cardset");
     expect(cardset.description.toLowerCase()).toContain("empty");
     expect(cardset.description.length).toBeLessThanOrEqual(GameFormatter.DISCORD_OPTION_DESCRIPTION_MAX);
+    const backurl = deckNew.options.find((option) => option.name === "backurl");
+    expect(backurl).toMatchObject({ required: false, max_length: 2048 });
+    expect(backurl.description.length).toBeLessThanOrEqual(GameFormatter.DISCORD_OPTION_DESCRIPTION_MAX);
+
+    const configure = json.options
+      .find((option) => option.name === "deck")
+      .options.find((option) => option.name === "configure");
+    const config = configure.options.find((option) => option.name === "config");
+    expect(config.choices.map((choice) => choice.value)).toEqual([
+      "shufflestyle",
+      "displaycardcounts",
+      "deckback",
+    ]);
+    const configureUrl = configure.options.find((option) => option.name === "url");
+    expect(configureUrl).toMatchObject({ required: false, max_length: 2048 });
+    expect(configureUrl.description.length).toBeLessThanOrEqual(
+      GameFormatter.DISCORD_OPTION_DESCRIPTION_MAX
+    );
   });
 
   test("/cards deck editcard picks deck then card and has no field or copies options", () => {

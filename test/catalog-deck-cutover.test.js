@@ -159,6 +159,28 @@ describe("catalog deck cutover", () => {
       expect(result.cards.some((card) => card.origin === "alpha-set")).toBe(
         false
       );
+      expect(result.backUrl).toBeNull();
+    });
+  });
+
+  test("materialize copies a catalog template deck back", () => {
+    withTempDataDir(({ dataDir }) => {
+      const catalog = new DeckCatalog({ dataDir });
+      try {
+        catalog.insertTemplate({
+          id: "alpha-set",
+          name: "Alpha Set",
+          cards: STORED_CARDS,
+          enabled: 1,
+          backUrl: "https://example.test/alpha-back.png",
+        });
+      } finally {
+        catalog.close();
+      }
+
+      const result = materializeDeck("Table Deck", "alpha-set", { dataDir });
+      expect(result.ok).toBe(true);
+      expect(result.backUrl).toBe("https://example.test/alpha-back.png");
     });
   });
 

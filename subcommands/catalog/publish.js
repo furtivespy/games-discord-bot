@@ -63,10 +63,15 @@ class CatalogPublish {
 
       const count = result.template.cards.length;
       const header = [
-        `Published \`${result.template.id}\``,
-        `${count} cards`,
-        formatLayoutLabel(result.template.cards),
-      ].join(" · ");
+        [
+          `Published \`${result.template.id}\``,
+          `${count} cards`,
+          formatLayoutLabel(result.template.cards),
+        ].join(" · "),
+        result.template.backUrl
+          ? `Deck back: ${result.template.backUrl}`
+          : "Deck back: default",
+      ].join("\n");
 
       await replyEphemeralEmbeds(
         interaction,

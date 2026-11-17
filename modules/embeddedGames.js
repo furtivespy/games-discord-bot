@@ -3,6 +3,7 @@
 const { createHash } = require("crypto");
 const { ChannelType, PermissionFlagsBits } = require("discord.js");
 const GameDB = require("../db/anygame");
+const DeckBack = require("./DeckBack");
 
 const GAME_COLLECTION = GameDB.ACTION_CATEGORIES.GAME;
 const DISCORD_EPOCH_MS = 1_420_070_400_000;
@@ -280,11 +281,7 @@ function otherPlayersSummary(data, userId, displays) {
 }
 
 function deckBackSource(deck) {
-  for (const key of ["backUrl", "cardBackUrl", "backImage"]) {
-    const value = deck?.[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return null;
+  return DeckBack.readBackUrl(deck);
 }
 
 function isDeckCountHidden(deck) {

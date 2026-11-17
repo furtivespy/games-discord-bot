@@ -115,7 +115,7 @@ const COMMAND_BLURBS = {
   players: "Add/remove seats, first player, score, color",
   team: "Team names, colors, join, randomize",
   cards: "Decks, hands, piles, play area, draft, board",
-  catalog: "Inspect and publish global deck templates",
+  catalog: "Inspect, publish, and set deck backs for global templates",
   bgg: "Look up a game on Board Game Geek",
   rules: "Ask an AI rules question for the current game",
   suggest: "Add, list, and vote on bot suggestions",
@@ -165,6 +165,7 @@ const HOWTO_DECKS = [
   "   • Updates that recipe card and any copies with the **same id**. Same-name cards with other ids are unchanged. Does not shuffle or change pile counts. `copies` stay add-only.",
   "5. `/cards deck shuffle` — mix discard into draw.",
   "6. `/cards deck draw` — top card into your hand. `/cards hand view` to see it (only you). `/cards hand show` and `/cards hand showall` show card(s) to the table without leaving your hand.",
+  "7. `/cards deck configure` with **Deck Back Image** and `url` — face-down image in visual mode. Omit `url` to see the current back; use `clear` for the default. New decks can also pass `backurl` on `/cards deck new`. Owner: `/catalog setback` for an existing catalog template.",
   "",
   "Many names at once: `/help topic:addlist`.",
 ].join("\n");
@@ -296,7 +297,7 @@ const TOPICS = {
     kind: "area",
     area: "catalog",
     intro:
-      "The deck **catalog** is a bot-wide list of templates used by `/cards deck new`. These commands are **owner-only**.",
+      "The deck **catalog** is a bot-wide list of templates used by `/cards deck new`. These commands are **owner-only**. `/catalog setback` sets a deck back image on an existing template (live games are unchanged).",
     commandNames: ["catalog"],
   },
   lookup: {

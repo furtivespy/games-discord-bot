@@ -834,6 +834,7 @@ describe("snapshotFromGameData", () => {
     ]);
     expect(snapshot.decks.map((deck) => deck.name)).toEqual(["Main", "Events"]);
     expect(snapshot.decks[0]).toEqual({ name: "Main", remaining: 1, total: 2 });
+    expect(snapshot.decks[0].backUrl).toBeUndefined();
     const json = JSON.stringify(snapshot);
     expect(json).not.toContain("Hidden Riley Card");
     expect(json).not.toContain("Riley Play Card");
@@ -879,6 +880,30 @@ describe("snapshotFromGameData", () => {
     expect(snapshot.status.players[1].tokens.clue).toBe("?");
     expect(snapshot.status.reverseOrder).toBe(true);
     expect(snapshot.decks[0]).toEqual({ name: "Main", remaining: 3, total: 10 });
+  });
+
+  test("includes a deck back URL when the deck has one assigned", () => {
+    const snapshot = snapshotFromGameData(
+      {
+        name: "Backed",
+        players: [{ userId: "will", name: "Will", hands: { main: [] } }],
+        decks: [
+          {
+            name: "Main",
+            backUrl: "https://example.test/custom-back.png",
+            allCards: [{}],
+            piles: { draw: { cards: [{}] } },
+          },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(snapshot.decks[0]).toEqual({
+      name: "Main",
+      remaining: 1,
+      total: 1,
+      backUrl: "https://example.test/custom-back.png",
+    });
   });
 
   test("uses Discord display names and avatar URLs when provided", () => {

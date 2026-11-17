@@ -2,6 +2,7 @@ const SlashCommand = require('../../base/SlashCommand.js')
 const {SlashCommandBuilder, MessageFlags} = require('discord.js');
 const GameDB = require('../../db/anygame.js')
 const GameFormatter = require('../../modules/GameFormatter')
+const DeckBack = require('../../modules/DeckBack')
 const BuildNew = require('../../subcommands/cards/buildernew')
 const BuildAdd = require('../../subcommands/cards/builderadd')
 const BuildRemove = require('../../subcommands/cards/builderremove')
@@ -94,6 +95,7 @@ class Cards extends SlashCommand {
                     .addStringOption(option => option.setName('name').setDescription('Name of the deck').setRequired(true))
                     .addStringOption(option => option.setName('cardset').setDescription('What set of cards to use. Choose empty to start from scratch.').setRequired(true).setAutocomplete(true))
                     .addStringOption(option => option.setName('customlist').setDescription('list of cards for the new custom deck. separate with commas'))
+                    .addStringOption(option => option.setName('backurl').setDescription('https image for the deck back. Leave empty for the default.').setMaxLength(DeckBack.IMAGE_URL_MAX))
                 ) 
             .addSubcommand(subcommand =>
                 subcommand
@@ -121,9 +123,11 @@ class Cards extends SlashCommand {
                     .addStringOption(option => option.setName('config').setDescription('Option to configure').setRequired(true)
                         .addChoices( {name: "Deck Shuffle Style", value: "shufflestyle"},
                             {name: "Display Card Counts", value: "displaycardcounts"},
+                            {name: "Deck Back Image", value: "deckback"},
                         )   
                     )
                     .addStringOption(option => option.setName('deck').setDescription('Deck to configure').setAutocomplete(true))
+                    .addStringOption(option => option.setName('url').setDescription('Deck back image URL. Use clear to restore the default.').setMaxLength(DeckBack.IMAGE_URL_MAX))
                 ) 
             .addSubcommand(subcommand =>
                 subcommand

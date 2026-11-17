@@ -3,6 +3,7 @@ const { find, cloneDeep, shuffle } = require('lodash')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
 const GameDB = require("../../db/anygame.js")
 const { materializeDeck, UNKNOWN_OR_DISABLED_CARD_SET } = require("../../db/catalogDecks.js")
+const DeckBack = require("../../modules/DeckBack")
 
 class NewDeck {
     async execute(interaction, client) {
@@ -31,6 +32,11 @@ class NewDeck {
         const inputName = interaction.options.getString("name");
         const inputSet = interaction.options.getString("cardset");
         const inputCustom = interaction.options.getString("customlist");
+        const backInput = DeckBack.parseBackUrlInput(interaction.options.getString("backurl"));
+        if (backInput.error) {
+            await interaction.editReply({ content: backInput.error });
+            return;
+        }
 
         if (find(gameData.decks, { name: inputName })) {
             await interaction.editReply({
@@ -58,6 +64,9 @@ class NewDeck {
             }
             newdeck.allCards = materialized.cards;
             cardSetDisplay = materialized.name;
+            if (materialized.backUrl) {
+                DeckBack.applyBackUrl(newdeck, materialized.backUrl);
+            }
         } else if (isEmptySet) {
             newdeck.allCards = [];
         } else {
@@ -65,6 +74,9 @@ class NewDeck {
         }
 
         newdeck.piles.draw.cards = cloneDeep(shuffle(newdeck.allCards));
+        if (backInput.present) {
+            DeckBack.applyBackUrl(newdeck, backInput.backUrl);
+        }
         gameData.decks.push(newdeck);
 
         // Record history
