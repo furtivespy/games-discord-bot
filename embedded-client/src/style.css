@@ -765,6 +765,7 @@ body {
 }
 
 .card-inspect-dialog {
+  position: relative;
   border: 0;
   padding: 0;
   margin: 0;
@@ -785,6 +786,39 @@ body {
   background: rgba(6, 12, 10, 0.72);
 }
 
+.card-inspect-close-form {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  z-index: 2;
+  margin: 0;
+}
+
+.card-inspect-close {
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: var(--ink);
+  background: rgba(12, 10, 8, 0.72);
+  cursor: pointer;
+}
+
+.card-inspect-close svg {
+  display: block;
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.card-inspect-close:hover,
+.card-inspect-close:focus-visible {
+  color: #fff;
+  background: rgba(12, 10, 8, 0.92);
+}
+
 .card-inspect-sheet {
   box-sizing: border-box;
   width: min(32rem, calc(100vw - 1.5rem));
@@ -800,25 +834,6 @@ body {
   box-shadow: 0 22px 48px rgba(0, 0, 0, 0.55);
 }
 
-.card-inspect-close {
-  justify-self: end;
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-  background: transparent;
-  border: 0;
-  padding: 0.15rem 0.2rem;
-  cursor: pointer;
-}
-
-.card-inspect-close:hover,
-.card-inspect-close:focus-visible {
-  color: var(--ink);
-}
-
 .card-inspect-art:not([hidden]) {
   display: block;
   max-width: min(28rem, 86vw);
@@ -828,6 +843,28 @@ body {
   object-fit: contain;
   border-radius: 0.7rem;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+}
+
+.card-inspect-dialog.is-photo .card-inspect-sheet {
+  width: auto;
+  max-width: 90vw;
+  max-height: 90vh;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  gap: 0;
+}
+
+.card-inspect-dialog.is-photo .card-inspect-art:not([hidden]) {
+  width: 90vw;
+  height: 90vh;
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: 0.4rem;
+  box-shadow: none;
 }
 
 .card-inspect-proxy {
