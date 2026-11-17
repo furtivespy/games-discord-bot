@@ -503,6 +503,7 @@ describe("embedded HTTP origin", () => {
     expect(ruleBody("#table")).toMatch(/display:\s*flex/);
     expect(ruleBody("#table")).toMatch(/flex-direction:\s*column/);
     expect(ruleBody("#table")).toMatch(/height:\s*100%/);
+    expect(ruleBody("#table")).toMatch(/box-sizing:\s*border-box/);
     expect(ruleBody("#table")).not.toMatch(/align-content:\s*start/);
     expect(ruleBody("#table > *")).toMatch(/flex-shrink:\s*0/);
     expect(ruleBody(".hand-zone")).toMatch(/margin-top:\s*auto/);

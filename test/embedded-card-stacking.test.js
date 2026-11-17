@@ -467,6 +467,7 @@ async function report(body) {
 }
 
 try {
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
   const table = document.getElementById("table");
   const hand = document.querySelector(".hand-zone");
   const play = document.querySelector('[data-zone="play-area"]');
@@ -563,7 +564,10 @@ describe("hand zone stays at the bottom of the table", () => {
 
     expect(result.error).toBeUndefined();
     expect(result.tableHeight).toBeGreaterThan(result.viewportHeight - 2);
+    expect(result.tableBottom).toBeLessThanOrEqual(result.viewportHeight + 1);
     expect(result.handBottom).toBeGreaterThan(result.playBottom);
+    expect(result.handBottom).toBeLessThanOrEqual(result.viewportHeight);
+    expect(result.handBottom).toBeGreaterThan(result.viewportHeight - 32);
     expect(result.gapBelowHand).toBeGreaterThanOrEqual(0);
     expect(result.gapBelowHand).toBeLessThan(24);
     expect(result.spaceAboveHand).toBeGreaterThan(80);
