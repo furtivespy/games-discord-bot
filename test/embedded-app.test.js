@@ -414,14 +414,15 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain(".card-tile.dragging .card-face");
     expect(css).not.toContain(".card-tile.dragging:hover .card-face");
     expect(css).not.toContain(".deck-tile:hover .card-face");
-    expect(css).toContain("scale(1.48)");
+    expect(css).toContain("--card-hover-scale: 1.48");
+    expect(css).toContain("scale(var(--card-hover-scale))");
     expect(css).not.toContain("scale(1.28)");
     expect(css).toMatch(/\.card-tile img[\s\S]*object-fit:\s*contain/);
     expect(css).toContain(".card-inspect-dialog");
     expect(css).toContain(".card-inspect-description");
     expect(css).toContain(".deck-tile:hover .deck-actions");
     expect(css).toContain(".deck-tile:has(:focus-visible) .deck-actions");
-    expect(css).toMatch(/\.deck-actions\s*\{[^}]*bottom:\s*1\.35rem/);
+    expect(css).toMatch(/\.deck-actions\s*\{[^}]*bottom:\s*2rem/);
     expect(css).not.toContain(".deck-tile:focus-within");
     expect(css).toContain(".deck-action");
     expect(css).toContain(".hand-fan .card-tile + .card-tile");
@@ -431,7 +432,7 @@ describe("embedded HTTP origin", () => {
     expect(css).not.toContain(".status-player-meta");
   });
 
-  test("card rows are not scroll containers so drag and hover zoom are not clipped", () => {
+  test("card rows stay visible so drag and hover zoom are not clipped by the row", () => {
     const css = fs
       .readFileSync(
         path.join(__dirname, "..", "embedded-client", "src", "style.css"),
@@ -459,7 +460,11 @@ describe("embedded HTTP origin", () => {
       expect(body).not.toMatch(/overflow:\s*(auto|scroll|hidden)/);
     };
 
-    overflowIsVisible(ruleBody("#table"));
+    expect(html).toMatch(/id="table-main"/);
+    expect(ruleBody("#table")).toMatch(/overflow:\s*hidden/);
+    expect(ruleBody("#table")).not.toMatch(/overflow:\s*visible/);
+    expect(ruleBody("#table")).not.toMatch(/overflow:\s*auto/);
+    expect(ruleBody("#table-main")).toMatch(/overflow:\s*auto/);
     overflowIsVisible(ruleBody(".zone"));
     overflowIsVisible(ruleBody(".cards"));
     overflowIsVisible(ruleBody(".board-spread"));
@@ -489,6 +494,9 @@ describe("embedded HTTP origin", () => {
       "utf8"
     );
     expect(html).toMatch(/class="zone hand-zone" data-zone="hand"/);
+    expect(html).toMatch(
+      /id="table-main"[\s\S]*class="zone hand-zone" data-zone="hand"/
+    );
 
     const ruleBody = (selector) => {
       const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -504,14 +512,55 @@ describe("embedded HTTP origin", () => {
     expect(ruleBody("#table")).toMatch(/flex-direction:\s*column/);
     expect(ruleBody("#table")).toMatch(/height:\s*100%/);
     expect(ruleBody("#table")).toMatch(/box-sizing:\s*border-box/);
+    expect(ruleBody("#table")).toMatch(/overflow:\s*hidden/);
+    expect(ruleBody("#table")).not.toMatch(/container-type:/);
     expect(ruleBody("#table")).not.toMatch(/align-content:\s*start/);
-    expect(ruleBody("#table > *")).toMatch(/flex-shrink:\s*0/);
-    expect(ruleBody(".hand-zone")).toMatch(/margin-top:\s*auto/);
+    expect(ruleBody("#table-main")).toMatch(/flex:\s*1 1 auto/);
+    expect(ruleBody("#table-main")).toMatch(/min-height:\s*0/);
+    expect(ruleBody("#table-main")).toMatch(/overflow:\s*auto/);
+    expect(ruleBody("#table-main > *")).toMatch(/flex-shrink:\s*0/);
+    expect(ruleBody(".hand-zone")).toMatch(/flex:\s*0 0 auto/);
+    expect(ruleBody(".hand-zone")).not.toMatch(/margin-top:\s*auto/);
     expect(ruleBody(".hand-zone")).not.toMatch(/z-index\s*:/);
     expect(ruleBody(".hand-zone")).not.toMatch(/transform\s*:/);
     expect(css).toMatch(
       /@media\s*\(max-width:\s*820px\)\s*\{[^}]*#app\.connected\s*\{[^}]*grid-template-rows:\s*auto\s+minmax\(0,\s*1fr\)/
     );
+  });
+
+  test("visual-mode cards rest at the previous hover-zoom size", () => {
+    const css = fs.readFileSync(
+      path.join(__dirname, "..", "embedded-client", "src", "style.css"),
+      "utf8"
+    );
+    const previousWidthRem = 5.4;
+    const previousHeightRem = 7.55;
+    const previousOverlapRem = 2.35;
+    const hoverScale = 1.48;
+
+    expect(previousWidthRem * hoverScale).toBeCloseTo(7.992, 3);
+    expect(previousHeightRem * hoverScale).toBeCloseTo(11.174, 3);
+    expect(previousOverlapRem * hoverScale).toBeCloseTo(3.478, 3);
+    expect(css).toContain("--card-width: 7.992rem");
+    expect(css).toContain("--card-height: 11.174rem");
+    expect(css).toContain("--card-hover-scale: 1.48");
+    expect(css).toContain("--hand-overlap: 3.478rem");
+    expect(css).toContain("width: var(--card-width)");
+    expect(css).toContain("height: var(--card-height)");
+    expect(css).toMatch(
+      /\.card-tile,\s*\.deck-tile\s*\{[^}]*flex-shrink:\s*0/
+    );
+    expect(css).not.toContain("--card-used-height");
+    expect(css).not.toContain("--card-fit-height");
+    expect(css).not.toContain("container-type: size");
+    expect(css).not.toContain("max(5.5rem");
+    expect(css).toContain("scale(var(--card-hover-scale))");
+    expect(css).toContain("margin-left: calc(-1 * var(--hand-overlap))");
+    expect(css).toMatch(/#table-main\s*>\s*\*\s*\{[^}]*flex-shrink:\s*0/);
+    expect(css).toMatch(/\.hand-zone\s*\{[^}]*flex:\s*0 0 auto/);
+    expect(css).not.toMatch(/\.card-tile,\s*\.deck-tile\s*\{[^}]*width:\s*5\.4rem/);
+    expect(css).not.toMatch(/\.card-tile,\s*\.deck-tile\s*\{[^}]*height:\s*7\.55rem/);
+    expect(css).not.toContain("scale(1.28)");
   });
 });
 
