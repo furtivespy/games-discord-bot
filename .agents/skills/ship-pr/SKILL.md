@@ -33,14 +33,18 @@ decisions live in `.github/ship-pr.json`. This skill only runs the loop.
    The Cursor QA run is a comment, not a GitHub review, so add
    `{"login": "cursor", "state": "COMMENTED"}` to `reviews` **only when all
    three hold**: `Verdict: PASS`, `Head` equals the current `headRefOid`, and
-   `For you to test` is `none`. Otherwise leave `reviews` empty and the loop
-   returns `wait-for-review`.
+   `For you to test` is `none`. If `Head` is stale or `For you to test` is not
+   `none`, **park for the owner**: do not merge, leave a short PR comment with
+   why and what the owner must do, and stop. Do not omit the review and wait.
+   If Verdict is not PASS yet, leave `reviews` empty and the loop returns
+   `wait-for-review`.
 5. **Do the one action it returns**: fix CI, address review threads (fix it, or
    reply with why), resolve conflicts, mark ready, wait, or merge. Reviewers
    check every changed test expectation against the intent. Then repeat step 4
    with fresh state.
 6. **Merge** only when the step is `merge`, using a merge commit
-   (`gh pr merge <n> --merge`). `high` risk always parks for the owner.
+   (`gh pr merge <n> --merge`). `high` risk always parks for the owner. Stale
+   QA Head and `For you to test` not `none` also park (step 4).
 7. **After merge**, `release.yml` builds the image and its `verify-deploy` job
    waits for `/health` to report the merge commit. To check by hand:
    `SHIP_PR_SHA=<merge-sha> node scripts/check-deployed-version.js`.
