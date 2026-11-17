@@ -225,20 +225,67 @@ describe("runVisualCardAction", () => {
 
   function clientForGame(gameData, { send } = {}) {
     const posted = [];
+    const pinPosts = [];
+    const messages = new Map();
     const channel = {
       id: "thread-game",
       guild: { id: "guild-1" },
-      messages: { fetch: async () => null },
+      permissionsFor: () => ({ has: () => true }),
+      messages: {
+        fetch: async (idOrOptions) => {
+          const id =
+            typeof idOrOptions === "object" && idOrOptions
+              ? idOrOptions.message || idOrOptions.id
+              : idOrOptions;
+          return messages.get(id) || null;
+        },
+      },
       send: async (payload) => {
-        if (typeof send === "function") return send(payload, posted);
+        const isPin =
+          typeof payload.content === "string" &&
+          payload.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER);
+        if (isPin) {
+          const msg = {
+            id: `pin-${pinPosts.length + 1}`,
+            pinned: false,
+            content: payload.content,
+            pin: async () => {
+              msg.pinned = true;
+            },
+            edit: async (next) => {
+              Object.assign(msg, next);
+              return msg;
+            },
+          };
+          pinPosts.push(payload);
+          messages.set(msg.id, msg);
+          return msg;
+        }
+        if (typeof send === "function") {
+          const result = await send(payload, posted);
+          if (result && typeof result === "object" && result.id) {
+            if (typeof result.edit !== "function") {
+              result.edit = async () => result;
+            }
+            messages.set(result.id, result);
+          }
+          return result;
+        }
         posted.push(payload);
-        return { id: "msg-1" };
+        const msg = {
+          id: `msg-${posted.length}`,
+          content: payload.content,
+          edit: async () => msg,
+        };
+        messages.set(msg.id, msg);
+        return msg;
       },
     };
     const store = new Map();
     store.set("guild-1:game:thread-game", gameData);
     return {
       posted,
+      pinPosts,
       store,
       discordClient: {
         user: { id: "bot-1" },
@@ -864,6 +911,50 @@ describe("runVisualCardAction", () => {
     releaseSend();
     await drainLockedVisualActions();
     expect(posted).toHaveLength(2);
+  });
+
+  test("a delayed channel post does not spawn a second live-status pin", async () => {
+    let releaseSend;
+    const sendGate = new Promise((resolve) => {
+      releaseSend = resolve;
+    });
+    let chatSends = 0;
+    const game = gameWithDeck();
+    game.pinnedStatusMode = "on";
+    game.pinnedStatusEnabled = true;
+    const { posted, pinPosts, store, discordClient } = clientForGame(game, {
+      send: async (payload, postedMessages) => {
+        chatSends += 1;
+        if (chatSends === 1) await sendGate;
+        postedMessages.push(payload);
+        return { id: `msg-${postedMessages.length}` };
+      },
+    });
+    const draw = {
+      action: "draw",
+      deckName: "Main",
+      count: 1,
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+    };
+    const first = await runVisualCardAction({ ...draw, requestId: "pin-post-aaa" });
+    const second = await runVisualCardAction({ ...draw, requestId: "pin-post-bbb" });
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(pinPosts).toHaveLength(0);
+    releaseSend();
+    await drainLockedVisualActions();
+    expect(posted).toHaveLength(2);
+    expect(pinPosts).toHaveLength(1);
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.pinnedStatusMessageId).toBe("pin-1");
+    expect(saved.players[0].hands.main.map((card) => card.name)).toEqual([
+      "Copper",
+      "Ace",
+      "King",
+    ]);
   });
 
   test("scores save uses applyPlayerScores, persists, and posts the scoreall message", async () => {

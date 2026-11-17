@@ -331,6 +331,37 @@ describe("GameStatusHelper pinned live status", () => {
     expect(harness.persistCalls).toHaveLength(1);
   });
 
+  test("upsertPinnedStatus uses the stored pin id instead of creating a second pin", async () => {
+    const harness = createHarness({
+      gameData: createGameData({
+        pinnedStatusEnabled: true,
+        pinnedStatusMessageId: null,
+        pinnedStatusChannelId: null,
+        pinnedStatusPinned: false,
+      }),
+    });
+    harness.storedGame.pinnedStatusMessageId = "pin-1";
+    harness.storedGame.pinnedStatusChannelId = "channel-1";
+    harness.storedGame.pinnedStatusPinned = true;
+    harness.pinMessage.pinned = true;
+
+    await GameStatusHelper.sendPublicStatusUpdate(
+      harness.interaction,
+      harness.client,
+      harness.gameData,
+      { content: "Alice drew 3 cards", pinFromLatest: true }
+    );
+
+    const pinSends = harness.sendCalls.filter(
+      (payload) =>
+        typeof payload.content === "string" &&
+        payload.content.startsWith(GameStatusHelper.PINNED_STATUS_HEADER)
+    );
+    expect(pinSends).toHaveLength(0);
+    expect(harness.fetchCalls).toContain("pin-1");
+    expect(harness.gameData.pinnedStatusMessageId).toBe("pin-1");
+  });
+
   test("cleanUpPreviousMessage never fetches or edits the pinned id", async () => {
     const harness = createHarness();
     const gameData = createGameData({

@@ -226,7 +226,7 @@ async function postCommandToGameChannel({
     interaction,
     discordClient,
     gameData,
-    { content, runLocked }
+    { content, runLocked, pinFromLatest: true }
   );
   return true;
 }
@@ -268,7 +268,7 @@ async function finishVisualCardAction({
         discordClient,
         { guildId, channelId },
         gameData,
-        { runLocked }
+        { runLocked, pinFromLatest: true }
       );
     } catch (err) {
       logger?.log?.(
@@ -376,11 +376,12 @@ async function playerNamesForScoreUpdate(gameData, scores, { discordClient, guil
 /**
  * Serialize load → mutate → save for one game document. Two Deal/Draw POSTs
  * with different requestIds must not both load the same snapshot. Channel
- * posts are best-effort after this lock: a hung Discord send, pin REST, or
- * card-image loadImage must not stall the next visual action. Status metadata
- * merges re-enter the lock only around the short get-then-set so they cannot
- * clobber a later save. The HTTP response is released as soon as persist and
- * the visual snapshot finish.
+ * posts are best-effort on a second per-channel queue: a hung Discord send,
+ * pin REST, or card-image loadImage must not stall the next persist. Posts
+ * themselves stay serialized so concurrent sends cannot spawn leftover
+ * live-status pins. Status metadata merges re-enter the persist lock only
+ * around the short get-then-set so they cannot clobber a later save. The HTTP
+ * response is released as soon as persist and the visual snapshot finish.
  */
 function createGameChannelLock() {
   const tails = new Map();
@@ -404,6 +405,7 @@ function createGameChannelLock() {
 }
 
 const defaultGameChannelLock = createGameChannelLock();
+const defaultGamePostLock = createGameChannelLock();
 const pendingLockedVisualActions = new Set();
 
 function trackLockedVisualAction(work) {
@@ -570,6 +572,7 @@ async function runVisualCardAction({
     gameChannelLock && typeof gameChannelLock.run === "function"
       ? gameChannelLock
       : defaultGameChannelLock;
+  const postLock = defaultGamePostLock;
 
   const runLocked = (fn) => lock.run(gid, cid, fn);
 
@@ -650,16 +653,18 @@ async function runVisualCardAction({
         return false;
       }
       if (!pendingPost) return false;
-      return finishVisualCardAction({
-        discordClient,
-        guildId: gid,
-        channelId: cid,
-        actor,
-        gameData: pendingPost.gameData,
-        content: pendingPost.content,
-        logger,
-        runLocked,
-      });
+      return postLock.run(gid, cid, () =>
+        finishVisualCardAction({
+          discordClient,
+          guildId: gid,
+          channelId: cid,
+          actor,
+          gameData: pendingPost.gameData,
+          content: pendingPost.content,
+          logger,
+          runLocked,
+        })
+      );
     });
     return httpReady;
   };

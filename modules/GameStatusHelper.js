@@ -421,6 +421,26 @@ class GameStatusHelper {
     }
   }
 
+  static async latestGameForPin(client, interaction, gameData) {
+    if (!client || typeof client.getGameDataV2 !== "function") {
+      return gameData;
+    }
+    const guildId = interaction?.guildId;
+    const channelId = interaction?.channelId;
+    if (!guildId || !channelId) {
+      return gameData;
+    }
+    try {
+      const fresh = await client.getGameDataV2(guildId, "game", channelId);
+      if (fresh && !fresh.isdeleted) {
+        return fresh;
+      }
+    } catch (error) {
+      console.error("Could not load latest game for pinned status.", error);
+    }
+    return gameData;
+  }
+
   static async upsertPinnedStatus(channel, client, interaction, gameData, snapshotReply = null, options = {}) {
     if (!this.isPinnedStatusEnabled(gameData)) {
       return;
@@ -429,9 +449,17 @@ class GameStatusHelper {
       return;
     }
 
+    const latest = await this.latestGameForPin(client, interaction, gameData);
+    if (latest?.pinnedStatusMessageId) {
+      gameData.pinnedStatusMessageId = latest.pinnedStatusMessageId;
+      gameData.pinnedStatusChannelId = latest.pinnedStatusChannelId;
+      gameData.pinnedStatusPinned = latest.pinnedStatusPinned;
+    }
+
+    const pinSource = options.pinFromLatest ? latest : gameData;
     let snapshot = snapshotReply;
-    if (!snapshot) {
-      snapshot = await this.buildStatusReplyOptions(gameData, channel.guild, client.user.id, {});
+    if (options.pinFromLatest || !snapshot) {
+      snapshot = await this.buildStatusReplyOptions(pinSource, channel.guild, client.user.id, {});
     }
 
     const pinPayload = {
