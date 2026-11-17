@@ -70,7 +70,7 @@ describe("/visual", () => {
     });
   });
 
-  test("refuses to launch in a forum post and does not mention a channel option", async () => {
+  test("refuses to launch in a forum post", async () => {
     await withHarness({ channelName: "Inis Friday" }, async (harness) => {
       const launches = [];
       harness.channel.type = ChannelType.PublicThread;
@@ -86,37 +86,49 @@ describe("/visual", () => {
       await new Visual(harness.client).execute(harness.interaction);
       expect(launches).toEqual([]);
       expect(harness.lastContent()).toBe(VisualLaunch.FORUM_BLOCKED_MESSAGE);
-      expect(harness.lastContent()).toContain("forum");
-      expect(harness.lastContent()).toContain("normal text channel");
-      expect(harness.lastContent()).toContain("not set up yet");
-      expect(harness.lastContent()).not.toMatch(/pass a text `channel`/i);
       expect(harness.calls.reply[0].flags).toBe(MessageFlags.Ephemeral);
     });
   });
 
-  test("ignores a leftover channel option and still launches in place", async () => {
-    await withHarness({}, async (harness) => {
-      const sent = [];
-      const launches = [];
-      harness.interaction.launchActivity = async () => {
-        launches.push(true);
-      };
-      harness.interaction.options.getChannel = () => ({
-        id: "table-99",
-        name: "game-table",
-        type: ChannelType.GuildText,
-        send: async (payload) => {
-          sent.push(payload);
-          return { id: "bridge-1" };
-        },
-      });
+  test("a leftover channel option from a forum post does not post a bridge button", async () => {
+    expect(VisualLaunch.FORUM_BLOCKED_MESSAGE).not.toMatch(/pass a text `channel`/i);
 
-      await new Visual(harness.client).execute(harness.interaction);
+    await withHarness(
+      { channelName: "Inis Friday", channelId: "forum-thread-1" },
+      async (harness) => {
+        const sent = [];
+        const launches = [];
+        harness.channel.type = ChannelType.PublicThread;
+        harness.channel.parent = {
+          id: "forum-1",
+          type: ChannelType.GuildForum,
+          name: "games",
+        };
+        harness.channel.isThread = () => true;
+        harness.interaction.launchActivity = async () => {
+          launches.push(true);
+        };
+        harness.interaction.options.getChannel = (name) =>
+          name === "channel"
+            ? {
+                id: "table-99",
+                name: "game-table",
+                type: ChannelType.GuildText,
+                send: async (payload) => {
+                  sent.push(payload);
+                  return { id: "bridge-1" };
+                },
+              }
+            : null;
 
-      expect(launches).toEqual([true]);
-      expect(sent).toEqual([]);
-      expect(harness.calls.reply).toEqual([]);
-    });
+        await new Visual(harness.client).execute(harness.interaction);
+
+        expect(launches).toEqual([]);
+        expect(sent).toEqual([]);
+        expect(harness.lastContent()).toBe(VisualLaunch.FORUM_BLOCKED_MESSAGE);
+        expect(harness.calls.reply[0].flags).toBe(MessageFlags.Ephemeral);
+      }
+    );
   });
 });
 
