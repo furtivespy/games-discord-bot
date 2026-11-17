@@ -456,3 +456,116 @@ describe("dropped cards snap back to their rest slot", () => {
     expect(result.jumpY).toBeLessThan(8);
   }, 30000);
 });
+
+const PIN_HARNESS_JS = `
+async function report(body) {
+  await fetch("/result", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+try {
+  const table = document.getElementById("table");
+  const hand = document.querySelector(".hand-zone");
+  const play = document.querySelector('[data-zone="play-area"]');
+  const tableBox = table.getBoundingClientRect();
+  const handBox = hand.getBoundingClientRect();
+  const playBox = play.getBoundingClientRect();
+  await report({
+    viewportHeight: window.innerHeight,
+    tableHeight: tableBox.height,
+    tableBottom: tableBox.bottom,
+    handTop: handBox.top,
+    handBottom: handBox.bottom,
+    playBottom: playBox.bottom,
+    gapBelowHand: tableBox.bottom - handBox.bottom,
+    spaceAboveHand: handBox.top - playBox.bottom,
+  });
+} catch (error) {
+  await report({ error: String(error && error.stack ? error.stack : error) });
+}
+`;
+
+describe("hand zone stays at the bottom of the table", () => {
+  const chrome = workingChromeBin();
+  let server;
+  let chromeProc;
+  let userDataDir;
+
+  afterEach(() => {
+    try {
+      chromeProc?.kill("SIGKILL");
+    } catch {}
+    chromeProc = null;
+    try {
+      server?.stop(true);
+    } catch {}
+    server = null;
+    if (userDataDir) {
+      fs.rmSync(userDataDir, { recursive: true, force: true });
+      userDataDir = null;
+    }
+  });
+
+  test.skipIf(!chrome)("QA: hand sits on the table bottom with slack above it", async () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+
+    let resolveResult;
+    const resultPromise = new Promise((resolve) => {
+      resolveResult = resolve;
+    });
+
+    server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const url = new URL(req.url);
+        if (req.method === "POST" && url.pathname === "/result") {
+          resolveResult(await req.json());
+          return new Response("ok");
+        }
+        if (url.pathname === "/harness.js") {
+          return new Response(PIN_HARNESS_JS, {
+            headers: { "Content-Type": "text/javascript; charset=utf-8" },
+          });
+        }
+        return new Response(stackingHarness(css), {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      },
+    });
+
+    userDataDir = fs.mkdtempSync(path.join(require("os").tmpdir(), "hand-pin-"));
+    chromeProc = spawn(
+      chrome,
+      [
+        "--headless=new",
+        "--disable-gpu",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--hide-scrollbars",
+        "--no-first-run",
+        "--window-size=1280,800",
+        `--user-data-dir=${userDataDir}`,
+        String(server.url),
+      ],
+      { stdio: "ignore" }
+    );
+
+    const result = await Promise.race([
+      resultPromise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("timed out waiting for Chrome hand-pin result")), 20000)
+      ),
+    ]);
+
+    expect(result.error).toBeUndefined();
+    expect(result.tableHeight).toBeGreaterThan(result.viewportHeight - 2);
+    expect(result.handBottom).toBeGreaterThan(result.playBottom);
+    expect(result.gapBelowHand).toBeGreaterThanOrEqual(0);
+    expect(result.gapBelowHand).toBeLessThan(24);
+    expect(result.spaceAboveHand).toBeGreaterThan(80);
+  }, 30000);
+});

@@ -37,6 +37,7 @@ body {
   min-height: 100%;
   place-items: stretch;
   grid-template-columns: minmax(16rem, 19.5rem) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   padding: 0;
 }
 
@@ -341,14 +342,23 @@ body {
 #table {
   min-width: 0;
   min-height: 0;
-  display: grid;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
   gap: 0.45rem;
   padding: 0.5rem 0.75rem 0.55rem;
-  align-content: start;
   overflow: visible;
   /* Cards from every zone share this stacking context so a raised tile can
      paint above later DOM zones. Do not put z-index/transform on .zone. */
   isolation: isolate;
+}
+
+#table > * {
+  flex-shrink: 0;
+}
+
+.hand-zone {
+  margin-top: auto;
 }
 
 #table[hidden] {
@@ -720,6 +730,7 @@ body {
 @media (max-width: 820px) {
   #app.connected {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   #app.connected #side-panel {
