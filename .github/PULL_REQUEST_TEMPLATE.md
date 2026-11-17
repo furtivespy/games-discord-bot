@@ -10,6 +10,12 @@
 
 <!-- two-way (easy to revert) | one-way (data, contracts, releases) -->
 
+## Cleanup
+
+<!-- none | needed (FUR-123) | done. Does this PR leave something to remove later (a shim, an old code path, preserved old records, a flag)? If so, file a `Cleanup:` issue and link it here. See "Cleanup tickets" in AGENTS.md. -->
+
+none
+
 ## Testing
 
 <!-- Commands run and their results. Say what you could not verify. -->

@@ -56,3 +56,7 @@ decisions live in `.github/ship-pr.json`. This skill only runs the loop.
    decide. If the PR cost you time because of the repo itself (a flaky check, a
    wrong doc, a missing fixture), file it by following
    [friction-log](../friction-log/SKILL.md). Nothing met the bar? File nothing.
+   If the PR leaves something to remove later, check that its Cleanup section
+   links a `Cleanup:` issue (see "Cleanup tickets" in
+   [AGENTS.md](../../../AGENTS.md)); if it says `none` but the PR left a shim,
+   old path, or preserved old records, file one and link it before merging.

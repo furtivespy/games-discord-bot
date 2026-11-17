@@ -38,6 +38,29 @@ This repo's Linear project is **Game Bot** (team **Furtivespy**, key `FUR`).
 
 When the user mentions Linear, issues, or project tracking for this codebase, scope work to the Game Bot project unless they say otherwise.
 
+## Cleanup tickets
+
+If your PR leaves something that should be removed later, file a `Cleanup:` issue
+before you finish, and link it in the PR's Cleanup section. Examples: a
+compatibility shim, an old code path kept during a rollout, old records preserved
+by a migration (see below), a flag past its removal date. Nothing left behind?
+Write `none`.
+
+Create it in Linear (team Furtivespy, project Game Bot) from the **Cleanup**
+template, with label `cleanup`. Fill every section:
+
+- **What to clean up:** one thing, naming the files.
+- **Why it is safe:** what proves nothing depends on it.
+- **Ready when:** a check anyone can run that is true exactly when the cleanup is
+  safe to do now, for example "`rg legacyFoo` finds no callers outside
+  `modules/legacyFoo.js`". If you cannot write one, it is not ready; say what
+  you would need to know and add `needs-decision`.
+- **Door:** `two-way` or `one-way`. Deleting stored data is one-way: add
+  `needs-decision`, because the weekly legacy reaper does not do those alone.
+
+Use a priority; Low is the default. See `docs/cleanup-automations.md` for what the
+weekly reaper will and will not do with these.
+
 ## Data migrations
 
 - Do not change data scope (for example, guild- or channel-scoped data to bot-wide data) without an explicit migration path.
