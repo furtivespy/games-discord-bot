@@ -836,6 +836,54 @@ body {
   background: rgba(12, 10, 8, 0.92);
 }
 
+.card-inspect-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.card-inspect-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: var(--ink);
+  background: rgba(12, 10, 8, 0.72);
+  cursor: pointer;
+}
+
+.card-inspect-nav[hidden] {
+  display: none;
+}
+
+#card-inspect-prev {
+  left: 0.7rem;
+  transform: translateY(-50%);
+}
+
+#card-inspect-next {
+  right: 0.7rem;
+  transform: translateY(-50%);
+}
+
+.card-inspect-nav svg {
+  display: block;
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.card-inspect-nav:hover,
+.card-inspect-nav:focus-visible {
+  color: #fff;
+  background: rgba(12, 10, 8, 0.92);
+}
+
 .card-inspect-sheet {
   box-sizing: border-box;
   width: min(32rem, calc(100vw - 1.5rem));
@@ -844,7 +892,7 @@ body {
   background: #1b1711;
   border: 1px solid var(--panel-edge);
   border-radius: 16px;
-  padding: 0.7rem 1rem 1rem;
+  padding: 0.7rem 3.4rem 1rem;
   display: grid;
   justify-items: center;
   gap: 0.65rem;

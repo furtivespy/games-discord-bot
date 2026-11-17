@@ -57,7 +57,12 @@ import {
 } from "./visualActions";
 import { SNAP_BACK_DURATION_MS, enableCardDrag, type CardOffset } from "./drag";
 import { enableHoverZoomClamp } from "./hoverZoom";
-import { closeCardInspect, enableCardInspectDialog, openCardInspect } from "./cardInspect";
+import {
+  closeCardInspect,
+  enableCardInspectDialog,
+  openCardInspect,
+  type InspectSequenceItem,
+} from "./cardInspect";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
 import { asCardList, createSnapshotLoader, shouldApplySnapshot } from "./requestSeq";
@@ -855,11 +860,13 @@ function renderCards(
   config: EmbeddedConfig,
   containerId: string,
   cards: SnapshotCard[] | undefined,
-  positions: Map<string, CardOffset>
+  positions: Map<string, CardOffset>,
+  enableInspectNav = false
 ) {
   const container = document.getElementById(containerId);
   if (!container) return;
   container.replaceChildren();
+  const sequence: InspectSequenceItem[] = [];
   for (const card of asCardList(cards) as SnapshotCard[]) {
     const tile = document.createElement("article");
     tile.className = "card-tile";
@@ -871,13 +878,15 @@ function renderCards(
     const name =
       typeof nameValue === "string" && nameValue.trim() ? nameValue.trim() : "Card";
     tile.title = name;
+    const imageSrc = mappedImageSrc(config, card.imageUrl);
     tile.append(renderCardFace(config, card));
     enableHoverZoomClamp(tile);
+    if (enableInspectNav) sequence.push({ card, imageSrc, tile });
     if (cardId) {
       // No drop targets yet: enableCardDrag snaps back unless a later hook consumes the drop.
       enableCardDrag(tile, cardId, positions, {
         onInspect: () =>
-          openCardInspect(card, mappedImageSrc(config, card.imageUrl), tile),
+          openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined),
       });
     }
     container.append(tile);
@@ -1273,8 +1282,8 @@ function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot): boolean {
   renderOtherPlayers(config, payload.otherPlayers, payload.status?.teams);
   renderDecks(config, payload.decks);
   renderCards(config, "board-cards", payload.gameBoard, cardPositions);
-  renderCards(config, "play-area-cards", payload.playArea, cardPositions);
-  renderCards(config, "hand-cards", payload.hand, cardPositions);
+  renderCards(config, "play-area-cards", payload.playArea, cardPositions, true);
+  renderCards(config, "hand-cards", payload.hand, cardPositions, true);
   restoreScrollTop(document.getElementById("side-panel"), sideScroll);
   restoreScrollTop(document.getElementById("game-status"), statusScroll);
   restoreScrollTop(
