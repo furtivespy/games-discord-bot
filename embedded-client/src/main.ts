@@ -58,7 +58,7 @@ import { SNAP_BACK_DURATION_MS, enableCardDrag, type CardOffset } from "./drag";
 import { closeCardInspect, enableCardInspectDialog, openCardInspect } from "./cardInspect";
 import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
-import { asCardList, createSnapshotLoader } from "./requestSeq";
+import { asCardList, createSnapshotLoader, shouldApplySnapshot } from "./requestSeq";
 import {
   asRecordList,
   autoSelectGameId,
@@ -222,6 +222,8 @@ function setDeckActionsLocked(locked: boolean) {
   document.querySelectorAll<HTMLButtonElement>("button.deck-action").forEach((button) => {
     button.disabled = locked;
   });
+  const select = document.getElementById("game-select") as HTMLSelectElement | null;
+  if (select) select.disabled = locked;
   const { confirm } = actionDialogElements();
   if (confirm) confirm.disabled = locked;
 }
@@ -499,7 +501,11 @@ function closeActionDialog() {
   dialog?.close?.();
 }
 
-function openActionDialog(kind: DeckActionKind, deckName: string) {
+function openActionDialog(
+  kind: DeckActionKind,
+  deckName: string,
+  count: number = DEFAULT_ACTION_COUNT
+) {
   if (actionInFlight) return;
   const els = actionDialogElements();
   if (!els.dialog || !els.input || !els.form) return;
@@ -514,7 +520,8 @@ function openActionDialog(kind: DeckActionKind, deckName: string) {
   els.dialog.dataset.deckName = deckName;
   els.input.min = String(ACTION_COUNT_MIN);
   els.input.max = String(ACTION_COUNT_MAX);
-  els.input.value = String(DEFAULT_ACTION_COUNT);
+  const restored = parseActionCount(count);
+  els.input.value = String(restored ?? DEFAULT_ACTION_COUNT);
   setActionDialogError(null);
   if (typeof els.dialog.showModal === "function") {
     if (!els.dialog.open) els.dialog.showModal();
@@ -537,6 +544,19 @@ async function submitDeckAction(kind: DeckActionKind, deckName: string, count: n
   actionRequestId = newActionRequestId();
   setDeckActionsLocked(true);
   setActionDialogError(null);
+  closeActionDialog();
+  const stillThisGame = () =>
+    shouldApplySnapshot({
+      isCurrent: true,
+      selectedChannelId: liveSelectedChannelId(session.config.channelId),
+      requestedChannelId: channelId,
+    });
+  const reopenWithError = (message: string) => {
+    if (!stillThisGame()) return;
+    setDeckActionsLocked(false);
+    openActionDialog(kind, deckName, count);
+    setActionDialogError(message);
+  };
   try {
     const response = await fetch(
       actionRequestUrl(session.config.apiHost, window.location.protocol),
@@ -574,14 +594,14 @@ async function submitDeckAction(kind: DeckActionKind, deckName: string, count: n
       payload = {};
     }
     if (!response.ok) {
-      setActionDialogError(visualActionErrorMessage(payload.error, payload.message));
+      reopenWithError(visualActionErrorMessage(payload.error, payload.message));
       return;
     }
-    closeActionDialog();
+    if (!stillThisGame()) return;
     applySnapshot(session.config, payload);
     setActionNotice(payload.channelPosted === false ? CHANNEL_POST_FAILED_NOTICE : null);
   } catch {
-    setActionDialogError(visualActionErrorMessage("action_failed"));
+    reopenWithError(visualActionErrorMessage("action_failed"));
   } finally {
     actionRequestId = null;
     setDeckActionsLocked(false);

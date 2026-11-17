@@ -17,6 +17,7 @@ const {
   memberChannelPermissions,
   optionalDiscordAccessGuard,
   requiredDiscordAccessGuard,
+  resolvePlayerDisplays,
   MAX_VISIBLE_DECKS,
   snapshotFromGameData,
   snapshotGameForUser,
@@ -1519,6 +1520,46 @@ describe("requiredDiscordAccessGuard", () => {
       body: { error: "try_again" },
     });
     expect(expensiveWaits).toEqual([]);
+  });
+});
+
+describe("resolvePlayerDisplays", () => {
+  test("fetchMissing false uses the discord.js cache and does not fetch", async () => {
+    let guildFetches = 0;
+    let memberFetches = 0;
+    const cached = await resolvePlayerDisplays({
+      guildId: "guild-1",
+      userIds: ["will", "missing"],
+      fetchMissing: false,
+      discordClient: {
+        guilds: {
+          cache: {
+            get: (id) =>
+              id === "guild-1"
+                ? {
+                    members: {
+                      cache: {
+                        get: (userId) =>
+                          userId === "will" ? { displayName: "WillOnServer" } : null,
+                      },
+                      fetch: async () => {
+                        memberFetches += 1;
+                        return { displayName: "Fetched" };
+                      },
+                    },
+                  }
+                : null,
+          },
+          fetch: async () => {
+            guildFetches += 1;
+            return null;
+          },
+        },
+      },
+    });
+    expect(cached).toEqual({ will: { name: "WillOnServer", avatarUrl: null } });
+    expect(guildFetches).toBe(0);
+    expect(memberFetches).toBe(0);
   });
 });
 

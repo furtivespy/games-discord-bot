@@ -147,6 +147,16 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("onDeckActionButtonClick");
     expect(main).toContain("openActionDialog");
     expect(main).toContain("submitDeckAction");
+    const submitDeckAction = main.slice(
+      main.indexOf("async function submitDeckAction"),
+      main.indexOf("function bindActionDialog")
+    );
+    expect(submitDeckAction.indexOf("closeActionDialog();")).toBeGreaterThan(-1);
+    expect(submitDeckAction.indexOf("closeActionDialog();")).toBeLessThan(
+      submitDeckAction.indexOf("await fetch(")
+    );
+    expect(submitDeckAction).toContain("shouldApplySnapshot");
+    expect(main).toContain("select.disabled = locked");
     expect(main).toContain("actionRequestUrl");
     expect(main).toContain("applySnapshot");
     expect(main).toContain("renderGameChannelLink");
