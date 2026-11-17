@@ -40,6 +40,7 @@ import {
   ACTION_COUNT_MAX,
   ACTION_COUNT_MIN,
   ACTION_ERROR_MESSAGES,
+  ACTION_SUBMIT_CLOSES_DIALOG_IMMEDIATELY,
   CHANNEL_POST_FAILED_NOTICE,
   DEFAULT_ACTION_COUNT,
   GAME_CHANNEL_LINK_LABEL,
@@ -499,7 +500,11 @@ function closeActionDialog() {
   dialog?.close?.();
 }
 
-function openActionDialog(kind: DeckActionKind, deckName: string) {
+function openActionDialog(
+  kind: DeckActionKind,
+  deckName: string,
+  count: number = DEFAULT_ACTION_COUNT
+) {
   if (actionInFlight) return;
   const els = actionDialogElements();
   if (!els.dialog || !els.input || !els.form) return;
@@ -514,7 +519,8 @@ function openActionDialog(kind: DeckActionKind, deckName: string) {
   els.dialog.dataset.deckName = deckName;
   els.input.min = String(ACTION_COUNT_MIN);
   els.input.max = String(ACTION_COUNT_MAX);
-  els.input.value = String(DEFAULT_ACTION_COUNT);
+  const restored = parseActionCount(count);
+  els.input.value = String(restored ?? DEFAULT_ACTION_COUNT);
   setActionDialogError(null);
   if (typeof els.dialog.showModal === "function") {
     if (!els.dialog.open) els.dialog.showModal();
@@ -537,6 +543,12 @@ async function submitDeckAction(kind: DeckActionKind, deckName: string, count: n
   actionRequestId = newActionRequestId();
   setDeckActionsLocked(true);
   setActionDialogError(null);
+  if (ACTION_SUBMIT_CLOSES_DIALOG_IMMEDIATELY) closeActionDialog();
+  const reopenWithError = (message: string) => {
+    setDeckActionsLocked(false);
+    openActionDialog(kind, deckName, count);
+    setActionDialogError(message);
+  };
   try {
     const response = await fetch(
       actionRequestUrl(session.config.apiHost, window.location.protocol),
@@ -574,14 +586,13 @@ async function submitDeckAction(kind: DeckActionKind, deckName: string, count: n
       payload = {};
     }
     if (!response.ok) {
-      setActionDialogError(visualActionErrorMessage(payload.error, payload.message));
+      reopenWithError(visualActionErrorMessage(payload.error, payload.message));
       return;
     }
-    closeActionDialog();
     applySnapshot(session.config, payload);
     setActionNotice(payload.channelPosted === false ? CHANNEL_POST_FAILED_NOTICE : null);
   } catch {
-    setActionDialogError(visualActionErrorMessage("action_failed"));
+    reopenWithError(visualActionErrorMessage("action_failed"));
   } finally {
     actionRequestId = null;
     setDeckActionsLocked(false);

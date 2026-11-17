@@ -540,19 +540,26 @@ function avatarUrlFromMember(member) {
   return null;
 }
 
-async function playerDisplayFromDiscord(discordClient, guildId, userId) {
+async function playerDisplayFromDiscord(
+  discordClient,
+  guildId,
+  userId,
+  { fetchMissing = true } = {}
+) {
   if (!discordClient || !guildId || !userId) return null;
   try {
     const guilds = discordClient.guilds;
     const cachedGuild = guilds?.cache?.get?.(guildId);
     const guild =
       cachedGuild ||
-      (typeof guilds?.fetch === "function" ? await guilds.fetch(guildId) : null);
+      (fetchMissing && typeof guilds?.fetch === "function"
+        ? await guilds.fetch(guildId)
+        : null);
     if (!guild) return null;
     const cachedMember = guild.members?.cache?.get?.(userId);
     const member =
       cachedMember ||
-      (typeof guild.members?.fetch === "function"
+      (fetchMissing && typeof guild.members?.fetch === "function"
         ? await guild.members.fetch(userId)
         : null);
     if (!member) return null;
@@ -576,7 +583,12 @@ async function playerDisplayFromDiscord(discordClient, guildId, userId) {
   }
 }
 
-async function resolvePlayerDisplays({ discordClient, guildId, userIds } = {}) {
+async function resolvePlayerDisplays({
+  discordClient,
+  guildId,
+  userIds,
+  fetchMissing = true,
+} = {}) {
   const displays = {};
   const ids = Array.isArray(userIds)
     ? [...new Set(userIds.map((id) => String(id || "")).filter(Boolean))]
@@ -584,7 +596,9 @@ async function resolvePlayerDisplays({ discordClient, guildId, userIds } = {}) {
   if (!ids.length) return displays;
   await Promise.all(
     ids.map(async (userId) => {
-      const display = await playerDisplayFromDiscord(discordClient, guildId, userId);
+      const display = await playerDisplayFromDiscord(discordClient, guildId, userId, {
+        fetchMissing,
+      });
       if (display && (display.name || display.avatarUrl)) {
         displays[userId] = display;
       }

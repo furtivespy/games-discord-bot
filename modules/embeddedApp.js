@@ -708,6 +708,14 @@ function createEmbeddedApp({
       idempotency: actionIdempotency,
     });
     sendSnapshotResult(res, result, req);
+    if (result?.channelPost && typeof result.channelPost.then === "function") {
+      void result.channelPost.catch((err) => {
+        logger?.log?.(
+          `Visual-mode action channel post failed: ${err.message || err}`,
+          "warn"
+        );
+      });
+    }
   }
 
   app.post(["/api/game/action", "/.proxy/api/game/action"], sendGameAction);

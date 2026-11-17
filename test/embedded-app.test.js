@@ -18,6 +18,7 @@ const {
   sanitizeClientId,
 } = require("../modules/embeddedApp");
 const VisualLaunch = require("../modules/visualLaunch");
+const { drainVisualActionChannelPosts } = require("../modules/embeddedActions");
 const GameStore = require("../db/gameStore");
 const GameDB = require("../db/anygame");
 const { DISCORD_API_BASE, GAME_COLLECTION } = require("../modules/embeddedGames");
@@ -1281,6 +1282,7 @@ describe("POST /api/game/action", () => {
         try {
           await run({ url, posted, store });
         } finally {
+          await drainVisualActionChannelPosts();
           server.close();
           fs.rmSync(staticDir, { recursive: true, force: true });
         }
@@ -1305,6 +1307,16 @@ describe("POST /api/game/action", () => {
     });
   }
 
+  async function waitFor(predicate, { timeoutMs = 2000, intervalMs = 5 } = {}) {
+    const start = Date.now();
+    while (!predicate()) {
+      if (Date.now() - start > timeoutMs) {
+        throw new Error("timed out waiting");
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+
   test("draw updates the snapshot hand and history and posts to the game channel", async () => {
     await withActionApp({}, async ({ url, posted }) => {
       const missingAuth = await fetch(`${url}/api/game/action`, {
@@ -1327,6 +1339,7 @@ describe("POST /api/game/action", () => {
       expect(body.channelPosted).toBe(true);
       expect(body.hand.map((card) => card.name)).toEqual(["Copper", "Ace", "King"]);
       expect(body.status.history.at(-1).summary).toBe("TableWill drew 2 cards from Main");
+      await waitFor(() => posted.length === 1);
       expect(posted[0].content).toContain("TableWill drew 2 cards from Main");
 
       const snapshot = await fetch(
@@ -1349,6 +1362,7 @@ describe("POST /api/game/action", () => {
       expect(body.message).toBe("Dealt out a total of 2 cards from Main.");
       expect(body.channelPosted).toBe(true);
       expect(body.hand.map((card) => card.name)).toEqual(["Copper", "Ace"]);
+      await waitFor(() => posted.length === 1);
       expect(posted[0].content).toContain("Dealt out a total of 2 cards from Main.");
     });
   });
@@ -1540,10 +1554,10 @@ describe("POST /api/game/action", () => {
         (entry) => entry?.action?.type === GameDB.ACTION_TYPES.DRAW
       );
       expect(drawHistory.map((entry) => entry.summary)).toEqual([
-        "WillOnServer drew 1 cards from Main",
-        "WillOnServer drew 1 cards from Main",
+        "TableWill drew 1 cards from Main",
+        "TableWill drew 1 cards from Main",
       ]);
-      expect(posted).toHaveLength(drawHistory.length);
+      await waitFor(() => posted.length === drawHistory.length);
       posted.forEach((payload, index) => {
         expect(postMatchesHistory(payload.content, drawHistory[index])).toBe(true);
       });
@@ -1589,10 +1603,60 @@ describe("POST /api/game/action", () => {
       expect(history.map((entry) => entry.action.type).sort()).toEqual(
         [GameDB.ACTION_TYPES.DEAL, GameDB.ACTION_TYPES.DRAW].sort()
       );
-      expect(posted).toHaveLength(history.length);
-      posted.forEach((payload, index) => {
-        expect(postMatchesHistory(payload.content, history[index])).toBe(true);
-      });
+      await waitFor(() => posted.length === history.length);
+      const postedContents = posted.map((payload) => payload.content);
+      for (const entry of history) {
+        expect(
+          postedContents.some((content) => postMatchesHistory(content, entry))
+        ).toBe(true);
+      }
     });
+  });
+
+  test("Deal POST returns the table before a slow channel send finishes", async () => {
+    let releaseSend;
+    const sendGate = new Promise((resolve) => {
+      releaseSend = resolve;
+    });
+    let memberFetches = 0;
+    await withActionApp(
+      {
+        send: async (payload, posted) => {
+          await sendGate;
+          posted.push(payload);
+          return { id: "msg-1" };
+        },
+        clientExtras: {
+          guilds: {
+            cache: { get: () => null },
+            fetch: async () => {
+              memberFetches += 1;
+              return {
+                members: {
+                  cache: { get: () => null },
+                  fetch: async () => ({ displayName: "SlowNick" }),
+                },
+              };
+            },
+          },
+        },
+      },
+      async ({ url, posted }) => {
+        try {
+          const res = await postAction(url, { action: "deal", deck: "Main", count: 1 });
+          expect(res.status).toBe(200);
+          const body = await res.json();
+          expect(body.message).toBe("Dealt out a total of 2 cards from Main.");
+          expect(body.hand.map((card) => card.name)).toEqual(["Copper", "Ace"]);
+          expect(body.channelPosted).toBe(true);
+          expect(posted).toHaveLength(0);
+          expect(memberFetches).toBe(0);
+        } finally {
+          releaseSend();
+        }
+        await waitFor(() => posted.length === 1);
+        expect(posted[0].content).toContain("Dealt out a total of 2 cards from Main.");
+      }
+    );
   });
 });

@@ -3,6 +3,8 @@ import shared from "../../modules/visualActionShared.json";
 export const ACTION_COUNT_MIN = shared.ACTION_COUNT_MIN;
 export const ACTION_COUNT_MAX = shared.ACTION_COUNT_MAX;
 export const DEFAULT_ACTION_COUNT = shared.DEFAULT_ACTION_COUNT;
+/** Close the Deal/Draw dialog as soon as the user confirms; do not wait for the POST. */
+export const ACTION_SUBMIT_CLOSES_DIALOG_IMMEDIATELY = true;
 export const GAME_CHANNEL_LINK_LABEL = "Open Discord channel";
 export const CHANNEL_POST_FAILED_NOTICE =
   "The table updated, but Discord didn't get the channel message.";

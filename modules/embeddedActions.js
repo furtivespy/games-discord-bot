@@ -15,6 +15,7 @@ const {
   resolveGetGameData,
   resolvePlayerDisplays,
   snapshotFromGameData,
+  snapshotVersion,
   userIsPlayer,
 } = require("./embeddedGames");
 
@@ -154,7 +155,9 @@ async function persistGameData({
   gameData,
 }) {
   if (typeof discordClient?.setGameDataV2 === "function") {
-    await discordClient.setGameDataV2(guildId, GAME_COLLECTION, channelId, gameData);
+    await discordClient.setGameDataV2(guildId, GAME_COLLECTION, channelId, gameData, {
+      skipPinnedRefresh: true,
+    });
     return;
   }
   if (typeof gameStore?.upsertGameData === "function") {
@@ -237,7 +240,9 @@ function applyVisualCardAction(gameData, { action, deckName, count, actor, userI
 
 /**
  * Serialize load → mutate → save for one game document. Two Deal/Draw POSTs
- * with different requestIds must not both load the same snapshot.
+ * with different requestIds must not both load the same snapshot. The Discord
+ * channel post stays on this lock so persistStatusUpdate cannot clobber a
+ * later save. The HTTP response is released as soon as persist finishes.
  */
 function createGameChannelLock() {
   const tails = new Map();
@@ -261,6 +266,22 @@ function createGameChannelLock() {
 }
 
 const defaultGameChannelLock = createGameChannelLock();
+const pendingChannelPosts = new Set();
+
+function startChannelPost(work) {
+  const promise = Promise.resolve()
+    .then(work)
+    .catch(() => false);
+  pendingChannelPosts.add(promise);
+  promise.finally(() => pendingChannelPosts.delete(promise));
+  return promise;
+}
+
+async function drainVisualActionChannelPosts() {
+  while (pendingChannelPosts.size > 0) {
+    await Promise.all([...pendingChannelPosts]);
+  }
+}
 
 async function enrichActorDisplayName(actor, { discordClient, guildId, userId }) {
   try {
@@ -268,13 +289,14 @@ async function enrichActorDisplayName(actor, { discordClient, guildId, userId })
       discordClient,
       guildId,
       userIds: [userId],
+      fetchMissing: false,
     });
     const guildName = displays[userId]?.name;
     if (typeof guildName === "string" && guildName.trim()) {
       actor.displayName = guildName.trim();
     }
   } catch {
-    // OAuth global_name / username / member nick is enough if the lookup fails.
+    // OAuth global_name / username / member nick is enough if the cache misses.
   }
 }
 
@@ -347,6 +369,7 @@ async function snapshotFromCurrentGame({
     discordClient,
     guildId,
     userIds,
+    fetchMissing: false,
   });
   return snapshotFromGameData(gameData, {
     channelId,
@@ -391,33 +414,74 @@ async function runVisualCardAction({
       ? gameChannelLock
       : defaultGameChannelLock;
 
-  const execute = () =>
-    lock.run(gid, cid, async () => {
-      const persisted = await runVisualCardActionOnce({
-        action,
-        deckName,
-        count,
-        actor,
-        guildId: gid,
-        channelId: cid,
-        userId: uid,
-        getGameData,
-        discordClient,
-        gameStore,
-        logger,
-      });
-      if (persisted.status !== 200) return persisted;
-      return finishVisualCardAction({
-        gameData: persisted.gameData,
-        applied: persisted.applied,
-        actor,
-        discordClient,
-        guildId: gid,
-        channelId: cid,
-        userId: uid,
-        logger,
-      });
+  const execute = () => {
+    let settlePersist;
+    const persistReady = new Promise((resolve, reject) => {
+      settlePersist = { resolve, reject };
     });
+    const channelPost = startChannelPost(() =>
+      lock.run(gid, cid, async () => {
+        try {
+          const persisted = await runVisualCardActionOnce({
+            action,
+            deckName,
+            count,
+            actor,
+            guildId: gid,
+            channelId: cid,
+            userId: uid,
+            getGameData,
+            discordClient,
+            gameStore,
+            logger,
+          });
+          if (persisted.status !== 200) {
+            settlePersist.resolve(persisted);
+            return persisted;
+          }
+          const snapshotBody = await snapshotFromCurrentGame({
+            gameData: persisted.gameData,
+            discordClient,
+            guildId: gid,
+            channelId: cid,
+            userId: uid,
+          });
+          const version = snapshotVersion(persisted.gameData, {
+            channelId: cid,
+            guildId: gid,
+            userId: uid,
+          });
+          const result = {
+            status: 200,
+            version,
+            body: {
+              ...snapshotBody,
+              version,
+              message: persisted.applied.content,
+              channelPosted: true,
+            },
+          };
+          settlePersist.resolve(result);
+          return finishVisualCardAction({
+            gameData: persisted.gameData,
+            applied: persisted.applied,
+            actor,
+            discordClient,
+            guildId: gid,
+            channelId: cid,
+            logger,
+          });
+        } catch (err) {
+          settlePersist.reject(err);
+          throw err;
+        }
+      })
+    );
+    return persistReady.then((result) => {
+      if (result.status === 200) result.channelPost = channelPost;
+      return result;
+    });
+  };
 
   if (idempotency && typeof idempotency.run === "function") {
     return idempotency.run(requestId, uid, gid, cid, execute, {
@@ -506,12 +570,10 @@ async function finishVisualCardAction({
   discordClient,
   guildId,
   channelId,
-  userId,
   logger,
 }) {
-  let channelPosted = false;
   try {
-    channelPosted = Boolean(
+    return Boolean(
       await postCommandToGameChannel({
         discordClient,
         guildId,
@@ -527,24 +589,8 @@ async function finishVisualCardAction({
       `Failed to post visual-mode action to Discord: ${err.message || err}`,
       "warn"
     );
-    channelPosted = false;
+    return false;
   }
-
-  const snapshotBody = await snapshotFromCurrentGame({
-    gameData,
-    discordClient,
-    guildId,
-    channelId,
-    userId,
-  });
-  return {
-    status: 200,
-    body: {
-      ...snapshotBody,
-      message: applied.content,
-      channelPosted,
-    },
-  };
 }
 
 module.exports = {
@@ -554,6 +600,7 @@ module.exports = {
   applyVisualCardAction,
   createActionIdempotencyCache,
   createGameChannelLock,
+  drainVisualActionChannelPosts,
   parseVisualActionBody,
   parseVisualActionRequestId,
   postCommandToGameChannel,
