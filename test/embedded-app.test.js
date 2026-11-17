@@ -432,7 +432,7 @@ describe("embedded HTTP origin", () => {
     expect(css).not.toContain(".status-player-meta");
   });
 
-  test("card rows are not scroll containers so drag and hover zoom are not clipped", () => {
+  test("card rows stay visible so drag and hover zoom are not clipped by the row", () => {
     const css = fs
       .readFileSync(
         path.join(__dirname, "..", "embedded-client", "src", "style.css"),
@@ -460,7 +460,8 @@ describe("embedded HTTP origin", () => {
       expect(body).not.toMatch(/overflow:\s*(auto|scroll|hidden)/);
     };
 
-    overflowIsVisible(ruleBody("#table"));
+    expect(ruleBody("#table")).toMatch(/overflow:\s*auto/);
+    expect(ruleBody("#table")).not.toMatch(/overflow:\s*visible/);
     overflowIsVisible(ruleBody(".zone"));
     overflowIsVisible(ruleBody(".cards"));
     overflowIsVisible(ruleBody(".board-spread"));
@@ -505,9 +506,10 @@ describe("embedded HTTP origin", () => {
     expect(ruleBody("#table")).toMatch(/flex-direction:\s*column/);
     expect(ruleBody("#table")).toMatch(/height:\s*100%/);
     expect(ruleBody("#table")).toMatch(/box-sizing:\s*border-box/);
-    expect(ruleBody("#table")).not.toMatch(/container-type:\s*size/);
+    expect(ruleBody("#table")).not.toMatch(/container-type:/);
     expect(ruleBody("#table")).not.toMatch(/align-content:\s*start/);
     expect(ruleBody("#table > *")).toMatch(/flex-shrink:\s*0/);
+    expect(ruleBody(".hand-zone")).toMatch(/flex-shrink:\s*0/);
     expect(ruleBody(".hand-zone")).toMatch(/margin-top:\s*auto/);
     expect(ruleBody(".hand-zone")).not.toMatch(/z-index\s*:/);
     expect(ruleBody(".hand-zone")).not.toMatch(/transform\s*:/);
@@ -535,11 +537,14 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain("--hand-overlap: 3.478rem");
     expect(css).toContain("width: var(--card-width)");
     expect(css).toContain("height: var(--card-height)");
-    expect(css).toContain("scale(var(--card-hover-scale))");
-    expect(css).toContain("margin-left: calc(-1 * var(--hand-overlap))");
     expect(css).not.toContain("--card-used-height");
     expect(css).not.toContain("--card-fit-height");
     expect(css).not.toContain("container-type: size");
+    expect(css).not.toContain("max(5.5rem");
+    expect(css).toContain("scale(var(--card-hover-scale))");
+    expect(css).toContain("margin-left: calc(-1 * var(--hand-overlap))");
+    expect(css).toMatch(/#table\s*>\s*\*\s*\{[^}]*flex-shrink:\s*0/);
+    expect(css).toMatch(/\.hand-zone\s*\{[^}]*flex-shrink:\s*0/);
     expect(css).not.toMatch(/\.card-tile,\s*\.deck-tile\s*\{[^}]*width:\s*5\.4rem/);
     expect(css).not.toMatch(/\.card-tile,\s*\.deck-tile\s*\{[^}]*height:\s*7\.55rem/);
     expect(css).not.toContain("scale(1.28)");

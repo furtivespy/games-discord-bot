@@ -11,8 +11,9 @@
   --tile-ink: #1c140c;
   --red: #c62828;
   --shadow: 0 10px 18px rgba(0, 0, 0, 0.35);
-  /* Resting tiles match the old hover-zoom (5.4×7.55rem × 1.48). Hover still
-     uses the same 1.48 scale from this new size. */
+  /* Resting tiles match the old hover-zoom (5.4×7.55rem × 1.48). Do not
+     shrink tiles to fit the viewport; the table scrolls instead. Hover still
+     uses the same 1.48 scale from this size. */
   --card-width: 7.992rem;
   --card-height: 11.174rem;
   --card-hover-scale: 1.48;
@@ -354,7 +355,7 @@ body {
   flex-direction: column;
   gap: 0.45rem;
   padding: 0.5rem 0.75rem 0.55rem;
-  overflow: visible;
+  overflow: auto;
   /* Cards from every zone share this stacking context so a raised tile can
      paint above later DOM zones. Do not put z-index/transform on .zone. */
   isolation: isolate;
@@ -365,6 +366,7 @@ body {
 }
 
 .hand-zone {
+  flex-shrink: 0;
   margin-top: auto;
 }
 
