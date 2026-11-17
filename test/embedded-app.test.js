@@ -394,6 +394,12 @@ describe("embedded HTTP origin", () => {
     expect(html).toContain('id="card-inspect"');
     expect(html).toContain('id="card-inspect-art"');
     expect(html).toContain('id="card-inspect-caption"');
+    expect(html).toContain('id="card-inspect-meta"');
+    expect(html).toContain('class="card-inspect-close-form"');
+    expect(html).toContain('class="card-inspect-close"');
+    expect(html).toContain('aria-label="Close"');
+    expect(html).toContain('viewBox="0 0 24 24"');
+    expect(html).not.toMatch(/class="card-inspect-close"[^>]*>\s*Close\s*</);
     const css = fs.readFileSync(
       path.join(__dirname, "..", "embedded-client", "src", "style.css"),
       "utf8"
@@ -420,6 +426,17 @@ describe("embedded HTTP origin", () => {
     expect(css).toMatch(/\.card-tile img[\s\S]*object-fit:\s*contain/);
     expect(css).toContain(".card-inspect-dialog");
     expect(css).toContain(".card-inspect-description");
+    expect(css).toContain(".card-inspect-close-form");
+    expect(css).toContain(".card-inspect-dialog.is-photo");
+    expect(css).toMatch(
+      /\.card-inspect-close-form\s*\{[^}]*top:\s*0\.7rem[^}]*right:\s*0\.7rem/
+    );
+    expect(css).toMatch(
+      /\.card-inspect-dialog\.is-photo \.card-inspect-art:not\(\[hidden\]\)\s*\{[^}]*width:\s*90vw[^}]*height:\s*90vh[^}]*max-width:\s*90vw[^}]*max-height:\s*90vh/
+    );
+    expect(css).toMatch(
+      /\.card-inspect-art:not\(\[hidden\]\)\s*\{[^}]*max-width:\s*min\(28rem,\s*86vw\)[^}]*max-height:\s*min\(78vh,\s*36rem\)/
+    );
     expect(css).toContain(".deck-tile:hover .deck-actions");
     expect(css).toContain(".deck-tile:has(:focus-visible) .deck-actions");
     expect(css).toMatch(/\.deck-actions\s*\{[^}]*bottom:\s*2rem/);

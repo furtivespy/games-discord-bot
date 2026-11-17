@@ -48,9 +48,13 @@ const {
   visualOffset,
 } = require("../embedded-client/src/drag.ts");
 const {
+  HOST_IMAGE_ID_PREFIX,
+  INSPECT_PHOTO_CLASS,
+  INSPECT_PHOTO_LABEL,
   inspectCardCaption,
   inspectCardTitle,
   inspectView,
+  isHostThreadImage,
 } = require("../embedded-client/src/cardInspect.ts");
 const {
   asCardList,
@@ -926,17 +930,67 @@ describe("card inspect modal content", () => {
     expect(inspectView({ name: "Province", description: "8 points" }, "/art.png")).toEqual({
       title: "Province",
       caption: "8 points",
+      showTitle: true,
       showArt: true,
       artSrc: "/art.png",
       showProxy: false,
+      layout: "card",
     });
     expect(inspectView({ name: "Copper" }, null)).toEqual({
       title: "Copper",
       caption: "",
+      showTitle: true,
       showArt: false,
       artSrc: null,
       showProxy: true,
+      layout: "card",
     });
+  });
+
+  test("thread host images enlarge as a nameless photo, not a titled card", () => {
+    expect(HOST_IMAGE_ID_PREFIX).toBe("host-image:");
+    expect(INSPECT_PHOTO_CLASS).toBe("is-photo");
+    expect(INSPECT_PHOTO_LABEL).toBe("Enlarged photo");
+    expect(isHostThreadImage({ id: "host-image:m1:a1", name: "Image" })).toBe(true);
+    expect(isHostThreadImage({ id: "card-12", name: "Image" })).toBe(false);
+    expect(isHostThreadImage({ name: "Image" })).toBe(false);
+    expect(
+      inspectView(
+        { id: "host-image:host-msg-1:att-1", name: "Image" },
+        "/mock-host-setup.svg"
+      )
+    ).toEqual({
+      title: "",
+      caption: "",
+      showTitle: false,
+      showArt: true,
+      artSrc: "/mock-host-setup.svg",
+      showProxy: false,
+      layout: "photo",
+    });
+    expect(
+      inspectView({ id: "host-image:m1:a1", name: "map", description: "ignored" }, null)
+    ).toEqual({
+      title: "",
+      caption: "",
+      showTitle: false,
+      showArt: false,
+      artSrc: null,
+      showProxy: true,
+      layout: "photo",
+    });
+    const inspectSrc = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "embedded-client", "src", "cardInspect.ts"),
+      "utf8"
+    );
+    expect(inspectSrc).toContain("dialog.classList.toggle(INSPECT_PHOTO_CLASS");
+    expect(inspectSrc).toContain("title.hidden = !view.showTitle");
+    const html = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "embedded-client", "index.html"),
+      "utf8"
+    );
+    expect(html).toContain('class="card-inspect-close-form"');
+    expect(html).not.toMatch(/class="card-inspect-close"[^>]*>\s*Close\s*</);
   });
 });
 
