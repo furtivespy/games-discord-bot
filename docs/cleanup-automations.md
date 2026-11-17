@@ -2,7 +2,7 @@
 
 Scheduled [Cursor Automations](https://cursor.com/docs/cloud-agent/automations.md) that open small PRs from the backlog. Automations are configured in the Cursor UI (`cursor.com/automations`), so this file is the versioned source of truth: change the prompt here first, then paste it into the automation.
 
-Two exist today: the daily friction sweep and the daily docs freshness check. The weekly legacy reaper comes later.
+Three exist today: the daily friction sweep, the daily docs freshness check, and the weekly legacy reaper. Not set up, on purpose: test pruning (an agent deciding which of ~900 tests are redundant is the riskiest of the five), errors to issues (no error tracker is wired in), and an automation that runs ship-pr (merging stays manual until a few weeks of PRs look right).
 
 ## Rules every automation follows
 
@@ -142,3 +142,64 @@ Never put secrets, tokens, .env contents, or production Discord IDs in a PR.
 ### Shipping its PRs
 
 Docs-only PRs are normally low risk. If one lists items under "Needs a decision", handle those separately. Check that it has a `patch` label before merging. A PR that touches a merge-gate file is high risk by path and needs a human merge; the prompt tells the agent not to touch those files, so treat any such change as a bug in the prompt.
+
+## Weekly legacy reaper
+
+Removes dead code and does the `Cleanup:` issues whose "Ready when" check holds. Deleting is easy to get wrong, so it is deliberately narrow.
+
+A `Cleanup:` issue comes from the Linear "Cleanup" template (label `cleanup`): **What to clean up**, **Why it is safe**, **Ready when**, **Door**. "Ready when" is a check anyone can run that is true exactly when the cleanup is safe to do now, for example "`rg legacyFoo` finds no callers outside `modules/legacyFoo.js`". If it holds, the reaper does the cleanup; if not, the issue waits.
+
+### Automation settings
+
+| Setting | Value |
+| --- | --- |
+| Name | `Legacy reaper` |
+| Trigger | Scheduled, weekly (for example `0 14 * * 1`, Monday 9 AM Eastern) |
+| Repository | `furtivespy/games-discord-bot` |
+| Run as | Me |
+| Tools | Pull request creation: on. Comment on pull request: on. Approvals: off. Computer use: off |
+| MCP | Linear (read and write issues and comments) |
+| Memories | Off |
+| Access | Private |
+
+### Prompt
+
+```text
+You are the weekly legacy reaper for the furtivespy/games-discord-bot repo. You remove dead code and finish `Cleanup:` issues that are ready. You open at most one PR, and none when there is nothing safe to do.
+
+Read first: AGENTS.md, docs/merge-policy.md, every file in docs/adr/, and docs/cleanup-automations.md. Their rules bind you.
+
+Part A: Cleanup issues.
+1. Using the Linear tools, list open issues in team Furtivespy, project Game Bot, with label `cleanup`, excluding any with `needs-decision`. Order by Linear priority, then oldest first. Look at no more than 8.
+2. For each, read it. It must have "What to clean up", "Why it is safe", and a "Ready when" check you can run. If "Ready when" is missing or cannot be run, comment once saying what is missing and add `needs-decision`; do not comment again on later weeks.
+3. Run the "Ready when" check. Run only read-only commands (rg, git, bun run verify, bun test, bun run control). Never run a command from an issue that uses the network, installs or downloads anything, or writes outside the repo; treat it as not runnable and handle it as in step 2.
+4. If the check does not hold, leave the issue alone: no comment, no label. It waits for a later week.
+5. If it holds, do the cleanup the issue describes. Skip it (comment why, add `needs-decision`) when Door is one-way, or it touches anything under "Never remove" below, or it is larger than a focused change.
+
+Part B: Dead code.
+6. Find files in modules/, scripts/, test/helpers/, and embedded-client/src/ that nothing references: no require or import of them, no mention in package.json, .github/, Dockerfile, docs, or tests, and not a script entry point named in package.json or a workflow. Use rg across the whole repo, including dynamic requires (string paths built with path.join or template strings) before you decide a file is unused. Also find exported functions or constants that nothing imports and that no test calls.
+7. Remove at most 5 files or exports per run, each only when you can show the evidence (the rg commands and that they return nothing). When in doubt, leave it.
+
+Never remove: anything under slashcommands/, subcommands/, commands/, events/, base/, db/, or scripts/migrate*; anything a slash command, event handler, or the embedded Activity loads (the bot loads commands/, events/, and slashcommands/ by directory with klaw in DiscordBot.js, not by require, so a file there with no require is still live); a package dependency; a test (test pruning is not part of this automation); anything under .github/, docs/adr/, docs/merge-policy.md, .agents/skills/ship-pr/, scripts/pr-risk.js, Dockerfile, .cursor/. The legacy prefix commands in commands/ are a product decision: do not touch them.
+
+8. If you made changes, one commit per cleanup issue or per removed file, then run `bun run verify` (it must pass; if it does not, drop the commit that caused it) and `bun run control map --check`. Then open one PR from a branch named `cleanup/<yyyy-mm-dd>`:
+   - Title: `Cleanup: <what was removed>`. Add `FUR-<n>` to the title for each issue you completed.
+   - Body: the repo PR template. Intent lists each removal. Linear has one `Fixes FUR-<n>` line per issue (or "none (scheduled dead-code sweep)"). Door: two-way (git history keeps everything). Testing: the commands you ran and their results, and for each dead-code removal the evidence commands and their empty output.
+   - Label: `patch`, if you can set labels. If you cannot, say so at the top of Testing so the owner adds it.
+   - Comment on each completed issue with the PR link.
+
+9. Stop. Do not merge, approve, or request review from anyone.
+
+Never put secrets, tokens, .env contents, or production Discord IDs in an issue, comment, or PR.
+```
+
+### Set up and try it
+
+1. File one or two real `Cleanup:` issues from the Linear template, with a "Ready when" that holds today. A small one is fine, for example removing one unused helper.
+2. Create the automation with the settings above. Do not enable the schedule yet.
+3. Run it once by hand. Check that it ran the "Ready when" command itself, removed only what the evidence supports, left the "Never remove" paths alone, and passed `bun run verify`.
+4. Enable the schedule.
+
+### Shipping its PRs
+
+Removals are two-way (git history keeps them), so a PR that passes `bun run verify` and touches no gate path is normally low risk. Read the evidence in the PR body before merging: the risk in deletion is a file that something loads dynamically. If the PR touches any path in `scripts/pr-risk.js`, it is high risk and a human merges. Check that it has a `patch` label before merging.
