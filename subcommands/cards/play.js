@@ -29,9 +29,10 @@ class Play {
             return
         }
 
-        const [, outcome] = await Promise.all([
-            interaction.deferReply(),
-            withGameDocumentLock(interaction.guildId, interaction.channelId, async () => {
+        // Ack Discord first. Persist only after defer succeeds so a failed
+        // ack cannot leave the card already gone from the hand.
+        await interaction.deferReply()
+        const outcome = await withGameDocumentLock(interaction.guildId, interaction.channelId, async () => {
                 const gameData = await GameHelper.getGameData(client, interaction)
                 if (gameData.isdeleted) {
                     return { kind: "no_game" }
@@ -62,7 +63,6 @@ class Play {
                 await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
                 return { kind: "ok", gameData, player, result }
             })
-        ]);
 
         if (outcome.kind === "no_game") {
             await interaction.editReply({ content: `There is no game in this channel.`})

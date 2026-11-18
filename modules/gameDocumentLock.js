@@ -3,8 +3,9 @@
 /**
  * Serialize load → mutate → save for one game document. Slash `/cards hand
  * play|discard|show` and visual Activity actions share this queue so they
- * cannot last-write-wins against each other. Channel posts stay off this
- * lock: a hung Discord send or pin REST must not stall the next persist.
+ * cannot last-write-wins against each other. Channel posts and snapshot
+ * host-image fetches stay off this lock: a hung Discord send, pin REST, or
+ * host-image GET must not stall the next persist.
  */
 function createGameChannelLock() {
   const tails = new Map();

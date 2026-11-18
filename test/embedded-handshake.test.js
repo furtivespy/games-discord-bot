@@ -31,6 +31,8 @@ const {
   shouldUseOpenExternalLink,
   tryOpenExternalLink,
   HAND_CARD_ACTIONS,
+  isVisualActionSnapshot,
+  readVisualActionResponse,
   visualActionBody,
   visualActionErrorMessage,
   visualHandActionBody,
@@ -169,7 +171,7 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("enableCardInspectDialog");
     expect(main).toContain("closeCardInspect");
     expect(main).toContain("submitHandCardAction");
-    expect(main).toContain("visualHandActionBody");
+    expect(main).toContain("./submitHandCardAction");
     expect(main).toContain("setInspectCardActionHandler");
     expect(main).toContain("snapshotLoader");
     expect(main).toContain("createSnapshotLoader");
@@ -1407,19 +1409,43 @@ describe("deck hover Deal and Draw", () => {
     ).toBe(false);
   });
 
-  test("a failed PLAY/DISCARD/SHOW closes inspect so snapshot polls resume", () => {
-    const main = require("fs").readFileSync(
-      require("path").join(__dirname, "..", "embedded-client", "src", "main.ts"),
-      "utf8"
-    );
-    const submit = main.slice(
-      main.indexOf("async function submitHandCardAction"),
-      main.indexOf("function bindActionDialog")
-    );
-    expect(submit).toContain("closeInspectAfterFailedAction");
-    expect(submit).toMatch(/if \(!response\.ok\) \{[\s\S]*closeInspectAfterFailedAction\(\)/);
-    expect(submit).toContain("flushDeferredSnapshot");
-    expect(submit).toContain("setActionNotice");
+  test("HTTP 200 with an empty or non-JSON body is not a table snapshot", async () => {
+    expect(isVisualActionSnapshot({})).toBe(false);
+    expect(isVisualActionSnapshot(null)).toBe(false);
+    expect(isVisualActionSnapshot("ok")).toBe(false);
+    expect(isVisualActionSnapshot({ error: "action_failed" })).toBe(false);
+    expect(
+      isVisualActionSnapshot({ version: "abc", channelId: "thread-1", hand: [] })
+    ).toBe(true);
+    expect(isVisualActionSnapshot({ hand: [] })).toBe(true);
+
+    expect(
+      await readVisualActionResponse({
+        ok: true,
+        text: async () => "",
+      })
+    ).toEqual({ kind: "invalid_body", payload: {} });
+    expect(
+      await readVisualActionResponse({
+        ok: true,
+        text: async () => "not-json",
+      })
+    ).toEqual({ kind: "invalid_body", payload: {} });
+    expect(
+      await readVisualActionResponse({
+        ok: true,
+        text: async () => "{}",
+      })
+    ).toEqual({ kind: "invalid_body", payload: {} });
+    expect(
+      await readVisualActionResponse({
+        ok: false,
+        text: async () => JSON.stringify({ error: "card_not_in_hand" }),
+      })
+    ).toEqual({
+      kind: "http_error",
+      payload: { error: "card_not_in_hand" },
+    });
   });
 
   test("Edit Scores posts the shared scores action body", () => {

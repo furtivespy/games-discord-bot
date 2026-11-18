@@ -9,6 +9,7 @@ const {
   createActionIdempotencyCache,
   drainLockedVisualActions,
   applyVisualScoreAction,
+  createGameChannelLock,
   parseVisualActionBody,
   runVisualCardAction,
   runVisualScoreAction,
@@ -581,6 +582,55 @@ describe("runVisualCardAction", () => {
     expect(saved.players[0].hands.main.map((card) => card.id)).toEqual(["hand-1"]);
   });
 
+  test("sequential SHOW of the same card within a short window does not double-post", async () => {
+    const { posted, store, discordClient } = clientForGame(gameWithDeck());
+    const cache = createActionIdempotencyCache();
+    const args = {
+      action: "show",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+      idempotency: cache,
+    };
+    const first = await runVisualCardAction({ ...args, requestId: "show-req-aaaa" });
+    await drainLockedVisualActions();
+    const second = await runVisualCardAction({ ...args, requestId: "show-req-bbbb" });
+    await drainLockedVisualActions();
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.history.filter((entry) => entry.action?.type === GameDB.ACTION_TYPES.REVEAL)).toHaveLength(
+      1
+    );
+    expect(posted).toHaveLength(1);
+  });
+
+  test("SHOW of the same card can post again after the coalesce window", async () => {
+    const { posted, store, discordClient } = clientForGame(gameWithDeck());
+    const cache = createActionIdempotencyCache({ showCoalesceTtlMs: 5 });
+    const args = {
+      action: "show",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+      idempotency: cache,
+    };
+    await runVisualCardAction({ ...args, requestId: "show-req-aaaa" });
+    await drainLockedVisualActions();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await runVisualCardAction({ ...args, requestId: "show-req-bbbb" });
+    await drainLockedVisualActions();
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.history.filter((entry) => entry.action?.type === GameDB.ACTION_TYPES.REVEAL)).toHaveLength(
+      2
+    );
+    expect(posted).toHaveLength(2);
+  });
+
   test("duplicate SHOW requestIds reuse the first successful result", async () => {
     const { posted, discordClient } = clientForGame(gameWithDeck());
     const cache = createActionIdempotencyCache();
@@ -655,6 +705,79 @@ describe("runVisualCardAction", () => {
     const saved = store.get("guild-1:game:thread-game");
     expect(slashSawHand1).toBe(false);
     expect(saved.players[0].hands.main.map((card) => card.id)).toEqual([]);
+  });
+
+  test("host-image snapshot fetches do not hold the persist lock", async () => {
+    const game = gameWithDeck();
+    game.history = [
+      {
+        timestamp: "2026-11-17T12:00:00.000Z",
+        actor: { userId: "snowflake-user" },
+        action: {
+          category: GameDB.ACTION_CATEGORIES.GAME,
+          type: GameDB.ACTION_TYPES.CREATE,
+        },
+      },
+    ];
+    const { store, discordClient } = clientForGame(game);
+    discordClient.token = "bot-token";
+    const inner = createGameChannelLock();
+    let lockDepth = 0;
+    const gameChannelLock = {
+      run(guildId, channelId, fn) {
+        return inner.run(guildId, channelId, async () => {
+          lockDepth += 1;
+          try {
+            return await fn();
+          } finally {
+            lockDepth -= 1;
+          }
+        });
+      },
+    };
+    let fetchStarted = false;
+    let releaseFetch;
+    const fetchGate = new Promise((resolve) => {
+      releaseFetch = resolve;
+    });
+    let lockHeldWhenFetchStarted = null;
+    const fetchImpl = async () => {
+      lockHeldWhenFetchStarted = lockDepth > 0;
+      fetchStarted = true;
+      await fetchGate;
+      return { status: 200, json: async () => [] };
+    };
+
+    const visual = runVisualCardAction({
+      action: "play",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+      gameChannelLock,
+      fetchImpl,
+    });
+
+    const start = Date.now();
+    while (!fetchStarted) {
+      if (Date.now() - start > 2000) throw new Error("host-image fetch never started");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    expect(lockHeldWhenFetchStarted).toBe(false);
+    expect(store.get("guild-1:game:thread-game").players[0].hands.main).toEqual([]);
+
+    let slashFinished = false;
+    await gameChannelLock.run("guild-1", "thread-game", async () => {
+      slashFinished = true;
+    });
+    expect(slashFinished).toBe(true);
+
+    releaseFetch();
+    const result = await visual;
+    await drainLockedVisualActions();
+    expect(result.status).toBe(200);
   });
 
   test("draw auto-joins a non-player the way /cards deck drawmultiple does", async () => {

@@ -180,3 +180,61 @@ export function visualHandActionBody(opts: {
   if (fixture) body.fixture = fixture;
   return body;
 }
+
+/**
+ * HTTP 200 with `{}` or a non-object body is not a table snapshot. Applying it
+ * would wipe the hand/board via `asCardList(undefined) === []`.
+ */
+export function isVisualActionSnapshot(
+  payload: unknown
+): payload is Record<string, unknown> {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return false;
+  }
+  const obj = payload as Record<string, unknown>;
+  if (typeof obj.version === "string" && obj.version.trim()) return true;
+  if (typeof obj.channelId === "string" && obj.channelId.trim()) return true;
+  if (Array.isArray(obj.hand)) return true;
+  if (Array.isArray(obj.playArea)) return true;
+  if (Array.isArray(obj.gameBoard)) return true;
+  if (Array.isArray(obj.decks)) return true;
+  if (obj.status && typeof obj.status === "object" && !Array.isArray(obj.status)) {
+    return true;
+  }
+  return false;
+}
+
+export type VisualActionResponseResult =
+  | { kind: "http_error"; payload: Record<string, unknown> }
+  | { kind: "invalid_body"; payload: Record<string, unknown> }
+  | { kind: "snapshot"; payload: Record<string, unknown> };
+
+function asPayloadObject(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+export async function readVisualActionResponse(response: {
+  ok: boolean;
+  text?: () => Promise<string>;
+  json?: () => Promise<unknown>;
+}): Promise<VisualActionResponseResult> {
+  let parsed: unknown = null;
+  try {
+    if (typeof response.text === "function") {
+      const raw = await response.text();
+      const trimmed = String(raw ?? "").trim();
+      if (trimmed) parsed = JSON.parse(trimmed);
+    } else if (typeof response.json === "function") {
+      parsed = await response.json();
+    }
+  } catch {
+    parsed = null;
+  }
+  const payload = asPayloadObject(parsed);
+  if (!response.ok) return { kind: "http_error", payload };
+  if (!isVisualActionSnapshot(parsed)) return { kind: "invalid_body", payload };
+  return { kind: "snapshot", payload };
+}

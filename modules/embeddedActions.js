@@ -31,6 +31,8 @@ const HAND_ACTIONS = new Set(["play", "discard", "show"]);
 const VISUAL_ACTIONS = new Set(["deal", "draw", "scores", "play", "discard", "show"]);
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 const ACTION_IDEMPOTENCY_MAX = 500;
+/** Sequential SHOW of the same card (new requestIds) within this window reuse the first post. */
+const SHOW_COALESCE_TTL_MS = 2000;
 const ACTION_ERROR_MESSAGES = Object.freeze({
   ...SHARED_ACTION_ERROR_MESSAGES,
   unspecified_deck: GameHelper.SPECIFY_DECK_MESSAGE,
@@ -631,6 +633,7 @@ async function enrichActorDisplayName(actor, { discordClient, guildId, userId })
 function createActionIdempotencyCache({
   ttlMs = 5 * 60 * 1000,
   maxSize = ACTION_IDEMPOTENCY_MAX,
+  showCoalesceTtlMs = SHOW_COALESCE_TTL_MS,
 } = {}) {
   const completed = new Map();
   const inflight = new Map();
@@ -639,13 +642,16 @@ function createActionIdempotencyCache({
     return `${userId}:${guildId}:${channelId}:${requestId}:${action}:${detail}`;
   }
 
-  function remember(key, result) {
+  function remember(key, result, entryTtlMs = ttlMs) {
     if (completed.size >= maxSize && !completed.has(key)) {
       const oldest = completed.keys().next().value;
       if (oldest != null) completed.delete(oldest);
     }
     completed.set(key, result);
-    setTimeout(() => completed.delete(key), ttlMs).unref?.();
+    const held = result;
+    setTimeout(() => {
+      if (completed.get(key) === held) completed.delete(key);
+    }, entryTtlMs).unref?.();
   }
 
   async function run(requestId, userId, guildId, channelId, fn, actionParts = {}) {
@@ -653,8 +659,9 @@ function createActionIdempotencyCache({
     const action = String(actionParts.action || "");
     const detail = String(actionParts.detail ?? "");
     const key = id ? cacheKey(userId, guildId, channelId, id, action, detail) : null;
-    // SHOW does not remove the card, so two tabs / double-clicks with different
-    // requestIds would both 200. Coalesce inflight SHOW of the same card.
+    // SHOW does not remove the card, so two tabs / sequential clicks with
+    // different requestIds would both 200. Coalesce inflight SHOW of the same
+    // card, and reuse a successful SHOW of that card for a short window.
     const coalesceKey =
       action === "show" && detail
         ? `coalesce:show:${userId}:${guildId}:${channelId}:${detail}`
@@ -665,7 +672,11 @@ function createActionIdempotencyCache({
       if (cached) return cached;
       if (inflight.has(key)) return inflight.get(key);
     }
-    if (coalesceKey && inflight.has(coalesceKey)) return inflight.get(coalesceKey);
+    if (coalesceKey) {
+      const cachedShow = completed.get(coalesceKey);
+      if (cachedShow) return cachedShow;
+      if (inflight.has(coalesceKey)) return inflight.get(coalesceKey);
+    }
     const promise = Promise.resolve()
       .then(fn)
       .then((result) => {
@@ -673,6 +684,9 @@ function createActionIdempotencyCache({
         if (coalesceKey) inflight.delete(coalesceKey);
         if (result?.status === 200 && key) {
           remember(key, result);
+        }
+        if (result?.status === 200 && coalesceKey) {
+          remember(coalesceKey, result, showCoalesceTtlMs);
         }
         return result;
       })
@@ -814,34 +828,10 @@ async function runVisualCardAction({
               releaseHttp.resolve(persisted);
               return null;
             }
-            const snapshot = await snapshotFromCurrentGame({
-              gameData: persisted.gameData,
-              discordClient,
-              guildId: gid,
-              channelId: cid,
-              userId: uid,
-              fetchImpl,
-              botToken,
-              hostImageCache,
-            });
-            const snapshotBody = snapshot.body;
-            const version = snapshotVersion(persisted.gameData, {
-              channelId: cid,
-              guildId: gid,
-              userId: uid,
-              hostBoardImages: snapshot.hostBoardImages,
-            });
-            releaseHttp.resolve({
-              status: 200,
-              version,
-              body: {
-                ...snapshotBody,
-                version,
-                message: persisted.applied.content,
-              },
-            });
+            // Snapshot (host-image fetches) stays off the persist lock so
+            // slash `/cards hand *` is not stalled by Discord CDN I/O.
             return {
-              gameData: persisted.gameData,
+              gameData: cloneDeep(persisted.gameData),
               content: persisted.applied.content,
               card: persisted.applied.card,
               revealCard: persisted.applied.revealCard,
@@ -855,6 +845,37 @@ async function runVisualCardAction({
         return false;
       }
       if (!pendingPost) return false;
+      try {
+        const snapshot = await snapshotFromCurrentGame({
+          gameData: pendingPost.gameData,
+          discordClient,
+          guildId: gid,
+          channelId: cid,
+          userId: uid,
+          fetchImpl,
+          botToken,
+          hostImageCache,
+        });
+        const snapshotBody = snapshot.body;
+        const version = snapshotVersion(pendingPost.gameData, {
+          channelId: cid,
+          guildId: gid,
+          userId: uid,
+          hostBoardImages: snapshot.hostBoardImages,
+        });
+        releaseHttp.resolve({
+          status: 200,
+          version,
+          body: {
+            ...snapshotBody,
+            version,
+            message: pendingPost.content,
+          },
+        });
+      } catch (err) {
+        releaseHttp.reject(err);
+        return false;
+      }
       return postQueue.enqueue(gid, cid, async (queue) => {
         let additionalEmbeds;
         let additionalFiles;
@@ -1088,6 +1109,7 @@ async function runVisualScoreAction({
 module.exports = {
   ACTION_ERROR_MESSAGES,
   ACTION_IDEMPOTENCY_MAX,
+  SHOW_COALESCE_TTL_MS,
   actorFromDiscordUser,
   applyVisualCardAction,
   applyVisualScoreAction,

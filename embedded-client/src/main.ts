@@ -53,10 +53,10 @@ import {
   tryOpenExternalLink,
   visualActionBody,
   visualActionErrorMessage,
-  visualHandActionBody,
   type DeckActionKind,
   type HandActionKind,
 } from "./visualActions";
+import { submitHandCardAction as postHandCardAction } from "./submitHandCardAction";
 import { SNAP_BACK_DURATION_MS, enableCardDrag, type CardOffset } from "./drag";
 import { enableHoverZoomClamp } from "./hoverZoom";
 import {
@@ -712,83 +712,26 @@ async function submitScoreEdits(scores: ScoreMap) {
 }
 
 async function submitHandCardAction(kind: HandActionKind, card: InspectableCard) {
-  const session = activeSession;
-  const cardId = typeof card?.id === "string" ? card.id.trim() : "";
-  if (!session || !cardId) {
-    setInspectActionError("Could not reach the game.");
-    return;
-  }
-  if (actionInFlight) return;
-  const channelId = liveSelectedChannelId(session.config.channelId);
-  const guildId = session.guildId || session.config.guildId;
-  actionRequestId = newActionRequestId();
-  setDeckActionsLocked(true);
-  setInspectActionError(null);
-  const stillThisGame = () =>
-    shouldApplySnapshot({
-      isCurrent: true,
-      selectedChannelId: liveSelectedChannelId(session.config.channelId),
-      requestedChannelId: channelId,
-    });
-  try {
-    const response = await fetch(
-      actionRequestUrl(session.config.apiHost, window.location.protocol),
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(
-          visualHandActionBody({
-            action: kind,
-            cardId,
-            channelId,
-            guildId,
-            requestId: actionRequestId,
-            fixture: session.config.mock ? readFixture() : undefined,
-          })
-        ),
-      }
-    );
-    let payload: GameSnapshot & {
-      message?: string;
-      error?: string;
-      channelPosted?: boolean;
-    } = {};
-    try {
-      payload = (await response.json()) as GameSnapshot & {
-        message?: string;
-        error?: string;
-        channelPosted?: boolean;
-      };
-    } catch {
-      payload = {};
-    }
-    if (!response.ok) {
-      closeInspectAfterFailedAction();
-      if (stillThisGame()) {
-        setDeckActionsLocked(false);
-        setActionNotice(visualActionErrorMessage(payload.error, payload.message));
-        flushDeferredSnapshot();
-      }
-      return;
-    }
-    if (!stillThisGame()) return;
-    closeCardInspect();
-    applySnapshot(session.config, payload);
-    setActionNotice(payload.channelPosted === false ? CHANNEL_POST_FAILED_NOTICE : null);
-  } catch {
-    closeInspectAfterFailedAction();
-    if (stillThisGame()) {
-      setDeckActionsLocked(false);
-      setActionNotice(visualActionErrorMessage("action_failed"));
-      flushDeferredSnapshot();
-    }
-  } finally {
-    actionRequestId = null;
-    setDeckActionsLocked(false);
-  }
+  await postHandCardAction(kind, card, {
+    getSession: () => activeSession,
+    isActionInFlight: () => actionInFlight,
+    selectedChannelId: liveSelectedChannelId,
+    setDeckActionsLocked,
+    setInspectActionError,
+    setActionNotice,
+    closeInspectAfterFailedAction,
+    closeCardInspect,
+    flushDeferredSnapshot,
+    applySnapshot: (config, payload) => applySnapshot(config, payload as GameSnapshot),
+    readFixture,
+    requestId: () => {
+      actionRequestId = newActionRequestId();
+      return actionRequestId;
+    },
+    onSettled: () => {
+      actionRequestId = null;
+    },
+  });
 }
 
 function bindActionDialog() {

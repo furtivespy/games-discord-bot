@@ -11,6 +11,7 @@ const {
   openCardInspect,
   setInspectCardActionHandler,
 } = require("../embedded-client/src/cardInspect.ts");
+const { submitHandCardAction } = require("../embedded-client/src/submitHandCardAction.ts");
 const { isSnapshotPollBlocked } = require("../embedded-client/src/snapshotPoll.ts");
 
 const STYLE_PATH = path.join(__dirname, "..", "embedded-client", "src", "style.css");
@@ -593,7 +594,49 @@ describe("inspect overlay hand actions", () => {
 });
 
 describe("inspect overlay vs snapshot poll", () => {
-  test("a failed hand action closes inspect so snapshot polls resume", () => {
+  function handActionHooks(overrides = {}) {
+    const applied = [];
+    const notices = [];
+    let flushed = 0;
+    const session = {
+      config: { apiHost: "", mock: true, channelId: "thread-1", guildId: "guild-1" },
+      accessToken: "tok",
+      guildId: "guild-1",
+    };
+    return {
+      applied,
+      notices,
+      flushed: () => flushed,
+      session,
+      hooks: {
+        getSession: () => session,
+        isActionInFlight: () => false,
+        selectedChannelId: (id) => id,
+        setDeckActionsLocked: () => {},
+        setInspectActionError: () => {},
+        setActionNotice: (text) => {
+          notices.push(text);
+        },
+        closeInspectAfterFailedAction,
+        closeCardInspect,
+        flushDeferredSnapshot: () => {
+          flushed += 1;
+        },
+        applySnapshot: (_config, payload) => {
+          applied.push(payload);
+        },
+        readFixture: () => "several-games",
+        fetchImpl: async () => ({
+          ok: false,
+          status: 409,
+          text: async () => JSON.stringify({ error: "card_not_in_hand" }),
+        }),
+        ...overrides,
+      },
+    };
+  }
+
+  test("submitHandCardAction closes inspect on a failed PLAY so snapshot polls resume", async () => {
     const { document, dialog, actions } = installInspectDocument();
     const { copper, sequence, tiles } = handSequence();
     for (const item of sequence) item.handActions = true;
@@ -602,10 +645,90 @@ describe("inspect overlay vs snapshot poll", () => {
     expect(actions.hidden).toBe(false);
     expect(isSnapshotPollBlocked(document)).toBe(true);
 
-    closeInspectAfterFailedAction();
+    const { applied, hooks } = handActionHooks();
+    await submitHandCardAction("play", copper, hooks);
 
     expect(dialog.open).toBe(false);
     expect(isSnapshotPollBlocked(document)).toBe(false);
+    expect(applied).toEqual([]);
+  });
+
+  test("submitHandCardAction does not apply an empty HTTP 200 body", async () => {
+    const { document, dialog } = installInspectDocument();
+    const { copper, sequence, tiles } = handSequence();
+    for (const item of sequence) item.handActions = true;
+    openCardInspect(copper, "/copper.png", tiles[0], sequence, { handActions: true });
+    expect(isSnapshotPollBlocked(document)).toBe(true);
+
+    const { applied, hooks } = handActionHooks({
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        text: async () => "",
+      }),
+    });
+    await submitHandCardAction("play", copper, hooks);
+
+    expect(dialog.open).toBe(false);
+    expect(applied).toEqual([]);
+    expect(isSnapshotPollBlocked(document)).toBe(false);
+  });
+
+  test("submitHandCardAction does not apply a non-JSON HTTP 200 body", async () => {
+    const { dialog } = installInspectDocument();
+    const { copper, sequence, tiles } = handSequence();
+    for (const item of sequence) item.handActions = true;
+    openCardInspect(copper, "/copper.png", tiles[0], sequence, { handActions: true });
+
+    const { applied, hooks } = handActionHooks({
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        text: async () => "{}",
+      }),
+    });
+    await submitHandCardAction("discard", copper, hooks);
+
+    expect(dialog.open).toBe(false);
+    expect(applied).toEqual([]);
+  });
+
+  test("submitHandCardAction closes inspect when session or cardId is missing", async () => {
+    const { document, dialog } = installInspectDocument();
+    const { copper, sequence, tiles } = handSequence();
+    for (const item of sequence) item.handActions = true;
+    openCardInspect(copper, "/copper.png", tiles[0], sequence, { handActions: true });
+    expect(isSnapshotPollBlocked(document)).toBe(true);
+
+    const missingSession = handActionHooks({ getSession: () => null });
+    await submitHandCardAction("play", copper, missingSession.hooks);
+    expect(dialog.open).toBe(false);
+    expect(missingSession.applied).toEqual([]);
+    expect(isSnapshotPollBlocked(document)).toBe(false);
+
+    openCardInspect(copper, "/copper.png", tiles[0], sequence, { handActions: true });
+    const missingCard = handActionHooks();
+    await submitHandCardAction("show", { id: 123 }, missingCard.hooks);
+    expect(dialog.open).toBe(false);
+    expect(missingCard.applied).toEqual([]);
+  });
+
+  test("submitHandCardAction applies a valid snapshot and closes inspect", async () => {
+    const { dialog } = installInspectDocument();
+    const { copper, sequence, tiles } = handSequence();
+    for (const item of sequence) item.handActions = true;
+    openCardInspect(copper, "/copper.png", tiles[0], sequence, { handActions: true });
+    const snapshot = { version: "v1", channelId: "thread-1", hand: [] };
+    const { applied, hooks } = handActionHooks({
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(snapshot),
+      }),
+    });
+    await submitHandCardAction("play", copper, hooks);
+    expect(dialog.open).toBe(false);
+    expect(applied).toEqual([snapshot]);
   });
 
   test("a poll while inspect is open is deferred and leaves no stale index after close", () => {
