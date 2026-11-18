@@ -488,7 +488,13 @@ describe("embedded HTTP origin", () => {
       /\.card-inspect-dialog\.is-photo \.card-inspect-art:not\(\[hidden\]\)\s*\{[^}]*width:\s*90vw[^}]*height:\s*90vh[^}]*max-width:\s*90vw[^}]*max-height:\s*90vh/
     );
     expect(css).toMatch(
-      /\.card-inspect-art:not\(\[hidden\]\)\s*\{[^}]*max-width:\s*min\(28rem,\s*86vw\)[^}]*max-height:\s*min\(78vh,\s*36rem\)/
+      /\.card-inspect-sheet\s*\{[^}]*width:\s*min\(44rem,\s*calc\(100vw - 1\.5rem\)\)/
+    );
+    expect(css).toMatch(
+      /\.card-inspect-sheet\s*\{[^}]*overflow:\s*auto/
+    );
+    expect(css).toMatch(
+      /\.card-inspect-art:not\(\[hidden\]\)\s*\{[^}]*max-width:\s*100%[^}]*max-height:\s*min\(78vh,\s*36rem\)/
     );
     expect(css).toContain(".deck-tile:hover .deck-actions");
     expect(css).toContain(".deck-tile:has(:focus-visible) .deck-actions");

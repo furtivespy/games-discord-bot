@@ -556,6 +556,8 @@ body {
 .board-row > .pile-stack {
   grid-column: 2;
   grid-row: 1 / span 2;
+  /* Subgrid so Decks shares the Game Board row and Discard shares Play Area. */
+  grid-template-rows: subgrid;
 }
 
 /* No z-index on .zone: a value other than auto makes the row a stacking
@@ -572,26 +574,44 @@ body {
 }
 
 .pile-stack {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
+  display: grid;
+  grid-template-columns: minmax(0, auto);
+  column-gap: 0.35rem;
+  row-gap: 0.45rem;
+  align-items: stretch;
   min-width: 0;
 }
 
+/* Hidden nav buttons are display:none; keep one column so empty tracks
+   do not still insert column-gap on both sides of the pile windows. */
+.pile-stack:has(> .deck-nav:not([hidden])) {
+  grid-template-columns: auto minmax(0, auto) auto;
+}
+
 .pile-windows {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 0.45rem;
-  flex: 1;
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-column: 1;
+  grid-row: 1 / span 2;
   min-width: 0;
   align-self: stretch;
 }
 
+.pile-stack:has(> .deck-nav:not([hidden])) .pile-windows {
+  grid-column: 2;
+}
+
 .decks-zone,
 .discards-zone {
-  flex: 0 0 auto;
   min-width: calc(var(--card-width) + 1.2rem);
+}
+
+.decks-zone {
+  grid-row: 1;
+}
+
+.discards-zone {
+  grid-row: 2;
 }
 
 .pile-stack.is-pair .decks-zone,
@@ -605,8 +625,20 @@ body {
   align-items: flex-end;
 }
 
+.pile-stack > .deck-nav {
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+#deck-nav-prev {
+  grid-column: 1;
+}
+
+#deck-nav-next {
+  grid-column: 3;
+}
+
 .deck-nav {
-  flex-shrink: 0;
   display: grid;
   place-items: center;
   width: 2.2rem;
@@ -748,6 +780,11 @@ body {
   grid-template-rows: 1fr auto auto;
   color: #f8e7a1;
   border-color: #e6c35c;
+}
+
+/* Name occupies the 1fr row; keep the pill sized to the text, not the card. */
+.deck-name {
+  align-self: start;
 }
 
 /* Extra translate is a clamp so edge cards stay inside #table / #table-main.
@@ -961,6 +998,8 @@ body {
   .board-row > .pile-stack {
     grid-column: 2;
     grid-row: 2;
+    /* One parent row on the right; stack Decks over Discard inside it. */
+    grid-template-rows: auto auto;
   }
 }
 
@@ -1069,7 +1108,7 @@ body {
 
 .card-inspect-sheet {
   box-sizing: border-box;
-  width: min(32rem, calc(100vw - 1.5rem));
+  width: min(44rem, calc(100vw - 1.5rem));
   max-height: calc(100vh - 1.5rem);
   overflow: auto;
   background: #1b1711;
@@ -1084,11 +1123,12 @@ body {
 
 .card-inspect-art:not([hidden]) {
   display: block;
-  max-width: min(28rem, 86vw);
+  max-width: 100%;
   max-height: min(78vh, 36rem);
   width: auto;
   height: auto;
   object-fit: contain;
+  justify-self: center;
   border-radius: 0.7rem;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
 }
@@ -1154,7 +1194,7 @@ body {
   align-items: stretch;
   gap: 0.55rem;
   width: 100%;
-  max-width: 28rem;
+  max-width: 100%;
 }
 
 .card-inspect-actions[hidden] {
@@ -1190,7 +1230,7 @@ body {
 .card-inspect-error {
   margin: 0;
   text-align: center;
-  max-width: 28rem;
+  max-width: 100%;
   font-size: 0.82rem;
   line-height: 1.35;
   color: #f3b4a0;
@@ -1207,7 +1247,7 @@ body {
 
 .card-inspect-caption {
   text-align: center;
-  max-width: 28rem;
+  max-width: 100%;
 }
 
 .card-inspect-title {
