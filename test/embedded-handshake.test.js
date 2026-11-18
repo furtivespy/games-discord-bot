@@ -193,6 +193,7 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("renderDeckTile");
     expect(main).toContain("renderDiscardTile");
     expect(main).toContain("function renderPileTile");
+    expect(main).toContain("tile.title = discard ? `${deckName} discard` : deckName");
     expect(main).not.toContain("bindPileLayout");
     expect(main).not.toContain("currentPileWindowSize");
     expect(main).not.toContain("NARROW_PILE_MEDIA");
@@ -412,6 +413,7 @@ describe("visual table layout helpers", () => {
     expect(deckCountLabel("?", 42)).toBe("?/42");
     expect(deckCountLabel("?", "?")).toBe("?/?");
     expect(deckCountLabel(1, "?")).toBe("1/?");
+    expect(handCountLabel(0)).toBe("0 cards");
     expect(handCountLabel(1)).toBe("1 card");
     expect(handCountLabel(4)).toBe("4 cards");
     expect(handCountLabel("?")).toBe("? cards");

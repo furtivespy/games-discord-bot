@@ -26,6 +26,10 @@ const {
   userIsPlayer,
   versionGameForUser,
 } = require("../modules/embeddedGames");
+const {
+  deckCountLabel,
+  handCountLabel,
+} = require("../embedded-client/src/tableLayout.ts");
 
 async function withStore(run) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "embedded-games-"));
@@ -1177,8 +1181,12 @@ describe("snapshotFromGameData", () => {
       name: "Main",
       remaining: 1,
       total: "?",
-      discard: "?",
+      discard: 1,
     });
+    expect(handCountLabel(hiddenOne.decks[0].discard)).toBe("1 card");
+    expect(deckCountLabel(hiddenOne.decks[0].remaining, hiddenOne.decks[0].total)).toBe(
+      "1/?"
+    );
   });
 
   test("hidden discard 0/1 cannot reconstruct a hidden sibling count", () => {
@@ -1201,8 +1209,15 @@ describe("snapshotFromGameData", () => {
       name: "Main",
       remaining: "?",
       total: "?",
-      discard: "?",
+      discard: 0,
     });
+    expect(handCountLabel(hiddenEmptyDiscard.decks[0].discard)).toBe("0 cards");
+    expect(
+      deckCountLabel(
+        hiddenEmptyDiscard.decks[0].remaining,
+        hiddenEmptyDiscard.decks[0].total
+      )
+    ).toBe("?/?");
 
     const hiddenOneDraw = snapshotFromGameData(
       {
@@ -1250,6 +1265,42 @@ describe("snapshotFromGameData", () => {
       total: "?",
       discard: "?",
     });
+
+    const hiddenManyDiscard = snapshotFromGameData(
+      {
+        name: "Hidden Many Discard",
+        players: [{ userId: "will", name: "Will", hands: { main: [] } }],
+        decks: [
+          {
+            name: "Main",
+            hiddenInfo: "deck",
+            allCards: Array.from({ length: 11 }),
+            piles: {
+              draw: { cards: [{}, {}, {}, {}] },
+              discard: { cards: [{}, {}, {}, {}, {}, {}, {}] },
+            },
+          },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(hiddenManyDiscard.decks[0]).toEqual({
+      name: "Main",
+      remaining: "?",
+      total: "?",
+      discard: "?",
+    });
+    const json = JSON.stringify(hiddenManyDiscard);
+    expect(json).not.toContain('"discard":7');
+    expect(json).not.toContain('"remaining":4');
+    expect(json).not.toContain('"total":11');
+    expect(handCountLabel(hiddenManyDiscard.decks[0].discard)).toBe("? cards");
+    expect(
+      deckCountLabel(
+        hiddenManyDiscard.decks[0].remaining,
+        hiddenManyDiscard.decks[0].total
+      )
+    ).toBe("?/?");
   });
 
   test("includes a deck back URL when the deck has one assigned", () => {

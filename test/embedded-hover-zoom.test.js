@@ -656,11 +656,19 @@ describe("hover zoom clamp on a tile", () => {
     );
     expect(pileFn).toContain('textContent = "Discard"');
     expect(pileFn).toContain("handCountLabel(deck.discard)");
+    const titleAssign = pileFn.match(/tile\.title =[^\n]+/)?.[0] ?? "";
+    expect(titleAssign).toContain("`${deckName} discard`");
+    expect(titleAssign).not.toContain("deck.discard");
+    expect(titleAssign).not.toContain("deck.remaining");
+    expect(titleAssign).not.toContain("handCountLabel");
+    expect(pileFn).toContain("tile.dataset.deckName = deckName");
+    expect(pileFn).not.toContain("dataset.discard");
     const discardBranch = pileFn.slice(
       pileFn.indexOf("if (discard)"),
       pileFn.indexOf("} else {")
     );
     expect(discardBranch).toContain('textContent = "Discard"');
+    expect(discardBranch).toContain("handCountLabel(deck.discard)");
     expect(discardBranch).not.toContain("renderDeckActions");
     expect(main).toContain("enableHoverZoomClamp(tile)");
   });
