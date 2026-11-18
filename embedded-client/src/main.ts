@@ -82,13 +82,10 @@ import {
   deckNavDirectionFromDataset,
   deckNavNeeded,
   deckWindowStart,
-  discardPileEmpty,
   groupPlayersByTeam,
   handCountLabel,
   initialsFromName,
-  NARROW_PILE_MEDIA,
   pileColumnWidthClass,
-  pileWindowSize,
   rotateDeckWindow,
   tablePlayersInSeatOrder,
   suitColorClass,
@@ -120,7 +117,6 @@ let activeSession: {
 } | null = null;
 let actionDialogBound = false;
 let deckNavBound = false;
-let pileLayoutBound = false;
 let deckWindowStartIndex = 0;
 let lastDeckRender: { config: EmbeddedConfig; decks: SnapshotDeck[] } | null = null;
 let actionInFlight = false;
@@ -1115,7 +1111,6 @@ function renderPileTile(
   const deckName = deckDisplayName(deck);
   tile.title = discard ? `${deckName} discard` : deckName;
   tile.dataset.deckName = deckName;
-  if (discard && discardPileEmpty(deck.discard)) tile.classList.add("is-empty");
   const face = document.createElement("div");
   face.className = discard ? "card-face deck-face discard-face" : "card-face deck-face";
   face.style.backgroundImage = `url("${pileBackSrc(config, deck)}")`;
@@ -1152,22 +1147,13 @@ function renderDiscardTile(config: EmbeddedConfig, deck: SnapshotDeck): HTMLElem
   return renderPileTile(config, deck, "discard");
 }
 
-function currentPileWindowSize(): number {
-  if (typeof matchMedia !== "function") return pileWindowSize(false);
-  return pileWindowSize(matchMedia(NARROW_PILE_MEDIA).matches);
-}
-
-function syncDeckNav(total: number, windowSize = currentPileWindowSize()) {
+function syncDeckNav(total: number) {
   const stack = document.getElementById("pile-stack");
   if (stack) {
     stack.classList.remove("is-single", "is-pair");
-    stack.classList.add(pileColumnWidthClass(total, windowSize));
-    stack.dataset.deckStart = String(
-      deckWindowStart(deckWindowStartIndex, total, windowSize)
-    );
-    stack.dataset.deckCount = String(total);
+    stack.classList.add(pileColumnWidthClass(total));
   }
-  const show = deckNavNeeded(total, windowSize);
+  const show = deckNavNeeded(total);
   for (const id of ["deck-nav-prev", "deck-nav-next"]) {
     const button = document.getElementById(id) as HTMLButtonElement | null;
     if (!button) continue;
@@ -1183,12 +1169,10 @@ function onDeckNavClick(event: Event) {
   const direction = deckNavDirectionFromDataset(target?.dataset?.deckNav);
   target?.blur?.();
   if (!direction) return;
-  const windowSize = currentPileWindowSize();
   deckWindowStartIndex = rotateDeckWindow(
     deckWindowStartIndex,
     lastDeckRender.decks.length,
-    direction,
-    windowSize
+    direction
   );
   renderDecks(lastDeckRender.config, lastDeckRender.decks);
 }
@@ -1200,29 +1184,12 @@ function bindDeckNav() {
   document.getElementById("deck-nav-next")?.addEventListener("click", onDeckNavClick);
 }
 
-function bindPileLayout() {
-  if (pileLayoutBound || typeof matchMedia !== "function") return;
-  pileLayoutBound = true;
-  const media = matchMedia(NARROW_PILE_MEDIA);
-  const onChange = () => {
-    if (!lastDeckRender) return;
-    renderDecks(lastDeckRender.config, lastDeckRender.decks);
-  };
-  if (typeof media.addEventListener === "function") {
-    media.addEventListener("change", onChange);
-    return;
-  }
-  media.addListener(onChange);
-}
-
 function renderDecks(config: EmbeddedConfig, decks: SnapshotDeck[] | undefined) {
   bindDeckNav();
-  bindPileLayout();
   const list = asRecordList<SnapshotDeck>(decks);
   lastDeckRender = { config, decks: list };
-  const windowSize = currentPileWindowSize();
-  deckWindowStartIndex = deckWindowStart(deckWindowStartIndex, list.length, windowSize);
-  const shown = visibleDecks(list, deckWindowStartIndex, windowSize);
+  deckWindowStartIndex = deckWindowStart(deckWindowStartIndex, list.length);
+  const shown = visibleDecks(list, deckWindowStartIndex);
   const deckBox = document.getElementById("decks");
   const discardBox = document.getElementById("discards");
   if (deckBox) {
@@ -1233,7 +1200,7 @@ function renderDecks(config: EmbeddedConfig, decks: SnapshotDeck[] | undefined) 
     discardBox.replaceChildren();
     for (const deck of shown) discardBox.append(renderDiscardTile(config, deck));
   }
-  syncDeckNav(list.length, windowSize);
+  syncDeckNav(list.length);
 }
 
 function appendStatusLines(parent: HTMLElement, lines: string[]) {

@@ -478,6 +478,7 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain(".pile-label");
     expect(css).toContain(".discard-title");
     expect(css).toContain(".discard-count");
+    expect(css).not.toContain(".discard-tile.is-empty");
     expect(css).toContain(".deck-nav[hidden]");
     expect(css).toContain(".pile-stack.is-pair .decks-zone");
     expect(css).toContain(".pile-stack.is-pair .discards-zone");

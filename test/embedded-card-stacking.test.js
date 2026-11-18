@@ -922,12 +922,16 @@ describe("hand zone stays at the bottom of the table", () => {
 
   test.skipIf(!chrome)("QA: hand sits on the table bottom with slack above it", async () => {
     const css = fs.readFileSync(STYLE_PATH, "utf8");
+    // Headless Chrome's innerHeight is ~143px below --window-size. 1000
+    // outer is a true ~800px desktop viewport; 800 outer yields ~657 inner,
+    // which cannot fit two card rows plus the pinned hand.
     const result = await measureLayout(stackingHarness(css), {
       width: 1280,
-      height: 800,
+      height: 1000,
     });
 
     expect(result.error).toBeUndefined();
+    expect(result.viewportHeight).toBeGreaterThanOrEqual(800);
     expect(result.tableHeight).toBeGreaterThan(result.viewportHeight - 2);
     expect(result.tableBottom).toBeLessThanOrEqual(result.viewportHeight + 1);
     expect(result.handBottom).toBeGreaterThan(result.playBottom);

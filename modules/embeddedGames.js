@@ -186,7 +186,6 @@ function isMissingGame(data) {
   return Object.keys(data).length === 0;
 }
 
-const MAX_VISIBLE_DECKS = 2;
 const STATUS_HISTORY_LIMIT = 8;
 const AVATAR_SIZE = 128;
 
@@ -334,7 +333,7 @@ function deckTotal(deck) {
 
 function deckSummaries(data) {
   const decks = Array.isArray(data?.decks) ? data.decks : [];
-  // Send every deck. The Activity windows to MAX_VISIBLE_DECKS and rotates.
+  // Send every deck. The Activity windows to two visible piles and rotates.
   return decks.map((deck) => {
     const name =
       typeof deck?.name === "string" && deck.name.trim() ? deck.name.trim() : "Deck";
@@ -1209,7 +1208,6 @@ module.exports = {
   DISCORD_LOOKUP_TTL_MS,
   GAME_COLLECTION,
   HISTORY_KEEP_LIMIT,
-  MAX_VISIBLE_DECKS,
   STATUS_HISTORY_LIMIT,
   channelNameFromDiscordClient,
   copyCards,

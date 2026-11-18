@@ -1,12 +1,6 @@
 export const MAX_VISIBLE_DECKS = 2;
-export const NARROW_PILE_MAX_WIDTH_PX = 820;
-export const NARROW_PILE_MEDIA = `(max-width: ${NARROW_PILE_MAX_WIDTH_PX}px)`;
 export const DEFAULT_CARD_BACK = "/card-back.svg";
 export const UNASSIGNED_TEAM_LABEL = "No team";
-
-export function pileWindowSize(narrow: unknown): number {
-  return narrow ? 1 : MAX_VISIBLE_DECKS;
-}
 
 export type SnapshotDeck = {
   name?: string;
@@ -105,58 +99,40 @@ export type PlayerTeamGroup = {
   players: OtherPlayer[];
 };
 
-function resolvedWindowSize(windowSize: unknown): number {
-  const size = Number.isFinite(Number(windowSize))
-    ? Math.max(1, Math.trunc(Number(windowSize)))
-    : MAX_VISIBLE_DECKS;
-  return size;
-}
-
-export function deckWindowStart(
-  start: unknown,
-  total: number,
-  windowSize = MAX_VISIBLE_DECKS
-): number {
+export function deckWindowStart(start: unknown, total: number): number {
   const n = Number.isFinite(Number(total)) ? Math.max(0, Math.trunc(Number(total))) : 0;
-  const size = resolvedWindowSize(windowSize);
-  if (n <= size) return 0;
+  if (n <= MAX_VISIBLE_DECKS) return 0;
   const raw = Number.isFinite(Number(start)) ? Math.trunc(Number(start)) : 0;
   return ((raw % n) + n) % n;
 }
 
 export function visibleDecks<T>(
   decks: T[] | undefined | null,
-  start: unknown = 0,
-  windowSize = MAX_VISIBLE_DECKS
+  start: unknown = 0
 ): T[] {
   if (!Array.isArray(decks)) return [];
   const list = decks.filter((deck) => deck != null);
-  const size = resolvedWindowSize(windowSize);
-  if (list.length <= size) return list;
-  const origin = deckWindowStart(start, list.length, size);
+  if (list.length <= MAX_VISIBLE_DECKS) return list;
+  const origin = deckWindowStart(start, list.length);
   const shown: T[] = [];
-  for (let i = 0; i < size; i++) {
+  for (let i = 0; i < MAX_VISIBLE_DECKS; i++) {
     shown.push(list[(origin + i) % list.length]);
   }
   return shown;
 }
 
-export function deckNavNeeded(
-  total: unknown,
-  windowSize = MAX_VISIBLE_DECKS
-): boolean {
+export function deckNavNeeded(total: unknown): boolean {
   const n = Number.isFinite(Number(total)) ? Math.trunc(Number(total)) : 0;
-  return n > resolvedWindowSize(windowSize);
+  return n > MAX_VISIBLE_DECKS;
 }
 
 export function rotateDeckWindow(
   start: unknown,
   total: number,
-  direction: DeckNavDirection,
-  windowSize = MAX_VISIBLE_DECKS
+  direction: DeckNavDirection
 ): number {
   const delta = direction === "next" ? 1 : direction === "prev" ? -1 : 0;
-  return deckWindowStart(Number(start) + delta, total, windowSize);
+  return deckWindowStart(Number(start) + delta, total);
 }
 
 export function deckNavDirectionFromDataset(
@@ -165,20 +141,9 @@ export function deckNavDirectionFromDataset(
   return value === "prev" || value === "next" ? value : null;
 }
 
-export function pileColumnWidthClass(
-  total: unknown,
-  windowSize = MAX_VISIBLE_DECKS
-): "is-single" | "is-pair" {
+export function pileColumnWidthClass(total: unknown): "is-single" | "is-pair" {
   const n = Number.isFinite(Number(total)) ? Math.trunc(Number(total)) : 0;
-  const size = resolvedWindowSize(windowSize);
-  return n >= 2 && size >= 2 ? "is-pair" : "is-single";
-}
-
-export function discardPileEmpty(count: unknown): boolean {
-  if (count === "?") return false;
-  const n = Number(count);
-  if (!Number.isFinite(n)) return true;
-  return n <= 0;
+  return n >= 2 ? "is-pair" : "is-single";
 }
 
 export function deckCountLabel(

@@ -881,10 +881,6 @@ body {
   font-size: 0.78rem;
 }
 
-.discard-tile.is-empty .discard-face {
-  opacity: 0.72;
-}
-
 .named-card {
   grid-template-rows: 1fr;
   place-items: center;
@@ -945,7 +941,7 @@ body {
   }
 
   /* Keep play area to the left of discard. Board spans the full row above
-     so the pair of piles can drop to one column without stacking play under
+     so two piles plus play stay side-by-side instead of stacking play under
      the deck window. */
   .board-row {
     grid-template-columns: minmax(0, 1fr) auto;

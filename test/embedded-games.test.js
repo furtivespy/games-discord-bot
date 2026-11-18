@@ -18,7 +18,6 @@ const {
   optionalDiscordAccessGuard,
   requiredDiscordAccessGuard,
   resolvePlayerDisplays,
-  MAX_VISIBLE_DECKS,
   snapshotFromGameData,
   snapshotGameForUser,
   snapshotVersion,
@@ -483,7 +482,6 @@ describe("snapshotGameForUser", () => {
       expect(json).not.toContain("Hidden Draw");
       expect(result.body.players).toBeUndefined();
       expect(result.body.decks).toEqual([{ name: "Main", remaining: 1, total: 1, discard: 0 }]);
-      expect(MAX_VISIBLE_DECKS).toBe(2);
     });
   });
 
