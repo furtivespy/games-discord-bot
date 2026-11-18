@@ -156,16 +156,22 @@ describe("cardMoves playFromHand", () => {
     expect(gameData.players[0].hands.main.map((item) => item.id)).toEqual(["keep"]);
   });
 
-  test("unknown origin returns the card to hand", () => {
-    const card = createCard({ id: "orphan", name: "Ace", origin: "MissingDeck" });
-    const gameData = gameWithDeck({ draw: [], hand: [card] });
+  test("unknown origin restores the card at its original hand index", () => {
+    const first = createCard({ id: "keep-1", name: "Copper", origin: "Main" });
+    const orphan = createCard({ id: "orphan", name: "Ace", origin: "MissingDeck" });
+    const last = createCard({ id: "keep-2", name: "Estate", origin: "Main" });
+    const gameData = gameWithDeck({ draw: [], hand: [first, orphan, last] });
     const result = CardMoves.playFromHand(gameData, {
       player: gameData.players[0],
       cardId: "orphan",
       actor,
     });
     expect(result).toMatchObject({ ok: false, error: "discard_pile_missing" });
-    expect(gameData.players[0].hands.main.map((item) => item.id)).toEqual(["orphan"]);
+    expect(gameData.players[0].hands.main.map((item) => item.id)).toEqual([
+      "keep-1",
+      "orphan",
+      "keep-2",
+    ]);
     expect(gameData.decks[0].piles.discard.cards).toEqual([]);
   });
 });

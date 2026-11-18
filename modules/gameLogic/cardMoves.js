@@ -81,12 +81,18 @@ function takeCardFromHand(player, cardId) {
   const index = findCardIndex(hand, cardId);
   if (index === -1) return null;
   const [card] = hand.splice(index, 1);
-  return card || null;
+  if (!card) return null;
+  return { card, index };
 }
 
-function returnCardToHand(player, card) {
+function returnCardToHand(player, card, index) {
   if (!card) return;
-  mainHand(player).push(card);
+  const hand = mainHand(player);
+  if (Number.isInteger(index) && index >= 0 && index <= hand.length) {
+    hand.splice(index, 0, card);
+    return;
+  }
+  hand.push(card);
 }
 
 /**
@@ -235,10 +241,11 @@ function playFromHand(gameData, { player, cardId, destination, actor } = {}) {
   if (!player) {
     return missingCardResult("Something is broken!?");
   }
-  const card = takeCardFromHand(player, cardId);
-  if (!card) {
+  const taken = takeCardFromHand(player, cardId);
+  if (!taken) {
     return missingCardResult("Something is broken!?");
   }
+  const { card, index } = taken;
 
   let actualDestination =
     typeof destination === "string" && destination.trim()
@@ -265,7 +272,7 @@ function playFromHand(gameData, { player, cardId, destination, actor } = {}) {
       deck.piles.discard.cards.push(card);
       destinationName = "discard pile";
     } else {
-      returnCardToHand(player, card);
+      returnCardToHand(player, card, index);
       return {
         ok: false,
         error: "discard_pile_missing",
@@ -279,7 +286,7 @@ function playFromHand(gameData, { player, cardId, destination, actor } = {}) {
       destinationName = pile.name;
       destinationType = "pile";
     } else {
-      returnCardToHand(player, card);
+      returnCardToHand(player, card, index);
       return {
         ok: false,
         error: "destination_not_found",
@@ -333,14 +340,15 @@ function discardFromHand(gameData, { player, cardId, destination, actor } = {}) 
       content: "Something is broken! You don't have that card.",
     };
   }
-  const card = takeCardFromHand(player, cardId);
-  if (!card) {
+  const taken = takeCardFromHand(player, cardId);
+  if (!taken) {
     return {
       ok: false,
       error: "card_not_in_hand",
       content: "Something is broken! You don't have that card.",
     };
   }
+  const { card } = taken;
 
   const actualDestination =
     typeof destination === "string" && destination.trim()

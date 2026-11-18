@@ -210,6 +210,40 @@ describe("applyVisualCardAction", () => {
     expect(showGame.history.at(-1).summary).toBe("Will revealed Copper from hand");
   });
 
+  test("playToPlayArea sends the card to the play area instead of discard", () => {
+    const game = gameWithDeck();
+    game.playToPlayArea = true;
+    const played = applyVisualCardAction(game, {
+      action: "play",
+      cardId: "hand-1",
+      actor,
+      userId: actor.id,
+    });
+    expect(played.ok).toBe(true);
+    expect(played.content).toBe("Will has Played to play area:");
+    expect(game.players[0].hands.main).toEqual([]);
+    expect(game.players[0].playArea.map((card) => card.id)).toEqual(["hand-1"]);
+    expect(game.decks[0].piles.discard.cards).toEqual([]);
+  });
+
+  test("a card from another seat is card_not_in_hand and leaves both hands", () => {
+    const game = gameWithDeck();
+    game.players[1].hands.main = [createCard({ id: "other-hand-1", name: "Village" })];
+    const played = applyVisualCardAction(game, {
+      action: "play",
+      cardId: "other-hand-1",
+      actor,
+      userId: actor.id,
+    });
+    expect(played).toMatchObject({
+      ok: false,
+      status: 409,
+      error: "card_not_in_hand",
+    });
+    expect(game.players[0].hands.main.map((card) => card.id)).toEqual(["hand-1"]);
+    expect(game.players[1].hands.main.map((card) => card.id)).toEqual(["other-hand-1"]);
+  });
+
   test("hand actions without a player are not_a_player", () => {
     const game = gameWithDeck();
     const played = applyVisualCardAction(game, {

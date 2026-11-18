@@ -1260,6 +1260,12 @@ describe("card inspect sequence navigation", () => {
     expect(html).toContain(">PLAY<");
     expect(html).toContain(">DISCARD<");
     expect(html).toContain(">SHOW<");
+    expect(html.indexOf('id="card-inspect-actions"')).toBeLessThan(
+      html.indexOf('id="card-inspect-meta"')
+    );
+    expect(html.indexOf('id="card-inspect-meta"')).toBeLessThan(
+      html.indexOf('id="card-inspect-error"')
+    );
     expect(html).toContain(`aria-label="${INSPECT_PREV_LABEL}"`);
     expect(html).toContain(`aria-label="${INSPECT_NEXT_LABEL}"`);
     expect(html).toContain('data-inspect-nav="prev"');
