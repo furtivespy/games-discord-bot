@@ -1065,7 +1065,7 @@ describe("inspect art fits a wide card image", () => {
       ),
     ]);
     expect(result.error).toBeUndefined();
-    expect(result.overflowX).toBe("hidden");
+    expect(result.overflowX).toBe("auto");
     expect(result.sheetWidth).toBeGreaterThan(32 * 16);
     expect(result.sheetScrollWidth).toBeLessThanOrEqual(result.sheetClientWidth + 1);
     expect(result.artWidth).toBeGreaterThan(200);

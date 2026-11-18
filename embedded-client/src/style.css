@@ -575,30 +575,43 @@ body {
 
 .pile-stack {
   display: grid;
-  grid-template-columns: auto auto auto;
+  grid-template-columns: minmax(0, auto);
   column-gap: 0.35rem;
   row-gap: 0.45rem;
   align-items: stretch;
   min-width: 0;
 }
 
+/* Hidden nav buttons are display:none; keep one column so empty tracks
+   do not still insert column-gap on both sides of the pile windows. */
+.pile-stack:has(> .deck-nav:not([hidden])) {
+  grid-template-columns: auto minmax(0, auto) auto;
+}
+
 .pile-windows {
   display: grid;
   grid-template-rows: subgrid;
-  grid-column: 2;
+  grid-column: 1;
   grid-row: 1 / span 2;
   min-width: 0;
   align-self: stretch;
 }
 
+.pile-stack:has(> .deck-nav:not([hidden])) .pile-windows {
+  grid-column: 2;
+}
+
+.decks-zone,
+.discards-zone {
+  min-width: calc(var(--card-width) + 1.2rem);
+}
+
 .decks-zone {
   grid-row: 1;
-  min-width: calc(var(--card-width) + 1.2rem);
 }
 
 .discards-zone {
   grid-row: 2;
-  min-width: calc(var(--card-width) + 1.2rem);
 }
 
 .pile-stack.is-pair .decks-zone,
@@ -626,7 +639,6 @@ body {
 }
 
 .deck-nav {
-  flex-shrink: 0;
   display: grid;
   place-items: center;
   width: 2.2rem;
@@ -1098,8 +1110,7 @@ body {
   box-sizing: border-box;
   width: min(44rem, calc(100vw - 1.5rem));
   max-height: calc(100vh - 1.5rem);
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: auto;
   background: #1b1711;
   border: 1px solid var(--panel-edge);
   border-radius: 16px;
@@ -1113,7 +1124,7 @@ body {
 .card-inspect-art:not([hidden]) {
   display: block;
   max-width: 100%;
-  max-height: min(72vh, 34rem);
+  max-height: min(78vh, 36rem);
   width: auto;
   height: auto;
   object-fit: contain;

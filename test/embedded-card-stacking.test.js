@@ -681,6 +681,11 @@ try {
   const rest = face.getBoundingClientRect();
   const pile = document.getElementById("pile-stack");
   const pileBox = pile.getBoundingClientRect();
+  const pileWindows = document.querySelector(".pile-windows");
+  const pileWindowsBox = pileWindows ? pileWindows.getBoundingClientRect() : null;
+  const navVisible = [...document.querySelectorAll(".pile-stack > .deck-nav")].some(
+    (el) => !el.hidden
+  );
   const root = getComputedStyle(document.documentElement);
   const mainOverflow = main.scrollHeight > main.clientHeight + 1;
   const boardCards = rects("#board-cards .card-tile");
@@ -735,6 +740,9 @@ try {
     pileRight: pileBox.right,
     pileTop: pileBox.top,
     pileWidth: pileBox.width,
+    pileWindowsLeft: pileWindowsBox && pileWindowsBox.left,
+    pileWindowsRight: pileWindowsBox && pileWindowsBox.right,
+    navVisible,
     gapBelowHand: tableBox.bottom - handBox.bottom,
     spaceAboveHand: handBox.top - playBox.bottom,
     handOverlaps,
@@ -785,6 +793,13 @@ describe("narrow pile layout CSS", () => {
     expect(desktop).toMatch(/\.decks-zone\s*\{[^}]*grid-row:\s*1/);
     expect(desktop).toMatch(/\.discards-zone\s*\{[^}]*grid-row:\s*2/);
     expect(desktop).toMatch(/\.deck-name\s*\{[^}]*align-self:\s*start/);
+    expect(desktop).toMatch(/\.pile-stack:has\(>\s*\.deck-nav:not\(\[hidden\]\)\)/);
+    expect(desktop).toMatch(
+      /\.pile-windows\s*\{[^}]*grid-column:\s*1/
+    );
+    expect(desktop).toMatch(
+      /\.pile-stack:has\(>\s*\.deck-nav:not\(\[hidden\]\)\) \.pile-windows\s*\{[^}]*grid-column:\s*2/
+    );
     expect(desktop).not.toMatch(/\.pile-windows\s*\{[^}]*justify-content:\s*space-between/);
   });
 });
@@ -1037,6 +1052,9 @@ describe("hand zone stays at the bottom of the table", () => {
     expect(result.spaceAboveHand).toBeGreaterThan(8);
     expect(result.mainOverflow).toBe(false);
     expectHandPinned(result, "1280x800-pin");
+    expect(result.navVisible).toBe(false);
+    expect(Math.abs(result.pileWindowsLeft - result.pileLeft)).toBeLessThanOrEqual(2);
+    expect(Math.abs(result.pileWindowsRight - result.pileRight)).toBeLessThanOrEqual(2);
   }, 30000);
 
   test.skipIf(!chrome)("QA: at 820px play area stays left of the discard stack", async () => {
@@ -1152,5 +1170,8 @@ describe("hand zone stays at the bottom of the table", () => {
     expect(result.deckNameHeight).toBeGreaterThan(8);
     expect(result.drawTileHeight).toBeGreaterThan(result.deckNameHeight * 2);
     expect(result.deckNameHeight).toBeLessThan(result.drawTileHeight * 0.45);
+    expect(result.navVisible).toBe(true);
+    expect(result.pileWindowsLeft).toBeGreaterThan(result.pileLeft + 8);
+    expect(result.pileRight).toBeGreaterThan(result.pileWindowsRight + 8);
   }, 30000);
 });
