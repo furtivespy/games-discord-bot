@@ -319,7 +319,8 @@ export function asRecordList<T extends object>(value: unknown): T[] {
 export function playerSeatOrder(
   player: { order?: unknown } | null | undefined
 ): number {
-  return Number.isFinite(Number(player?.order)) ? Number(player.order) : 0;
+  const order = Number(player?.order);
+  return Number.isFinite(order) ? order : 0;
 }
 
 export function tablePlayersInSeatOrder(

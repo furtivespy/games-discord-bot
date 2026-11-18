@@ -41,6 +41,18 @@ function workingChromeBin() {
   }
 }
 
+/**
+ * Headless Chrome's --window-size is the outer window. Inner CSS viewport is
+ * shorter by window chrome (~80–150px). Pad the next outer size so a test that
+ * asks for 800px gets 800px of innerHeight.
+ */
+function windowSizeForInnerViewport(requested, measured, outer) {
+  return {
+    width: Math.max(1, outer.width + (requested.width - measured.width)),
+    height: Math.max(1, outer.height + (requested.height - measured.height)),
+  };
+}
+
 const ROOT_FONT_PX = 16;
 const OLD_REST_HEIGHT_PX = 7.55 * ROOT_FONT_PX;
 const REST_WIDTH_PX = 7.992 * ROOT_FONT_PX;
@@ -754,11 +766,31 @@ describe("visual-mode tile overlap math", () => {
   });
 });
 
+describe("headless Chrome window size", () => {
+  test("pads outer --window-size by the inner viewport deficit", () => {
+    expect(
+      windowSizeForInnerViewport(
+        { width: 1280, height: 800 },
+        { width: 1280, height: 657 },
+        { width: 1280, height: 800 }
+      )
+    ).toEqual({ width: 1280, height: 943 });
+    expect(
+      windowSizeForInnerViewport(
+        { width: 1024, height: 768 },
+        { width: 1024, height: 768 },
+        { width: 1024, height: 768 }
+      )
+    ).toEqual({ width: 1024, height: 768 });
+  });
+});
+
 describe("hand zone stays at the bottom of the table", () => {
   const chrome = workingChromeBin();
   let server;
   let chromeProc;
   let userDataDir;
+  let windowPad = { width: 0, height: 0 };
 
   function cleanupLayoutRun() {
     try {
@@ -779,7 +811,7 @@ describe("hand zone stays at the bottom of the table", () => {
     cleanupLayoutRun();
   });
 
-  async function measureLayout(html, { width, height }) {
+  async function launchLayout(html, { width, height }) {
     cleanupLayoutRun();
     let resolveResult;
     const resultPromise = new Promise((resolve) => {
@@ -826,9 +858,33 @@ describe("hand zone stays at the bottom of the table", () => {
     return Promise.race([
       resultPromise,
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("timed out waiting for Chrome hand-pin result")), 20000)
+        setTimeout(() => reject(new Error("timed out waiting for Chrome hand-pin result")), 25000)
       ),
     ]);
+  }
+
+  async function measureLayout(html, requested) {
+    const outer = {
+      width: requested.width + windowPad.width,
+      height: requested.height + windowPad.height,
+    };
+    let result = await launchLayout(html, outer);
+    const measured = {
+      width: result.viewportWidth,
+      height: result.viewportHeight,
+    };
+    if (
+      Math.abs(measured.width - requested.width) > 1 ||
+      Math.abs(measured.height - requested.height) > 1
+    ) {
+      const padded = windowSizeForInnerViewport(requested, measured, outer);
+      windowPad = {
+        width: padded.width - requested.width,
+        height: padded.height - requested.height,
+      };
+      result = await launchLayout(html, padded);
+    }
+    return result;
   }
 
   function expectRestSize(result, label) {
@@ -922,16 +978,15 @@ describe("hand zone stays at the bottom of the table", () => {
 
   test.skipIf(!chrome)("QA: hand sits on the table bottom with slack above it", async () => {
     const css = fs.readFileSync(STYLE_PATH, "utf8");
-    // Headless Chrome's innerHeight is ~143px below --window-size. 1000
-    // outer is a true ~800px desktop viewport; 800 outer yields ~657 inner,
-    // which cannot fit two card rows plus the pinned hand.
     const result = await measureLayout(stackingHarness(css), {
       width: 1280,
-      height: 1000,
+      height: 800,
     });
 
     expect(result.error).toBeUndefined();
-    expect(result.viewportHeight).toBeGreaterThanOrEqual(800);
+    expect(result.viewportWidth).toBe(1280);
+    expect(result.viewportHeight).toBeGreaterThanOrEqual(799);
+    expect(result.viewportHeight).toBeLessThanOrEqual(801);
     expect(result.tableHeight).toBeGreaterThan(result.viewportHeight - 2);
     expect(result.tableBottom).toBeLessThanOrEqual(result.viewportHeight + 1);
     expect(result.handBottom).toBeGreaterThan(result.playBottom);

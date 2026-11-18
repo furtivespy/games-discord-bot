@@ -134,7 +134,7 @@ let appliedHistoryKeys: string[] = [];
 let cardPositions = new Map<string, CardOffset>();
 let pendingSnapshot: { config: EmbeddedConfig; payload: GameSnapshot } | null = null;
 let playerScoreBlock: PlayerScoreBlock | null = null;
-let historyFlashTimer: ReturnType<typeof setTimeout> | null = null;
+let historyFlashTimer: number | null = null;
 let snapshotPoller: ReturnType<typeof createSnapshotPoller> | null = null;
 let snapshotPollVisibilityBound = false;
 let snapshotApplyResumeBound = false;
@@ -733,7 +733,8 @@ async function submitHandCardAction(kind: HandActionKind, card: InspectableCard)
     closeInspectAfterFailedAction,
     closeCardInspect,
     flushDeferredSnapshot,
-    applySnapshot: (config, payload) => applySnapshot(config, payload as GameSnapshot),
+    applySnapshot: (config, payload) =>
+      applySnapshot(config as EmbeddedConfig, payload as GameSnapshot),
     readFixture,
     requestId: () => {
       actionRequestId = newActionRequestId();
