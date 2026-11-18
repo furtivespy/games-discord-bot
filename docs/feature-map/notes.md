@@ -25,6 +25,8 @@ BoardGameGeek lookup by name, with autocomplete.
 
 Deck, hand, draft, pile, play area, game board and deck-builder actions for the channel's game.
 
+When `hiddenInfo` is `deck` or `all`, draw and discard counts of 0 or 1 stay visible; only 2+ become `?`, because empty vs one card is easy to see (FUR-274). `/cards hand play|discard|show` ack Discord before they persist, so a failed defer does not save; visual inspect PLAY / DISCARD / SHOW on your own hand cards reuse those same mutations (FUR-271).
+
 - Seed: an active game with at least one deck (`createDeck`) and players (`createPlayer`). Most subcommands read the deck named by the optional `deck` option and default to the only deck.
 - Reach: `scripts/control-fixtures/cards-draw.js` runs `/cards deck draw` then `/cards deck peek`. Hand actions such as `/cards hand play` need cards in the player's `hands.main`. Interactive pickers (select menus, buttons) show up as component rows in the output; clicking them is not simulated.
 
@@ -186,8 +188,10 @@ Named tokens per game and player: create, gain, lose, give, take and reveal.
 
 Launch the embedded Activity in the current channel. `/visual` has no options.
 
+Visual Deal/Draw persist first; Discord chat and pin updates are best-effort and must not block the next action (FUR-232). `/game delete` then `/game newgame` while that post queue is still draining can still receive leftover lines from the old game; that is accepted (FUR-270). Team groups on the Players rail keep original roster order after `/players first` so teams stay visually stable (FUR-266). Inspect arrows step through Hand and Play Area only, not Game Board (FUR-263). Per-deck discard piles sit under the decks, two-wide, with arrows only when there are more than two (FUR-272).
+
 - Seed: none.
-- Reach: the command reply is covered by `test/visual-command.test.js`. To see the Activity itself, use `bun run control browse`. Team grouping: `bun run control browse --path '/?fixture=team-game&game=team-thread'`. Deal/Draw from a hovered deck, and Edit Scores in the Players list: `bun run control browse --path '/?fixture=several-games&game=newest-thread'`.
+- Reach: the command reply is covered by `test/visual-command.test.js`. To see the Activity itself, use `bun run control browse`. Team grouping: `bun run control browse --path '/?fixture=team-game&game=team-thread'`. Deal/Draw from a hovered deck, Edit Scores in the Players list, hand-card inspect PLAY / DISCARD / SHOW, and per-deck discard piles: `bun run control browse --path '/?fixture=several-games&game=newest-thread'`.
 
 ## /winshare
 

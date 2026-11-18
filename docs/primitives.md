@@ -41,7 +41,7 @@ The Discord Activity (visual mode): an Express server and a Vite client.
 
 - Code: `modules/embeddedApp.js` (server, `/health`), `embedded-client/` (client), `scripts/embedded-app-mock.js` (mock mode)
 - ADRs: [0003](adr/0003-agent-defaults-to-no.md)
-- Notes: `bun run control browse` screenshots the mock. Real Discord auth and the Activity iframe are not covered.
+- Notes: `bun run control browse` screenshots the mock. Real Discord auth and the Activity iframe are not covered. Visual mutations persist before Discord posts; the channel pin and chat line are best-effort so a hung send cannot stall the next Deal/Draw (FUR-232).
 
 ## Release pipeline
 
