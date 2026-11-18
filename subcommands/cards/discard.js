@@ -1,9 +1,10 @@
 const { MessageFlags } = require("discord.js");
 const GameHelper = require('../../modules/GlobalGameHelper')
-const GameDB = require('../../db/anygame.js')
 const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
+const CardMoves = require('../../modules/gameLogic/cardMoves')
+const { withGameDocumentLock } = require('../../modules/gameDocumentLock')
 
 class Discard {
     async execute(interaction, client) {
@@ -26,79 +27,64 @@ class Discard {
             return
         }
 
-        const [, gameData] = await Promise.all([
-            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
-            GameHelper.getGameData(client, interaction)
-        ]);
-        let player = find(gameData.players, {userId: interaction.user.id})
+        // Ack Discord first. Persist only after defer succeeds so a failed
+        // ack cannot leave the card already gone from the hand.
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
+        const outcome = await withGameDocumentLock(interaction.guildId, interaction.channelId, async () => {
+                const gameData = await GameHelper.getGameData(client, interaction)
+                let player = find(gameData.players, {userId: interaction.user.id})
 
-        if (gameData.isdeleted) {
+                if (gameData.isdeleted) {
+                    return { kind: "no_game" }
+                }
+
+                const cardid = interaction.options.getString('card')
+                const destination = interaction.options.getString('destination') || 'discard'
+
+                if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
+                    return { kind: "missing" }
+                }
+
+                const result = CardMoves.discardFromHand(gameData, {
+                    player,
+                    cardId: cardid,
+                    destination,
+                    actor: {
+                        id: interaction.user.id,
+                        username: interaction.user.username,
+                        displayName: interaction.member?.displayName || interaction.user.username,
+                    },
+                })
+                if (!result.ok) {
+                    return { kind: "failed", result }
+                }
+
+                await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+                return { kind: "ok", gameData, player, result, destination }
+            })
+
+        if (outcome.kind === "no_game") {
             await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
-
-        const cardid = interaction.options.getString('card')
-        const destination = interaction.options.getString('destination') || 'discard'
-        
-        if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
+        if (outcome.kind === "missing") {
             await interaction.editReply({ content: "Something is broken! You don't have that card."})
             return
         }
-        
-        let card = find(player.hands.main, {id: cardid})
-        player.hands.main.splice(findIndex(player.hands.main, {id: cardid}), 1)
-        
-        let destinationName = ''
-
-        if (destination === 'gameboard') {
-            if (!gameData.gameBoard) {
-                gameData.gameBoard = []
-            }
-            gameData.gameBoard.push(card)
-            destinationName = 'Game Board'
-        } else if (destination === 'discard') {
-            // Default to deck's discard pile
-            let deck = find(gameData.decks, {name: card.origin})
-            deck.piles.discard.cards.push(card)
-            destinationName = `${deck.name} discard pile`
-        } else {
-            // Assume pile
-            const pile = GameHelper.getGlobalPile(gameData, destination)
-            if (!pile) {
-                // Return card to hand if pile not found
-                player.hands.main.push(card)
-                await interaction.editReply({ content: 'Pile not found!'})
-                return
-            }
-            pile.cards.push(card)
-            destinationName = pile.name
+        if (outcome.kind === "failed") {
+            await interaction.editReply({ content: outcome.result.content })
+            return
         }
 
-        try {
-            const actorDisplayName = interaction.member?.displayName || interaction.user.username
-            GameHelper.recordMove(
-                gameData,
-                interaction.user,
-                GameDB.ACTION_CATEGORIES.CARD,
-                GameDB.ACTION_TYPES.DISCARD,
-                `${actorDisplayName} discarded a card to ${destinationName}`,
-                { 
-                    destination: destinationName,
-                    destinationType: destination,
-                    origin: card.origin 
-                }
-            )
-        } catch (error) {
-            console.warn('Failed to record card discard in history:', error)
-        }
-
-        await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
+        const { gameData, player, result, destination } = outcome
+        const card = result.card
+        const destinationName = result.destinationName
 
         const [, , handInfo] = await Promise.all([
             GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
-                content: `${interaction.member.displayName} has Discarded a card${destination !== 'discard' ? ' to ' + destinationName : ''}`
+                content: result.content
             }),
-            interaction.editReply({ content: `You discarded ${Formatter.cardShortName(card)}${destination !== 'discard' ? ' to ' + destinationName : ''}.` }),
+            interaction.editReply({ content: result.privateContent || `You discarded ${Formatter.cardShortName(card)}${destination !== 'discard' ? ' to ' + destinationName : ''}.` }),
             Formatter.playerSecretHandAndImages(gameData, player)
         ]);
         const privateFollowup = { embeds: [...handInfo.embeds], flags: MessageFlags.Ephemeral };

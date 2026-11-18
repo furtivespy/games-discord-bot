@@ -1021,6 +1021,78 @@ describe("/cards command handlers", () => {
     );
   });
 
+  test("hand play does not persist when deferReply fails", async () => {
+    const card = createCard({ id: "play-1", name: "Ace", origin: "Main" });
+    await withHarness(
+      {
+        gameData: gameWithDeck({ draw: [], hand: [card] }),
+        options: {
+          subcommandGroup: "hand",
+          subcommand: "play",
+          strings: { card: "play-1", destination: "discard" },
+        },
+      },
+      async (harness) => {
+        harness.interaction.deferReply = async () => {
+          throw new Error("Unknown interaction");
+        };
+        await runCards(harness);
+        expect(harness.persistCalls).toHaveLength(0);
+        expect((await harness.getSavedGame()).players[0].hands.main.map((item) => item.id)).toEqual([
+          "play-1",
+        ]);
+      }
+    );
+  });
+
+  test("hand discard does not persist when deferReply fails", async () => {
+    const card = createCard({ id: "play-1", name: "Ace", origin: "Main" });
+    await withHarness(
+      {
+        gameData: gameWithDeck({ draw: [], hand: [card] }),
+        options: {
+          subcommandGroup: "hand",
+          subcommand: "discard",
+          strings: { card: "play-1" },
+        },
+      },
+      async (harness) => {
+        harness.interaction.deferReply = async () => {
+          throw new Error("Unknown interaction");
+        };
+        await runCards(harness);
+        expect(harness.persistCalls).toHaveLength(0);
+        expect((await harness.getSavedGame()).players[0].hands.main.map((item) => item.id)).toEqual([
+          "play-1",
+        ]);
+      }
+    );
+  });
+
+  test("hand show does not persist when deferReply fails", async () => {
+    const card = createCard({ id: "play-1", name: "Ace", origin: "Main" });
+    await withHarness(
+      {
+        gameData: gameWithDeck({ draw: [], hand: [card] }),
+        options: {
+          subcommandGroup: "hand",
+          subcommand: "show",
+          strings: { card: "play-1" },
+        },
+      },
+      async (harness) => {
+        harness.interaction.deferReply = async () => {
+          throw new Error("Unknown interaction");
+        };
+        await runCards(harness);
+        expect(harness.persistCalls).toHaveLength(0);
+        expect((await harness.getSavedGame()).players[0].hands.main.map((item) => item.id)).toEqual([
+          "play-1",
+        ]);
+      }
+    );
+  });
+
   test("hand play sends a card to the discard pile", async () => {
     const card = createCard({ id: "play-1", name: "Ace", origin: "Main" });
     await withHarness(

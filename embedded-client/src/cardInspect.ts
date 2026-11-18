@@ -1,3 +1,9 @@
+import {
+  HAND_CARD_ACTIONS,
+  handCardActionFromDataset,
+  type HandActionKind,
+} from "./visualActions";
+
 export type InspectableCard = {
   id?: string;
   name?: string;
@@ -28,6 +34,7 @@ export type InspectSequenceItem = {
   card: InspectableCard;
   imageSrc: string | null;
   tile: HTMLElement;
+  handActions?: boolean;
 };
 
 export type InspectSession = {
@@ -50,10 +57,15 @@ const CAPTION_ID = "card-inspect-caption";
 const META_ID = "card-inspect-meta";
 const PREV_ID = "card-inspect-prev";
 const NEXT_ID = "card-inspect-next";
+const ACTIONS_ID = "card-inspect-actions";
+const ERROR_ID = "card-inspect-error";
 
 let inspectBoundDocument: Document | null = null;
 let inspectItems: InspectSequenceItem[] = [];
 let inspectIndex = 0;
+let inspectCardActionHandler:
+  | ((action: HandActionKind, card: InspectableCard) => void)
+  | null = null;
 
 export function isHostThreadImage(card: InspectableCard | null | undefined): boolean {
   const id = typeof card?.id === "string" ? card.id.trim() : "";
@@ -173,6 +185,35 @@ export function inspectNavDirectionFromDataset(
   return value === "prev" || value === "next" ? value : null;
 }
 
+export function inspectHandActionsVisible(
+  item: InspectSequenceItem | null | undefined,
+  layout: InspectLayout | null | undefined
+): boolean {
+  return Boolean(item?.handActions) && layout !== "photo";
+}
+
+export function setInspectCardActionHandler(
+  handler: ((action: HandActionKind, card: InspectableCard) => void) | null
+) {
+  inspectCardActionHandler = handler;
+}
+
+export function setInspectActionError(message: string | null | undefined) {
+  const error = document.getElementById(ERROR_ID);
+  if (!error) return;
+  const text = typeof message === "string" ? message.trim() : "";
+  error.textContent = text;
+  error.hidden = !text;
+}
+
+export function setInspectActionButtonsLocked(locked: boolean) {
+  const root = document.getElementById(ACTIONS_ID);
+  if (!root) return;
+  root.querySelectorAll<HTMLButtonElement>("button.card-inspect-action").forEach((button) => {
+    button.disabled = locked;
+  });
+}
+
 export function inspectSequenceIndex(
   sequence: InspectSequenceItem[] | null | undefined,
   tile: HTMLElement
@@ -186,11 +227,14 @@ export function resolveInspectSession(
   card: InspectableCard,
   imageSrc: string | null,
   tile: HTMLElement,
-  sequence?: InspectSequenceItem[] | null
+  sequence?: InspectSequenceItem[] | null,
+  options?: { handActions?: boolean } | null
 ): InspectSession {
   const list = Array.isArray(sequence) ? sequence.filter(Boolean) : [];
   const index = inspectSequenceIndex(list, tile);
-  const items = index >= 0 ? list : [{ card, imageSrc, tile }];
+  const handActions = Boolean(options?.handActions);
+  const fallback: InspectSequenceItem = { card, imageSrc, tile, handActions };
+  const items = index >= 0 ? list : [fallback];
   const resolvedIndex = index >= 0 ? index : 0;
   return {
     items,
@@ -217,6 +261,7 @@ function resetInspectSession() {
 
 export function closeCardInspect() {
   resetInspectSession();
+  setInspectActionError(null);
   const dialog = dialogEl();
   if (!dialog) return;
   if (typeof dialog.close === "function" && dialog.open) {
@@ -224,6 +269,11 @@ export function closeCardInspect() {
     return;
   }
   dialog.removeAttribute("open");
+}
+
+/** Close inspect so snapshot polls can resume after a failed PLAY/DISCARD/SHOW. */
+export function closeInspectAfterFailedAction() {
+  closeCardInspect();
 }
 
 function stepInspect(direction: InspectNavDirection) {
@@ -331,17 +381,54 @@ function syncInspectNav() {
   }
 }
 
+function stampInspectActionButtons() {
+  const root = document.getElementById(ACTIONS_ID);
+  if (!root) return;
+  for (const action of HAND_CARD_ACTIONS) {
+    const button =
+      root.querySelector<HTMLButtonElement>(`[data-card-action="${action.id}"]`);
+    if (!button) continue;
+    button.textContent = action.label;
+    button.title = action.tooltip;
+    button.setAttribute("aria-label", action.tooltip);
+  }
+}
+
+function syncInspectActions(view: InspectView) {
+  const root = document.getElementById(ACTIONS_ID);
+  if (!root) return;
+  const item = inspectItems[inspectIndex];
+  root.hidden = !inspectHandActionsVisible(item, view.layout);
+}
+
 export function enableCardInspectDialog() {
   const dialog = dialogEl();
   if (!dialog) return;
   if (inspectBoundDocument === document) return;
   inspectBoundDocument = document;
+  stampInspectActionButtons();
   dialog.addEventListener("click", (event) => {
     const target = event.target;
     const art = document.getElementById(ART_ID);
     const inspectArt = art instanceof HTMLImageElement ? art : null;
     if (isInspectOutsideClick(event, dialog, inspectArt)) {
       closeCardInspect();
+      return;
+    }
+    const actionButton =
+      target instanceof Element ? target.closest("[data-card-action]") : null;
+    if (actionButton instanceof HTMLElement) {
+      const action = handCardActionFromDataset(actionButton.dataset.cardAction);
+      const item = inspectItems[inspectIndex];
+      if (
+        action &&
+        item &&
+        inspectHandActionsVisible(item, inspectView(item.card, item.imageSrc).layout)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        inspectCardActionHandler?.(action, item.card);
+      }
       return;
     }
     const button =
@@ -355,6 +442,7 @@ export function enableCardInspectDialog() {
   });
   dialog.addEventListener("close", () => {
     resetInspectSession();
+    setInspectActionError(null);
   });
   document.addEventListener("keydown", (event) => {
     const direction = inspectKeyCommand(event, inspectOverlayOpen());
@@ -397,6 +485,7 @@ function fillInspectDom(
     caption.textContent = view.caption;
   }
   if (meta) meta.hidden = !view.showTitle && !view.caption;
+  syncInspectActions(view);
   if (art instanceof HTMLImageElement) {
     art.hidden = !view.showArt;
     if (view.artSrc) {
@@ -429,14 +518,16 @@ export function openCardInspect(
   card: InspectableCard,
   imageSrc: string | null,
   tile: HTMLElement,
-  sequence?: InspectSequenceItem[] | null
+  sequence?: InspectSequenceItem[] | null,
+  options?: { handActions?: boolean } | null
 ) {
   enableCardInspectDialog();
   const dialog = dialogEl();
   if (!dialog) return;
-  const session = resolveInspectSession(card, imageSrc, tile, sequence);
+  const session = resolveInspectSession(card, imageSrc, tile, sequence, options);
   inspectItems = session.items;
   inspectIndex = session.index;
+  setInspectActionError(null);
   showInspectItem(inspectIndex);
   try {
     if (!dialog.open) dialog.showModal();

@@ -54,13 +54,20 @@ import {
   visualActionBody,
   visualActionErrorMessage,
   type DeckActionKind,
+  type HandActionKind,
 } from "./visualActions";
+import { submitHandCardAction as postHandCardAction } from "./submitHandCardAction";
 import { SNAP_BACK_DURATION_MS, enableCardDrag, type CardOffset } from "./drag";
 import { enableHoverZoomClamp } from "./hoverZoom";
 import {
   closeCardInspect,
+  closeInspectAfterFailedAction,
   enableCardInspectDialog,
   openCardInspect,
+  setInspectActionButtonsLocked,
+  setInspectActionError,
+  setInspectCardActionHandler,
+  type InspectableCard,
   type InspectSequenceItem,
 } from "./cardInspect";
 import {
@@ -252,6 +259,7 @@ function setDeckActionsLocked(locked: boolean) {
     .forEach((button) => {
       button.disabled = locked;
     });
+  setInspectActionButtonsLocked(locked);
   const select = document.getElementById("game-select") as HTMLSelectElement | null;
   if (select) select.disabled = locked;
   const { confirm } = actionDialogElements();
@@ -714,6 +722,29 @@ async function submitScoreEdits(scores: ScoreMap) {
   }
 }
 
+async function submitHandCardAction(kind: HandActionKind, card: InspectableCard) {
+  await postHandCardAction(kind, card, {
+    getSession: () => activeSession,
+    isActionInFlight: () => actionInFlight,
+    selectedChannelId: liveSelectedChannelId,
+    setDeckActionsLocked,
+    setInspectActionError,
+    setActionNotice,
+    closeInspectAfterFailedAction,
+    closeCardInspect,
+    flushDeferredSnapshot,
+    applySnapshot: (config, payload) => applySnapshot(config, payload as GameSnapshot),
+    readFixture,
+    requestId: () => {
+      actionRequestId = newActionRequestId();
+      return actionRequestId;
+    },
+    onSettled: () => {
+      actionRequestId = null;
+    },
+  });
+}
+
 function bindActionDialog() {
   if (actionDialogBound) return;
   const els = actionDialogElements();
@@ -979,12 +1010,15 @@ function renderCards(
     const imageSrc = mappedImageSrc(config, card.imageUrl);
     tile.append(renderCardFace(config, card));
     enableHoverZoomClamp(tile);
-    if (enableInspectNav) sequence.push({ card, imageSrc, tile });
+    const handActions = containerId === "hand-cards";
+    if (enableInspectNav) sequence.push({ card, imageSrc, tile, handActions });
     if (cardId) {
       // No drop targets yet: enableCardDrag snaps back unless a later hook consumes the drop.
       enableCardDrag(tile, cardId, positions, {
         onInspect: () =>
-          openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined),
+          openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined, {
+            handActions,
+          }),
       });
     }
     container.append(tile);
@@ -1564,6 +1598,9 @@ async function bootstrap() {
   bindActionDialog();
   bindDeckNav();
   enableCardInspectDialog();
+  setInspectCardActionHandler((action, card) => {
+    void submitHandCardAction(action, card);
+  });
 
   // discordSdk.guildId is the SDK field (query param guild_id). The game
   // channel/thread id comes from the picker, not discordSdk.channelId.

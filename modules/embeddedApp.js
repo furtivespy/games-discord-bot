@@ -648,6 +648,7 @@ function createEmbeddedApp({
         action: parsed.action,
         deckName: parsed.deckName,
         count: parsed.count,
+        cardId: parsed.cardId,
         scores: parsed.scores,
         requestId: parsed.requestId,
       });
@@ -726,6 +727,7 @@ function createEmbeddedApp({
             action: parsed.action,
             deckName: parsed.deckName,
             count: parsed.count,
+            cardId: parsed.cardId,
             user,
             member: guard.member,
             guildId: requestedGuildId,

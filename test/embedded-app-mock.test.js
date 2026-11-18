@@ -604,6 +604,54 @@ describe("mock embedded HTTP", () => {
       );
       expect(will.score).toBe("99");
       expect(riley.score).toBe("1");
+      const played = await fetch(`${url}/api/game/action`, {
+        method: "POST",
+        headers: auth,
+        body: JSON.stringify({
+          action: "play",
+          cardId: "hand-1",
+          channelId: "newest-thread",
+          guildId: "mock-guild",
+          fixture: "several-games",
+        }),
+      });
+      expect(played.status).toBe(200);
+      const playedBody = await played.json();
+      expect(playedBody.message).toContain("has Played to");
+      expect(playedBody.hand.some((card) => card.id === "hand-1")).toBe(false);
+
+      const shown = await fetch(`${url}/api/game/action`, {
+        method: "POST",
+        headers: auth,
+        body: JSON.stringify({
+          action: "show",
+          cardId: "hand-2",
+          channelId: "newest-thread",
+          guildId: "mock-guild",
+          fixture: "several-games",
+        }),
+      });
+      expect(shown.status).toBe(200);
+      const shownBody = await shown.json();
+      expect(shownBody.message).toBe("Showing a card:");
+      expect(shownBody.hand.some((card) => card.id === "hand-2")).toBe(true);
+
+      const discarded = await fetch(`${url}/api/game/action`, {
+        method: "POST",
+        headers: auth,
+        body: JSON.stringify({
+          action: "discard",
+          cardId: "hand-2",
+          channelId: "newest-thread",
+          guildId: "mock-guild",
+          fixture: "several-games",
+        }),
+      });
+      expect(discarded.status).toBe(200);
+      const discardedBody = await discarded.json();
+      expect(discardedBody.message).toContain("has Discarded a card");
+      expect(discardedBody.hand.some((card) => card.id === "hand-2")).toBe(false);
+
       expect(scoredBody.status.history.at(-1).summary).toContain(
         "updated player scores"
       );

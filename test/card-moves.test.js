@@ -110,3 +110,125 @@ describe("cardMoves drawMultiple", () => {
     expect(gameData.players[0].hands.main).toEqual([]);
   });
 });
+
+describe("cardMoves playFromHand", () => {
+  test("defaults to discard and records a play, matching /cards hand play", () => {
+    const card = createCard({ id: "play-1", name: "Ace", origin: "Main" });
+    const gameData = gameWithDeck({ draw: [], hand: [card] });
+    const result = CardMoves.playFromHand(gameData, {
+      player: gameData.players[0],
+      cardId: "play-1",
+      actor,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.destinationName).toBe("discard pile");
+    expect(result.content).toBe("Alice has Played to discard pile:");
+    expect(gameData.players[0].hands.main).toEqual([]);
+    expect(gameData.decks[0].piles.discard.cards.map((item) => item.id)).toEqual(["play-1"]);
+    expect(gameData.history.at(-1).summary).toBe("Alice played Ace to discard pile");
+    expect(gameData.history.at(-1).action).toEqual({ category: "card", type: "play" });
+  });
+
+  test("playToPlayArea sends the card to the player's play area", () => {
+    const card = createCard({ id: "play-2", name: "King", origin: "Main" });
+    const gameData = gameWithDeck({ draw: [], hand: [card] });
+    gameData.playToPlayArea = true;
+    const result = CardMoves.playFromHand(gameData, {
+      player: gameData.players[0],
+      cardId: "play-2",
+      actor,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.actualDestination).toBe("playarea");
+    expect(gameData.players[0].playArea.map((item) => item.id)).toEqual(["play-2"]);
+    expect(gameData.players[0].hands.main).toEqual([]);
+  });
+
+  test("missing card leaves the hand unchanged", () => {
+    const card = createCard({ id: "keep", name: "Ace", origin: "Main" });
+    const gameData = gameWithDeck({ draw: [], hand: [card] });
+    const result = CardMoves.playFromHand(gameData, {
+      player: gameData.players[0],
+      cardId: "missing",
+      actor,
+    });
+    expect(result).toMatchObject({ ok: false, error: "card_not_in_hand" });
+    expect(gameData.players[0].hands.main.map((item) => item.id)).toEqual(["keep"]);
+  });
+
+  test("unknown origin restores the card at its original hand index", () => {
+    const first = createCard({ id: "keep-1", name: "Copper", origin: "Main" });
+    const orphan = createCard({ id: "orphan", name: "Ace", origin: "MissingDeck" });
+    const last = createCard({ id: "keep-2", name: "Estate", origin: "Main" });
+    const gameData = gameWithDeck({ draw: [], hand: [first, orphan, last] });
+    const result = CardMoves.playFromHand(gameData, {
+      player: gameData.players[0],
+      cardId: "orphan",
+      actor,
+    });
+    expect(result).toMatchObject({ ok: false, error: "discard_pile_missing" });
+    expect(gameData.players[0].hands.main.map((item) => item.id)).toEqual([
+      "keep-1",
+      "orphan",
+      "keep-2",
+    ]);
+    expect(gameData.decks[0].piles.discard.cards).toEqual([]);
+  });
+
+  test("a missing pile restores the card at its original index, not the end", () => {
+    const first = createCard({ id: "keep-1", name: "Copper", origin: "Main" });
+    const middle = createCard({ id: "middle", name: "Ace", origin: "Main" });
+    const last = createCard({ id: "keep-2", name: "King", origin: "Main" });
+    const gameData = gameWithDeck({ draw: [], hand: [first, middle, last] });
+    const result = CardMoves.playFromHand(gameData, {
+      player: gameData.players[0],
+      cardId: "middle",
+      destination: "no-such-pile",
+      actor,
+    });
+    expect(result).toMatchObject({ ok: false, error: "destination_not_found" });
+    expect(gameData.players[0].hands.main.map((item) => item.id)).toEqual([
+      "keep-1",
+      "middle",
+      "keep-2",
+    ]);
+  });
+});
+
+describe("cardMoves discardFromHand", () => {
+  test("moves the card to the origin discard pile without naming it publicly", () => {
+    const card = createCard({ id: "disc-1", name: "Village", origin: "Main" });
+    const gameData = gameWithDeck({ draw: [], hand: [card] });
+    const result = CardMoves.discardFromHand(gameData, {
+      player: gameData.players[0],
+      cardId: "disc-1",
+      actor,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.content).toBe("Alice has Discarded a card");
+    expect(result.privateContent).toBe("You discarded Village.");
+    expect(gameData.players[0].hands.main).toEqual([]);
+    expect(gameData.decks[0].piles.discard.cards.map((item) => item.id)).toEqual(["disc-1"]);
+    expect(gameData.history.at(-1).summary).toBe("Alice discarded a card to Main discard pile");
+    expect(gameData.history.at(-1).details.cardName).toBeUndefined();
+  });
+});
+
+describe("cardMoves showFromHand", () => {
+  test("records a reveal and leaves the card in hand", () => {
+    const ace = createCard({ id: "ace-1", name: "Ace", origin: "Main" });
+    const king = createCard({ id: "king-1", name: "King", origin: "Main" });
+    const gameData = gameWithDeck({ draw: [], hand: [ace, king] });
+    const result = CardMoves.showFromHand(gameData, {
+      player: gameData.players[0],
+      cardId: "ace-1",
+      actor,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.content).toBe("Showing a card:");
+    expect(result.card.id).toBe("ace-1");
+    expect(gameData.players[0].hands.main.map((item) => item.id)).toEqual(["ace-1", "king-1"]);
+    expect(gameData.history.at(-1).summary).toBe("Alice revealed Ace from hand");
+    expect(gameData.history.at(-1).action).toEqual({ category: "card", type: "reveal" });
+  });
+});

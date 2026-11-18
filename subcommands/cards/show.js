@@ -1,8 +1,9 @@
 const { MessageFlags } = require("discord.js");
-const GameDB = require('../../db/anygame.js')
 const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameHelper = require('../../modules/GlobalGameHelper')
+const CardMoves = require('../../modules/gameLogic/cardMoves')
+const { withGameDocumentLock } = require('../../modules/gameDocumentLock')
 
 class Show {
     async execute(interaction, client) {
@@ -23,49 +24,54 @@ class Show {
             return
         }
 
-        const [, gameData] = await Promise.all([
-            interaction.deferReply(),
-            GameHelper.getGameData(client, interaction)
-        ]);
+        // Ack Discord first. Persist only after defer succeeds so a failed
+        // ack cannot leave a history/channel post with no Discord reply.
+        await interaction.deferReply()
+        const outcome = await withGameDocumentLock(interaction.guildId, interaction.channelId, async () => {
+                const gameData = await GameHelper.getGameData(client, interaction)
 
-        if (gameData.isdeleted) {
+                if (gameData.isdeleted) {
+                    return { kind: "no_game" }
+                }
+
+                const cardid = interaction.options.getString('card')
+                let player = find(gameData.players, {userId: interaction.user.id})
+                if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
+                    return { kind: "missing" }
+                }
+
+                const result = CardMoves.showFromHand(gameData, {
+                    player,
+                    cardId: cardid,
+                    actor: {
+                        id: interaction.user.id,
+                        username: interaction.user.username,
+                        displayName: interaction.member?.displayName || interaction.user.username,
+                    },
+                })
+                if (!result.ok) {
+                    return { kind: "failed", result }
+                }
+
+                // Save game data to persist history entry
+                await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+                return { kind: "ok", gameData, player, result }
+            })
+
+        if (outcome.kind === "no_game") {
             await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
-
-        const cardid = interaction.options.getString('card')
-        let player = find(gameData.players, {userId: interaction.user.id})
-        if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
+        if (outcome.kind === "missing") {
             await interaction.editReply({ content: "Something is broken!?"})
             return
         }
-        
-        let card = find(player.hands.main, {id: cardid})
-        
-        // Record history
-        try {
-            const actorDisplayName = interaction.member?.displayName || interaction.user.username
-            const cardName = Formatter.cardShortName(card)
-            
-            GameHelper.recordMove(
-                gameData,
-                interaction.user,
-                GameDB.ACTION_CATEGORIES.CARD,
-                GameDB.ACTION_TYPES.REVEAL,
-                `${actorDisplayName} revealed ${cardName} from hand`,
-                {
-                    cardId: card.id,
-                    cardName: cardName,
-                    source: "hand",
-                    action: "public reveal"
-                }
-            )
-        } catch (error) {
-            console.warn('Failed to record card show in history:', error)
+        if (outcome.kind === "failed") {
+            await interaction.editReply({ content: outcome.result.content })
+            return
         }
-
-        // Save game data to persist history entry
-        await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+        const { gameData, player, result } = outcome
+        const card = result.card
 
         const cardMedia = await Formatter.oneCardReplyParts(card)
         const publicReply = {

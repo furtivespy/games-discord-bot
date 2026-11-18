@@ -411,6 +411,23 @@ describe("embedded HTTP origin", () => {
     expect(html).toContain('class="card-inspect-close"');
     expect(html).toContain('id="card-inspect-prev"');
     expect(html).toContain('id="card-inspect-next"');
+    expect(html).toContain('id="card-inspect-actions"');
+    expect(html).toContain('data-card-action="play"');
+    expect(html).toContain('data-card-action="discard"');
+    expect(html).toContain('data-card-action="show"');
+    expect(html).toContain(">PLAY<");
+    expect(html).toContain(">DISCARD<");
+    expect(html).toContain(">SHOW<");
+    expect(html.indexOf('id="card-inspect-art"')).toBeLessThan(
+      html.indexOf('id="card-inspect-actions"')
+    );
+    expect(html.indexOf('id="card-inspect-actions"')).toBeLessThan(
+      html.indexOf('id="card-inspect-meta"')
+    );
+    expect(html.indexOf('id="card-inspect-meta"')).toBeLessThan(
+      html.indexOf('id="card-inspect-error"')
+    );
+    expect(html).toContain('id="card-inspect-error"');
     expect(html).toContain('aria-label="Previous card"');
     expect(html).toContain('aria-label="Next card"');
     expect(html).toContain('aria-label="Close"');
@@ -458,6 +475,10 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain(".card-inspect-nav[hidden]");
     expect(css).toContain("#card-inspect-prev");
     expect(css).toContain("#card-inspect-next");
+    expect(css).toContain(".card-inspect-actions");
+    expect(css).toContain("justify-content: space-between");
+    expect(css).toContain(".card-inspect-action");
+    expect(css).toContain(".card-inspect-error");
     expect(html).toContain('class="card-inspect-stage"');
     expect(css).toContain(".card-inspect-dialog.is-photo");
     expect(css).toMatch(
@@ -1446,6 +1467,7 @@ describe("POST /api/game/action", () => {
 
   function actionGame({
     userId = "snowflake-user",
+    playToPlayArea = false,
     draw = [
       { id: "d1", name: "Ace", url: null },
       { id: "d2", name: "King", url: null },
@@ -1456,12 +1478,13 @@ describe("POST /api/game/action", () => {
     return {
       isdeleted: false,
       name: "Friday Inis",
+      playToPlayArea,
       players: [
         {
           userId,
           name: "Will",
           order: 0,
-          hands: { main: [{ id: "hand-1", name: "Copper", url: null }] },
+          hands: { main: [{ id: "hand-1", name: "Copper", url: null, origin: "Main" }] },
         },
         {
           userId: "other-player",
@@ -1517,16 +1540,19 @@ describe("POST /api/game/action", () => {
       const hand = gameData?.players?.[0]?.hands?.main;
       return {
         content: options.content ?? "📊",
-        embeds: Array.isArray(draw)
-          ? [
-              {
-                title: "Game Status",
-                remaining: draw.length,
-                handSize: Array.isArray(hand) ? hand.length : 0,
-              },
-            ]
-          : [],
-        files: [],
+        embeds: [
+          ...(Array.isArray(draw)
+            ? [
+                {
+                  title: "Game Status",
+                  remaining: draw.length,
+                  handSize: Array.isArray(hand) ? hand.length : 0,
+                },
+              ]
+            : []),
+          ...(options.additionalEmbeds || []),
+        ],
+        files: [...(options.additionalFiles || [])],
       };
     };
     try {
@@ -1711,6 +1737,74 @@ describe("POST /api/game/action", () => {
         "Ace",
         "King",
       ]);
+    });
+  });
+
+  test("play, discard, and show update the hand and post like the slash commands", async () => {
+    await withActionApp({}, async ({ url, posted, store }) => {
+      const played = await postAction(url, { action: "play", cardId: "hand-1" });
+      expect(played.status).toBe(200);
+      const playBody = await played.json();
+      expect(playBody.message).toBe("TableWill has Played to discard pile:");
+      expect(playBody.hand).toEqual([]);
+      await waitFor(() => posted.length >= 1);
+      expect(posted[0].content).toContain("has Played to discard pile:");
+      const afterPlay = store.getSpecificGameData("guild-1", GAME_COLLECTION, "thread-game");
+      expect(afterPlay.decks[0].piles.discard.cards.map((card) => card.id)).toEqual(["hand-1"]);
+    });
+
+    await withActionApp({}, async ({ url, posted }) => {
+      const discarded = await postAction(url, { action: "discard", cardId: "hand-1" });
+      expect(discarded.status).toBe(200);
+      const body = await discarded.json();
+      expect(body.message).toBe("TableWill has Discarded a card");
+      expect(body.hand).toEqual([]);
+      await waitFor(() => posted.length >= 1);
+      expect(posted[0].content).toContain("has Discarded a card");
+    });
+
+    await withActionApp({}, async ({ url, posted }) => {
+      const shown = await postAction(url, { action: "show", cardId: "hand-1" });
+      expect(shown.status).toBe(200);
+      const body = await shown.json();
+      expect(body.message).toBe("Showing a card:");
+      expect(body.hand.map((card) => card.id)).toEqual(["hand-1"]);
+      await waitFor(() => posted.length >= 1);
+      expect(posted[0].content).toContain("Showing a card:");
+    });
+
+    await withActionApp({}, async ({ url }) => {
+      const missing = await postAction(url, { action: "play" });
+      expect(missing.status).toBe(400);
+      expect(await missing.json()).toMatchObject({ error: "missing_card" });
+    });
+
+    await withActionApp({ game: actionGame({ playToPlayArea: true }) }, async ({ url, store }) => {
+      const played = await postAction(url, { action: "play", cardId: "hand-1" });
+      expect(played.status).toBe(200);
+      const body = await played.json();
+      expect(body.message).toBe("TableWill has Played to play area:");
+      expect(body.hand).toEqual([]);
+      expect(body.playArea.map((card) => card.id)).toEqual(["hand-1"]);
+      const afterPlay = store.getSpecificGameData("guild-1", GAME_COLLECTION, "thread-game");
+      expect(afterPlay.players[0].playArea.map((card) => card.id)).toEqual(["hand-1"]);
+      expect(afterPlay.decks[0].piles.discard.cards).toEqual([]);
+    });
+
+    const otherSeatGame = actionGame();
+    otherSeatGame.players[1].hands.main = [
+      { id: "other-hand-1", name: "Village", url: null, origin: "Main" },
+    ];
+    await withActionApp({ game: otherSeatGame }, async ({ url, store }) => {
+      const missing = await postAction(url, { action: "play", cardId: "other-hand-1" });
+      expect(missing.status).toBe(409);
+      expect(await missing.json()).toMatchObject({
+        error: "card_not_in_hand",
+        message: "You don't have that card.",
+      });
+      const unchanged = store.getSpecificGameData("guild-1", GAME_COLLECTION, "thread-game");
+      expect(unchanged.players[0].hands.main.map((card) => card.id)).toEqual(["hand-1"]);
+      expect(unchanged.players[1].hands.main.map((card) => card.id)).toEqual(["other-hand-1"]);
     });
   });
 

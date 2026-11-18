@@ -499,6 +499,7 @@ function createMockGameSession() {
     action,
     deckName,
     count,
+    cardId,
     scores,
     requestId,
   } = {}) {
@@ -535,6 +536,7 @@ function createMockGameSession() {
               action,
               deckName,
               count,
+              cardId,
               actor: mockActor(),
               userId: MOCK_USER.id,
             });
@@ -570,7 +572,9 @@ function createMockGameSession() {
       detail:
         action === "scores"
           ? scoresIdempotencyKey(scores)
-          : `${deckName}:${count}`,
+          : cardId
+            ? String(cardId)
+            : `${deckName}:${count}`,
     });
   }
 

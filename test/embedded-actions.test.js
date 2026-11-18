@@ -9,11 +9,14 @@ const {
   createActionIdempotencyCache,
   drainLockedVisualActions,
   applyVisualScoreAction,
+  createGameChannelLock,
   parseVisualActionBody,
   runVisualCardAction,
   runVisualScoreAction,
   visualActionErrorMessage,
+  withGameDocumentLock,
 } = require("../modules/embeddedActions");
+const CardMoves = require("../modules/gameLogic/cardMoves");
 const { PermissionsBitField } = require("discord.js");
 const GameDB = require("../db/anygame");
 const Formatter = require("../modules/GameFormatter");
@@ -81,7 +84,20 @@ describe("parseVisualActionBody", () => {
     expect(parseVisualActionBody({ action: "shuffle", deck: "Main", count: 1 })).toEqual({
       error: "invalid_action",
       status: 400,
-      message: "Deal, Draw, and Edit Scores are the only visual actions.",
+      message: "Deal, Draw, Play, Discard, Show, and Edit Scores are the only visual actions.",
+    });
+    expect(
+      parseVisualActionBody({ action: "play", cardId: "hand-1", requestId: "req-play-1" })
+    ).toEqual({ action: "play", cardId: "hand-1", requestId: "req-play-1" });
+    expect(parseVisualActionBody({ action: "discard", cardId: "  hand-1  " })).toEqual({
+      action: "discard",
+      cardId: "hand-1",
+      requestId: null,
+    });
+    expect(parseVisualActionBody({ action: "show" })).toEqual({
+      error: "missing_card",
+      status: 400,
+      message: "Pick a card first.",
     });
     expect(parseVisualActionBody({ action: "deal", count: 1 })).toEqual({
       error: "missing_deck",
@@ -153,6 +169,100 @@ describe("applyVisualCardAction", () => {
     expect(drawGame.history.at(-1).summary).toBe("Will drew 2 cards from Main");
   });
 
+  test("play, discard, and show follow /cards hand play, discard, and show", () => {
+    const playGame = gameWithDeck();
+    const played = applyVisualCardAction(playGame, {
+      action: "play",
+      cardId: "hand-1",
+      actor,
+      userId: actor.id,
+    });
+    expect(played.ok).toBe(true);
+    expect(played.revealCard).toBe(true);
+    expect(played.content).toBe("Will has Played to discard pile:");
+    expect(playGame.players[0].hands.main).toEqual([]);
+    expect(playGame.decks[0].piles.discard.cards.map((card) => card.id)).toEqual(["hand-1"]);
+    expect(playGame.history.at(-1).summary).toBe("Will played Copper to discard pile");
+
+    const discardGame = gameWithDeck();
+    const discarded = applyVisualCardAction(discardGame, {
+      action: "discard",
+      cardId: "hand-1",
+      actor,
+      userId: actor.id,
+    });
+    expect(discarded.ok).toBe(true);
+    expect(discarded.revealCard).toBe(false);
+    expect(discarded.content).toBe("Will has Discarded a card");
+    expect(discardGame.players[0].hands.main).toEqual([]);
+    expect(discardGame.history.at(-1).summary).toBe(
+      "Will discarded a card to Main discard pile"
+    );
+
+    const showGame = gameWithDeck();
+    const shown = applyVisualCardAction(showGame, {
+      action: "show",
+      cardId: "hand-1",
+      actor,
+      userId: actor.id,
+    });
+    expect(shown.ok).toBe(true);
+    expect(shown.revealCard).toBe(true);
+    expect(shown.content).toBe("Showing a card:");
+    expect(showGame.players[0].hands.main.map((card) => card.id)).toEqual(["hand-1"]);
+    expect(showGame.history.at(-1).summary).toBe("Will revealed Copper from hand");
+  });
+
+  test("playToPlayArea sends the card to the play area instead of discard", () => {
+    const game = gameWithDeck();
+    game.playToPlayArea = true;
+    const played = applyVisualCardAction(game, {
+      action: "play",
+      cardId: "hand-1",
+      actor,
+      userId: actor.id,
+    });
+    expect(played.ok).toBe(true);
+    expect(played.content).toBe("Will has Played to play area:");
+    expect(game.players[0].hands.main).toEqual([]);
+    expect(game.players[0].playArea.map((card) => card.id)).toEqual(["hand-1"]);
+    expect(game.decks[0].piles.discard.cards).toEqual([]);
+  });
+
+  test("a card from another seat is card_not_in_hand and leaves both hands", () => {
+    const game = gameWithDeck();
+    game.players[1].hands.main = [createCard({ id: "other-hand-1", name: "Village" })];
+    const played = applyVisualCardAction(game, {
+      action: "play",
+      cardId: "other-hand-1",
+      actor,
+      userId: actor.id,
+    });
+    expect(played).toMatchObject({
+      ok: false,
+      status: 409,
+      error: "card_not_in_hand",
+    });
+    expect(game.players[0].hands.main.map((card) => card.id)).toEqual(["hand-1"]);
+    expect(game.players[1].hands.main.map((card) => card.id)).toEqual(["other-hand-1"]);
+  });
+
+  test("hand actions without a player are not_a_player", () => {
+    const game = gameWithDeck();
+    const played = applyVisualCardAction(game, {
+      action: "play",
+      cardId: "hand-1",
+      actor: { id: "stranger", username: "nope", displayName: "Nope" },
+      userId: "stranger",
+    });
+    expect(played).toMatchObject({
+      ok: false,
+      status: 403,
+      error: "not_a_player",
+    });
+    expect(game.players[0].hands.main.map((card) => card.id)).toEqual(["hand-1"]);
+  });
+
   test("draw without a player is not_a_player until the caller auto-joins", () => {
     const game = gameWithDeck();
     const drawn = applyVisualCardAction(game, {
@@ -214,16 +324,19 @@ describe("runVisualCardAction", () => {
       const hand = gameData?.players?.[0]?.hands?.main;
       return {
         content: options.content ?? "📊",
-        embeds: Array.isArray(draw)
-          ? [
-              {
-                title: "Game Status",
-                remaining: draw.length,
-                handSize: Array.isArray(hand) ? hand.length : 0,
-              },
-            ]
-          : [],
-        files: [],
+        embeds: [
+          ...(Array.isArray(draw)
+            ? [
+                {
+                  title: "Game Status",
+                  remaining: draw.length,
+                  handSize: Array.isArray(hand) ? hand.length : 0,
+                },
+              ]
+            : []),
+          ...(options.additionalEmbeds || []),
+        ],
+        files: [...(options.additionalFiles || [])],
       };
     };
   });
@@ -366,6 +479,305 @@ describe("runVisualCardAction", () => {
     expect(posted[0].content).toContain("Will drew 2 cards from Main");
     const saved = store.get("guild-1:game:thread-game");
     expect(saved.history.at(-1).action.type).toBe(GameDB.ACTION_TYPES.DRAW);
+  });
+
+  test("play, discard, and show save, post, and return an updated snapshot", async () => {
+    const playClient = clientForGame(gameWithDeck());
+    const played = await runVisualCardAction({
+      action: "play",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient: playClient.discordClient,
+    });
+    await drainLockedVisualActions();
+    expect(played.status).toBe(200);
+    expect(played.body.message).toBe("Will has Played to discard pile:");
+    expect(played.body.hand).toEqual([]);
+    expect(playClient.posted[0].content).toContain("Will has Played to discard pile:");
+    expect(playClient.posted[0].embeds?.length).toBeGreaterThan(0);
+
+    const discardClient = clientForGame(gameWithDeck());
+    const discarded = await runVisualCardAction({
+      action: "discard",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient: discardClient.discordClient,
+    });
+    await drainLockedVisualActions();
+    expect(discarded.status).toBe(200);
+    expect(discarded.body.message).toBe("Will has Discarded a card");
+    expect(discarded.body.hand).toEqual([]);
+    expect(discardClient.posted[0].content).toContain("Will has Discarded a card");
+    expect(discardClient.posted[0].embeds?.some((embed) => embed?.data?.title || embed?.title)).toBe(
+      true
+    );
+
+    const showClient = clientForGame(gameWithDeck());
+    const shown = await runVisualCardAction({
+      action: "show",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient: showClient.discordClient,
+    });
+    await drainLockedVisualActions();
+    expect(shown.status).toBe(200);
+    expect(shown.body.message).toBe("Showing a card:");
+    expect(shown.body.hand.map((card) => card.id)).toEqual(["hand-1"]);
+    expect(showClient.posted[0].content).toContain("Showing a card:");
+  });
+
+  test("a crafted cardId from another seat returns 409 and leaves that hand unchanged", async () => {
+    const game = gameWithDeck();
+    game.players[1].hands.main = [
+      createCard({ id: "riley-secret", name: "Village", origin: "Main" }),
+    ];
+    const { store, discordClient } = clientForGame(game);
+    const result = await runVisualCardAction({
+      action: "play",
+      cardId: "riley-secret",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+    });
+    await drainLockedVisualActions();
+    expect(result.status).toBe(409);
+    expect(result.body.error).toBe("card_not_in_hand");
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.players[1].hands.main.map((card) => card.id)).toEqual(["riley-secret"]);
+    expect(saved.players[0].hands.main.map((card) => card.id)).toEqual(["hand-1"]);
+    expect(saved.history).toEqual([]);
+  });
+
+  test("concurrent SHOW of the same card coalesces duplicate requestIds", async () => {
+    const { posted, store, discordClient } = clientForGame(gameWithDeck());
+    const cache = createActionIdempotencyCache();
+    const args = {
+      action: "show",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+      idempotency: cache,
+    };
+    const [first, second] = await Promise.all([
+      runVisualCardAction({ ...args, requestId: "show-req-aaaa" }),
+      runVisualCardAction({ ...args, requestId: "show-req-bbbb" }),
+    ]);
+    await drainLockedVisualActions();
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.history.filter((entry) => entry.action?.type === GameDB.ACTION_TYPES.REVEAL)).toHaveLength(
+      1
+    );
+    expect(posted).toHaveLength(1);
+    expect(saved.players[0].hands.main.map((card) => card.id)).toEqual(["hand-1"]);
+  });
+
+  test("sequential SHOW of the same card within a short window does not double-post", async () => {
+    const { posted, store, discordClient } = clientForGame(gameWithDeck());
+    const cache = createActionIdempotencyCache();
+    const args = {
+      action: "show",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+      idempotency: cache,
+    };
+    const first = await runVisualCardAction({ ...args, requestId: "show-req-aaaa" });
+    await drainLockedVisualActions();
+    const second = await runVisualCardAction({ ...args, requestId: "show-req-bbbb" });
+    await drainLockedVisualActions();
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.history.filter((entry) => entry.action?.type === GameDB.ACTION_TYPES.REVEAL)).toHaveLength(
+      1
+    );
+    expect(posted).toHaveLength(1);
+  });
+
+  test("SHOW of the same card can post again after the coalesce window", async () => {
+    const { posted, store, discordClient } = clientForGame(gameWithDeck());
+    const cache = createActionIdempotencyCache({ showCoalesceTtlMs: 5 });
+    const args = {
+      action: "show",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+      idempotency: cache,
+    };
+    await runVisualCardAction({ ...args, requestId: "show-req-aaaa" });
+    await drainLockedVisualActions();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await runVisualCardAction({ ...args, requestId: "show-req-bbbb" });
+    await drainLockedVisualActions();
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.history.filter((entry) => entry.action?.type === GameDB.ACTION_TYPES.REVEAL)).toHaveLength(
+      2
+    );
+    expect(posted).toHaveLength(2);
+  });
+
+  test("duplicate SHOW requestIds reuse the first successful result", async () => {
+    const { posted, discordClient } = clientForGame(gameWithDeck());
+    const cache = createActionIdempotencyCache();
+    const args = {
+      action: "show",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+      requestId: "show-same-req-01",
+      idempotency: cache,
+    };
+    const first = await runVisualCardAction(args);
+    const second = await runVisualCardAction(args);
+    await drainLockedVisualActions();
+    expect(first.status).toBe(200);
+    expect(second.body.hand).toEqual(first.body.hand);
+    expect(posted).toHaveLength(1);
+  });
+
+  test("slash-style hand mutate waits for an in-flight visual persist", async () => {
+    const game = gameWithDeck();
+    game.players[0].hands.main = [
+      createCard({ id: "hand-1", name: "Copper", origin: "Main" }),
+      createCard({ id: "hand-2", name: "Silver", origin: "Main" }),
+    ];
+    const { store, discordClient } = clientForGame(game);
+    let releaseLoad;
+    const loadGate = new Promise((resolve) => {
+      releaseLoad = resolve;
+    });
+    let loads = 0;
+    const originalGet = discordClient.getGameDataV2.bind(discordClient);
+    discordClient.getGameDataV2 = async (...args) => {
+      loads += 1;
+      if (loads === 1) await loadGate;
+      return originalGet(...args);
+    };
+
+    const visual = runVisualCardAction({
+      action: "play",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+    });
+
+    const start = Date.now();
+    while (loads < 1) {
+      if (Date.now() - start > 2000) throw new Error("visual load never started");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    let slashSawHand1 = null;
+    const slash = withGameDocumentLock("guild-1", "thread-game", async () => {
+      const current = await originalGet("guild-1", "game", "thread-game");
+      slashSawHand1 = current.players[0].hands.main.some((card) => card.id === "hand-1");
+      CardMoves.playFromHand(current, {
+        player: current.players[0],
+        cardId: "hand-2",
+        actor,
+      });
+      await discordClient.setGameDataV2("guild-1", "game", "thread-game", current);
+    });
+
+    releaseLoad();
+    await Promise.all([visual, slash]);
+    await drainLockedVisualActions();
+
+    const saved = store.get("guild-1:game:thread-game");
+    expect(slashSawHand1).toBe(false);
+    expect(saved.players[0].hands.main.map((card) => card.id)).toEqual([]);
+  });
+
+  test("host-image snapshot fetches do not hold the persist lock", async () => {
+    const game = gameWithDeck();
+    game.history = [
+      {
+        timestamp: "2026-11-17T12:00:00.000Z",
+        actor: { userId: "snowflake-user" },
+        action: {
+          category: GameDB.ACTION_CATEGORIES.GAME,
+          type: GameDB.ACTION_TYPES.CREATE,
+        },
+      },
+    ];
+    const { store, discordClient } = clientForGame(game);
+    discordClient.token = "bot-token";
+    const inner = createGameChannelLock();
+    let lockDepth = 0;
+    const gameChannelLock = {
+      run(guildId, channelId, fn) {
+        return inner.run(guildId, channelId, async () => {
+          lockDepth += 1;
+          try {
+            return await fn();
+          } finally {
+            lockDepth -= 1;
+          }
+        });
+      },
+    };
+    let fetchStarted = false;
+    let releaseFetch;
+    const fetchGate = new Promise((resolve) => {
+      releaseFetch = resolve;
+    });
+    let lockHeldWhenFetchStarted = null;
+    const fetchImpl = async () => {
+      lockHeldWhenFetchStarted = lockDepth > 0;
+      fetchStarted = true;
+      await fetchGate;
+      return { status: 200, json: async () => [] };
+    };
+
+    const visual = runVisualCardAction({
+      action: "play",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+      gameChannelLock,
+      fetchImpl,
+    });
+
+    const start = Date.now();
+    while (!fetchStarted) {
+      if (Date.now() - start > 2000) throw new Error("host-image fetch never started");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    expect(lockHeldWhenFetchStarted).toBe(false);
+    expect(store.get("guild-1:game:thread-game").players[0].hands.main).toEqual([]);
+
+    let slashFinished = false;
+    await gameChannelLock.run("guild-1", "thread-game", async () => {
+      slashFinished = true;
+    });
+    expect(slashFinished).toBe(true);
+
+    releaseFetch();
+    const result = await visual;
+    await drainLockedVisualActions();
+    expect(result.status).toBe(200);
   });
 
   test("draw auto-joins a non-player the way /cards deck drawmultiple does", async () => {
@@ -1371,5 +1783,10 @@ describe("visualActionErrorMessage", () => {
     );
     expect(visualActionErrorMessage("try_again")).toContain("Try again");
     expect(visualActionErrorMessage("no_cards_to_deal")).toBe("No cards to deal.");
+    expect(visualActionErrorMessage("card_not_in_hand")).toBe("You don't have that card.");
+    expect(visualActionErrorMessage("missing_card")).toBe("Pick a card first.");
+    expect(visualActionErrorMessage("discard_pile_missing")).toBe(
+      "Error: Could not find the discard pile. Card returned to hand."
+    );
   });
 });

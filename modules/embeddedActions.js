@@ -4,6 +4,7 @@ const { cloneDeep } = require("lodash");
 const GameDB = require("../db/anygame");
 const GameHelper = require("./GlobalGameHelper");
 const GameStatusHelper = require("./GameStatusHelper");
+const Formatter = require("./GameFormatter");
 const CardMoves = require("./gameLogic/cardMoves");
 const PlayerScores = require("./gameLogic/playerScores");
 const { parseActionCount } = require("./actionCount");
@@ -20,10 +21,18 @@ const {
   snapshotVersion,
   userIsPlayer,
 } = require("./embeddedGames");
+const {
+  createGameChannelLock,
+  defaultGameChannelLock,
+  withGameDocumentLock,
+} = require("./gameDocumentLock");
 
-const VISUAL_ACTIONS = new Set(["deal", "draw", "scores"]);
+const HAND_ACTIONS = new Set(["play", "discard", "show"]);
+const VISUAL_ACTIONS = new Set(["deal", "draw", "scores", "play", "discard", "show"]);
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 const ACTION_IDEMPOTENCY_MAX = 500;
+/** Sequential SHOW of the same card (new requestIds) within this window reuse the first post. */
+const SHOW_COALESCE_TTL_MS = 2000;
 const ACTION_ERROR_MESSAGES = Object.freeze({
   ...SHARED_ACTION_ERROR_MESSAGES,
   unspecified_deck: GameHelper.SPECIFY_DECK_MESSAGE,
@@ -98,6 +107,21 @@ function parseVisualActionBody(body = {}) {
     return {
       action,
       scores: parseVisualScoreMap(body.scores),
+      requestId,
+    };
+  }
+  if (HAND_ACTIONS.has(action)) {
+    const cardId = typeof body.cardId === "string" ? body.cardId.trim() : "";
+    if (!cardId) {
+      return {
+        error: "missing_card",
+        status: 400,
+        message: ACTION_ERROR_MESSAGES.missing_card,
+      };
+    }
+    return {
+      action,
+      cardId,
       requestId,
     };
   }
@@ -204,6 +228,8 @@ async function postCommandToGameChannel({
   logger,
   withChannelLock,
   skipPin,
+  additionalEmbeds,
+  additionalFiles,
 }) {
   if (!discordClient) return false;
   const channel = await resolveDiscordChannel(discordClient, channelId);
@@ -227,9 +253,33 @@ async function postCommandToGameChannel({
     interaction,
     discordClient,
     gameData,
-    { content, withChannelLock, pinFromLatest: true, skipPin }
+    {
+      content,
+      withChannelLock,
+      pinFromLatest: true,
+      skipPin,
+      additionalEmbeds,
+      additionalFiles,
+    }
   );
   return true;
+}
+
+async function cardReplyPartsForChannel(card, logger) {
+  if (!card) return { additionalEmbeds: undefined, additionalFiles: undefined };
+  try {
+    const parts = await Formatter.oneCardReplyParts(card);
+    return {
+      additionalEmbeds: parts?.embed ? [parts.embed] : undefined,
+      additionalFiles: parts?.files?.length ? parts.files : undefined,
+    };
+  } catch (err) {
+    logger?.log?.(
+      `Failed to attach card image for visual-mode action: ${err.message || err}`,
+      "warn"
+    );
+    return { additionalEmbeds: undefined, additionalFiles: undefined };
+  }
 }
 
 async function finishVisualCardAction({
@@ -242,6 +292,8 @@ async function finishVisualCardAction({
   logger,
   withChannelLock,
   skipPin,
+  additionalEmbeds,
+  additionalFiles,
 }) {
   let posted = false;
   try {
@@ -256,6 +308,8 @@ async function finishVisualCardAction({
         logger,
         withChannelLock,
         skipPin,
+        additionalEmbeds,
+        additionalFiles,
       })
     );
   } catch (err) {
@@ -318,7 +372,44 @@ async function postLatestVisualCardAction(args, { shouldSkipPin } = {}) {
   });
 }
 
-function applyVisualCardAction(gameData, { action, deckName, count, actor, userId }) {
+function applyVisualHandAction(gameData, { action, cardId, actor, userId }) {
+  const player = findPlayer(gameData, userId);
+  if (!player) {
+    return {
+      ok: false,
+      status: 403,
+      error: "not_a_player",
+      content: ACTION_ERROR_MESSAGES.not_a_player,
+    };
+  }
+  const result =
+    action === "play"
+      ? CardMoves.playFromHand(gameData, { player, cardId, actor })
+      : action === "discard"
+        ? CardMoves.discardFromHand(gameData, { player, cardId, actor })
+        : CardMoves.showFromHand(gameData, { player, cardId, actor });
+  if (!result.ok) {
+    const status = result.error === "not_a_player" ? 403 : 409;
+    return {
+      ok: false,
+      status,
+      error: result.error,
+      content: result.content,
+    };
+  }
+  return {
+    ok: true,
+    content: result.content,
+    card: result.card,
+    revealCard: action === "play" || action === "show",
+  };
+}
+
+function applyVisualCardAction(gameData, { action, deckName, count, cardId, actor, userId }) {
+  if (HAND_ACTIONS.has(action)) {
+    return applyVisualHandAction(gameData, { action, cardId, actor, userId });
+  }
+
   const deckResult = GameHelper.resolveDeckOption(gameData, deckName);
   if (deckResult.unspecified) {
     return {
@@ -412,38 +503,6 @@ async function playerNamesForScoreUpdate(gameData, scores, { discordClient, guil
 }
 
 /**
- * Serialize load → mutate → save for one game document. Two Deal/Draw POSTs
- * with different requestIds must not both load the same snapshot. Channel
- * posts are best-effort on a second per-channel queue: a hung Discord send,
- * pin REST, or card-image loadImage must not stall the next persist. Chat
- * action lines stay queued (best-effort); pin/status refresh coalesces to
- * the latest persisted board so concurrent sends cannot spawn leftover
- * live-status pins. Status metadata merges re-enter the persist lock only
- * around the short get-then-set so they cannot clobber a later save. The HTTP
- * response is released as soon as persist and the visual snapshot finish.
- */
-function createGameChannelLock() {
-  const tails = new Map();
-
-  function run(guildId, channelId, fn) {
-    const key = `${guildId}:${channelId}`;
-    const previous = tails.get(key) || Promise.resolve();
-    const next = previous.catch(() => {}).then(fn);
-    const idle = next.then(
-      () => {},
-      () => {}
-    );
-    tails.set(key, idle);
-    idle.then(() => {
-      if (tails.get(key) === idle) tails.delete(key);
-    });
-    return next;
-  }
-
-  return { run };
-}
-
-/**
  * Best-effort Discord posts after the game lock. One worker per channel
  * serializes channel.send so leftover pins cannot race into existence.
  * Every queued chat action line is posted; pin refresh is skipped when a
@@ -523,7 +582,6 @@ function createVisualChannelPostQueue() {
   return { enqueue, drain };
 }
 
-const defaultGameChannelLock = createGameChannelLock();
 const defaultVisualChannelPostQueue = createVisualChannelPostQueue();
 const pendingLockedVisualActions = new Set();
 
@@ -575,6 +633,7 @@ async function enrichActorDisplayName(actor, { discordClient, guildId, userId })
 function createActionIdempotencyCache({
   ttlMs = 5 * 60 * 1000,
   maxSize = ACTION_IDEMPOTENCY_MAX,
+  showCoalesceTtlMs = SHOW_COALESCE_TTL_MS,
 } = {}) {
   const completed = new Map();
   const inflight = new Map();
@@ -583,38 +642,61 @@ function createActionIdempotencyCache({
     return `${userId}:${guildId}:${channelId}:${requestId}:${action}:${detail}`;
   }
 
-  function remember(key, result) {
+  function remember(key, result, entryTtlMs = ttlMs) {
     if (completed.size >= maxSize && !completed.has(key)) {
       const oldest = completed.keys().next().value;
       if (oldest != null) completed.delete(oldest);
     }
     completed.set(key, result);
-    setTimeout(() => completed.delete(key), ttlMs).unref?.();
+    const held = result;
+    setTimeout(() => {
+      if (completed.get(key) === held) completed.delete(key);
+    }, entryTtlMs).unref?.();
   }
 
   async function run(requestId, userId, guildId, channelId, fn, actionParts = {}) {
     const id = parseVisualActionRequestId(requestId);
-    if (!id) return fn();
     const action = String(actionParts.action || "");
     const detail = String(actionParts.detail ?? "");
-    const key = cacheKey(userId, guildId, channelId, id, action, detail);
-    const cached = completed.get(key);
-    if (cached) return cached;
-    if (inflight.has(key)) return inflight.get(key);
+    const key = id ? cacheKey(userId, guildId, channelId, id, action, detail) : null;
+    // SHOW does not remove the card, so two tabs / sequential clicks with
+    // different requestIds would both 200. Coalesce inflight SHOW of the same
+    // card, and reuse a successful SHOW of that card for a short window.
+    const coalesceKey =
+      action === "show" && detail
+        ? `coalesce:show:${userId}:${guildId}:${channelId}:${detail}`
+        : null;
+    if (!key && !coalesceKey) return fn();
+    if (key) {
+      const cached = completed.get(key);
+      if (cached) return cached;
+      if (inflight.has(key)) return inflight.get(key);
+    }
+    if (coalesceKey) {
+      const cachedShow = completed.get(coalesceKey);
+      if (cachedShow) return cachedShow;
+      if (inflight.has(coalesceKey)) return inflight.get(coalesceKey);
+    }
     const promise = Promise.resolve()
       .then(fn)
       .then((result) => {
-        inflight.delete(key);
-        if (result?.status === 200) {
+        if (key) inflight.delete(key);
+        if (coalesceKey) inflight.delete(coalesceKey);
+        if (result?.status === 200 && key) {
           remember(key, result);
+        }
+        if (result?.status === 200 && coalesceKey) {
+          remember(coalesceKey, result, showCoalesceTtlMs);
         }
         return result;
       })
       .catch((err) => {
-        inflight.delete(key);
+        if (key) inflight.delete(key);
+        if (coalesceKey) inflight.delete(coalesceKey);
         throw err;
       });
-    inflight.set(key, promise);
+    if (key) inflight.set(key, promise);
+    if (coalesceKey) inflight.set(coalesceKey, promise);
     return promise;
   }
 
@@ -663,6 +745,7 @@ async function runVisualCardAction({
   action,
   deckName,
   count,
+  cardId,
   user,
   member,
   guildId,
@@ -731,6 +814,7 @@ async function runVisualCardAction({
                   action,
                   deckName,
                   count,
+                  cardId,
                   actor,
                   guildId: gid,
                   channelId: cid,
@@ -744,35 +828,13 @@ async function runVisualCardAction({
               releaseHttp.resolve(persisted);
               return null;
             }
-            const snapshot = await snapshotFromCurrentGame({
-              gameData: persisted.gameData,
-              discordClient,
-              guildId: gid,
-              channelId: cid,
-              userId: uid,
-              fetchImpl,
-              botToken,
-              hostImageCache,
-            });
-            const snapshotBody = snapshot.body;
-            const version = snapshotVersion(persisted.gameData, {
-              channelId: cid,
-              guildId: gid,
-              userId: uid,
-              hostBoardImages: snapshot.hostBoardImages,
-            });
-            releaseHttp.resolve({
-              status: 200,
-              version,
-              body: {
-                ...snapshotBody,
-                version,
-                message: persisted.applied.content,
-              },
-            });
+            // Snapshot (host-image fetches) stays off the persist lock so
+            // slash `/cards hand *` is not stalled by Discord CDN I/O.
             return {
-              gameData: persisted.gameData,
+              gameData: cloneDeep(persisted.gameData),
               content: persisted.applied.content,
+              card: persisted.applied.card,
+              revealCard: persisted.applied.revealCard,
             };
           } catch (err) {
             releaseHttp.reject(err);
@@ -783,8 +845,46 @@ async function runVisualCardAction({
         return false;
       }
       if (!pendingPost) return false;
-      return postQueue.enqueue(gid, cid, (queue) =>
-        postLatestVisualCardAction(
+      try {
+        const snapshot = await snapshotFromCurrentGame({
+          gameData: pendingPost.gameData,
+          discordClient,
+          guildId: gid,
+          channelId: cid,
+          userId: uid,
+          fetchImpl,
+          botToken,
+          hostImageCache,
+        });
+        const snapshotBody = snapshot.body;
+        const version = snapshotVersion(pendingPost.gameData, {
+          channelId: cid,
+          guildId: gid,
+          userId: uid,
+          hostBoardImages: snapshot.hostBoardImages,
+        });
+        releaseHttp.resolve({
+          status: 200,
+          version,
+          body: {
+            ...snapshotBody,
+            version,
+            message: pendingPost.content,
+          },
+        });
+      } catch (err) {
+        releaseHttp.reject(err);
+        return false;
+      }
+      return postQueue.enqueue(gid, cid, async (queue) => {
+        let additionalEmbeds;
+        let additionalFiles;
+        if (pendingPost.revealCard && pendingPost.card) {
+          const parts = await cardReplyPartsForChannel(pendingPost.card, logger);
+          additionalEmbeds = parts.additionalEmbeds;
+          additionalFiles = parts.additionalFiles;
+        }
+        return postLatestVisualCardAction(
           {
             discordClient,
             gameStore,
@@ -796,10 +896,12 @@ async function runVisualCardAction({
             content: pendingPost.content,
             logger,
             withChannelLock,
+            additionalEmbeds,
+            additionalFiles,
           },
           queue
-        )
-      );
+        );
+      });
     });
     return httpReady;
   };
@@ -810,7 +912,9 @@ async function runVisualCardAction({
       detail:
         idempotencyDetail != null
           ? String(idempotencyDetail)
-          : `${deckName}:${count}`,
+          : cardId
+            ? String(cardId)
+            : `${deckName}:${count}`,
     });
   }
   return execute();
@@ -820,6 +924,7 @@ async function runVisualCardActionOnce({
   action,
   deckName,
   count,
+  cardId,
   actor,
   guildId,
   channelId,
@@ -860,6 +965,7 @@ async function runVisualCardActionOnce({
     action,
     deckName,
     count,
+    cardId,
     actor,
     userId,
   });
@@ -1003,12 +1109,14 @@ async function runVisualScoreAction({
 module.exports = {
   ACTION_ERROR_MESSAGES,
   ACTION_IDEMPOTENCY_MAX,
+  SHOW_COALESCE_TTL_MS,
   actorFromDiscordUser,
   applyVisualCardAction,
   applyVisualScoreAction,
   createActionIdempotencyCache,
   createGameChannelLock,
   createVisualChannelPostQueue,
+  withGameDocumentLock,
   drainLockedVisualActions,
   parseVisualActionBody,
   parseVisualActionRequestId,
