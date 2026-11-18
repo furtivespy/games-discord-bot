@@ -938,3 +938,139 @@ describe("inspect nav arrows stay inside the sheet", () => {
   });
 });
 
+const ART_OVERFLOW_HARNESS_JS = `
+function box(el) {
+  const r = el.getBoundingClientRect();
+  return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+}
+try {
+  const dialog = document.getElementById("card-inspect");
+  const sheet = document.querySelector(".card-inspect-sheet");
+  const art = document.getElementById("card-inspect-art");
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="700">' +
+    '<rect width="900" height="700" fill="#c9a066"/>' +
+    "</svg>";
+  art.hidden = false;
+  art.alt = "Charisma";
+  art.src = "data:image/svg+xml," + encodeURIComponent(svg);
+  try {
+    if (!dialog.open) dialog.showModal();
+  } catch {
+    dialog.setAttribute("open", "");
+  }
+  if (typeof art.decode === "function") await art.decode();
+  else await new Promise((resolve) => { art.onload = resolve; if (art.complete) resolve(); });
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const sheetBox = box(sheet);
+  const artBox = box(art);
+  await fetch("/result", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      viewportWidth: window.innerWidth,
+      overflowX: getComputedStyle(sheet).overflowX,
+      sheetWidth: sheetBox.width,
+      sheetClientWidth: sheet.clientWidth,
+      sheetScrollWidth: sheet.scrollWidth,
+      artWidth: artBox.width,
+      artCenter: (artBox.left + artBox.right) / 2,
+      sheetCenter: (sheetBox.left + sheetBox.right) / 2,
+    }),
+  });
+} catch (error) {
+  await fetch("/result", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ error: String(error && error.stack ? error.stack : error) }),
+  });
+}
+`;
+
+describe("inspect art fits a wide card image", () => {
+  const chrome = workingChromeBin();
+  let server;
+  let chromeProc;
+  let userDataDir;
+
+  afterEach(() => {
+    try {
+      chromeProc?.kill("SIGKILL");
+    } catch {}
+    chromeProc = null;
+    try {
+      server?.stop(true);
+    } catch {}
+    server = null;
+    if (userDataDir) {
+      fs.rmSync(userDataDir, { recursive: true, force: true });
+      userDataDir = null;
+    }
+  });
+
+  test.skipIf(!chrome)("QA: wide card art is centered with no horizontal scroll", async () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const html = fs.readFileSync(HTML_PATH, "utf8");
+    const dialogHtml = html.slice(
+      html.indexOf('<dialog id="card-inspect"'),
+      html.indexOf("</dialog>", html.indexOf('<dialog id="card-inspect"')) + "</dialog>".length
+    );
+
+    let resolveResult;
+    const resultPromise = new Promise((resolve) => {
+      resolveResult = resolve;
+    });
+
+    server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const url = new URL(req.url);
+        if (req.method === "POST" && url.pathname === "/result") {
+          resolveResult(await req.json());
+          return new Response("ok");
+        }
+        if (url.pathname === "/harness.js") {
+          return new Response(ART_OVERFLOW_HARNESS_JS, {
+            headers: { "Content-Type": "text/javascript; charset=utf-8" },
+          });
+        }
+        return new Response(inspectNavHarness(css, dialogHtml), {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      },
+    });
+
+    userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "inspect-art-"));
+    chromeProc = spawn(
+      chrome,
+      [
+        "--headless=new",
+        "--disable-gpu",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--hide-scrollbars",
+        "--no-first-run",
+        "--window-size=1100,900",
+        `--user-data-dir=${userDataDir}`,
+        String(server.url),
+      ],
+      { stdio: "ignore" }
+    );
+
+    const result = await Promise.race([
+      resultPromise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("chrome harness timed out")), 12_000)
+      ),
+    ]);
+    expect(result.error).toBeUndefined();
+    expect(result.overflowX).toBe("hidden");
+    expect(result.sheetWidth).toBeGreaterThan(32 * 16);
+    expect(result.sheetScrollWidth).toBeLessThanOrEqual(result.sheetClientWidth + 1);
+    expect(result.artWidth).toBeGreaterThan(200);
+    expect(result.artWidth).toBeLessThanOrEqual(result.sheetClientWidth + 1);
+    expect(Math.abs(result.artCenter - result.sheetCenter)).toBeLessThanOrEqual(8);
+  });
+});
+

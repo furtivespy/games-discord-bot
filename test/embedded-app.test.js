@@ -488,7 +488,13 @@ describe("embedded HTTP origin", () => {
       /\.card-inspect-dialog\.is-photo \.card-inspect-art:not\(\[hidden\]\)\s*\{[^}]*width:\s*90vw[^}]*height:\s*90vh[^}]*max-width:\s*90vw[^}]*max-height:\s*90vh/
     );
     expect(css).toMatch(
-      /\.card-inspect-art:not\(\[hidden\]\)\s*\{[^}]*max-width:\s*min\(28rem,\s*86vw\)[^}]*max-height:\s*min\(78vh,\s*36rem\)/
+      /\.card-inspect-sheet\s*\{[^}]*width:\s*min\(44rem,\s*calc\(100vw - 1\.5rem\)\)/
+    );
+    expect(css).toMatch(
+      /\.card-inspect-sheet\s*\{[^}]*overflow-x:\s*hidden/
+    );
+    expect(css).toMatch(
+      /\.card-inspect-art:not\(\[hidden\]\)\s*\{[^}]*max-width:\s*100%[^}]*max-height:\s*min\(72vh,\s*34rem\)/
     );
     expect(css).toContain(".deck-tile:hover .deck-actions");
     expect(css).toContain(".deck-tile:has(:focus-visible) .deck-actions");
@@ -496,6 +502,8 @@ describe("embedded HTTP origin", () => {
     expect(css).not.toContain(".deck-tile:focus-within");
     expect(css).toContain(".deck-action");
     expect(css).toContain(".pile-stack");
+    expect(css).toContain("grid-template-rows: subgrid");
+    expect(css).toMatch(/\.deck-name\s*\{[^}]*align-self:\s*start/);
     expect(css).toContain(".pile-label");
     expect(css).toContain(".discard-title");
     expect(css).toContain(".discard-count");

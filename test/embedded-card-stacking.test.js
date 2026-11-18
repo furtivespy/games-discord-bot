@@ -662,12 +662,22 @@ try {
   const main = document.getElementById("table-main");
   const hand = document.querySelector(".hand-zone");
   const play = document.querySelector('[data-zone="play-area"]');
+  const board = document.querySelector('[data-zone="board"]');
+  const decks = document.querySelector('[data-zone="decks"]');
+  const discards = document.querySelector('[data-zone="discards"]');
+  const deckName = document.querySelector(".deck-name");
+  const drawTile = document.querySelector(".deck-tile:not(.discard-tile)");
   const tile = document.querySelector(".card-tile");
   const face = tile && tile.querySelector(".card-face");
   const tableBox = table.getBoundingClientRect();
   const mainBox = main.getBoundingClientRect();
   const handBox = hand.getBoundingClientRect();
   const playBox = play.getBoundingClientRect();
+  const boardBox = board ? board.getBoundingClientRect() : null;
+  const decksBox = decks ? decks.getBoundingClientRect() : null;
+  const discardsBox = discards ? discards.getBoundingClientRect() : null;
+  const deckNameBox = deckName ? deckName.getBoundingClientRect() : null;
+  const drawTileBox = drawTile ? drawTile.getBoundingClientRect() : null;
   const rest = face.getBoundingClientRect();
   const pile = document.getElementById("pile-stack");
   const pileBox = pile.getBoundingClientRect();
@@ -709,6 +719,18 @@ try {
     playLeft: playBox.left,
     playRight: playBox.right,
     playTop: playBox.top,
+    playHeight: playBox.height,
+    boardTop: boardBox && boardBox.top,
+    boardBottom: boardBox && boardBox.bottom,
+    boardHeight: boardBox && boardBox.height,
+    decksTop: decksBox && decksBox.top,
+    decksBottom: decksBox && decksBox.bottom,
+    decksHeight: decksBox && decksBox.height,
+    discardsTop: discardsBox && discardsBox.top,
+    discardsBottom: discardsBox && discardsBox.bottom,
+    discardsHeight: discardsBox && discardsBox.height,
+    deckNameHeight: deckNameBox && deckNameBox.height,
+    drawTileHeight: drawTileBox && drawTileBox.height,
     pileLeft: pileBox.left,
     pileRight: pileBox.right,
     pileTop: pileBox.top,
@@ -746,7 +768,24 @@ describe("narrow pile layout CSS", () => {
     expect(narrow).toMatch(
       /\.board-row\s*>\s*\.pile-stack\s*\{[^}]*grid-column:\s*2/
     );
+    expect(narrow).toMatch(
+      /\.board-row\s*>\s*\.pile-stack\s*\{[^}]*grid-template-rows:\s*auto auto/
+    );
     expect(narrow).not.toContain("grid-column: auto");
+  });
+
+  test("desktop pile stack subgrids board/play rows and keeps the deck-name pill short", () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const start = css.indexOf("@media (max-width: 820px)");
+    const desktop = start >= 0 ? css.slice(0, start) : css;
+    expect(desktop).toMatch(
+      /\.board-row\s*>\s*\.pile-stack\s*\{[^}]*grid-template-rows:\s*subgrid/
+    );
+    expect(desktop).toMatch(/\.pile-windows\s*\{[^}]*grid-template-rows:\s*subgrid/);
+    expect(desktop).toMatch(/\.decks-zone\s*\{[^}]*grid-row:\s*1/);
+    expect(desktop).toMatch(/\.discards-zone\s*\{[^}]*grid-row:\s*2/);
+    expect(desktop).toMatch(/\.deck-name\s*\{[^}]*align-self:\s*start/);
+    expect(desktop).not.toMatch(/\.pile-windows\s*\{[^}]*justify-content:\s*space-between/);
   });
 });
 
@@ -1092,5 +1131,26 @@ describe("hand zone stays at the bottom of the table", () => {
     expect(result.handFitsTable).toBe(true);
     const visibleHandHeight = Math.min(result.handBottom, result.viewportHeight) - Math.max(result.handTop, 0);
     expect(visibleHandHeight / (result.handBottom - result.handTop)).toBeGreaterThan(0.9);
+  }, 30000);
+
+  test.skipIf(!chrome)("QA: board matches decks height and play matches discard", async () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const result = await measureLayout(populatedTableHarness(css), {
+      width: 1280,
+      height: 800,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.boardHeight).toBeGreaterThan(0);
+    expect(result.decksHeight).toBeGreaterThan(0);
+    expect(result.playHeight).toBeGreaterThan(0);
+    expect(result.discardsHeight).toBeGreaterThan(0);
+    expect(Math.abs(result.boardHeight - result.decksHeight)).toBeLessThanOrEqual(2);
+    expect(Math.abs(result.playHeight - result.discardsHeight)).toBeLessThanOrEqual(2);
+    expect(Math.abs(result.boardTop - result.decksTop)).toBeLessThanOrEqual(2);
+    expect(Math.abs(result.playTop - result.discardsTop)).toBeLessThanOrEqual(2);
+    expect(result.deckNameHeight).toBeGreaterThan(8);
+    expect(result.drawTileHeight).toBeGreaterThan(result.deckNameHeight * 2);
+    expect(result.deckNameHeight).toBeLessThan(result.drawTileHeight * 0.45);
   }, 30000);
 });
