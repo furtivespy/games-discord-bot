@@ -3,6 +3,7 @@ const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const CardMoves = require('../../modules/gameLogic/cardMoves')
+const { withGameDocumentLock } = require('../../modules/gameDocumentLock')
 
 class Show {
     async execute(interaction, client) {
@@ -23,40 +24,54 @@ class Show {
             return
         }
 
-        const [, gameData] = await Promise.all([
+        const [, outcome] = await Promise.all([
             interaction.deferReply(),
-            GameHelper.getGameData(client, interaction)
+            withGameDocumentLock(interaction.guildId, interaction.channelId, async () => {
+                const gameData = await GameHelper.getGameData(client, interaction)
+
+                if (gameData.isdeleted) {
+                    return { kind: "no_game" }
+                }
+
+                const cardid = interaction.options.getString('card')
+                let player = find(gameData.players, {userId: interaction.user.id})
+                if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
+                    return { kind: "missing" }
+                }
+
+                const result = CardMoves.showFromHand(gameData, {
+                    player,
+                    cardId: cardid,
+                    actor: {
+                        id: interaction.user.id,
+                        username: interaction.user.username,
+                        displayName: interaction.member?.displayName || interaction.user.username,
+                    },
+                })
+                if (!result.ok) {
+                    return { kind: "failed", result }
+                }
+
+                // Save game data to persist history entry
+                await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+                return { kind: "ok", gameData, player, result }
+            })
         ]);
 
-        if (gameData.isdeleted) {
+        if (outcome.kind === "no_game") {
             await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
-
-        const cardid = interaction.options.getString('card')
-        let player = find(gameData.players, {userId: interaction.user.id})
-        if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
+        if (outcome.kind === "missing") {
             await interaction.editReply({ content: "Something is broken!?"})
             return
         }
-
-        const result = CardMoves.showFromHand(gameData, {
-            player,
-            cardId: cardid,
-            actor: {
-                id: interaction.user.id,
-                username: interaction.user.username,
-                displayName: interaction.member?.displayName || interaction.user.username,
-            },
-        })
-        if (!result.ok) {
-            await interaction.editReply({ content: result.content })
+        if (outcome.kind === "failed") {
+            await interaction.editReply({ content: outcome.result.content })
             return
         }
+        const { gameData, player, result } = outcome
         const card = result.card
-
-        // Save game data to persist history entry
-        await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
         const cardMedia = await Formatter.oneCardReplyParts(card)
         const publicReply = {

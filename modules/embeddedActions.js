@@ -21,6 +21,11 @@ const {
   snapshotVersion,
   userIsPlayer,
 } = require("./embeddedGames");
+const {
+  createGameChannelLock,
+  defaultGameChannelLock,
+  withGameDocumentLock,
+} = require("./gameDocumentLock");
 
 const HAND_ACTIONS = new Set(["play", "discard", "show"]);
 const VISUAL_ACTIONS = new Set(["deal", "draw", "scores", "play", "discard", "show"]);
@@ -496,38 +501,6 @@ async function playerNamesForScoreUpdate(gameData, scores, { discordClient, guil
 }
 
 /**
- * Serialize load → mutate → save for one game document. Two Deal/Draw POSTs
- * with different requestIds must not both load the same snapshot. Channel
- * posts are best-effort on a second per-channel queue: a hung Discord send,
- * pin REST, or card-image loadImage must not stall the next persist. Chat
- * action lines stay queued (best-effort); pin/status refresh coalesces to
- * the latest persisted board so concurrent sends cannot spawn leftover
- * live-status pins. Status metadata merges re-enter the persist lock only
- * around the short get-then-set so they cannot clobber a later save. The HTTP
- * response is released as soon as persist and the visual snapshot finish.
- */
-function createGameChannelLock() {
-  const tails = new Map();
-
-  function run(guildId, channelId, fn) {
-    const key = `${guildId}:${channelId}`;
-    const previous = tails.get(key) || Promise.resolve();
-    const next = previous.catch(() => {}).then(fn);
-    const idle = next.then(
-      () => {},
-      () => {}
-    );
-    tails.set(key, idle);
-    idle.then(() => {
-      if (tails.get(key) === idle) tails.delete(key);
-    });
-    return next;
-  }
-
-  return { run };
-}
-
-/**
  * Best-effort Discord posts after the game lock. One worker per channel
  * serializes channel.send so leftover pins cannot race into existence.
  * Every queued chat action line is posted; pin refresh is skipped when a
@@ -607,7 +580,6 @@ function createVisualChannelPostQueue() {
   return { enqueue, drain };
 }
 
-const defaultGameChannelLock = createGameChannelLock();
 const defaultVisualChannelPostQueue = createVisualChannelPostQueue();
 const pendingLockedVisualActions = new Set();
 
@@ -678,27 +650,39 @@ function createActionIdempotencyCache({
 
   async function run(requestId, userId, guildId, channelId, fn, actionParts = {}) {
     const id = parseVisualActionRequestId(requestId);
-    if (!id) return fn();
     const action = String(actionParts.action || "");
     const detail = String(actionParts.detail ?? "");
-    const key = cacheKey(userId, guildId, channelId, id, action, detail);
-    const cached = completed.get(key);
-    if (cached) return cached;
-    if (inflight.has(key)) return inflight.get(key);
+    const key = id ? cacheKey(userId, guildId, channelId, id, action, detail) : null;
+    // SHOW does not remove the card, so two tabs / double-clicks with different
+    // requestIds would both 200. Coalesce inflight SHOW of the same card.
+    const coalesceKey =
+      action === "show" && detail
+        ? `coalesce:show:${userId}:${guildId}:${channelId}:${detail}`
+        : null;
+    if (!key && !coalesceKey) return fn();
+    if (key) {
+      const cached = completed.get(key);
+      if (cached) return cached;
+      if (inflight.has(key)) return inflight.get(key);
+    }
+    if (coalesceKey && inflight.has(coalesceKey)) return inflight.get(coalesceKey);
     const promise = Promise.resolve()
       .then(fn)
       .then((result) => {
-        inflight.delete(key);
-        if (result?.status === 200) {
+        if (key) inflight.delete(key);
+        if (coalesceKey) inflight.delete(coalesceKey);
+        if (result?.status === 200 && key) {
           remember(key, result);
         }
         return result;
       })
       .catch((err) => {
-        inflight.delete(key);
+        if (key) inflight.delete(key);
+        if (coalesceKey) inflight.delete(coalesceKey);
         throw err;
       });
-    inflight.set(key, promise);
+    if (key) inflight.set(key, promise);
+    if (coalesceKey) inflight.set(coalesceKey, promise);
     return promise;
   }
 
@@ -1110,6 +1094,7 @@ module.exports = {
   createActionIdempotencyCache,
   createGameChannelLock,
   createVisualChannelPostQueue,
+  withGameDocumentLock,
   drainLockedVisualActions,
   parseVisualActionBody,
   parseVisualActionRequestId,

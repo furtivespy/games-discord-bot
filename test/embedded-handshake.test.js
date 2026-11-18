@@ -1407,6 +1407,21 @@ describe("deck hover Deal and Draw", () => {
     ).toBe(false);
   });
 
+  test("a failed PLAY/DISCARD/SHOW closes inspect so snapshot polls resume", () => {
+    const main = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "embedded-client", "src", "main.ts"),
+      "utf8"
+    );
+    const submit = main.slice(
+      main.indexOf("async function submitHandCardAction"),
+      main.indexOf("function bindActionDialog")
+    );
+    expect(submit).toContain("closeInspectAfterFailedAction");
+    expect(submit).toMatch(/if \(!response\.ok\) \{[\s\S]*closeInspectAfterFailedAction\(\)/);
+    expect(submit).toContain("flushDeferredSnapshot");
+    expect(submit).toContain("setActionNotice");
+  });
+
   test("Edit Scores posts the shared scores action body", () => {
     expect(EDIT_SCORES_LABEL).toBe("Edit Scores");
     expect(SAVE_SCORES_LABEL).toBe("Save");

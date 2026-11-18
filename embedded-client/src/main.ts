@@ -61,6 +61,7 @@ import { SNAP_BACK_DURATION_MS, enableCardDrag, type CardOffset } from "./drag";
 import { enableHoverZoomClamp } from "./hoverZoom";
 import {
   closeCardInspect,
+  closeInspectAfterFailedAction,
   enableCardInspectDialog,
   openCardInspect,
   setInspectActionButtonsLocked,
@@ -729,11 +730,6 @@ async function submitHandCardAction(kind: HandActionKind, card: InspectableCard)
       selectedChannelId: liveSelectedChannelId(session.config.channelId),
       requestedChannelId: channelId,
     });
-  const failWith = (message: string) => {
-    if (!stillThisGame()) return;
-    setDeckActionsLocked(false);
-    setInspectActionError(message);
-  };
   try {
     const response = await fetch(
       actionRequestUrl(session.config.apiHost, window.location.protocol),
@@ -770,7 +766,12 @@ async function submitHandCardAction(kind: HandActionKind, card: InspectableCard)
       payload = {};
     }
     if (!response.ok) {
-      failWith(visualActionErrorMessage(payload.error, payload.message));
+      closeInspectAfterFailedAction();
+      if (stillThisGame()) {
+        setDeckActionsLocked(false);
+        setActionNotice(visualActionErrorMessage(payload.error, payload.message));
+        flushDeferredSnapshot();
+      }
       return;
     }
     if (!stillThisGame()) return;
@@ -778,7 +779,12 @@ async function submitHandCardAction(kind: HandActionKind, card: InspectableCard)
     applySnapshot(session.config, payload);
     setActionNotice(payload.channelPosted === false ? CHANNEL_POST_FAILED_NOTICE : null);
   } catch {
-    failWith(visualActionErrorMessage("action_failed"));
+    closeInspectAfterFailedAction();
+    if (stillThisGame()) {
+      setDeckActionsLocked(false);
+      setActionNotice(visualActionErrorMessage("action_failed"));
+      flushDeferredSnapshot();
+    }
   } finally {
     actionRequestId = null;
     setDeckActionsLocked(false);

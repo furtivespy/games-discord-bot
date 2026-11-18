@@ -88,11 +88,59 @@ function takeCardFromHand(player, cardId) {
 function returnCardToHand(player, card, index) {
   if (!card) return;
   const hand = mainHand(player);
-  if (Number.isInteger(index) && index >= 0 && index <= hand.length) {
-    hand.splice(index, 0, card);
-    return;
+  const at = Number.isInteger(index)
+    ? Math.min(Math.max(0, index), hand.length)
+    : hand.length;
+  hand.splice(at, 0, card);
+}
+
+function defaultPlayDestination(gameData) {
+  return gameData?.playToPlayArea ? "playarea" : "discard";
+}
+
+function placeCardAtDestination(
+  gameData,
+  player,
+  card,
+  actualDestination,
+  { allowPlayArea, discardLabel, missingPileContent } = {}
+) {
+  if (actualDestination === "gameboard") {
+    if (!Array.isArray(gameData.gameBoard)) gameData.gameBoard = [];
+    gameData.gameBoard.push(card);
+    return { ok: true, destinationName: "Game Board", destinationType: actualDestination };
   }
-  hand.push(card);
+  if (allowPlayArea && actualDestination === "playarea") {
+    if (!Array.isArray(player.playArea)) player.playArea = [];
+    player.playArea.push(card);
+    return { ok: true, destinationName: "play area", destinationType: actualDestination };
+  }
+  if (actualDestination === "discard") {
+    const deck = findDeckByName(gameData, card.origin);
+    if (deck?.piles?.discard && Array.isArray(deck.piles.discard.cards)) {
+      deck.piles.discard.cards.push(card);
+      return {
+        ok: true,
+        destinationName: discardLabel(deck),
+        destinationType: actualDestination,
+      };
+    }
+    return {
+      ok: false,
+      error: "discard_pile_missing",
+      content: "Error: Could not find the discard pile. Card returned to hand.",
+    };
+  }
+  const pile = GameHelper.getGlobalPile(gameData, actualDestination);
+  if (pile && Array.isArray(pile.cards)) {
+    pile.cards.push(card);
+    return { ok: true, destinationName: pile.name, destinationType: "pile" };
+  }
+  return {
+    ok: false,
+    error: "destination_not_found",
+    content: missingPileContent,
+  };
 }
 
 /**
@@ -247,52 +295,23 @@ function playFromHand(gameData, { player, cardId, destination, actor } = {}) {
   }
   const { card, index } = taken;
 
-  let actualDestination =
+  const actualDestination =
     typeof destination === "string" && destination.trim()
       ? destination.trim()
-      : "";
-  if (!actualDestination) {
-    actualDestination = gameData?.playToPlayArea ? "playarea" : "discard";
-  }
+      : defaultPlayDestination(gameData);
 
-  let destinationName = "";
-  let destinationType = actualDestination;
-
-  if (actualDestination === "gameboard") {
-    if (!Array.isArray(gameData.gameBoard)) gameData.gameBoard = [];
-    gameData.gameBoard.push(card);
-    destinationName = "Game Board";
-  } else if (actualDestination === "playarea") {
-    if (!Array.isArray(player.playArea)) player.playArea = [];
-    player.playArea.push(card);
-    destinationName = "play area";
-  } else if (actualDestination === "discard") {
-    const deck = findDeckByName(gameData, card.origin);
-    if (deck?.piles?.discard && Array.isArray(deck.piles.discard.cards)) {
-      deck.piles.discard.cards.push(card);
-      destinationName = "discard pile";
-    } else {
-      returnCardToHand(player, card, index);
-      return {
-        ok: false,
-        error: "discard_pile_missing",
-        content: "Error: Could not find the discard pile. Card returned to hand.",
-      };
-    }
-  } else {
-    const pile = GameHelper.getGlobalPile(gameData, actualDestination);
-    if (pile && Array.isArray(pile.cards)) {
-      pile.cards.push(card);
-      destinationName = pile.name;
-      destinationType = "pile";
-    } else {
-      returnCardToHand(player, card, index);
-      return {
-        ok: false,
-        error: "destination_not_found",
-        content: "Destination not found (Pile or other)!",
-      };
-    }
+  const placed = placeCardAtDestination(gameData, player, card, actualDestination, {
+    allowPlayArea: true,
+    discardLabel: () => "discard pile",
+    missingPileContent: "Destination not found (Pile or other)!",
+  });
+  if (!placed.ok) {
+    returnCardToHand(player, card, index);
+    return {
+      ok: false,
+      error: placed.error,
+      content: placed.content,
+    };
   }
 
   const displayName = actorDisplayName(actor);
@@ -303,12 +322,12 @@ function playFromHand(gameData, { player, cardId, destination, actor } = {}) {
       recordActor(actor),
       GameDB.ACTION_CATEGORIES.CARD,
       GameDB.ACTION_TYPES.PLAY,
-      `${displayName} played ${cardName} to ${destinationName}`,
+      `${displayName} played ${cardName} to ${placed.destinationName}`,
       {
         cardId: card.id,
         cardName,
-        destination: destinationName,
-        destinationType,
+        destination: placed.destinationName,
+        destinationType: placed.destinationType,
         origin: card.origin,
       },
       displayName
@@ -321,10 +340,10 @@ function playFromHand(gameData, { player, cardId, destination, actor } = {}) {
     ok: true,
     error: null,
     card,
-    destinationName,
+    destinationName: placed.destinationName,
     actualDestination,
-    destinationType,
-    content: `${displayName} has Played to ${destinationName}:`,
+    destinationType: placed.destinationType,
+    content: `${displayName} has Played to ${placed.destinationName}:`,
   };
 }
 
@@ -355,38 +374,20 @@ function discardFromHand(gameData, { player, cardId, destination, actor } = {}) 
       ? destination.trim()
       : "discard";
 
-  let destinationName = "";
-
-  if (actualDestination === "gameboard") {
-    if (!Array.isArray(gameData.gameBoard)) gameData.gameBoard = [];
-    gameData.gameBoard.push(card);
-    destinationName = "Game Board";
-  } else if (actualDestination === "discard") {
-    const deck = findDeckByName(gameData, card.origin);
-    if (deck?.piles?.discard && Array.isArray(deck.piles.discard.cards)) {
-      deck.piles.discard.cards.push(card);
-      destinationName = `${deck.name} discard pile`;
-    } else {
-      returnCardToHand(player, card);
-      return {
-        ok: false,
-        error: "discard_pile_missing",
-        content: "Error: Could not find the discard pile. Card returned to hand.",
-      };
-    }
-  } else {
-    const pile = GameHelper.getGlobalPile(gameData, actualDestination);
-    if (!pile || !Array.isArray(pile.cards)) {
-      returnCardToHand(player, card);
-      return {
-        ok: false,
-        error: "destination_not_found",
-        content: "Pile not found!",
-      };
-    }
-    pile.cards.push(card);
-    destinationName = pile.name;
+  const placed = placeCardAtDestination(gameData, player, card, actualDestination, {
+    allowPlayArea: false,
+    discardLabel: (deck) => `${deck.name} discard pile`,
+    missingPileContent: "Pile not found!",
+  });
+  if (!placed.ok) {
+    returnCardToHand(player, card);
+    return {
+      ok: false,
+      error: placed.error,
+      content: placed.content,
+    };
   }
+  const destinationName = placed.destinationName;
 
   const displayName = actorDisplayName(actor);
   try {

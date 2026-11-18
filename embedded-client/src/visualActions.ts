@@ -10,6 +10,8 @@ export const CHANNEL_POST_FAILED_NOTICE =
 export type DeckActionKind = "deal" | "draw";
 export type HandActionKind = "play" | "discard" | "show";
 
+// Tooltips copy the slash command descriptions, not the destination option.
+// Visual PLAY/DISCARD use that command's default destination (no picker).
 export const HAND_CARD_ACTIONS: ReadonlyArray<{
   id: HandActionKind;
   label: string;

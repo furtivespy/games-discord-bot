@@ -261,6 +261,7 @@ function resetInspectSession() {
 
 export function closeCardInspect() {
   resetInspectSession();
+  setInspectActionError(null);
   const dialog = dialogEl();
   if (!dialog) return;
   if (typeof dialog.close === "function" && dialog.open) {
@@ -268,6 +269,11 @@ export function closeCardInspect() {
     return;
   }
   dialog.removeAttribute("open");
+}
+
+/** Close inspect so snapshot polls can resume after a failed PLAY/DISCARD/SHOW. */
+export function closeInspectAfterFailedAction() {
+  closeCardInspect();
 }
 
 function stepInspect(direction: InspectNavDirection) {

@@ -13,7 +13,9 @@ const {
   runVisualCardAction,
   runVisualScoreAction,
   visualActionErrorMessage,
+  withGameDocumentLock,
 } = require("../modules/embeddedActions");
+const CardMoves = require("../modules/gameLogic/cardMoves");
 const { PermissionsBitField } = require("discord.js");
 const GameDB = require("../db/anygame");
 const Formatter = require("../modules/GameFormatter");
@@ -527,6 +529,132 @@ describe("runVisualCardAction", () => {
     expect(shown.body.message).toBe("Showing a card:");
     expect(shown.body.hand.map((card) => card.id)).toEqual(["hand-1"]);
     expect(showClient.posted[0].content).toContain("Showing a card:");
+  });
+
+  test("a crafted cardId from another seat returns 409 and leaves that hand unchanged", async () => {
+    const game = gameWithDeck();
+    game.players[1].hands.main = [
+      createCard({ id: "riley-secret", name: "Village", origin: "Main" }),
+    ];
+    const { store, discordClient } = clientForGame(game);
+    const result = await runVisualCardAction({
+      action: "play",
+      cardId: "riley-secret",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+    });
+    await drainLockedVisualActions();
+    expect(result.status).toBe(409);
+    expect(result.body.error).toBe("card_not_in_hand");
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.players[1].hands.main.map((card) => card.id)).toEqual(["riley-secret"]);
+    expect(saved.players[0].hands.main.map((card) => card.id)).toEqual(["hand-1"]);
+    expect(saved.history).toEqual([]);
+  });
+
+  test("concurrent SHOW of the same card coalesces duplicate requestIds", async () => {
+    const { posted, store, discordClient } = clientForGame(gameWithDeck());
+    const cache = createActionIdempotencyCache();
+    const args = {
+      action: "show",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+      idempotency: cache,
+    };
+    const [first, second] = await Promise.all([
+      runVisualCardAction({ ...args, requestId: "show-req-aaaa" }),
+      runVisualCardAction({ ...args, requestId: "show-req-bbbb" }),
+    ]);
+    await drainLockedVisualActions();
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    const saved = store.get("guild-1:game:thread-game");
+    expect(saved.history.filter((entry) => entry.action?.type === GameDB.ACTION_TYPES.REVEAL)).toHaveLength(
+      1
+    );
+    expect(posted).toHaveLength(1);
+    expect(saved.players[0].hands.main.map((card) => card.id)).toEqual(["hand-1"]);
+  });
+
+  test("duplicate SHOW requestIds reuse the first successful result", async () => {
+    const { posted, discordClient } = clientForGame(gameWithDeck());
+    const cache = createActionIdempotencyCache();
+    const args = {
+      action: "show",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+      requestId: "show-same-req-01",
+      idempotency: cache,
+    };
+    const first = await runVisualCardAction(args);
+    const second = await runVisualCardAction(args);
+    await drainLockedVisualActions();
+    expect(first.status).toBe(200);
+    expect(second.body.hand).toEqual(first.body.hand);
+    expect(posted).toHaveLength(1);
+  });
+
+  test("slash-style hand mutate waits for an in-flight visual persist", async () => {
+    const game = gameWithDeck();
+    game.players[0].hands.main = [
+      createCard({ id: "hand-1", name: "Copper", origin: "Main" }),
+      createCard({ id: "hand-2", name: "Silver", origin: "Main" }),
+    ];
+    const { store, discordClient } = clientForGame(game);
+    let releaseLoad;
+    const loadGate = new Promise((resolve) => {
+      releaseLoad = resolve;
+    });
+    let loads = 0;
+    const originalGet = discordClient.getGameDataV2.bind(discordClient);
+    discordClient.getGameDataV2 = async (...args) => {
+      loads += 1;
+      if (loads === 1) await loadGate;
+      return originalGet(...args);
+    };
+
+    const visual = runVisualCardAction({
+      action: "play",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+    });
+
+    const start = Date.now();
+    while (loads < 1) {
+      if (Date.now() - start > 2000) throw new Error("visual load never started");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    let slashSawHand1 = null;
+    const slash = withGameDocumentLock("guild-1", "thread-game", async () => {
+      const current = await originalGet("guild-1", "game", "thread-game");
+      slashSawHand1 = current.players[0].hands.main.some((card) => card.id === "hand-1");
+      CardMoves.playFromHand(current, {
+        player: current.players[0],
+        cardId: "hand-2",
+        actor,
+      });
+      await discordClient.setGameDataV2("guild-1", "game", "thread-game", current);
+    });
+
+    releaseLoad();
+    await Promise.all([visual, slash]);
+    await drainLockedVisualActions();
+
+    const saved = store.get("guild-1:game:thread-game");
+    expect(slashSawHand1).toBe(false);
+    expect(saved.players[0].hands.main.map((card) => card.id)).toEqual([]);
   });
 
   test("draw auto-joins a non-player the way /cards deck drawmultiple does", async () => {

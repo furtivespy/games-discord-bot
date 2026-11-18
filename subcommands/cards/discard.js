@@ -4,6 +4,7 @@ const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
 const CardMoves = require('../../modules/gameLogic/cardMoves')
+const { withGameDocumentLock } = require('../../modules/gameDocumentLock')
 
 class Discard {
     async execute(interaction, client) {
@@ -26,44 +27,58 @@ class Discard {
             return
         }
 
-        const [, gameData] = await Promise.all([
+        const [, outcome] = await Promise.all([
             interaction.deferReply({ flags: MessageFlags.Ephemeral }),
-            GameHelper.getGameData(client, interaction)
-        ]);
-        let player = find(gameData.players, {userId: interaction.user.id})
+            withGameDocumentLock(interaction.guildId, interaction.channelId, async () => {
+                const gameData = await GameHelper.getGameData(client, interaction)
+                let player = find(gameData.players, {userId: interaction.user.id})
 
-        if (gameData.isdeleted) {
+                if (gameData.isdeleted) {
+                    return { kind: "no_game" }
+                }
+
+                const cardid = interaction.options.getString('card')
+                const destination = interaction.options.getString('destination') || 'discard'
+
+                if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
+                    return { kind: "missing" }
+                }
+
+                const result = CardMoves.discardFromHand(gameData, {
+                    player,
+                    cardId: cardid,
+                    destination,
+                    actor: {
+                        id: interaction.user.id,
+                        username: interaction.user.username,
+                        displayName: interaction.member?.displayName || interaction.user.username,
+                    },
+                })
+                if (!result.ok) {
+                    return { kind: "failed", result }
+                }
+
+                await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+                return { kind: "ok", gameData, player, result, destination }
+            })
+        ]);
+
+        if (outcome.kind === "no_game") {
             await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
-
-        const cardid = interaction.options.getString('card')
-        const destination = interaction.options.getString('destination') || 'discard'
-        
-        if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
+        if (outcome.kind === "missing") {
             await interaction.editReply({ content: "Something is broken! You don't have that card."})
             return
         }
-
-        const result = CardMoves.discardFromHand(gameData, {
-            player,
-            cardId: cardid,
-            destination,
-            actor: {
-                id: interaction.user.id,
-                username: interaction.user.username,
-                displayName: interaction.member?.displayName || interaction.user.username,
-            },
-        })
-        if (!result.ok) {
-            await interaction.editReply({ content: result.content })
+        if (outcome.kind === "failed") {
+            await interaction.editReply({ content: outcome.result.content })
             return
         }
 
+        const { gameData, player, result, destination } = outcome
         const card = result.card
         const destinationName = result.destinationName
-
-        await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
         const [, , handInfo] = await Promise.all([
             GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {

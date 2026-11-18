@@ -2,6 +2,7 @@ const GameHelper = require('../../modules/GlobalGameHelper')
 const {sortBy, find, filter, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const CardMoves = require('../../modules/gameLogic/cardMoves')
+const { withGameDocumentLock } = require('../../modules/gameDocumentLock')
 const { EmbedBuilder, MessageFlags } = require('discord.js')
 
 class Play {
@@ -28,36 +29,51 @@ class Play {
             return
         }
 
-        const [, gameData] = await Promise.all([
+        const [, outcome] = await Promise.all([
             interaction.deferReply(),
-            GameHelper.getGameData(client, interaction)
+            withGameDocumentLock(interaction.guildId, interaction.channelId, async () => {
+                const gameData = await GameHelper.getGameData(client, interaction)
+                if (gameData.isdeleted) {
+                    return { kind: "no_game" }
+                }
+
+                const cardid = interaction.options.getString('card')
+                const destination = interaction.options.getString('destination')
+
+                let player = find(gameData.players, {userId: interaction.user.id})
+                if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
+                    return { kind: "missing" }
+                }
+
+                const result = CardMoves.playFromHand(gameData, {
+                    player,
+                    cardId: cardid,
+                    destination,
+                    actor: {
+                        id: interaction.user.id,
+                        username: interaction.user.username,
+                        displayName: interaction.member?.displayName || interaction.user.username,
+                    },
+                })
+                if (!result.ok) {
+                    return { kind: "failed", result }
+                }
+
+                await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
+                return { kind: "ok", gameData, player, result }
+            })
         ]);
 
-        if (gameData.isdeleted) {
+        if (outcome.kind === "no_game") {
             await interaction.editReply({ content: `There is no game in this channel.`})
             return
         }
-
-        const cardid = interaction.options.getString('card')
-        const destination = interaction.options.getString('destination')
-        
-        let player = find(gameData.players, {userId: interaction.user.id})
-        if (!player || findIndex(player.hands.main, {id: cardid}) == -1){
+        if (outcome.kind === "missing") {
             await interaction.editReply({ content: "Something is broken!?"})
             return
         }
-
-        const result = CardMoves.playFromHand(gameData, {
-            player,
-            cardId: cardid,
-            destination,
-            actor: {
-                id: interaction.user.id,
-                username: interaction.user.username,
-                displayName: interaction.member?.displayName || interaction.user.username,
-            },
-        })
-        if (!result.ok) {
+        if (outcome.kind === "failed") {
+            const result = outcome.result
             if (result.error === "discard_pile_missing") {
                 client.logger.log(`Error: Deck or discard pile not found for card origin in /cards play.`, 'error')
             }
@@ -72,12 +88,11 @@ class Play {
             return
         }
 
+        const { gameData, player, result } = outcome
         const cardToPlay = result.card
         const destinationName = result.destinationName
         const actualDestination = result.actualDestination
         const destinationTypeForHistory = result.destinationType
-
-        await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 
         const cardMedia = await Formatter.oneCardReplyParts(cardToPlay);
         const replyEmbeds = [

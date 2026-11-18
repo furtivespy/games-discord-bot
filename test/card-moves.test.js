@@ -174,6 +174,25 @@ describe("cardMoves playFromHand", () => {
     ]);
     expect(gameData.decks[0].piles.discard.cards).toEqual([]);
   });
+
+  test("a missing pile restores the card at its original index, not the end", () => {
+    const first = createCard({ id: "keep-1", name: "Copper", origin: "Main" });
+    const middle = createCard({ id: "middle", name: "Ace", origin: "Main" });
+    const last = createCard({ id: "keep-2", name: "King", origin: "Main" });
+    const gameData = gameWithDeck({ draw: [], hand: [first, middle, last] });
+    const result = CardMoves.playFromHand(gameData, {
+      player: gameData.players[0],
+      cardId: "middle",
+      destination: "no-such-pile",
+      actor,
+    });
+    expect(result).toMatchObject({ ok: false, error: "destination_not_found" });
+    expect(gameData.players[0].hands.main.map((item) => item.id)).toEqual([
+      "keep-1",
+      "middle",
+      "keep-2",
+    ]);
+  });
 });
 
 describe("cardMoves discardFromHand", () => {

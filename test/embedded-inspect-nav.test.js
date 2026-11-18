@@ -5,6 +5,7 @@ const os = require("os");
 const path = require("path");
 const {
   closeCardInspect,
+  closeInspectAfterFailedAction,
   inspectKeyCommand,
   isInspectTypingTarget,
   openCardInspect,
@@ -592,6 +593,21 @@ describe("inspect overlay hand actions", () => {
 });
 
 describe("inspect overlay vs snapshot poll", () => {
+  test("a failed hand action closes inspect so snapshot polls resume", () => {
+    const { document, dialog, actions } = installInspectDocument();
+    const { copper, sequence, tiles } = handSequence();
+    for (const item of sequence) item.handActions = true;
+    openCardInspect(copper, "/copper.png", tiles[0], sequence, { handActions: true });
+    expect(dialog.open).toBe(true);
+    expect(actions.hidden).toBe(false);
+    expect(isSnapshotPollBlocked(document)).toBe(true);
+
+    closeInspectAfterFailedAction();
+
+    expect(dialog.open).toBe(false);
+    expect(isSnapshotPollBlocked(document)).toBe(false);
+  });
+
   test("a poll while inspect is open is deferred and leaves no stale index after close", () => {
     const { document } = installInspectDocument();
     const { copper, sequence, tiles } = handSequence();
