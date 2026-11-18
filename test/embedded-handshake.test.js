@@ -441,6 +441,8 @@ describe("visual table layout helpers", () => {
   test("compact sidebar player lines, initials, suits, and mock auto-select", () => {
     expect(playerSeatOrder({ order: Infinity })).toBe(0);
     expect(playerSeatOrder({ order: "nope" })).toBe(0);
+    expect(playerSeatOrder(null)).toBe(0);
+    expect(playerSeatOrder(undefined)).toBe(0);
     expect(tablePlayersInSeatOrder([
       { name: "Third", order: 2 },
       { name: "Will", order: 0, isYou: true },
