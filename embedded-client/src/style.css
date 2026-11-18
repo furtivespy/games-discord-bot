@@ -1012,6 +1012,63 @@ body {
   height: auto;
 }
 
+.card-inspect-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 0.55rem;
+  width: 100%;
+  max-width: 28rem;
+}
+
+.card-inspect-actions[hidden] {
+  display: none;
+}
+
+.card-inspect-action {
+  flex: 1 1 0;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  padding: 0.45rem 0.35rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(230, 195, 92, 0.75);
+  background: rgba(18, 12, 8, 0.88);
+  color: #f8e7a1;
+  cursor: pointer;
+}
+
+.card-inspect-action:hover,
+.card-inspect-action:focus-visible {
+  background: rgba(48, 28, 12, 0.94);
+  border-color: #f3d98c;
+}
+
+.card-inspect-action:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.card-inspect-error {
+  margin: 0;
+  text-align: center;
+  max-width: 28rem;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: #f3b4a0;
+}
+
+.card-inspect-error[hidden] {
+  display: none;
+}
+
+.card-inspect-dialog.is-photo .card-inspect-actions,
+.card-inspect-dialog.is-photo .card-inspect-error {
+  display: none;
+}
+
 .card-inspect-caption {
   text-align: center;
   max-width: 28rem;

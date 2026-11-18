@@ -1,8 +1,8 @@
 const { MessageFlags } = require("discord.js");
-const GameDB = require('../../db/anygame.js')
 const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameHelper = require('../../modules/GlobalGameHelper')
+const CardMoves = require('../../modules/gameLogic/cardMoves')
 
 class Show {
     async execute(interaction, client) {
@@ -39,30 +39,21 @@ class Show {
             await interaction.editReply({ content: "Something is broken!?"})
             return
         }
-        
-        let card = find(player.hands.main, {id: cardid})
-        
-        // Record history
-        try {
-            const actorDisplayName = interaction.member?.displayName || interaction.user.username
-            const cardName = Formatter.cardShortName(card)
-            
-            GameHelper.recordMove(
-                gameData,
-                interaction.user,
-                GameDB.ACTION_CATEGORIES.CARD,
-                GameDB.ACTION_TYPES.REVEAL,
-                `${actorDisplayName} revealed ${cardName} from hand`,
-                {
-                    cardId: card.id,
-                    cardName: cardName,
-                    source: "hand",
-                    action: "public reveal"
-                }
-            )
-        } catch (error) {
-            console.warn('Failed to record card show in history:', error)
+
+        const result = CardMoves.showFromHand(gameData, {
+            player,
+            cardId: cardid,
+            actor: {
+                id: interaction.user.id,
+                username: interaction.user.username,
+                displayName: interaction.member?.displayName || interaction.user.username,
+            },
+        })
+        if (!result.ok) {
+            await interaction.editReply({ content: result.content })
+            return
         }
+        const card = result.card
 
         // Save game data to persist history entry
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)

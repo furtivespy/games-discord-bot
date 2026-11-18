@@ -1,9 +1,9 @@
 const { MessageFlags } = require("discord.js");
 const GameHelper = require('../../modules/GlobalGameHelper')
-const GameDB = require('../../db/anygame.js')
 const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
+const CardMoves = require('../../modules/gameLogic/cardMoves')
 
 class Discard {
     async execute(interaction, client) {
@@ -44,61 +44,32 @@ class Discard {
             await interaction.editReply({ content: "Something is broken! You don't have that card."})
             return
         }
-        
-        let card = find(player.hands.main, {id: cardid})
-        player.hands.main.splice(findIndex(player.hands.main, {id: cardid}), 1)
-        
-        let destinationName = ''
 
-        if (destination === 'gameboard') {
-            if (!gameData.gameBoard) {
-                gameData.gameBoard = []
-            }
-            gameData.gameBoard.push(card)
-            destinationName = 'Game Board'
-        } else if (destination === 'discard') {
-            // Default to deck's discard pile
-            let deck = find(gameData.decks, {name: card.origin})
-            deck.piles.discard.cards.push(card)
-            destinationName = `${deck.name} discard pile`
-        } else {
-            // Assume pile
-            const pile = GameHelper.getGlobalPile(gameData, destination)
-            if (!pile) {
-                // Return card to hand if pile not found
-                player.hands.main.push(card)
-                await interaction.editReply({ content: 'Pile not found!'})
-                return
-            }
-            pile.cards.push(card)
-            destinationName = pile.name
+        const result = CardMoves.discardFromHand(gameData, {
+            player,
+            cardId: cardid,
+            destination,
+            actor: {
+                id: interaction.user.id,
+                username: interaction.user.username,
+                displayName: interaction.member?.displayName || interaction.user.username,
+            },
+        })
+        if (!result.ok) {
+            await interaction.editReply({ content: result.content })
+            return
         }
 
-        try {
-            const actorDisplayName = interaction.member?.displayName || interaction.user.username
-            GameHelper.recordMove(
-                gameData,
-                interaction.user,
-                GameDB.ACTION_CATEGORIES.CARD,
-                GameDB.ACTION_TYPES.DISCARD,
-                `${actorDisplayName} discarded a card to ${destinationName}`,
-                { 
-                    destination: destinationName,
-                    destinationType: destination,
-                    origin: card.origin 
-                }
-            )
-        } catch (error) {
-            console.warn('Failed to record card discard in history:', error)
-        }
+        const card = result.card
+        const destinationName = result.destinationName
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
         const [, , handInfo] = await Promise.all([
             GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
-                content: `${interaction.member.displayName} has Discarded a card${destination !== 'discard' ? ' to ' + destinationName : ''}`
+                content: result.content
             }),
-            interaction.editReply({ content: `You discarded ${Formatter.cardShortName(card)}${destination !== 'discard' ? ' to ' + destinationName : ''}.` }),
+            interaction.editReply({ content: result.privateContent || `You discarded ${Formatter.cardShortName(card)}${destination !== 'discard' ? ' to ' + destinationName : ''}.` }),
             Formatter.playerSecretHandAndImages(gameData, player)
         ]);
         const privateFollowup = { embeds: [...handInfo.embeds], flags: MessageFlags.Ephemeral };

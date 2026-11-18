@@ -53,7 +53,9 @@ import {
   tryOpenExternalLink,
   visualActionBody,
   visualActionErrorMessage,
+  visualHandActionBody,
   type DeckActionKind,
+  type HandActionKind,
 } from "./visualActions";
 import { SNAP_BACK_DURATION_MS, enableCardDrag, type CardOffset } from "./drag";
 import { enableHoverZoomClamp } from "./hoverZoom";
@@ -61,6 +63,10 @@ import {
   closeCardInspect,
   enableCardInspectDialog,
   openCardInspect,
+  setInspectActionButtonsLocked,
+  setInspectActionError,
+  setInspectCardActionHandler,
+  type InspectableCard,
   type InspectSequenceItem,
 } from "./cardInspect";
 import {
@@ -241,6 +247,7 @@ function setDeckActionsLocked(locked: boolean) {
     .forEach((button) => {
       button.disabled = locked;
     });
+  setInspectActionButtonsLocked(locked);
   const select = document.getElementById("game-select") as HTMLSelectElement | null;
   if (select) select.disabled = locked;
   const { confirm } = actionDialogElements();
@@ -703,6 +710,81 @@ async function submitScoreEdits(scores: ScoreMap) {
   }
 }
 
+async function submitHandCardAction(kind: HandActionKind, card: InspectableCard) {
+  const session = activeSession;
+  const cardId = typeof card?.id === "string" ? card.id.trim() : "";
+  if (!session || !cardId) {
+    setInspectActionError("Could not reach the game.");
+    return;
+  }
+  if (actionInFlight) return;
+  const channelId = liveSelectedChannelId(session.config.channelId);
+  const guildId = session.guildId || session.config.guildId;
+  actionRequestId = newActionRequestId();
+  setDeckActionsLocked(true);
+  setInspectActionError(null);
+  const stillThisGame = () =>
+    shouldApplySnapshot({
+      isCurrent: true,
+      selectedChannelId: liveSelectedChannelId(session.config.channelId),
+      requestedChannelId: channelId,
+    });
+  const failWith = (message: string) => {
+    if (!stillThisGame()) return;
+    setDeckActionsLocked(false);
+    setInspectActionError(message);
+  };
+  try {
+    const response = await fetch(
+      actionRequestUrl(session.config.apiHost, window.location.protocol),
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(
+          visualHandActionBody({
+            action: kind,
+            cardId,
+            channelId,
+            guildId,
+            requestId: actionRequestId,
+            fixture: session.config.mock ? readFixture() : undefined,
+          })
+        ),
+      }
+    );
+    let payload: GameSnapshot & {
+      message?: string;
+      error?: string;
+      channelPosted?: boolean;
+    } = {};
+    try {
+      payload = (await response.json()) as GameSnapshot & {
+        message?: string;
+        error?: string;
+        channelPosted?: boolean;
+      };
+    } catch {
+      payload = {};
+    }
+    if (!response.ok) {
+      failWith(visualActionErrorMessage(payload.error, payload.message));
+      return;
+    }
+    if (!stillThisGame()) return;
+    closeCardInspect();
+    applySnapshot(session.config, payload);
+    setActionNotice(payload.channelPosted === false ? CHANNEL_POST_FAILED_NOTICE : null);
+  } catch {
+    failWith(visualActionErrorMessage("action_failed"));
+  } finally {
+    actionRequestId = null;
+    setDeckActionsLocked(false);
+  }
+}
+
 function bindActionDialog() {
   if (actionDialogBound) return;
   const els = actionDialogElements();
@@ -968,12 +1050,15 @@ function renderCards(
     const imageSrc = mappedImageSrc(config, card.imageUrl);
     tile.append(renderCardFace(config, card));
     enableHoverZoomClamp(tile);
-    if (enableInspectNav) sequence.push({ card, imageSrc, tile });
+    const handActions = containerId === "hand-cards";
+    if (enableInspectNav) sequence.push({ card, imageSrc, tile, handActions });
     if (cardId) {
       // No drop targets yet: enableCardDrag snaps back unless a later hook consumes the drop.
       enableCardDrag(tile, cardId, positions, {
         onInspect: () =>
-          openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined),
+          openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined, {
+            handActions,
+          }),
       });
     }
     container.append(tile);
@@ -1465,6 +1550,9 @@ async function bootstrap() {
   setConnected(true);
   bindActionDialog();
   enableCardInspectDialog();
+  setInspectCardActionHandler((action, card) => {
+    void submitHandCardAction(action, card);
+  });
 
   // discordSdk.guildId is the SDK field (query param guild_id). The game
   // channel/thread id comes from the picker, not discordSdk.channelId.

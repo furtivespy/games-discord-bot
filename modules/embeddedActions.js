@@ -4,6 +4,7 @@ const { cloneDeep } = require("lodash");
 const GameDB = require("../db/anygame");
 const GameHelper = require("./GlobalGameHelper");
 const GameStatusHelper = require("./GameStatusHelper");
+const Formatter = require("./GameFormatter");
 const CardMoves = require("./gameLogic/cardMoves");
 const PlayerScores = require("./gameLogic/playerScores");
 const { parseActionCount } = require("./actionCount");
@@ -21,7 +22,8 @@ const {
   userIsPlayer,
 } = require("./embeddedGames");
 
-const VISUAL_ACTIONS = new Set(["deal", "draw", "scores"]);
+const HAND_ACTIONS = new Set(["play", "discard", "show"]);
+const VISUAL_ACTIONS = new Set(["deal", "draw", "scores", "play", "discard", "show"]);
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 const ACTION_IDEMPOTENCY_MAX = 500;
 const ACTION_ERROR_MESSAGES = Object.freeze({
@@ -98,6 +100,21 @@ function parseVisualActionBody(body = {}) {
     return {
       action,
       scores: parseVisualScoreMap(body.scores),
+      requestId,
+    };
+  }
+  if (HAND_ACTIONS.has(action)) {
+    const cardId = typeof body.cardId === "string" ? body.cardId.trim() : "";
+    if (!cardId) {
+      return {
+        error: "missing_card",
+        status: 400,
+        message: ACTION_ERROR_MESSAGES.missing_card,
+      };
+    }
+    return {
+      action,
+      cardId,
       requestId,
     };
   }
@@ -204,6 +221,8 @@ async function postCommandToGameChannel({
   logger,
   withChannelLock,
   skipPin,
+  additionalEmbeds,
+  additionalFiles,
 }) {
   if (!discordClient) return false;
   const channel = await resolveDiscordChannel(discordClient, channelId);
@@ -227,9 +246,33 @@ async function postCommandToGameChannel({
     interaction,
     discordClient,
     gameData,
-    { content, withChannelLock, pinFromLatest: true, skipPin }
+    {
+      content,
+      withChannelLock,
+      pinFromLatest: true,
+      skipPin,
+      additionalEmbeds,
+      additionalFiles,
+    }
   );
   return true;
+}
+
+async function cardReplyPartsForChannel(card, logger) {
+  if (!card) return { additionalEmbeds: undefined, additionalFiles: undefined };
+  try {
+    const parts = await Formatter.oneCardReplyParts(card);
+    return {
+      additionalEmbeds: parts?.embed ? [parts.embed] : undefined,
+      additionalFiles: parts?.files?.length ? parts.files : undefined,
+    };
+  } catch (err) {
+    logger?.log?.(
+      `Failed to attach card image for visual-mode action: ${err.message || err}`,
+      "warn"
+    );
+    return { additionalEmbeds: undefined, additionalFiles: undefined };
+  }
 }
 
 async function finishVisualCardAction({
@@ -242,6 +285,8 @@ async function finishVisualCardAction({
   logger,
   withChannelLock,
   skipPin,
+  additionalEmbeds,
+  additionalFiles,
 }) {
   let posted = false;
   try {
@@ -256,6 +301,8 @@ async function finishVisualCardAction({
         logger,
         withChannelLock,
         skipPin,
+        additionalEmbeds,
+        additionalFiles,
       })
     );
   } catch (err) {
@@ -318,7 +365,44 @@ async function postLatestVisualCardAction(args, { shouldSkipPin } = {}) {
   });
 }
 
-function applyVisualCardAction(gameData, { action, deckName, count, actor, userId }) {
+function applyVisualHandAction(gameData, { action, cardId, actor, userId }) {
+  const player = findPlayer(gameData, userId);
+  if (!player) {
+    return {
+      ok: false,
+      status: 403,
+      error: "not_a_player",
+      content: ACTION_ERROR_MESSAGES.not_a_player,
+    };
+  }
+  const result =
+    action === "play"
+      ? CardMoves.playFromHand(gameData, { player, cardId, actor })
+      : action === "discard"
+        ? CardMoves.discardFromHand(gameData, { player, cardId, actor })
+        : CardMoves.showFromHand(gameData, { player, cardId, actor });
+  if (!result.ok) {
+    const status = result.error === "not_a_player" ? 403 : 409;
+    return {
+      ok: false,
+      status,
+      error: result.error,
+      content: result.content,
+    };
+  }
+  return {
+    ok: true,
+    content: result.content,
+    card: result.card,
+    revealCard: action === "play" || action === "show",
+  };
+}
+
+function applyVisualCardAction(gameData, { action, deckName, count, cardId, actor, userId }) {
+  if (HAND_ACTIONS.has(action)) {
+    return applyVisualHandAction(gameData, { action, cardId, actor, userId });
+  }
+
   const deckResult = GameHelper.resolveDeckOption(gameData, deckName);
   if (deckResult.unspecified) {
     return {
@@ -663,6 +747,7 @@ async function runVisualCardAction({
   action,
   deckName,
   count,
+  cardId,
   user,
   member,
   guildId,
@@ -731,6 +816,7 @@ async function runVisualCardAction({
                   action,
                   deckName,
                   count,
+                  cardId,
                   actor,
                   guildId: gid,
                   channelId: cid,
@@ -773,6 +859,8 @@ async function runVisualCardAction({
             return {
               gameData: persisted.gameData,
               content: persisted.applied.content,
+              card: persisted.applied.card,
+              revealCard: persisted.applied.revealCard,
             };
           } catch (err) {
             releaseHttp.reject(err);
@@ -783,8 +871,15 @@ async function runVisualCardAction({
         return false;
       }
       if (!pendingPost) return false;
-      return postQueue.enqueue(gid, cid, (queue) =>
-        postLatestVisualCardAction(
+      return postQueue.enqueue(gid, cid, async (queue) => {
+        let additionalEmbeds;
+        let additionalFiles;
+        if (pendingPost.revealCard && pendingPost.card) {
+          const parts = await cardReplyPartsForChannel(pendingPost.card, logger);
+          additionalEmbeds = parts.additionalEmbeds;
+          additionalFiles = parts.additionalFiles;
+        }
+        return postLatestVisualCardAction(
           {
             discordClient,
             gameStore,
@@ -796,10 +891,12 @@ async function runVisualCardAction({
             content: pendingPost.content,
             logger,
             withChannelLock,
+            additionalEmbeds,
+            additionalFiles,
           },
           queue
-        )
-      );
+        );
+      });
     });
     return httpReady;
   };
@@ -810,7 +907,9 @@ async function runVisualCardAction({
       detail:
         idempotencyDetail != null
           ? String(idempotencyDetail)
-          : `${deckName}:${count}`,
+          : cardId
+            ? String(cardId)
+            : `${deckName}:${count}`,
     });
   }
   return execute();
@@ -820,6 +919,7 @@ async function runVisualCardActionOnce({
   action,
   deckName,
   count,
+  cardId,
   actor,
   guildId,
   channelId,
@@ -860,6 +960,7 @@ async function runVisualCardActionOnce({
     action,
     deckName,
     count,
+    cardId,
     actor,
     userId,
   });

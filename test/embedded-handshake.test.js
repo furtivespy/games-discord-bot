@@ -30,8 +30,10 @@ const {
   parseActionCount,
   shouldUseOpenExternalLink,
   tryOpenExternalLink,
+  HAND_CARD_ACTIONS,
   visualActionBody,
   visualActionErrorMessage,
+  visualHandActionBody,
 } = require("../embedded-client/src/visualActions.ts");
 const {
   EDIT_SCORES_LABEL,
@@ -71,6 +73,7 @@ const {
   inspectNavIndex,
   inspectNavState,
   inspectContainedImageRect,
+  inspectHandActionsVisible,
   inspectSequenceIndex,
   inspectView,
   isHostThreadImage,
@@ -161,10 +164,13 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("openCardInspect");
     expect(main).toContain("InspectSequenceItem");
     expect(main).toContain(
-      "openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined)"
+      "openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined, {"
     );
     expect(main).toContain("enableCardInspectDialog");
     expect(main).toContain("closeCardInspect");
+    expect(main).toContain("submitHandCardAction");
+    expect(main).toContain("visualHandActionBody");
+    expect(main).toContain("setInspectCardActionHandler");
     expect(main).toContain("snapshotLoader");
     expect(main).toContain("createSnapshotLoader");
     expect(main).toContain("liveSelectedChannelId");
@@ -1244,6 +1250,16 @@ describe("card inspect sequence navigation", () => {
     );
     expect(html).toContain('id="card-inspect-prev"');
     expect(html).toContain('id="card-inspect-next"');
+    expect(html).toContain('id="card-inspect-actions"');
+    expect(html).toContain('data-card-action="play"');
+    expect(html).toContain('data-card-action="discard"');
+    expect(html).toContain('data-card-action="show"');
+    expect(html).toContain(`title="${HAND_CARD_ACTIONS[0].tooltip}"`);
+    expect(html).toContain(`title="${HAND_CARD_ACTIONS[1].tooltip}"`);
+    expect(html).toContain(`title="${HAND_CARD_ACTIONS[2].tooltip}"`);
+    expect(html).toContain(">PLAY<");
+    expect(html).toContain(">DISCARD<");
+    expect(html).toContain(">SHOW<");
     expect(html).toContain(`aria-label="${INSPECT_PREV_LABEL}"`);
     expect(html).toContain(`aria-label="${INSPECT_NEXT_LABEL}"`);
     expect(html).toContain('data-inspect-nav="prev"');
@@ -1261,6 +1277,9 @@ describe("card inspect sequence navigation", () => {
     expect(css).toMatch(/#card-inspect-prev\s*\{[^}]*left:\s*0\.7rem/);
     expect(css).toMatch(/#card-inspect-next\s*\{[^}]*right:\s*0\.7rem/);
     expect(css).toMatch(/\.card-inspect-sheet\s*\{[^}]*padding:\s*0\.7rem 3\.4rem 1rem/);
+    expect(css).toContain(".card-inspect-actions");
+    expect(css).toMatch(/\.card-inspect-actions\s*\{[^}]*justify-content:\s*space-between/);
+    expect(css).toContain(".card-inspect-action");
     expect(css).not.toContain("calc(-100% - 0.7rem)");
     expect(css).not.toContain("calc(100% + 0.7rem)");
     expect(css).not.toContain(".card-inspect-dialog.is-photo #card-inspect-prev");
@@ -1273,9 +1292,9 @@ describe("card inspect sequence navigation", () => {
       main.indexOf("function appendPlayerChip")
     );
     expect(renderCards).toContain("enableInspectNav = false");
-    expect(renderCards).toContain("if (enableInspectNav) sequence.push({ card, imageSrc, tile })");
+    expect(renderCards).toContain("if (enableInspectNav) sequence.push({ card, imageSrc, tile, handActions })");
     expect(renderCards).toContain(
-      "openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined)"
+      "openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined, {"
     );
     expect(main).toContain('renderCards(config, "board-cards", payload.gameBoard, cardPositions)');
     expect(main).not.toContain(
@@ -1339,6 +1358,47 @@ describe("deck hover Deal and Draw", () => {
     expect(actionRequestUrl("gamebot.example.com", "https:")).toBe(
       "https://gamebot.example.com/api/game/action"
     );
+    expect(HAND_CARD_ACTIONS.map((action) => action.id)).toEqual([
+      "play",
+      "discard",
+      "show",
+    ]);
+    expect(HAND_CARD_ACTIONS.map((action) => action.label)).toEqual([
+      "PLAY",
+      "DISCARD",
+      "SHOW",
+    ]);
+    expect(HAND_CARD_ACTIONS[0].tooltip).toBe("Play a card from your hand.");
+    expect(HAND_CARD_ACTIONS[1].tooltip).toBe("discard a card (not shown to everyone)");
+    expect(HAND_CARD_ACTIONS[2].tooltip).toBe(
+      "Show a card from your hand to other players. The card stays in your hand."
+    );
+    expect(
+      visualHandActionBody({
+        action: "play",
+        cardId: "hand-1",
+        channelId: "newest-thread",
+        guildId: "mock-guild",
+        requestId: "req-hand-123456",
+        fixture: "several-games",
+      })
+    ).toEqual({
+      action: "play",
+      cardId: "hand-1",
+      channelId: "newest-thread",
+      guildId: "mock-guild",
+      requestId: "req-hand-123456",
+      fixture: "several-games",
+    });
+    expect(
+      inspectHandActionsVisible({ card: { id: "hand-1" }, imageSrc: null, tile: {}, handActions: true }, "card")
+    ).toBe(true);
+    expect(
+      inspectHandActionsVisible({ card: { id: "play-1" }, imageSrc: null, tile: {}, handActions: false }, "card")
+    ).toBe(false);
+    expect(
+      inspectHandActionsVisible({ card: { id: "hand-1" }, imageSrc: null, tile: {}, handActions: true }, "photo")
+    ).toBe(false);
   });
 
   test("Edit Scores posts the shared scores action body", () => {

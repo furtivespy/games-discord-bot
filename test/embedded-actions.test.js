@@ -81,7 +81,20 @@ describe("parseVisualActionBody", () => {
     expect(parseVisualActionBody({ action: "shuffle", deck: "Main", count: 1 })).toEqual({
       error: "invalid_action",
       status: 400,
-      message: "Deal, Draw, and Edit Scores are the only visual actions.",
+      message: "Deal, Draw, Play, Discard, Show, and Edit Scores are the only visual actions.",
+    });
+    expect(
+      parseVisualActionBody({ action: "play", cardId: "hand-1", requestId: "req-play-1" })
+    ).toEqual({ action: "play", cardId: "hand-1", requestId: "req-play-1" });
+    expect(parseVisualActionBody({ action: "discard", cardId: "  hand-1  " })).toEqual({
+      action: "discard",
+      cardId: "hand-1",
+      requestId: null,
+    });
+    expect(parseVisualActionBody({ action: "show" })).toEqual({
+      error: "missing_card",
+      status: 400,
+      message: "Pick a card first.",
     });
     expect(parseVisualActionBody({ action: "deal", count: 1 })).toEqual({
       error: "missing_deck",
@@ -153,6 +166,66 @@ describe("applyVisualCardAction", () => {
     expect(drawGame.history.at(-1).summary).toBe("Will drew 2 cards from Main");
   });
 
+  test("play, discard, and show follow /cards hand play, discard, and show", () => {
+    const playGame = gameWithDeck();
+    const played = applyVisualCardAction(playGame, {
+      action: "play",
+      cardId: "hand-1",
+      actor,
+      userId: actor.id,
+    });
+    expect(played.ok).toBe(true);
+    expect(played.revealCard).toBe(true);
+    expect(played.content).toBe("Will has Played to discard pile:");
+    expect(playGame.players[0].hands.main).toEqual([]);
+    expect(playGame.decks[0].piles.discard.cards.map((card) => card.id)).toEqual(["hand-1"]);
+    expect(playGame.history.at(-1).summary).toBe("Will played Copper to discard pile");
+
+    const discardGame = gameWithDeck();
+    const discarded = applyVisualCardAction(discardGame, {
+      action: "discard",
+      cardId: "hand-1",
+      actor,
+      userId: actor.id,
+    });
+    expect(discarded.ok).toBe(true);
+    expect(discarded.revealCard).toBe(false);
+    expect(discarded.content).toBe("Will has Discarded a card");
+    expect(discardGame.players[0].hands.main).toEqual([]);
+    expect(discardGame.history.at(-1).summary).toBe(
+      "Will discarded a card to Main discard pile"
+    );
+
+    const showGame = gameWithDeck();
+    const shown = applyVisualCardAction(showGame, {
+      action: "show",
+      cardId: "hand-1",
+      actor,
+      userId: actor.id,
+    });
+    expect(shown.ok).toBe(true);
+    expect(shown.revealCard).toBe(true);
+    expect(shown.content).toBe("Showing a card:");
+    expect(showGame.players[0].hands.main.map((card) => card.id)).toEqual(["hand-1"]);
+    expect(showGame.history.at(-1).summary).toBe("Will revealed Copper from hand");
+  });
+
+  test("hand actions without a player are not_a_player", () => {
+    const game = gameWithDeck();
+    const played = applyVisualCardAction(game, {
+      action: "play",
+      cardId: "hand-1",
+      actor: { id: "stranger", username: "nope", displayName: "Nope" },
+      userId: "stranger",
+    });
+    expect(played).toMatchObject({
+      ok: false,
+      status: 403,
+      error: "not_a_player",
+    });
+    expect(game.players[0].hands.main.map((card) => card.id)).toEqual(["hand-1"]);
+  });
+
   test("draw without a player is not_a_player until the caller auto-joins", () => {
     const game = gameWithDeck();
     const drawn = applyVisualCardAction(game, {
@@ -214,16 +287,19 @@ describe("runVisualCardAction", () => {
       const hand = gameData?.players?.[0]?.hands?.main;
       return {
         content: options.content ?? "📊",
-        embeds: Array.isArray(draw)
-          ? [
-              {
-                title: "Game Status",
-                remaining: draw.length,
-                handSize: Array.isArray(hand) ? hand.length : 0,
-              },
-            ]
-          : [],
-        files: [],
+        embeds: [
+          ...(Array.isArray(draw)
+            ? [
+                {
+                  title: "Game Status",
+                  remaining: draw.length,
+                  handSize: Array.isArray(hand) ? hand.length : 0,
+                },
+              ]
+            : []),
+          ...(options.additionalEmbeds || []),
+        ],
+        files: [...(options.additionalFiles || [])],
       };
     };
   });
@@ -366,6 +442,57 @@ describe("runVisualCardAction", () => {
     expect(posted[0].content).toContain("Will drew 2 cards from Main");
     const saved = store.get("guild-1:game:thread-game");
     expect(saved.history.at(-1).action.type).toBe(GameDB.ACTION_TYPES.DRAW);
+  });
+
+  test("play, discard, and show save, post, and return an updated snapshot", async () => {
+    const playClient = clientForGame(gameWithDeck());
+    const played = await runVisualCardAction({
+      action: "play",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient: playClient.discordClient,
+    });
+    await drainLockedVisualActions();
+    expect(played.status).toBe(200);
+    expect(played.body.message).toBe("Will has Played to discard pile:");
+    expect(played.body.hand).toEqual([]);
+    expect(playClient.posted[0].content).toContain("Will has Played to discard pile:");
+    expect(playClient.posted[0].embeds?.length).toBeGreaterThan(0);
+
+    const discardClient = clientForGame(gameWithDeck());
+    const discarded = await runVisualCardAction({
+      action: "discard",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient: discardClient.discordClient,
+    });
+    await drainLockedVisualActions();
+    expect(discarded.status).toBe(200);
+    expect(discarded.body.message).toBe("Will has Discarded a card");
+    expect(discarded.body.hand).toEqual([]);
+    expect(discardClient.posted[0].content).toContain("Will has Discarded a card");
+    expect(discardClient.posted[0].embeds?.some((embed) => embed?.data?.title || embed?.title)).toBe(
+      true
+    );
+
+    const showClient = clientForGame(gameWithDeck());
+    const shown = await runVisualCardAction({
+      action: "show",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient: showClient.discordClient,
+    });
+    await drainLockedVisualActions();
+    expect(shown.status).toBe(200);
+    expect(shown.body.message).toBe("Showing a card:");
+    expect(shown.body.hand.map((card) => card.id)).toEqual(["hand-1"]);
+    expect(showClient.posted[0].content).toContain("Showing a card:");
   });
 
   test("draw auto-joins a non-player the way /cards deck drawmultiple does", async () => {
@@ -1371,5 +1498,10 @@ describe("visualActionErrorMessage", () => {
     );
     expect(visualActionErrorMessage("try_again")).toContain("Try again");
     expect(visualActionErrorMessage("no_cards_to_deal")).toBe("No cards to deal.");
+    expect(visualActionErrorMessage("card_not_in_hand")).toBe("You don't have that card.");
+    expect(visualActionErrorMessage("missing_card")).toBe("Pick a card first.");
+    expect(visualActionErrorMessage("discard_pile_missing")).toBe(
+      "Error: Could not find the discard pile. Card returned to hand."
+    );
   });
 });

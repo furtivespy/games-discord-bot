@@ -8,6 +8,29 @@ export const CHANNEL_POST_FAILED_NOTICE =
   "The table updated, but Discord didn't get the channel message.";
 
 export type DeckActionKind = "deal" | "draw";
+export type HandActionKind = "play" | "discard" | "show";
+
+export const HAND_CARD_ACTIONS: ReadonlyArray<{
+  id: HandActionKind;
+  label: string;
+  tooltip: string;
+}> = [
+  {
+    id: "play",
+    label: "PLAY",
+    tooltip: "Play a card from your hand.",
+  },
+  {
+    id: "discard",
+    label: "DISCARD",
+    tooltip: "discard a card (not shown to everyone)",
+  },
+  {
+    id: "show",
+    label: "SHOW",
+    tooltip: "Show a card from your hand to other players. The card stays in your hand.",
+  },
+];
 
 export const ACTION_ERROR_MESSAGES: Record<string, string> =
   shared.ACTION_ERROR_MESSAGES;
@@ -119,6 +142,33 @@ export function visualActionBody(opts: {
     action: opts.action,
     deck: opts.deck,
     count: opts.count,
+    channelId: opts.channelId,
+    guildId: opts.guildId,
+  };
+  const requestId = String(opts.requestId || "").trim();
+  if (requestId) body.requestId = requestId;
+  const fixture = String(opts.fixture || "").trim();
+  if (fixture) body.fixture = fixture;
+  return body;
+}
+
+export function handCardActionFromDataset(
+  value: string | null | undefined
+): HandActionKind | null {
+  return value === "play" || value === "discard" || value === "show" ? value : null;
+}
+
+export function visualHandActionBody(opts: {
+  action: HandActionKind;
+  cardId: string;
+  channelId: string;
+  guildId: string;
+  requestId?: string | null;
+  fixture?: string | null;
+}): Record<string, string> {
+  const body: Record<string, string> = {
+    action: opts.action,
+    cardId: opts.cardId,
     channelId: opts.channelId,
     guildId: opts.guildId,
   };

@@ -8,6 +8,7 @@ const {
   inspectKeyCommand,
   isInspectTypingTarget,
   openCardInspect,
+  setInspectCardActionHandler,
 } = require("../embedded-client/src/cardInspect.ts");
 const { isSnapshotPollBlocked } = require("../embedded-client/src/snapshotPoll.ts");
 
@@ -111,11 +112,20 @@ class FakeElement {
         return this.isContentEditable === true;
       }
       if (part === "[data-inspect-nav]") return Boolean(this.dataset.inspectNav);
+      if (part === "[data-card-action]") return Boolean(this.dataset.cardAction);
       if (part === "dialog[open]") {
         return this.tagName === "DIALOG" && (this.open || this.hasAttribute("open"));
       }
       if (part.startsWith("#")) return this.id === part.slice(1);
       if (part.startsWith(".")) return this.classList.contains(part.slice(1));
+      const attr = part.match(/^\[data-card-action(?:=\"([^\"]*)\")?\]$/);
+      if (attr) {
+        if (attr[1] == null) return Boolean(this.dataset.cardAction);
+        return this.dataset.cardAction === attr[1];
+      }
+      if (part === "button.card-inspect-action") {
+        return this.tagName === "BUTTON" && this.classList.contains("card-inspect-action");
+      }
       return part.toUpperCase() === this.tagName;
     });
   }
@@ -136,6 +146,17 @@ class FakeElement {
       if (hit) return hit;
     }
     return null;
+  }
+
+  querySelectorAll(selector) {
+    const hits = [];
+    if (this.matches(selector)) hits.push(this);
+    for (const child of this.children) {
+      if (typeof child.querySelectorAll === "function") {
+        hits.push(...child.querySelectorAll(selector));
+      }
+    }
+    return hits;
   }
 
   replaceChildren(...nodes) {
@@ -227,6 +248,17 @@ function installInspectDocument({ showModalThrows = false } = {}) {
   put(nodes, new FakeHTMLElement("P", "card-inspect-title"));
   put(nodes, new FakeHTMLElement("P", "card-inspect-caption"));
   put(nodes, new FakeHTMLElement("DIV", "card-inspect-meta"));
+  const actions = put(nodes, new FakeHTMLElement("DIV", "card-inspect-actions"));
+  actions.hidden = true;
+  for (const action of ["play", "discard", "show"]) {
+    const button = new FakeHTMLElement("BUTTON");
+    button.dataset.cardAction = action;
+    button.classList.add("card-inspect-action");
+    button.textContent = action.toUpperCase();
+    actions.append(button);
+  }
+  const inspectError = put(nodes, new FakeHTMLElement("P", "card-inspect-error"));
+  inspectError.hidden = true;
   const prev = put(nodes, new FakeHTMLElement("BUTTON", "card-inspect-prev"));
   prev.hidden = true;
   prev.dataset.inspectNav = "prev";
@@ -271,7 +303,7 @@ function installInspectDocument({ showModalThrows = false } = {}) {
   globalThis.HTMLDialogElement = FakeHTMLDialogElement;
   globalThis.document = document;
 
-  return { document, dialog, prev, next, input, textarea, select, editable };
+  return { document, dialog, prev, next, actions, input, textarea, select, editable };
 }
 
 function makeTile(label) {
@@ -354,6 +386,7 @@ const previousGlobals = {
 
 afterEach(() => {
   try {
+    setInspectCardActionHandler(null);
     closeCardInspect();
   } catch {
     // document may already have been restored
@@ -511,6 +544,50 @@ describe("inspect overlay click-outside", () => {
 
     dialog.dispatchEvent(clickEvent(art, 150, 50));
     expect(dialog.open).toBe(true);
+  });
+});
+
+describe("inspect overlay hand actions", () => {
+  test("PLAY DISCARD SHOW appear for hand cards and invoke the matching action", () => {
+    const { dialog, actions } = installInspectDocument();
+    const { copper, sequence, tiles } = handSequence();
+    for (const item of sequence) item.handActions = true;
+    const calls = [];
+    setInspectCardActionHandler((action, card) => {
+      calls.push({ action, card });
+    });
+    openCardInspect(copper, "/copper.png", tiles[0], sequence, { handActions: true });
+    expect(actions.hidden).toBe(false);
+    expect(actions.children.map((button) => button.dataset.cardAction)).toEqual([
+      "play",
+      "discard",
+      "show",
+    ]);
+    expect(actions.children[0].title).toBe("Play a card from your hand.");
+    expect(actions.children[1].title).toBe("discard a card (not shown to everyone)");
+    expect(actions.children[2].title).toBe(
+      "Show a card from your hand to other players. The card stays in your hand."
+    );
+
+    dialog.dispatchEvent(clickEvent(actions.children[0]));
+    dialog.dispatchEvent(clickEvent(actions.children[1]));
+    dialog.dispatchEvent(clickEvent(actions.children[2]));
+    expect(calls).toEqual([
+      { action: "play", card: copper },
+      { action: "discard", card: copper },
+      { action: "show", card: copper },
+    ]);
+  });
+
+  test("actions stay hidden for play-area cards and host photos", () => {
+    const { actions } = installInspectDocument();
+    const { copper, tiles } = handSequence();
+    openCardInspect(copper, "/copper.png", tiles[0]);
+    expect(actions.hidden).toBe(true);
+
+    const photo = { id: "host-image:m1:a1", name: "Image" };
+    openCardInspect(photo, "/photo.png", makeTile("Image"), null, { handActions: true });
+    expect(actions.hidden).toBe(true);
   });
 });
 
