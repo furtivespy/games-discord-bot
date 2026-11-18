@@ -392,6 +392,16 @@ describe("embedded HTTP origin", () => {
     expect(html).toContain('id="action-notice"');
     expect(html).toContain('id="action-dialog"');
     expect(html).toContain('id="decks"');
+    expect(html).toContain('id="discards"');
+    expect(html).toContain('id="pile-stack"');
+    expect(html).toMatch(
+      /id="board-row"[\s\S]*id="pile-stack"[\s\S]*data-zone="play-area"[\s\S]*hand-zone/
+    );
+    expect(html).toContain('id="deck-nav-prev"');
+    expect(html).toContain('id="deck-nav-next"');
+    expect(html).toContain('aria-label="Previous decks"');
+    expect(html).toContain('aria-label="Next decks"');
+    expect(html).toContain("Discard");
     expect(html).toContain("hand-fan");
     expect(html).toContain('id="card-inspect"');
     expect(html).toContain('id="card-inspect-art"');
@@ -464,6 +474,29 @@ describe("embedded HTTP origin", () => {
     expect(css).toMatch(/\.deck-actions\s*\{[^}]*bottom:\s*2rem/);
     expect(css).not.toContain(".deck-tile:focus-within");
     expect(css).toContain(".deck-action");
+    expect(css).toContain(".pile-stack");
+    expect(css).toContain(".pile-label");
+    expect(css).toContain(".discard-title");
+    expect(css).toContain(".discard-count");
+    expect(css).not.toContain(".discard-tile.is-empty");
+    expect(css).toContain(".deck-nav[hidden]");
+    expect(css).toContain(".pile-stack.is-pair .decks-zone");
+    expect(css).toContain(".pile-stack.is-pair .discards-zone");
+    expect(css).toContain("grid-row: 1 / span 2");
+    expect(css).toContain('.board-row > [data-zone="play-area"]');
+    const narrow = css.slice(css.indexOf("@media (max-width: 820px)"));
+    expect(narrow).toContain(".board-row > [data-zone=\"play-area\"]");
+    expect(narrow).toContain(".board-row > .pile-stack");
+    expect(narrow).toMatch(
+      /\.board-row\s*>\s*\[data-zone="play-area"\]\s*\{[^}]*grid-column:\s*1/
+    );
+    expect(narrow).toMatch(
+      /\.board-row\s*>\s*\.pile-stack\s*\{[^}]*grid-column:\s*2/
+    );
+    expect(narrow).not.toMatch(
+      /\.board-row\s*>\s*\[data-zone="play-area"\][^{]*\{[^}]*grid-column:\s*auto/
+    );
+    expect(narrow).not.toContain("grid-column: auto");
     expect(css).toContain(".hand-fan .card-tile + .card-tile");
     expect(css).toContain(".player-team-group");
     expect(css).toContain(".status-player-score");

@@ -18,7 +18,6 @@ const {
   optionalDiscordAccessGuard,
   requiredDiscordAccessGuard,
   resolvePlayerDisplays,
-  MAX_VISIBLE_DECKS,
   snapshotFromGameData,
   snapshotGameForUser,
   snapshotVersion,
@@ -437,7 +436,7 @@ describe("snapshotGameForUser", () => {
             isYou: false,
           },
         ],
-        decks: [{ name: "Main", remaining: 1, total: 1 }],
+        decks: [{ name: "Main", remaining: 1, total: 1, discard: 0 }],
         status: {
           gameName: "Friday Inis",
           reverseOrder: false,
@@ -482,8 +481,7 @@ describe("snapshotGameForUser", () => {
       expect(json).not.toContain("Simultaneous Only");
       expect(json).not.toContain("Hidden Draw");
       expect(result.body.players).toBeUndefined();
-      expect(result.body.decks).toEqual([{ name: "Main", remaining: 1, total: 1 }]);
-      expect(MAX_VISIBLE_DECKS).toBe(2);
+      expect(result.body.decks).toEqual([{ name: "Main", remaining: 1, total: 1, discard: 0 }]);
     });
   });
 
@@ -1047,15 +1045,24 @@ describe("snapshotFromGameData", () => {
         isYou: false,
       },
     ]);
-    expect(snapshot.decks.map((deck) => deck.name)).toEqual(["Main", "Events"]);
-    expect(snapshot.decks[0]).toEqual({ name: "Main", remaining: 1, total: 2 });
+    expect(snapshot.decks.map((deck) => deck.name)).toEqual([
+      "Main",
+      "Events",
+      "Unused Chaos Deck",
+    ]);
+    expect(snapshot.decks[0]).toEqual({ name: "Main", remaining: 1, total: 2, discard: 0 });
+    expect(snapshot.decks[2]).toEqual({
+      name: "Unused Chaos Deck",
+      remaining: 1,
+      total: 1,
+      discard: 0,
+    });
     expect(snapshot.decks[0].backUrl).toBeUndefined();
     const json = JSON.stringify(snapshot);
     expect(json).not.toContain("Hidden Riley Card");
     expect(json).not.toContain("Riley Play Card");
     expect(json).not.toContain("secret-card");
     expect(json).not.toContain("Hidden Draw Card");
-    expect(json).not.toContain("Unused Chaos Deck");
   });
 
   test("hides hand counts and extra deck cards when hiddenInfo says so", () => {
@@ -1097,7 +1104,152 @@ describe("snapshotFromGameData", () => {
     expect(snapshot.status.players[0].tokens.clue).toBe(2);
     expect(snapshot.status.players[1].tokens.clue).toBe("?");
     expect(snapshot.status.reverseOrder).toBe(true);
-    expect(snapshot.decks[0]).toEqual({ name: "Main", remaining: 3, total: 10 });
+    expect(snapshot.decks[0]).toEqual({ name: "Main", remaining: 3, total: 10, discard: 0 });
+  });
+
+  test("sends discard counts and hides them the same way as draw counts", () => {
+    const visible = snapshotFromGameData(
+      {
+        name: "Discards",
+        players: [{ userId: "will", name: "Will", hands: { main: [] } }],
+        decks: [
+          {
+            name: "Main",
+            hiddenInfo: "visible",
+            allCards: Array.from({ length: 5 }),
+            piles: {
+              draw: { cards: [{}, {}] },
+              discard: { cards: [{}, {}, {}] },
+            },
+          },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(visible.decks[0]).toEqual({
+      name: "Main",
+      remaining: 2,
+      total: 5,
+      discard: 3,
+    });
+
+    const hidden = snapshotFromGameData(
+      {
+        name: "Hidden Discards",
+        players: [{ userId: "will", name: "Will", hands: { main: [] } }],
+        decks: [
+          {
+            name: "Main",
+            hiddenInfo: "deck",
+            allCards: Array.from({ length: 6 }),
+            piles: {
+              draw: { cards: [{}, {}, {}] },
+              discard: { cards: [{}, {}] },
+            },
+          },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(hidden.decks[0]).toEqual({
+      name: "Main",
+      remaining: "?",
+      total: "?",
+      discard: "?",
+    });
+
+    const hiddenOne = snapshotFromGameData(
+      {
+        name: "Hidden One",
+        players: [{ userId: "will", name: "Will", hands: { main: [] } }],
+        decks: [
+          {
+            name: "Main",
+            hiddenInfo: "all",
+            allCards: Array.from({ length: 2 }),
+            piles: { draw: { cards: [{}] }, discard: { cards: [{}] } },
+          },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(hiddenOne.decks[0]).toEqual({
+      name: "Main",
+      remaining: 1,
+      total: "?",
+      discard: "?",
+    });
+  });
+
+  test("hidden discard 0/1 cannot reconstruct a hidden sibling count", () => {
+    const hiddenEmptyDiscard = snapshotFromGameData(
+      {
+        name: "Hidden Empty Discard",
+        players: [{ userId: "will", name: "Will", hands: { main: [] } }],
+        decks: [
+          {
+            name: "Main",
+            hiddenInfo: "deck",
+            allCards: Array.from({ length: 4 }),
+            piles: { draw: { cards: [{}, {}, {}, {}] }, discard: { cards: [] } },
+          },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(hiddenEmptyDiscard.decks[0]).toEqual({
+      name: "Main",
+      remaining: "?",
+      total: "?",
+      discard: "?",
+    });
+
+    const hiddenOneDraw = snapshotFromGameData(
+      {
+        name: "Hidden One Draw",
+        players: [{ userId: "will", name: "Will", hands: { main: [] } }],
+        decks: [
+          {
+            name: "Main",
+            hiddenInfo: "deck",
+            allCards: Array.from({ length: 4 }),
+            piles: {
+              draw: { cards: [{}] },
+              discard: { cards: [{}, {}, {}] },
+            },
+          },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(hiddenOneDraw.decks[0]).toEqual({
+      name: "Main",
+      remaining: 1,
+      total: "?",
+      discard: "?",
+    });
+
+    const hiddenZeroDraw = snapshotFromGameData(
+      {
+        name: "Hidden Zero Draw",
+        players: [{ userId: "will", name: "Will", hands: { main: [] } }],
+        decks: [
+          {
+            name: "Main",
+            hiddenInfo: "all",
+            allCards: Array.from({ length: 4 }),
+            piles: { draw: { cards: [] }, discard: { cards: [{}, {}, {}, {}] } },
+          },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(hiddenZeroDraw.decks[0]).toEqual({
+      name: "Main",
+      remaining: 0,
+      total: "?",
+      discard: "?",
+    });
   });
 
   test("includes a deck back URL when the deck has one assigned", () => {
@@ -1120,6 +1272,7 @@ describe("snapshotFromGameData", () => {
       name: "Main",
       remaining: 1,
       total: 1,
+      discard: 0,
       backUrl: "https://example.test/custom-back.png",
     });
   });

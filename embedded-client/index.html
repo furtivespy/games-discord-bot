@@ -38,14 +38,60 @@
               <h2>Game Board</h2>
               <div class="cards board-spread" id="board-cards"></div>
             </section>
-            <section class="zone decks-zone" data-zone="decks">
-              <h2>Decks</h2>
-              <div id="decks" class="decks"></div>
+            <div id="pile-stack" class="pile-stack is-single">
+              <button
+                type="button"
+                id="deck-nav-prev"
+                class="deck-nav"
+                data-deck-nav="prev"
+                aria-label="Previous decks"
+                hidden
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path
+                    d="M15 6l-6 6 6 6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.25"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+              <div class="pile-windows">
+                <section class="zone decks-zone" data-zone="decks">
+                  <h2>Decks</h2>
+                  <div id="decks" class="decks"></div>
+                </section>
+                <section class="zone discards-zone" data-zone="discards">
+                  <h2>Discard</h2>
+                  <div id="discards" class="decks"></div>
+                </section>
+              </div>
+              <button
+                type="button"
+                id="deck-nav-next"
+                class="deck-nav"
+                data-deck-nav="next"
+                aria-label="Next decks"
+                hidden
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path
+                    d="M9 6l6 6-6 6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.25"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
+            <section class="zone" data-zone="play-area">
+              <h2>Play Area</h2>
+              <div class="cards board-spread" id="play-area-cards"></div>
             </section>
-          </section>
-          <section class="zone" data-zone="play-area">
-            <h2>Play Area</h2>
-            <div class="cards board-spread" id="play-area-cards"></div>
           </section>
         </div>
         <section class="zone hand-zone" data-zone="hand">

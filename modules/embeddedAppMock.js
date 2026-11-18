@@ -224,7 +224,17 @@ function populatedSeed() {
         allCards: Array.from({ length: 42 }, (_, i) =>
           fixtureCard(`main-all-${i + 1}`, `Main ${i + 1}`)
         ),
-        piles: { draw: { cards: drawCards }, discard: { cards: [] } },
+        piles: {
+          draw: { cards: drawCards },
+          discard: {
+            cards: [
+              fixtureCard("main-discard-1", "Discarded Copper"),
+              fixtureCard("main-discard-2", "Discarded Silver"),
+              fixtureCard("main-discard-3", "Discarded Village"),
+              fixtureCard("main-discard-4", "Discarded Smithy"),
+            ],
+          },
+        },
       },
       {
         name: "Events",
@@ -232,7 +242,10 @@ function populatedSeed() {
         allCards: Array.from({ length: 15 }, (_, i) =>
           fixtureCard(`event-all-${i + 1}`, `Event All ${i + 1}`)
         ),
-        piles: { draw: { cards: eventDraw }, discard: { cards: [] } },
+        piles: {
+          draw: { cards: eventDraw },
+          discard: { cards: [fixtureCard("event-discard-1", "Discarded Event")] },
+        },
       },
       {
         name: "Unused Chaos Deck",

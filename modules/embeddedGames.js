@@ -186,7 +186,6 @@ function isMissingGame(data) {
   return Object.keys(data).length === 0;
 }
 
-const MAX_VISIBLE_DECKS = 2;
 const STATUS_HISTORY_LIMIT = 8;
 const AVATAR_SIZE = 128;
 
@@ -304,13 +303,25 @@ function pileCardCount(pile) {
   return Array.isArray(pile?.cards) ? pile.cards.length : 0;
 }
 
+function hiddenPileCount(deck, pileName, { hideLikeHands = false } = {}) {
+  const count = pileCardCount(deck?.piles?.[pileName]);
+  if (!isDeckCountHidden(deck)) return count;
+  // Draw keeps the 0/1 reveal used by Discord deck status. Discard follows
+  // hands: always "?" so a sibling 0/1 plus total cannot reconstruct it.
+  if (hideLikeHands || count > 1) return "?";
+  return count;
+}
+
 function deckRemaining(deck) {
-  const remaining = pileCardCount(deck?.piles?.draw);
-  if (isDeckCountHidden(deck) && remaining > 1) return "?";
-  return remaining;
+  return hiddenPileCount(deck, "draw");
+}
+
+function deckDiscard(deck) {
+  return hiddenPileCount(deck, "discard", { hideLikeHands: true });
 }
 
 function deckTotal(deck) {
+  if (isDeckCountHidden(deck)) return "?";
   if (Array.isArray(deck?.allCards)) return deck.allCards.length;
   const piles = deck?.piles && typeof deck.piles === "object" ? deck.piles : {};
   let total = 0;
@@ -322,13 +333,15 @@ function deckTotal(deck) {
 
 function deckSummaries(data) {
   const decks = Array.isArray(data?.decks) ? data.decks : [];
-  return decks.slice(0, MAX_VISIBLE_DECKS).map((deck) => {
+  // Send every deck. The Activity windows to two visible piles and rotates.
+  return decks.map((deck) => {
     const name =
       typeof deck?.name === "string" && deck.name.trim() ? deck.name.trim() : "Deck";
     const summary = {
       name,
       remaining: deckRemaining(deck),
       total: deckTotal(deck),
+      discard: deckDiscard(deck),
     };
     const backUrl = deckBackSource(deck);
     if (backUrl) summary.backUrl = backUrl;
@@ -1195,7 +1208,6 @@ module.exports = {
   DISCORD_LOOKUP_TTL_MS,
   GAME_COLLECTION,
   HISTORY_KEEP_LIMIT,
-  MAX_VISIBLE_DECKS,
   STATUS_HISTORY_LIMIT,
   channelNameFromDiscordClient,
   copyCards,

@@ -122,13 +122,31 @@ describe("mock snapshot fixtures", () => {
     ]);
     expect(result.body.otherPlayers[1].handCount).toBe(1);
     expect(result.body.otherPlayers[2].handCount).toBe(4);
-    expect(result.body.decks.map((deck) => deck.name)).toEqual(["Main", "Events"]);
+    expect(result.body.decks.map((deck) => deck.name)).toEqual([
+      "Main",
+      "Events",
+      "Unused Chaos Deck",
+    ]);
     expect(result.body.decks[0]).toEqual({
       name: "Main",
       remaining: 30,
       total: 42,
+      discard: 4,
     });
-    expect(JSON.stringify(result.body)).not.toContain("Unused Chaos Deck");
+    expect(result.body.decks[1]).toEqual({
+      name: "Events",
+      remaining: 8,
+      total: 15,
+      discard: 1,
+    });
+    expect(result.body.decks[2]).toEqual({
+      name: "Unused Chaos Deck",
+      remaining: 12,
+      total: 20,
+      discard: 0,
+    });
+    expect(JSON.stringify(result.body)).not.toContain("Unused Chaos 1");
+    expect(JSON.stringify(result.body)).not.toContain("Discarded Copper");
     expect(result.body.status.players[0].isYou).toBe(true);
     expect(result.body.status.players[0].tokens.clue).toBe(2);
     expect(result.body.status.players[1].tokens.clue).toBe("?");

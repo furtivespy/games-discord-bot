@@ -111,17 +111,25 @@ function stackingHarness(css) {
                 ${namedTile("board-3", "Estate")}
               </div>
             </section>
-            <section class="zone decks-zone" data-zone="decks">
-              <h2>Decks</h2>
-              <div id="decks" class="decks"></div>
-            </section>
-          </section>
-          <section class="zone" data-zone="play-area">
-            <h2>Play Area</h2>
-            <div class="cards board-spread" id="play-area-cards">
-              ${namedTile("play-1", "Village")}
-              ${namedTile("play-2", "Market")}
+            <div id="pile-stack" class="pile-stack is-single">
+              <div class="pile-windows">
+                <section class="zone decks-zone" data-zone="decks">
+                  <h2>Decks</h2>
+                  <div id="decks" class="decks"></div>
+                </section>
+                <section class="zone discards-zone" data-zone="discards">
+                  <h2>Discard</h2>
+                  <div id="discards" class="decks"></div>
+                </section>
+              </div>
             </div>
+            <section class="zone" data-zone="play-area">
+              <h2>Play Area</h2>
+              <div class="cards board-spread" id="play-area-cards">
+                ${namedTile("play-1", "Village")}
+                ${namedTile("play-2", "Market")}
+              </div>
+            </section>
           </section>
         </div>
         <section class="zone hand-zone" data-zone="hand">
@@ -506,7 +514,9 @@ describe("dropped cards snap back to their rest slot", () => {
 
 function populatedTableHarness(css, { boardCount = 3, handCount = 5 } = {}) {
   const deck = (name, count) =>
-    `<article class="deck-tile" title="${name}"><div class="card-face deck-face"><span class="deck-name">${name}</span><span class="deck-count">${count}</span></div></article>`;
+    `<article class="deck-tile" title="${name}"><div class="card-face deck-face"><span class="deck-name pile-label">${name}</span><span class="deck-count pile-label">${count}</span></div></article>`;
+  const discard = (name, count) =>
+    `<article class="deck-tile discard-tile" title="${name} discard"><div class="card-face deck-face discard-face"><div class="discard-overlay"><span class="discard-title pile-label">Discard</span><span class="discard-count pile-label">${count}</span></div></div></article>`;
   const player = (initials, name, count) =>
     `<div class="player-chip"><div class="player-initials">${initials}</div><span class="player-name">${name}</span><span class="player-count">${count}</span></div>`;
   const boardNames = [
@@ -564,17 +574,31 @@ function populatedTableHarness(css, { boardCount = 3, handCount = 5 } = {}) {
                 ${boardTiles}
               </div>
             </section>
-            <section class="zone decks-zone" data-zone="decks">
-              <h2>Decks</h2>
-              <div id="decks" class="decks">${deck("Main", "30")}${deck("Events", "8")}${deck("Chaos", "12")}</div>
-            </section>
-          </section>
-          <section class="zone" data-zone="play-area">
-            <h2>Play Area</h2>
-            <div class="cards board-spread" id="play-area-cards">
-              ${namedTile("play-1", "Village")}
-              ${namedTile("play-2", "Market")}
+            <div id="pile-stack" class="pile-stack is-pair">
+              <button type="button" class="deck-nav" aria-label="Previous decks">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              </button>
+              <div class="pile-windows">
+                <section class="zone decks-zone" data-zone="decks">
+                  <h2>Decks</h2>
+                  <div id="decks" class="decks">${deck("Main", "30/42")}${deck("Events", "8/15")}</div>
+                </section>
+                <section class="zone discards-zone" data-zone="discards">
+                  <h2>Discard</h2>
+                  <div id="discards" class="decks">${discard("Main", "4 cards")}${discard("Events", "1 card")}</div>
+                </section>
+              </div>
+              <button type="button" class="deck-nav" aria-label="Next decks">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              </button>
             </div>
+            <section class="zone" data-zone="play-area">
+              <h2>Play Area</h2>
+              <div class="cards board-spread" id="play-area-cards">
+                ${namedTile("play-1", "Village")}
+                ${namedTile("play-2", "Market")}
+              </div>
+            </section>
           </section>
         </div>
         <section class="zone hand-zone" data-zone="hand">
@@ -633,6 +657,8 @@ try {
   const handBox = hand.getBoundingClientRect();
   const playBox = play.getBoundingClientRect();
   const rest = face.getBoundingClientRect();
+  const pile = document.getElementById("pile-stack");
+  const pileBox = pile.getBoundingClientRect();
   const root = getComputedStyle(document.documentElement);
   const mainOverflow = main.scrollHeight > main.clientHeight + 1;
   const boardCards = rects("#board-cards .card-tile");
@@ -668,6 +694,13 @@ try {
     handTop: handBox.top,
     handBottom: handBox.bottom,
     playBottom: playBox.bottom,
+    playLeft: playBox.left,
+    playRight: playBox.right,
+    playTop: playBox.top,
+    pileLeft: pileBox.left,
+    pileRight: pileBox.right,
+    pileTop: pileBox.top,
+    pileWidth: pileBox.width,
     gapBelowHand: tableBox.bottom - handBox.bottom,
     spaceAboveHand: handBox.top - playBox.bottom,
     handOverlaps,
@@ -688,6 +721,22 @@ try {
   await report({ error: String(error && error.stack ? error.stack : error) });
 }
 `;
+
+describe("narrow pile layout CSS", () => {
+  test("820px board-row keeps play area left of the pile stack", () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const start = css.indexOf("@media (max-width: 820px)");
+    expect(start).toBeGreaterThan(-1);
+    const narrow = css.slice(start, css.indexOf(".card-inspect-dialog", start));
+    expect(narrow).toMatch(
+      /\.board-row\s*>\s*\[data-zone="play-area"\]\s*\{[^}]*grid-column:\s*1/
+    );
+    expect(narrow).toMatch(
+      /\.board-row\s*>\s*\.pile-stack\s*\{[^}]*grid-column:\s*2/
+    );
+    expect(narrow).not.toContain("grid-column: auto");
+  });
+});
 
 describe("visual-mode tile overlap math", () => {
   test("detects board/play/hand tile collisions without Chrome", () => {
@@ -873,12 +922,16 @@ describe("hand zone stays at the bottom of the table", () => {
 
   test.skipIf(!chrome)("QA: hand sits on the table bottom with slack above it", async () => {
     const css = fs.readFileSync(STYLE_PATH, "utf8");
+    // Headless Chrome's innerHeight is ~143px below --window-size. 1000
+    // outer is a true ~800px desktop viewport; 800 outer yields ~657 inner,
+    // which cannot fit two card rows plus the pinned hand.
     const result = await measureLayout(stackingHarness(css), {
       width: 1280,
-      height: 800,
+      height: 1000,
     });
 
     expect(result.error).toBeUndefined();
+    expect(result.viewportHeight).toBeGreaterThanOrEqual(800);
     expect(result.tableHeight).toBeGreaterThan(result.viewportHeight - 2);
     expect(result.tableBottom).toBeLessThanOrEqual(result.viewportHeight + 1);
     expect(result.handBottom).toBeGreaterThan(result.playBottom);
@@ -888,7 +941,22 @@ describe("hand zone stays at the bottom of the table", () => {
     expect(result.gapBelowHand).toBeLessThan(24);
     expect(result.spaceAboveHand).toBeGreaterThan(result.gapBelowHand);
     expect(result.spaceAboveHand).toBeGreaterThan(8);
+    expect(result.mainOverflow).toBe(false);
     expectHandPinned(result, "1280x800-pin");
+  }, 30000);
+
+  test.skipIf(!chrome)("QA: at 820px play area stays left of the discard stack", async () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const result = await measureLayout(populatedTableHarness(css), {
+      width: 820,
+      height: 800,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.playLeft).toBeLessThan(result.pileLeft);
+    expect(result.playRight).toBeLessThanOrEqual(result.pileLeft + 8);
+    expect(result.playTop).toBeLessThan(result.pileTop + 48);
+    expect(result.playTop).toBeGreaterThan(result.pileTop - 48);
   }, 30000);
 
   const overflowViewports = [
