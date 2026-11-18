@@ -105,7 +105,10 @@ const {
   groupPlayersByTeam,
   handCountLabel,
   initialsFromName,
+  NARROW_PILE_MAX_WIDTH_PX,
+  NARROW_PILE_MEDIA,
   pileColumnWidthClass,
+  pileWindowSize,
   rotateDeckWindow,
   statusPlayerScoreLabel,
   statusPlayerSeatName,
@@ -184,6 +187,10 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("renderDecks");
     expect(main).toContain("renderDeckTile");
     expect(main).toContain("renderDiscardTile");
+    expect(main).toContain("function renderPileTile");
+    expect(main).toContain("bindPileLayout");
+    expect(main).toContain("NARROW_PILE_MEDIA");
+    expect(main).toContain("currentPileWindowSize");
     expect(main).toContain("renderDeckActions");
     expect(main).toContain('textContent = "Discard"');
     expect(main).toContain("pile-label");
@@ -395,11 +402,27 @@ describe("visual table layout helpers", () => {
     expect(pileColumnWidthClass(1)).toBe("is-single");
     expect(pileColumnWidthClass(2)).toBe("is-pair");
     expect(pileColumnWidthClass(5)).toBe("is-pair");
+    expect(pileColumnWidthClass(5, 1)).toBe("is-single");
+    expect(pileWindowSize(false)).toBe(2);
+    expect(pileWindowSize(true)).toBe(1);
+    expect(NARROW_PILE_MAX_WIDTH_PX).toBe(820);
+    expect(NARROW_PILE_MEDIA).toBe("(max-width: 820px)");
+    expect(visibleDecks([{ name: "a" }, { name: "b" }, { name: "c" }], 0, 1)).toEqual([
+      { name: "a" },
+    ]);
+    expect(visibleDecks([{ name: "a" }, { name: "b" }, { name: "c" }], 2, 1)).toEqual([
+      { name: "c" },
+    ]);
+    expect(deckNavNeeded(2, 1)).toBe(true);
+    expect(deckNavNeeded(1, 1)).toBe(false);
+    expect(rotateDeckWindow(0, 3, "next", 1)).toBe(1);
     expect(discardPileEmpty(0)).toBe(true);
     expect(discardPileEmpty("?")).toBe(false);
     expect(discardPileEmpty(2)).toBe(false);
     expect(deckCountLabel(30, 42)).toBe("30/42");
     expect(deckCountLabel("?", 42)).toBe("?/42");
+    expect(deckCountLabel("?", "?")).toBe("?/?");
+    expect(deckCountLabel(1, "?")).toBe("1/?");
     expect(handCountLabel(1)).toBe("1 card");
     expect(handCountLabel(4)).toBe("4 cards");
     expect(handCountLabel("?")).toBe("? cards");
@@ -409,6 +432,24 @@ describe("visual table layout helpers", () => {
         require("path").join(__dirname, "..", "embedded-client", "public", "card-back.svg")
       )
     ).toBe(true);
+  });
+
+  test("deck window retargets when the list shrinks while rotated", () => {
+    const five = ["a", "b", "c", "d", "e"].map((name) => ({ name }));
+    expect(visibleDecks(five, 4)).toEqual([{ name: "e" }, { name: "a" }]);
+    expect(deckWindowStart(4, 5)).toBe(4);
+
+    const three = five.slice(0, 3);
+    expect(deckWindowStart(4, 3)).toBe(1);
+    expect(visibleDecks(three, 4)).toEqual([{ name: "b" }, { name: "c" }]);
+
+    expect(deckWindowStart(4, 2)).toBe(0);
+    expect(visibleDecks(five.slice(0, 2), 4)).toEqual([{ name: "a" }, { name: "b" }]);
+    expect(deckWindowStart(4, 1)).toBe(0);
+    expect(visibleDecks(five.slice(0, 1), 4)).toEqual([{ name: "a" }]);
+
+    expect(deckWindowStart(4, 3, 1)).toBe(1);
+    expect(visibleDecks(three, 4, 1)).toEqual([{ name: "b" }]);
   });
 
   test("compact sidebar player lines, initials, suits, and mock auto-select", () => {

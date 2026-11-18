@@ -304,9 +304,12 @@ function pileCardCount(pile) {
   return Array.isArray(pile?.cards) ? pile.cards.length : 0;
 }
 
-function hiddenPileCount(deck, pileName) {
+function hiddenPileCount(deck, pileName, { hideLikeHands = false } = {}) {
   const count = pileCardCount(deck?.piles?.[pileName]);
-  if (isDeckCountHidden(deck) && count > 1) return "?";
+  if (!isDeckCountHidden(deck)) return count;
+  // Draw keeps the 0/1 reveal used by Discord deck status. Discard follows
+  // hands: always "?" so a sibling 0/1 plus total cannot reconstruct it.
+  if (hideLikeHands || count > 1) return "?";
   return count;
 }
 
@@ -315,10 +318,11 @@ function deckRemaining(deck) {
 }
 
 function deckDiscard(deck) {
-  return hiddenPileCount(deck, "discard");
+  return hiddenPileCount(deck, "discard", { hideLikeHands: true });
 }
 
 function deckTotal(deck) {
+  if (isDeckCountHidden(deck)) return "?";
   if (Array.isArray(deck?.allCards)) return deck.allCards.length;
   const piles = deck?.piles && typeof deck.piles === "object" ? deck.piles : {};
   let total = 0;

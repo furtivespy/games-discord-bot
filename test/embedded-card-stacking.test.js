@@ -657,6 +657,8 @@ try {
   const handBox = hand.getBoundingClientRect();
   const playBox = play.getBoundingClientRect();
   const rest = face.getBoundingClientRect();
+  const pile = document.getElementById("pile-stack");
+  const pileBox = pile.getBoundingClientRect();
   const root = getComputedStyle(document.documentElement);
   const mainOverflow = main.scrollHeight > main.clientHeight + 1;
   const boardCards = rects("#board-cards .card-tile");
@@ -692,6 +694,13 @@ try {
     handTop: handBox.top,
     handBottom: handBox.bottom,
     playBottom: playBox.bottom,
+    playLeft: playBox.left,
+    playRight: playBox.right,
+    playTop: playBox.top,
+    pileLeft: pileBox.left,
+    pileRight: pileBox.right,
+    pileTop: pileBox.top,
+    pileWidth: pileBox.width,
     gapBelowHand: tableBox.bottom - handBox.bottom,
     spaceAboveHand: handBox.top - playBox.bottom,
     handOverlaps,
@@ -712,6 +721,22 @@ try {
   await report({ error: String(error && error.stack ? error.stack : error) });
 }
 `;
+
+describe("narrow pile layout CSS", () => {
+  test("820px board-row keeps play area left of the pile stack", () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const start = css.indexOf("@media (max-width: 820px)");
+    expect(start).toBeGreaterThan(-1);
+    const narrow = css.slice(start, css.indexOf(".card-inspect-dialog", start));
+    expect(narrow).toMatch(
+      /\.board-row\s*>\s*\[data-zone="play-area"\]\s*\{[^}]*grid-column:\s*1/
+    );
+    expect(narrow).toMatch(
+      /\.board-row\s*>\s*\.pile-stack\s*\{[^}]*grid-column:\s*2/
+    );
+    expect(narrow).not.toContain("grid-column: auto");
+  });
+});
 
 describe("visual-mode tile overlap math", () => {
   test("detects board/play/hand tile collisions without Chrome", () => {
@@ -905,18 +930,29 @@ describe("hand zone stays at the bottom of the table", () => {
     expect(result.error).toBeUndefined();
     expect(result.tableHeight).toBeGreaterThan(result.viewportHeight - 2);
     expect(result.tableBottom).toBeLessThanOrEqual(result.viewportHeight + 1);
+    expect(result.handBottom).toBeGreaterThan(result.playBottom);
     expect(result.handBottom).toBeLessThanOrEqual(result.viewportHeight);
     expect(result.handBottom).toBeGreaterThan(result.viewportHeight - 32);
     expect(result.gapBelowHand).toBeGreaterThanOrEqual(0);
     expect(result.gapBelowHand).toBeLessThan(24);
+    expect(result.spaceAboveHand).toBeGreaterThan(result.gapBelowHand);
+    expect(result.spaceAboveHand).toBeGreaterThan(8);
+    expect(result.mainOverflow).toBe(false);
     expectHandPinned(result, "1280x800-pin");
-    if (result.mainOverflow) {
-      expect(result.mainScrollHeight).toBeGreaterThan(result.mainClientHeight + 1);
-    } else {
-      expect(result.spaceAboveHand).toBeGreaterThan(result.gapBelowHand);
-      expect(result.spaceAboveHand).toBeGreaterThan(8);
-      expect(result.handBottom).toBeGreaterThan(result.playBottom);
-    }
+  }, 30000);
+
+  test.skipIf(!chrome)("QA: at 820px play area stays left of the discard stack", async () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const result = await measureLayout(populatedTableHarness(css), {
+      width: 820,
+      height: 800,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.playLeft).toBeLessThan(result.pileLeft);
+    expect(result.playRight).toBeLessThanOrEqual(result.pileLeft + 8);
+    expect(result.playTop).toBeLessThan(result.pileTop + 48);
+    expect(result.playTop).toBeGreaterThan(result.pileTop - 48);
   }, 30000);
 
   const overflowViewports = [

@@ -1156,7 +1156,7 @@ describe("snapshotFromGameData", () => {
     expect(hidden.decks[0]).toEqual({
       name: "Main",
       remaining: "?",
-      total: 6,
+      total: "?",
       discard: "?",
     });
 
@@ -1178,8 +1178,79 @@ describe("snapshotFromGameData", () => {
     expect(hiddenOne.decks[0]).toEqual({
       name: "Main",
       remaining: 1,
-      total: 2,
-      discard: 1,
+      total: "?",
+      discard: "?",
+    });
+  });
+
+  test("hidden discard 0/1 cannot reconstruct a hidden sibling count", () => {
+    const hiddenEmptyDiscard = snapshotFromGameData(
+      {
+        name: "Hidden Empty Discard",
+        players: [{ userId: "will", name: "Will", hands: { main: [] } }],
+        decks: [
+          {
+            name: "Main",
+            hiddenInfo: "deck",
+            allCards: Array.from({ length: 4 }),
+            piles: { draw: { cards: [{}, {}, {}, {}] }, discard: { cards: [] } },
+          },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(hiddenEmptyDiscard.decks[0]).toEqual({
+      name: "Main",
+      remaining: "?",
+      total: "?",
+      discard: "?",
+    });
+
+    const hiddenOneDraw = snapshotFromGameData(
+      {
+        name: "Hidden One Draw",
+        players: [{ userId: "will", name: "Will", hands: { main: [] } }],
+        decks: [
+          {
+            name: "Main",
+            hiddenInfo: "deck",
+            allCards: Array.from({ length: 4 }),
+            piles: {
+              draw: { cards: [{}] },
+              discard: { cards: [{}, {}, {}] },
+            },
+          },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(hiddenOneDraw.decks[0]).toEqual({
+      name: "Main",
+      remaining: 1,
+      total: "?",
+      discard: "?",
+    });
+
+    const hiddenZeroDraw = snapshotFromGameData(
+      {
+        name: "Hidden Zero Draw",
+        players: [{ userId: "will", name: "Will", hands: { main: [] } }],
+        decks: [
+          {
+            name: "Main",
+            hiddenInfo: "all",
+            allCards: Array.from({ length: 4 }),
+            piles: { draw: { cards: [] }, discard: { cards: [{}, {}, {}, {}] } },
+          },
+        ],
+      },
+      { channelId: "ch", guildId: "g", userId: "will" }
+    );
+    expect(hiddenZeroDraw.decks[0]).toEqual({
+      name: "Main",
+      remaining: 0,
+      total: "?",
+      discard: "?",
     });
   });
 

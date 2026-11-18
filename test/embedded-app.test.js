@@ -483,6 +483,19 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain(".pile-stack.is-pair .discards-zone");
     expect(css).toContain("grid-row: 1 / span 2");
     expect(css).toContain('.board-row > [data-zone="play-area"]');
+    const narrow = css.slice(css.indexOf("@media (max-width: 820px)"));
+    expect(narrow).toContain(".board-row > [data-zone=\"play-area\"]");
+    expect(narrow).toContain(".board-row > .pile-stack");
+    expect(narrow).toMatch(
+      /\.board-row\s*>\s*\[data-zone="play-area"\]\s*\{[^}]*grid-column:\s*1/
+    );
+    expect(narrow).toMatch(
+      /\.board-row\s*>\s*\.pile-stack\s*\{[^}]*grid-column:\s*2/
+    );
+    expect(narrow).not.toMatch(
+      /\.board-row\s*>\s*\[data-zone="play-area"\][^{]*\{[^}]*grid-column:\s*auto/
+    );
+    expect(narrow).not.toContain("grid-column: auto");
     expect(css).toContain(".hand-fan .card-tile + .card-tile");
     expect(css).toContain(".player-team-group");
     expect(css).toContain(".status-player-score");

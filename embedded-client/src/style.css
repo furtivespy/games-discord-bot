@@ -944,16 +944,27 @@ body {
     max-height: 40vh;
   }
 
+  /* Keep play area to the left of discard. Board spans the full row above
+     so the pair of piles can drop to one column without stacking play under
+     the deck window. */
   .board-row {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
   }
 
-  .board-row > [data-zone="board"],
-  .board-row > [data-zone="play-area"],
+  .board-row > [data-zone="board"] {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .board-row > [data-zone="play-area"] {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
   .board-row > .pile-stack {
-    grid-column: auto;
-    grid-row: auto;
+    grid-column: 2;
+    grid-row: 2;
   }
 }
 
