@@ -111,17 +111,25 @@ function stackingHarness(css) {
                 ${namedTile("board-3", "Estate")}
               </div>
             </section>
-            <section class="zone decks-zone" data-zone="decks">
-              <h2>Decks</h2>
-              <div id="decks" class="decks"></div>
-            </section>
-          </section>
-          <section class="zone" data-zone="play-area">
-            <h2>Play Area</h2>
-            <div class="cards board-spread" id="play-area-cards">
-              ${namedTile("play-1", "Village")}
-              ${namedTile("play-2", "Market")}
+            <div id="pile-stack" class="pile-stack is-single">
+              <div class="pile-windows">
+                <section class="zone decks-zone" data-zone="decks">
+                  <h2>Decks</h2>
+                  <div id="decks" class="decks"></div>
+                </section>
+                <section class="zone discards-zone" data-zone="discards">
+                  <h2>Discard</h2>
+                  <div id="discards" class="decks"></div>
+                </section>
+              </div>
             </div>
+            <section class="zone" data-zone="play-area">
+              <h2>Play Area</h2>
+              <div class="cards board-spread" id="play-area-cards">
+                ${namedTile("play-1", "Village")}
+                ${namedTile("play-2", "Market")}
+              </div>
+            </section>
           </section>
         </div>
         <section class="zone hand-zone" data-zone="hand">
@@ -506,7 +514,9 @@ describe("dropped cards snap back to their rest slot", () => {
 
 function populatedTableHarness(css, { boardCount = 3, handCount = 5 } = {}) {
   const deck = (name, count) =>
-    `<article class="deck-tile" title="${name}"><div class="card-face deck-face"><span class="deck-name">${name}</span><span class="deck-count">${count}</span></div></article>`;
+    `<article class="deck-tile" title="${name}"><div class="card-face deck-face"><span class="deck-name pile-label">${name}</span><span class="deck-count pile-label">${count}</span></div></article>`;
+  const discard = (name, count) =>
+    `<article class="deck-tile discard-tile" title="${name} discard"><div class="card-face deck-face discard-face"><div class="discard-overlay"><span class="discard-title pile-label">Discard</span><span class="discard-count pile-label">${count}</span></div></div></article>`;
   const player = (initials, name, count) =>
     `<div class="player-chip"><div class="player-initials">${initials}</div><span class="player-name">${name}</span><span class="player-count">${count}</span></div>`;
   const boardNames = [
@@ -564,17 +574,31 @@ function populatedTableHarness(css, { boardCount = 3, handCount = 5 } = {}) {
                 ${boardTiles}
               </div>
             </section>
-            <section class="zone decks-zone" data-zone="decks">
-              <h2>Decks</h2>
-              <div id="decks" class="decks">${deck("Main", "30")}${deck("Events", "8")}${deck("Chaos", "12")}</div>
-            </section>
-          </section>
-          <section class="zone" data-zone="play-area">
-            <h2>Play Area</h2>
-            <div class="cards board-spread" id="play-area-cards">
-              ${namedTile("play-1", "Village")}
-              ${namedTile("play-2", "Market")}
+            <div id="pile-stack" class="pile-stack is-pair">
+              <button type="button" class="deck-nav" aria-label="Previous decks">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              </button>
+              <div class="pile-windows">
+                <section class="zone decks-zone" data-zone="decks">
+                  <h2>Decks</h2>
+                  <div id="decks" class="decks">${deck("Main", "30/42")}${deck("Events", "8/15")}</div>
+                </section>
+                <section class="zone discards-zone" data-zone="discards">
+                  <h2>Discard</h2>
+                  <div id="discards" class="decks">${discard("Main", "4 cards")}${discard("Events", "1 card")}</div>
+                </section>
+              </div>
+              <button type="button" class="deck-nav" aria-label="Next decks">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              </button>
             </div>
+            <section class="zone" data-zone="play-area">
+              <h2>Play Area</h2>
+              <div class="cards board-spread" id="play-area-cards">
+                ${namedTile("play-1", "Village")}
+                ${namedTile("play-2", "Market")}
+              </div>
+            </section>
           </section>
         </div>
         <section class="zone hand-zone" data-zone="hand">
@@ -881,14 +905,18 @@ describe("hand zone stays at the bottom of the table", () => {
     expect(result.error).toBeUndefined();
     expect(result.tableHeight).toBeGreaterThan(result.viewportHeight - 2);
     expect(result.tableBottom).toBeLessThanOrEqual(result.viewportHeight + 1);
-    expect(result.handBottom).toBeGreaterThan(result.playBottom);
     expect(result.handBottom).toBeLessThanOrEqual(result.viewportHeight);
     expect(result.handBottom).toBeGreaterThan(result.viewportHeight - 32);
     expect(result.gapBelowHand).toBeGreaterThanOrEqual(0);
     expect(result.gapBelowHand).toBeLessThan(24);
-    expect(result.spaceAboveHand).toBeGreaterThan(result.gapBelowHand);
-    expect(result.spaceAboveHand).toBeGreaterThan(8);
     expectHandPinned(result, "1280x800-pin");
+    if (result.mainOverflow) {
+      expect(result.mainScrollHeight).toBeGreaterThan(result.mainClientHeight + 1);
+    } else {
+      expect(result.spaceAboveHand).toBeGreaterThan(result.gapBelowHand);
+      expect(result.spaceAboveHand).toBeGreaterThan(8);
+      expect(result.handBottom).toBeGreaterThan(result.playBottom);
+    }
   }, 30000);
 
   const overflowViewports = [

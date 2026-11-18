@@ -643,10 +643,19 @@ describe("hover zoom clamp on a tile", () => {
     expect(css).not.toContain(".deck-tile:hover .card-face");
     expect(css).not.toMatch(/\.deck-tile[^{]*\{[^}]*--hover-shift/);
     const decksFn = main.slice(
-      main.indexOf("function renderDecks"),
+      main.indexOf("function renderDeckActions"),
       main.indexOf("function appendStatusLines")
     );
+    expect(decksFn).toContain("function renderDecks");
+    expect(decksFn).toContain("function renderDiscardTile");
     expect(decksFn).not.toContain("enableHoverZoomClamp");
+    const discardFn = main.slice(
+      main.indexOf("function renderDiscardTile"),
+      main.indexOf("function syncDeckNav")
+    );
+    expect(discardFn).toContain('textContent = "Discard"');
+    expect(discardFn).toContain("handCountLabel(deck.discard)");
+    expect(discardFn).not.toContain("renderDeckActions");
     expect(main).toContain("enableHoverZoomClamp(tile)");
   });
 });

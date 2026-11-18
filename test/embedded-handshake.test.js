@@ -98,9 +98,15 @@ const {
   DEFAULT_DECK_ACTIONS,
   deckActionsFor,
   deckCountLabel,
+  deckNavDirectionFromDataset,
+  deckNavNeeded,
+  deckWindowStart,
+  discardPileEmpty,
   groupPlayersByTeam,
   handCountLabel,
   initialsFromName,
+  pileColumnWidthClass,
+  rotateDeckWindow,
   statusPlayerScoreLabel,
   statusPlayerSeatName,
   suitGlyph,
@@ -176,7 +182,15 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("const seated = tablePlayersInSeatOrder");
     expect(main).toContain("dataset.userId");
     expect(main).toContain("renderDecks");
+    expect(main).toContain("renderDeckTile");
+    expect(main).toContain("renderDiscardTile");
     expect(main).toContain("renderDeckActions");
+    expect(main).toContain('textContent = "Discard"');
+    expect(main).toContain("pile-label");
+    expect(main).toContain("rotateDeckWindow");
+    expect(main).toContain("onDeckNavClick");
+    expect(main).toContain("bindDeckNav");
+    expect(main).toContain("deckWindowStartIndex = 0");
     expect(main).toContain("deckActionsFor");
     expect(main).toContain("dataset.deckAction");
     expect(main).toContain("dataset.deckName");
@@ -359,7 +373,31 @@ describe("visual table layout helpers", () => {
       { name: "a" },
       { name: "b" },
     ]);
+    expect(visibleDecks([{ name: "a" }, { name: "b" }, { name: "c" }], 1)).toEqual([
+      { name: "b" },
+      { name: "c" },
+    ]);
+    expect(visibleDecks([{ name: "a" }, { name: "b" }, { name: "c" }], 2)).toEqual([
+      { name: "c" },
+      { name: "a" },
+    ]);
+    expect(visibleDecks([{ name: "only" }])).toEqual([{ name: "only" }]);
     expect(visibleDecks(null)).toEqual([]);
+    expect(deckWindowStart(-1, 3)).toBe(2);
+    expect(rotateDeckWindow(0, 3, "next")).toBe(1);
+    expect(rotateDeckWindow(2, 3, "next")).toBe(0);
+    expect(rotateDeckWindow(0, 3, "prev")).toBe(2);
+    expect(rotateDeckWindow(0, 2, "next")).toBe(0);
+    expect(deckNavNeeded(2)).toBe(false);
+    expect(deckNavNeeded(3)).toBe(true);
+    expect(deckNavDirectionFromDataset("prev")).toBe("prev");
+    expect(deckNavDirectionFromDataset("sideways")).toBeNull();
+    expect(pileColumnWidthClass(1)).toBe("is-single");
+    expect(pileColumnWidthClass(2)).toBe("is-pair");
+    expect(pileColumnWidthClass(5)).toBe("is-pair");
+    expect(discardPileEmpty(0)).toBe(true);
+    expect(discardPileEmpty("?")).toBe(false);
+    expect(discardPileEmpty(2)).toBe(false);
     expect(deckCountLabel(30, 42)).toBe("30/42");
     expect(deckCountLabel("?", 42)).toBe("?/42");
     expect(handCountLabel(1)).toBe("1 card");

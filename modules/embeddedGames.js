@@ -304,10 +304,18 @@ function pileCardCount(pile) {
   return Array.isArray(pile?.cards) ? pile.cards.length : 0;
 }
 
+function hiddenPileCount(deck, pileName) {
+  const count = pileCardCount(deck?.piles?.[pileName]);
+  if (isDeckCountHidden(deck) && count > 1) return "?";
+  return count;
+}
+
 function deckRemaining(deck) {
-  const remaining = pileCardCount(deck?.piles?.draw);
-  if (isDeckCountHidden(deck) && remaining > 1) return "?";
-  return remaining;
+  return hiddenPileCount(deck, "draw");
+}
+
+function deckDiscard(deck) {
+  return hiddenPileCount(deck, "discard");
 }
 
 function deckTotal(deck) {
@@ -322,13 +330,15 @@ function deckTotal(deck) {
 
 function deckSummaries(data) {
   const decks = Array.isArray(data?.decks) ? data.decks : [];
-  return decks.slice(0, MAX_VISIBLE_DECKS).map((deck) => {
+  // Send every deck. The Activity windows to MAX_VISIBLE_DECKS and rotates.
+  return decks.map((deck) => {
     const name =
       typeof deck?.name === "string" && deck.name.trim() ? deck.name.trim() : "Deck";
     const summary = {
       name,
       remaining: deckRemaining(deck),
       total: deckTotal(deck),
+      discard: deckDiscard(deck),
     };
     const backUrl = deckBackSource(deck);
     if (backUrl) summary.backUrl = backUrl;

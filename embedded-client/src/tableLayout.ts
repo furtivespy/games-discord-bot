@@ -6,9 +6,12 @@ export type SnapshotDeck = {
   name?: string;
   remaining?: number | string;
   total?: number | string;
+  discard?: number | string;
   backUrl?: string;
   backImageUrl?: string;
 };
+
+export type DeckNavDirection = "prev" | "next";
 
 export type DeckAction = {
   id: string;
@@ -96,9 +99,65 @@ export type PlayerTeamGroup = {
   players: OtherPlayer[];
 };
 
-export function visibleDecks<T>(decks: T[] | undefined | null): T[] {
+export function deckWindowStart(
+  start: unknown,
+  total: number,
+  windowSize = MAX_VISIBLE_DECKS
+): number {
+  const n = Number.isFinite(Number(total)) ? Math.max(0, Math.trunc(Number(total))) : 0;
+  const size = Number.isFinite(Number(windowSize))
+    ? Math.max(1, Math.trunc(Number(windowSize)))
+    : MAX_VISIBLE_DECKS;
+  if (n <= size) return 0;
+  const raw = Number.isFinite(Number(start)) ? Math.trunc(Number(start)) : 0;
+  return ((raw % n) + n) % n;
+}
+
+export function visibleDecks<T>(
+  decks: T[] | undefined | null,
+  start: unknown = 0
+): T[] {
   if (!Array.isArray(decks)) return [];
-  return decks.filter((deck) => deck != null).slice(0, MAX_VISIBLE_DECKS);
+  const list = decks.filter((deck) => deck != null);
+  if (list.length <= MAX_VISIBLE_DECKS) return list;
+  const origin = deckWindowStart(start, list.length);
+  const shown: T[] = [];
+  for (let i = 0; i < MAX_VISIBLE_DECKS; i++) {
+    shown.push(list[(origin + i) % list.length]);
+  }
+  return shown;
+}
+
+export function deckNavNeeded(total: unknown): boolean {
+  const n = Number.isFinite(Number(total)) ? Math.trunc(Number(total)) : 0;
+  return n > MAX_VISIBLE_DECKS;
+}
+
+export function rotateDeckWindow(
+  start: unknown,
+  total: number,
+  direction: DeckNavDirection
+): number {
+  const delta = direction === "next" ? 1 : direction === "prev" ? -1 : 0;
+  return deckWindowStart(Number(start) + delta, total);
+}
+
+export function deckNavDirectionFromDataset(
+  value: string | null | undefined
+): DeckNavDirection | null {
+  return value === "prev" || value === "next" ? value : null;
+}
+
+export function pileColumnWidthClass(total: unknown): "is-single" | "is-pair" {
+  const n = Number.isFinite(Number(total)) ? Math.trunc(Number(total)) : 0;
+  return n >= 2 ? "is-pair" : "is-single";
+}
+
+export function discardPileEmpty(count: unknown): boolean {
+  if (count === "?") return false;
+  const n = Number(count);
+  if (!Number.isFinite(n)) return true;
+  return n <= 0;
 }
 
 export function deckCountLabel(

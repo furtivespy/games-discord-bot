@@ -79,9 +79,15 @@ import {
   DEFAULT_CARD_BACK,
   deckActionsFor,
   deckCountLabel,
+  deckNavDirectionFromDataset,
+  deckNavNeeded,
+  deckWindowStart,
+  discardPileEmpty,
   groupPlayersByTeam,
   handCountLabel,
   initialsFromName,
+  pileColumnWidthClass,
+  rotateDeckWindow,
   tablePlayersInSeatOrder,
   suitColorClass,
   suitGlyph,
@@ -111,6 +117,9 @@ let activeSession: {
   };
 } | null = null;
 let actionDialogBound = false;
+let deckNavBound = false;
+let deckWindowStartIndex = 0;
+let lastDeckRender: { config: EmbeddedConfig; decks: SnapshotDeck[] } | null = null;
 let actionInFlight = false;
 let actionRequestId: string | null = null;
 let appliedVersion = "";
@@ -234,6 +243,9 @@ function setActionNotice(text: string | null) {
 function setDeckActionsLocked(locked: boolean) {
   actionInFlight = locked;
   document.querySelectorAll<HTMLButtonElement>("button.deck-action").forEach((button) => {
+    button.disabled = locked;
+  });
+  document.querySelectorAll<HTMLButtonElement>("button.deck-nav").forEach((button) => {
     button.disabled = locked;
   });
   document
@@ -1082,28 +1094,114 @@ function renderDeckActions(deck: SnapshotDeck): HTMLDivElement {
   return actions;
 }
 
-function renderDecks(config: EmbeddedConfig, decks: SnapshotDeck[] | undefined) {
-  const container = document.getElementById("decks");
-  if (!container) return;
-  container.replaceChildren();
-  for (const deck of visibleDecks(asRecordList<SnapshotDeck>(decks))) {
-    const tile = document.createElement("article");
-    tile.className = "deck-tile";
-    const face = document.createElement("div");
-    face.className = "card-face deck-face";
-    const backSrc = mappedImageSrc(config, deck.backImageUrl) || DEFAULT_CARD_BACK;
-    face.style.backgroundImage = `url("${backSrc}")`;
-    const name = document.createElement("span");
-    name.className = "deck-name";
-    name.textContent =
-      typeof deck.name === "string" && deck.name.trim() ? deck.name.trim() : "Deck";
-    const count = document.createElement("span");
-    count.className = "deck-count";
-    count.textContent = deckCountLabel(deck.remaining, deck.total);
-    face.append(name, count);
-    tile.append(face, renderDeckActions(deck));
-    container.append(tile);
+function deckDisplayName(deck: SnapshotDeck): string {
+  return typeof deck.name === "string" && deck.name.trim() ? deck.name.trim() : "Deck";
+}
+
+function pileBackSrc(config: EmbeddedConfig, deck: SnapshotDeck): string {
+  return mappedImageSrc(config, deck.backImageUrl) || DEFAULT_CARD_BACK;
+}
+
+function renderDeckTile(config: EmbeddedConfig, deck: SnapshotDeck): HTMLElement {
+  const tile = document.createElement("article");
+  tile.className = "deck-tile";
+  const deckName = deckDisplayName(deck);
+  tile.title = deckName;
+  tile.dataset.deckName = deckName;
+  const face = document.createElement("div");
+  face.className = "card-face deck-face";
+  face.style.backgroundImage = `url("${pileBackSrc(config, deck)}")`;
+  const name = document.createElement("span");
+  name.className = "deck-name pile-label";
+  name.textContent = deckName;
+  const count = document.createElement("span");
+  count.className = "deck-count pile-label";
+  count.textContent = deckCountLabel(deck.remaining, deck.total);
+  face.append(name, count);
+  tile.append(face, renderDeckActions(deck));
+  return tile;
+}
+
+function renderDiscardTile(config: EmbeddedConfig, deck: SnapshotDeck): HTMLElement {
+  const tile = document.createElement("article");
+  tile.className = "deck-tile discard-tile";
+  const deckName = deckDisplayName(deck);
+  tile.title = `${deckName} discard`;
+  tile.dataset.deckName = deckName;
+  if (discardPileEmpty(deck.discard)) tile.classList.add("is-empty");
+  const face = document.createElement("div");
+  face.className = "card-face deck-face discard-face";
+  face.style.backgroundImage = `url("${pileBackSrc(config, deck)}")`;
+  const overlay = document.createElement("div");
+  overlay.className = "discard-overlay";
+  const title = document.createElement("span");
+  title.className = "discard-title pile-label";
+  title.textContent = "Discard";
+  const count = document.createElement("span");
+  count.className = "discard-count pile-label";
+  count.textContent = handCountLabel(deck.discard);
+  overlay.append(title, count);
+  face.append(overlay);
+  tile.append(face);
+  return tile;
+}
+
+function syncDeckNav(total: number) {
+  const stack = document.getElementById("pile-stack");
+  if (stack) {
+    stack.classList.remove("is-single", "is-pair");
+    stack.classList.add(pileColumnWidthClass(total));
+    stack.dataset.deckStart = String(deckWindowStart(deckWindowStartIndex, total));
+    stack.dataset.deckCount = String(total);
   }
+  const show = deckNavNeeded(total);
+  for (const id of ["deck-nav-prev", "deck-nav-next"]) {
+    const button = document.getElementById(id) as HTMLButtonElement | null;
+    if (!button) continue;
+    button.hidden = !show;
+    button.disabled = actionInFlight || !show;
+  }
+}
+
+function onDeckNavClick(event: Event) {
+  event.preventDefault();
+  if (actionInFlight || !lastDeckRender) return;
+  const target = event.currentTarget as HTMLElement | null;
+  const direction = deckNavDirectionFromDataset(target?.dataset?.deckNav);
+  target?.blur?.();
+  if (!direction) return;
+  deckWindowStartIndex = rotateDeckWindow(
+    deckWindowStartIndex,
+    lastDeckRender.decks.length,
+    direction
+  );
+  renderDecks(lastDeckRender.config, lastDeckRender.decks);
+}
+
+function bindDeckNav() {
+  if (deckNavBound) return;
+  deckNavBound = true;
+  document.getElementById("deck-nav-prev")?.addEventListener("click", onDeckNavClick);
+  document.getElementById("deck-nav-next")?.addEventListener("click", onDeckNavClick);
+}
+
+function renderDecks(config: EmbeddedConfig, decks: SnapshotDeck[] | undefined) {
+  bindDeckNav();
+  const list = asRecordList<SnapshotDeck>(decks);
+  lastDeckRender = { config, decks: list };
+  deckWindowStartIndex = deckWindowStart(deckWindowStartIndex, list.length);
+  const shown = visibleDecks(list, deckWindowStartIndex);
+  const deckBox = document.getElementById("decks");
+  const discardBox = document.getElementById("discards");
+  if (deckBox) {
+    deckBox.replaceChildren();
+    for (const deck of shown) deckBox.append(renderDeckTile(config, deck));
+  }
+  if (discardBox) {
+    discardBox.replaceChildren();
+    for (const deck of shown) discardBox.append(renderDiscardTile(config, deck));
+  }
+  syncDeckNav(list.length);
 }
 
 function appendStatusLines(parent: HTMLElement, lines: string[]) {
@@ -1340,6 +1438,7 @@ function applySnapshot(config: EmbeddedConfig, payload: GameSnapshot): boolean {
       : new Set<string>();
   if (channelId !== appliedChannelId) {
     cardPositions = new Map();
+    deckWindowStartIndex = 0;
   }
   appliedChannelId = channelId;
   appliedHistoryKeys = nextKeys;
@@ -1464,6 +1563,7 @@ async function bootstrap() {
   setOrigin(originLine(payload.origin_channel_name));
   setConnected(true);
   bindActionDialog();
+  bindDeckNav();
   enableCardInspectDialog();
 
   // discordSdk.guildId is the SDK field (query param guild_id). The game
