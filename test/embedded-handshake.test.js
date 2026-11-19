@@ -341,9 +341,11 @@ describe("embedded client handshake URLs", () => {
     expect(isPickerFixture("no-game")).toBe(false);
     expect(isPickerFixture("not-a-player")).toBe(false);
     expect(isPickerFixture("host-images")).toBe(false);
+    expect(isPickerFixture("hidden-decks")).toBe(false);
     expect(isSnapshotFixture("no-game")).toBe(true);
     expect(isSnapshotFixture("not-a-player")).toBe(true);
     expect(isSnapshotFixture("host-images")).toBe(true);
+    expect(isSnapshotFixture("hidden-decks")).toBe(true);
     expect(isSnapshotFixture("populated")).toBe(true);
     expect(isSnapshotFixture("team-game")).toBe(true);
     expect(isSnapshotFixture("several-games")).toBe(false);

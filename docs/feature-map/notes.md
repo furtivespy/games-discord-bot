@@ -191,7 +191,7 @@ Launch the embedded Activity in the current channel. `/visual` has no options.
 Visual Deal/Draw persist first; Discord chat and pin updates are best-effort and must not block the next action (FUR-232). `/game delete` then `/game newgame` while that post queue is still draining can still receive leftover lines from the old game; that is accepted (FUR-270). Team groups on the Players rail keep original roster order after `/players first` so teams stay visually stable (FUR-266). Inspect arrows step through Hand and Play Area only, not Game Board (FUR-263). Per-deck discard piles sit under the decks, two-wide, with arrows only when there are more than two (FUR-272).
 
 - Seed: none.
-- Reach: the command reply is covered by `test/visual-command.test.js`. To see the Activity itself, use `bun run control browse`. Team grouping: `bun run control browse --path '/?fixture=team-game&game=team-thread'`. Deal/Draw from a hovered deck, Edit Scores in the Players list, hand-card inspect PLAY / DISCARD / SHOW, and per-deck discard piles: `bun run control browse --path '/?fixture=several-games&game=newest-thread'`.
+- Reach: the command reply is covered by `test/visual-command.test.js`. To see the Activity itself, use `bun run control browse`. Team grouping: `bun run control browse --path '/?fixture=team-game&game=team-thread'`. Deal/Draw from a hovered deck, Edit Scores in the Players list, hand-card inspect PLAY / DISCARD / SHOW, and per-deck discard piles: `bun run control browse --path '/?fixture=several-games&game=newest-thread'`. Hidden draw/discard counts (`0` / `1` / `?`): `bun run control browse --path '/?fixture=hidden-decks'` (FUR-280).
 
 ## /winshare
 

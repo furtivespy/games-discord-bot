@@ -21,6 +21,7 @@ const MOCK_FIXTURE_NAMES = Object.freeze([
   "populated",
   "team-game",
   "host-images",
+  "hidden-decks",
   "no-game",
   "not-a-player",
 ]);
@@ -277,6 +278,21 @@ const MOCK_HOST_BOARD_IMAGES = Object.freeze([
   }),
 ]);
 
+function hiddenDecksSeed() {
+  const seed = populatedSeed();
+  seed.name = "Hidden Decks";
+  seed.decks[0].hiddenInfo = "deck";
+  seed.decks[1].hiddenInfo = "all";
+  seed.decks[1].piles.draw.cards = seed.decks[1].piles.draw.cards.slice(0, 1);
+  seed.decks[1].piles.discard.cards = [];
+  seed.decks[2].hiddenInfo = "deck";
+  seed.decks[2].piles.draw.cards = [];
+  seed.decks[2].piles.discard.cards = [
+    fixtureCard("chaos-discard-1", "Discarded Chaos"),
+  ];
+  return seed;
+}
+
 function hostImagesSeed() {
   const seed = populatedSeed();
   seed.gameBoard = [];
@@ -436,6 +452,7 @@ function createMockGameSession() {
   function loadSeed(name) {
     if (name === "team-game") return teamGameSeed();
     if (name === "host-images") return hostImagesSeed();
+    if (name === "hidden-decks") return hiddenDecksSeed();
     return populatedSeed();
   }
 
@@ -642,6 +659,7 @@ module.exports = {
   getMockGames,
   getMockSnapshot,
   handleMockTokenExchange,
+  hiddenDecksSeed,
   hostImagesSeed,
   isEmbeddedAppMockEnabled,
   isEmbeddedAppMockRequested,

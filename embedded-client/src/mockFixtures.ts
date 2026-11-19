@@ -13,6 +13,7 @@ export const SNAPSHOT_FIXTURES = [
   "populated",
   "team-game",
   "host-images",
+  "hidden-decks",
   "no-game",
   "not-a-player",
 ] as const;
