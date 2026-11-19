@@ -22,6 +22,7 @@ const {
   TEAM_GAME_FIXTURE,
   getMockGames,
   getMockSnapshot,
+  hiddenDecksSeed,
   hostImagesSeed,
   isEmbeddedAppMockEnabled,
   MOCK_HOST_BOARD_IMAGES,
@@ -192,6 +193,26 @@ describe("mock snapshot fixtures", () => {
     expect(result.body.hand).toHaveLength(5);
   });
 
+  test("hidden-decks fixture paints 0 / 1 / ? draw and discard counts", () => {
+    const result = getMockSnapshot({ fixture: "hidden-decks" });
+    expect(result.status).toBe(200);
+    expect(result.body.gameName).toBe("Hidden Decks");
+    expect(hiddenDecksSeed().decks.map((deck) => deck.hiddenInfo)).toEqual([
+      "deck",
+      "all",
+      "deck",
+    ]);
+    expect(result.body.decks).toEqual([
+      { name: "Main", remaining: "?", total: "?", discard: "?" },
+      { name: "Events", remaining: 1, total: "?", discard: 0 },
+      { name: "Unused Chaos Deck", remaining: 0, total: "?", discard: 1 },
+    ]);
+    const json = JSON.stringify(result.body);
+    expect(json).not.toContain('"remaining":30');
+    expect(json).not.toContain('"discard":4');
+    expect(json).not.toContain("Discarded Chaos");
+    expect(json).not.toContain("Discarded Copper");
+  });
 
   test("never includes another player's hand, draft, or simultaneous cards", () => {
     const seed = populatedSeed();
