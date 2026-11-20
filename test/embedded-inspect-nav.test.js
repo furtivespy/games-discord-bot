@@ -10,6 +10,7 @@ const {
   inspectKeyCommand,
   inspectZoomState,
   isInspectTypingTarget,
+  INSPECT_SUPPRESS_CLICK_MS,
   openCardInspect,
   setInspectCardActionHandler,
 } = require("../embedded-client/src/cardInspect.ts");
@@ -639,7 +640,14 @@ describe("inspect photo wheel zoom and pan", () => {
     }
   }
 
-  function panPhoto(
+  async function leftoverClick(dialog, target, x, y) {
+    // A leftover click is a later task, not the same turn as pointerup.
+    // Waiting a microtask fails if suppress is cleared with queueMicrotask.
+    await Promise.resolve();
+    dialog.dispatchEvent(clickEvent(target, x, y));
+  }
+
+  async function panPhoto(
     document,
     dialog,
     art,
@@ -655,7 +663,7 @@ describe("inspect photo wheel zoom and pan", () => {
     // leftover to the art (current) or the dialog (older path); both look
     // like an outside click unless the overlay swallows them.
     if (leftoverTarget) {
-      dialog.dispatchEvent(clickEvent(leftoverTarget, to.x, to.y));
+      await leftoverClick(dialog, leftoverTarget, to.x, to.y);
     }
   }
 
@@ -731,13 +739,13 @@ describe("inspect photo wheel zoom and pan", () => {
     expect(inspectZoomState().scale).toBeGreaterThan(1);
   });
 
-  test("zoomed photos pan with the pointer; a pan does not close", () => {
+  test("zoomed photos pan with the pointer; a pan does not close", async () => {
     const { document, dialog, art } = openSizedPhoto();
     zoomIn(art);
     expect(inspectZoomState().scale).toBeGreaterThan(1);
     const before = inspectZoomState();
 
-    panPhoto(document, dialog, art);
+    await panPhoto(document, dialog, art);
     expect(dialog.classList.contains("is-panning")).toBe(false);
     expect(dialog.open).toBe(true);
     expect(inspectZoomState().panX).not.toBe(before.panX);
@@ -745,15 +753,15 @@ describe("inspect photo wheel zoom and pan", () => {
     expect(art.pointerCaptureId).toBeNull();
   });
 
-  test("leftover pan-end click on the photo also does not close", () => {
+  test("leftover pan-end click on the photo also does not close", async () => {
     const { document, dialog, art } = openSizedPhoto();
     zoomIn(art);
-    panPhoto(document, dialog, art, { x: 150, y: 140 }, { x: 130, y: 130 }, art);
+    await panPhoto(document, dialog, art, { x: 150, y: 140 }, { x: 130, y: 130 }, art);
     expect(dialog.open).toBe(true);
     expect(inspectZoomState().scale).toBeGreaterThan(1);
   });
 
-  test("releasing a pan does not close when the ending click targets the dialog", () => {
+  test("releasing a pan does not close when the ending click targets the dialog", async () => {
     const { document, dialog, art } = openSizedPhoto();
     zoomIn(art);
     const from = { x: 150, y: 140 };
@@ -768,12 +776,12 @@ describe("inspect photo wheel zoom and pan", () => {
     expect(art.pointerCaptureId).toBeNull();
     // Pan-ending compatibility click: browsers retarget this at the capture
     // element. When that was the dialog, target === dialog and used to close.
-    dialog.dispatchEvent(clickEvent(dialog, to.x, to.y));
+    await leftoverClick(dialog, dialog, to.x, to.y);
     expect(dialog.open).toBe(true);
     expect(dialog.classList.contains("is-panning")).toBe(false);
   });
 
-  test("releasing a pan over the backdrop does not close; a later outside click does", () => {
+  test("releasing a pan over the backdrop does not close; a later outside click does", async () => {
     const { document, dialog, art } = openSizedPhoto();
     zoomIn(art);
 
@@ -782,7 +790,7 @@ describe("inspect photo wheel zoom and pan", () => {
     document.dispatchEvent(pointerEvent("pointermove", art, 10, 10));
     art.dispatchEvent(pointerEvent("pointerup", art, 10, 10));
     document.dispatchEvent(pointerEvent("pointerup", art, 10, 10));
-    dialog.dispatchEvent(clickEvent(dialog, 10, 10));
+    await leftoverClick(dialog, dialog, 10, 10);
     expect(dialog.open).toBe(true);
 
     dialog.dispatchEvent(clickEvent(dialog, 10, 10));
@@ -790,10 +798,21 @@ describe("inspect photo wheel zoom and pan", () => {
     expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
   });
 
-  test("X still closes after a pan", () => {
+  test("a leftover pan-end click after the suppress window is a genuine outside click", async () => {
+    const { document, dialog, art } = openSizedPhoto();
+    zoomIn(art);
+    await panPhoto(document, dialog, art, { x: 150, y: 140 }, { x: 130, y: 130 }, null);
+    expect(dialog.open).toBe(true);
+
+    await new Promise((resolve) => setTimeout(resolve, INSPECT_SUPPRESS_CLICK_MS + 20));
+    dialog.dispatchEvent(clickEvent(dialog, 10, 10));
+    expect(dialog.open).toBe(false);
+  });
+
+  test("X still closes after a pan", async () => {
     const { document, dialog, art, closeBtn } = openSizedPhoto();
     zoomIn(art);
-    panPhoto(document, dialog, art);
+    await panPhoto(document, dialog, art);
     expect(dialog.open).toBe(true);
 
     dialog.dispatchEvent(clickEvent(closeBtn, 190, 20));
@@ -801,10 +820,10 @@ describe("inspect photo wheel zoom and pan", () => {
     expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
   });
 
-  test("clicking outside after a pan closes without an intervening art click", () => {
+  test("clicking outside after a pan closes without an intervening art click", async () => {
     const { document, dialog, art } = openSizedPhoto();
     zoomIn(art);
-    panPhoto(document, dialog, art);
+    await panPhoto(document, dialog, art);
     expect(dialog.open).toBe(true);
 
     dialog.dispatchEvent(clickEvent(dialog, 10, 10));
@@ -812,7 +831,7 @@ describe("inspect photo wheel zoom and pan", () => {
     expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
   });
 
-  test("nav still steps after a pan", () => {
+  test("nav still steps after a pan", async () => {
     const { document, dialog, next } = installInspectDocument();
     const art = document.getElementById("card-inspect-art");
     const photos = [
@@ -822,7 +841,7 @@ describe("inspect photo wheel zoom and pan", () => {
     openCardInspect(photos[0].card, photos[0].imageSrc, photos[0].tile, photos);
     sizePhotoArt(art, { naturalWidth: 400, naturalHeight: 100, box: photoBox });
     zoomIn(art);
-    panPhoto(document, dialog, art);
+    await panPhoto(document, dialog, art);
     expect(dialog.open).toBe(true);
 
     dialog.dispatchEvent(clickEvent(next, 230, 140));
@@ -831,10 +850,10 @@ describe("inspect photo wheel zoom and pan", () => {
     expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
   });
 
-  test("document pan listeners unbind on pointerup, pointercancel, lostpointercapture, and close", () => {
+  test("document pan listeners unbind on pointerup, pointercancel, lostpointercapture, and close", async () => {
     const { document, dialog, art } = openSizedPhoto();
     zoomIn(art);
-    panPhoto(document, dialog, art);
+    await panPhoto(document, dialog, art);
     const afterPan = inspectZoomState();
     document.dispatchEvent(pointerEvent("pointermove", art, 10, 10));
     expect(inspectZoomState()).toEqual(afterPan);
@@ -1498,12 +1517,14 @@ try {
   art.dispatchEvent(pointer("pointerdown", cx, cy));
   art.dispatchEvent(pointer("pointermove", cx + 40, cy + 50));
   art.dispatchEvent(pointer("pointerup", cx + 40, cy + 50));
+  await Promise.resolve();
   dialog.dispatchEvent(clickAt(cx + 40, cy + 50));
   const openAfterPanClick = dialog.open;
   const afterPan = inspectZoomState();
   art.dispatchEvent(pointer("pointerdown", cx, cy));
   art.dispatchEvent(pointer("pointermove", 8, 8));
   art.dispatchEvent(pointer("pointerup", 8, 8));
+  await Promise.resolve();
   dialog.dispatchEvent(clickAt(8, 8));
   const openAfterBackdropRelease = dialog.open;
   dialog.dispatchEvent(clickAt(8, 8));

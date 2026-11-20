@@ -73,7 +73,7 @@ const ACTIONS_ID = "card-inspect-actions";
 const ERROR_ID = "card-inspect-error";
 
 /** Keep the pan-ending click suppressed until the browser has dispatched it. */
-const INSPECT_SUPPRESS_CLICK_MS = 50;
+export const INSPECT_SUPPRESS_CLICK_MS = 50;
 
 let inspectBoundDocument: Document | null = null;
 let inspectItems: InspectSequenceItem[] = [];
