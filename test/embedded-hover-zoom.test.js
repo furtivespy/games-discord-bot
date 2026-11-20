@@ -28,6 +28,7 @@ const {
 const STYLE_PATH = path.join(__dirname, "..", "embedded-client", "src", "style.css");
 const MAIN_PATH = path.join(__dirname, "..", "embedded-client", "src", "main.ts");
 const HOVER_ZOOM_PATH = path.join(__dirname, "..", "embedded-client", "src", "hoverZoom.ts");
+const DRAG_PATH = path.join(__dirname, "..", "embedded-client", "src", "drag.ts");
 
 const REST = { width: 128, height: 179 };
 const CORNERS = ["top-left", "top-right", "bottom-left", "bottom-right"];
@@ -731,6 +732,96 @@ try {
 }
 `;
 
+const SNAP_HARNESS_JS = `
+function frame() {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function box(el) {
+  const r = el.getBoundingClientRect();
+  return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+}
+
+function pointer(type, clientX, clientY) {
+  return new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    pointerId: 1,
+    pointerType: "mouse",
+    button: 0,
+    buttons: type === "pointerup" || type === "pointercancel" ? 0 : 1,
+    clientX,
+    clientY,
+  });
+}
+
+async function report(body) {
+  await fetch("/result", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+try {
+  const { enableHoverZoomClamp } = await import("/hover-zoom.js");
+  const { enableCardDrag, SNAP_BACK_DURATION_MS, CLICK_SLOP_PX } = await import("/drag.js");
+  const tile = document.querySelector('[data-card-id="edge-1"]');
+  const face = tile.querySelector(".card-face");
+  const table = document.getElementById("table");
+  const main = document.getElementById("table-main");
+  await frame();
+  tile.classList.add("measure-hover");
+  enableHoverZoomClamp(tile);
+  enableCardDrag(tile, "edge-1", new Map());
+  const rest = tile.getBoundingClientRect();
+  const start = { x: rest.left + 40, y: rest.top + 40 };
+  tile.dispatchEvent(pointer("pointerenter", start.x, start.y));
+  await frame();
+  await frame();
+  const hoveredX = getComputedStyle(tile).getPropertyValue("--hover-shift-x").trim();
+  const hoveredY = getComputedStyle(tile).getPropertyValue("--hover-shift-y").trim();
+  const end = { x: start.x + CLICK_SLOP_PX + 24, y: start.y + 12 };
+  tile.dispatchEvent(pointer("pointerdown", start.x, start.y));
+  document.dispatchEvent(pointer("pointermove", end.x, end.y));
+  // Real pointerup bubbles from the tile (hoverZoom) to document (drag).
+  tile.dispatchEvent(pointer("pointerup", end.x, end.y));
+  document.dispatchEvent(pointer("pointerup", end.x, end.y));
+  await Promise.resolve();
+  const midShiftX = getComputedStyle(tile).getPropertyValue("--hover-shift-x").trim();
+  const midSnapping = tile.classList.contains("snapping");
+  // Wait for the CSS snap, not a synthesized transitionend or a moved rect.
+  await wait(SNAP_BACK_DURATION_MS + 200);
+  await frame();
+  await frame();
+  const tableBox = box(table);
+  const mainBox = box(main);
+  const clip = {
+    left: Math.max(tableBox.left, mainBox.left),
+    top: Math.max(tableBox.top, mainBox.top),
+    right: Math.min(tableBox.right, mainBox.right),
+    bottom: Math.min(tableBox.bottom, mainBox.bottom),
+  };
+  await report({
+    hoveredX,
+    hoveredY,
+    midShiftX,
+    midSnapping,
+    snapping: tile.classList.contains("snapping"),
+    shiftX: getComputedStyle(tile).getPropertyValue("--hover-shift-x").trim(),
+    shiftY: getComputedStyle(tile).getPropertyValue("--hover-shift-y").trim(),
+    face: box(face),
+    clip,
+  });
+} catch (error) {
+  await report({ error: String(error && error.stack ? error.stack : error) });
+}
+`;
+
 describe("hover zoom stays inside the board window", () => {
   const chrome = workingChromeBin();
   let server;
@@ -756,15 +847,22 @@ describe("hover zoom stays inside the board window", () => {
     cleanup();
   });
 
-  test.skipIf(!chrome)("QA: top-left hover zoom is clamped inside #table-main", async () => {
+  async function launchHoverChrome(harnessJs) {
     const css = fs.readFileSync(STYLE_PATH, "utf8");
-    const built = await Bun.build({
+    const hoverBuilt = await Bun.build({
       entrypoints: [HOVER_ZOOM_PATH],
       target: "browser",
       format: "esm",
     });
-    expect(built.success).toBe(true);
-    const hoverJs = await built.outputs[0].text();
+    expect(hoverBuilt.success).toBe(true);
+    const hoverJs = await hoverBuilt.outputs[0].text();
+    const dragBuilt = await Bun.build({
+      entrypoints: [DRAG_PATH],
+      target: "browser",
+      format: "esm",
+    });
+    expect(dragBuilt.success).toBe(true);
+    const dragJs = await dragBuilt.outputs[0].text();
 
     let resolveResult;
     const resultPromise = new Promise((resolve) => {
@@ -785,8 +883,13 @@ describe("hover zoom stays inside the board window", () => {
             headers: { "Content-Type": "text/javascript; charset=utf-8" },
           });
         }
+        if (url.pathname === "/drag.js") {
+          return new Response(dragJs, {
+            headers: { "Content-Type": "text/javascript; charset=utf-8" },
+          });
+        }
         if (url.pathname === "/harness.js") {
-          return new Response(HOVER_HARNESS_JS, {
+          return new Response(harnessJs, {
             headers: { "Content-Type": "text/javascript; charset=utf-8" },
           });
         }
@@ -818,12 +921,16 @@ describe("hover zoom stays inside the board window", () => {
       { stdio: "ignore" }
     );
 
-    const result = await Promise.race([
+    return Promise.race([
       resultPromise,
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error("timed out waiting for Chrome hover-zoom result")), 20000)
       ),
     ]);
+  }
+
+  test.skipIf(!chrome)("QA: top-left hover zoom is clamped inside #table-main", async () => {
+    const result = await launchHoverChrome(HOVER_HARNESS_JS);
 
     expect(result.error).toBeUndefined();
     expect(result.unclamped.left).toBeLessThan(result.clip.left - 1);
@@ -834,5 +941,22 @@ describe("hover zoom stays inside the board window", () => {
     expect(result.clamped.top).toBeGreaterThanOrEqual(result.clip.top - 0.5);
     expect(result.clamped.right).toBeLessThanOrEqual(result.clip.right + 0.5);
     expect(result.clamped.bottom).toBeLessThanOrEqual(result.clip.bottom + 0.5);
+  });
+
+  test.skipIf(!chrome)("QA: snap-back while hovered reclamps after the tile rests", async () => {
+    const result = await launchHoverChrome(SNAP_HARNESS_JS);
+
+    expect(result.error).toBeUndefined();
+    expect(result.hoveredX).not.toBe("");
+    expect(Number.parseFloat(result.hoveredY)).toBeGreaterThan(0);
+    expect(result.midSnapping).toBe(true);
+    expect(result.midShiftX).toBe("");
+    expect(result.snapping).toBe(false);
+    expect(Number.parseFloat(result.shiftX)).toBeGreaterThan(0);
+    expect(Number.parseFloat(result.shiftY)).toBeGreaterThan(0);
+    expect(result.face.left).toBeGreaterThanOrEqual(result.clip.left - 0.5);
+    expect(result.face.top).toBeGreaterThanOrEqual(result.clip.top - 0.5);
+    expect(result.face.right).toBeLessThanOrEqual(result.clip.right + 0.5);
+    expect(result.face.bottom).toBeLessThanOrEqual(result.clip.bottom + 0.5);
   });
 });
