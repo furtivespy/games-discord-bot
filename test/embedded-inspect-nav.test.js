@@ -8,6 +8,7 @@ const {
   closeCardInspect,
   closeInspectAfterFailedAction,
   inspectKeyCommand,
+  inspectZoomState,
   isInspectTypingTarget,
   openCardInspect,
   setInspectCardActionHandler,
@@ -17,6 +18,7 @@ const { isSnapshotPollBlocked } = require("../embedded-client/src/snapshotPoll.t
 
 const STYLE_PATH = path.join(__dirname, "..", "embedded-client", "src", "style.css");
 const HTML_PATH = path.join(__dirname, "..", "embedded-client", "index.html");
+const CARD_INSPECT_PATH = path.join(__dirname, "..", "embedded-client", "src", "cardInspect.ts");
 
 class FakeElement {
   constructor(tagName, id = "") {
@@ -34,6 +36,18 @@ class FakeElement {
     this.attributes = {};
     this.classSet = new Set();
     this.listeners = new Map();
+    this.styleProps = {};
+    this.pointerCaptureId = null;
+    this.boundingRect = { left: 0, top: 0, width: 0, height: 0 };
+    this.style = {
+      setProperty: (name, value) => {
+        this.styleProps[name] = String(value);
+      },
+      getPropertyValue: (name) => this.styleProps[name] || "",
+      removeProperty: (name) => {
+        delete this.styleProps[name];
+      },
+    };
     this.classList = {
       add: (name) => this.classSet.add(name),
       remove: (name) => this.classSet.delete(name),
@@ -148,14 +162,40 @@ class FakeElement {
     return copy;
   }
 
+  setPointerCapture(pointerId) {
+    this.pointerCaptureId = pointerId;
+  }
+
+  releasePointerCapture(pointerId) {
+    if (this.pointerCaptureId === pointerId) this.pointerCaptureId = null;
+  }
+
+  getBoundingClientRect() {
+    const rect = this.boundingRect;
+    return {
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+      right: rect.left + rect.width,
+      bottom: rect.top + rect.height,
+    };
+  }
+
   addEventListener(type, fn) {
     const list = this.listeners.get(type) || [];
     list.push(fn);
     this.listeners.set(type, list);
   }
 
+  removeEventListener(type, fn) {
+    const list = (this.listeners.get(type) || []).filter((handler) => handler !== fn);
+    this.listeners.set(type, list);
+  }
+
   dispatchEvent(event) {
     for (const handler of this.listeners.get(event.type) || []) handler(event);
+    maybeCloseDialogFromClick(event);
     return true;
   }
 
@@ -178,19 +218,22 @@ class FakeHTMLImageElement extends FakeHTMLElement {
     this.naturalWidth = 0;
     this.naturalHeight = 0;
     this.complete = false;
-    this.boundingRect = { left: 0, top: 0, width: 0, height: 0 };
   }
+}
 
-  getBoundingClientRect() {
-    const rect = this.boundingRect;
-    return {
-      left: rect.left,
-      top: rect.top,
-      width: rect.width,
-      height: rect.height,
-      right: rect.left + rect.width,
-      bottom: rect.top + rect.height,
-    };
+function maybeCloseDialogFromClick(event) {
+  if (!event || event.type !== "click") return;
+  if (typeof event.wasPrevented === "function" && event.wasPrevented()) return;
+  if (event.defaultPrevented) return;
+  const target = event.target;
+  if (!target || typeof target.closest !== "function") return;
+  const button = target.closest(".card-inspect-close");
+  if (!button) return;
+  const form = button.closest("form");
+  if (!form || form.getAttribute("method") !== "dialog") return;
+  const dialog = form.closest("dialog") || form.parentNode;
+  if (dialog && typeof dialog.close === "function" && dialog.open) {
+    dialog.close();
   }
 }
 class FakeHTMLDialogElement extends FakeHTMLElement {
@@ -213,11 +256,23 @@ function installInspectDocument({ showModalThrows = false } = {}) {
       throw new Error("showModal unavailable");
     };
   }
-  put(nodes, new FakeHTMLImageElement("card-inspect-art"));
-  put(nodes, new FakeHTMLElement("DIV", "card-inspect-proxy"));
-  put(nodes, new FakeHTMLElement("P", "card-inspect-title"));
-  put(nodes, new FakeHTMLElement("P", "card-inspect-caption"));
-  put(nodes, new FakeHTMLElement("DIV", "card-inspect-meta"));
+  const closeForm = new FakeHTMLElement("FORM");
+  closeForm.setAttribute("method", "dialog");
+  closeForm.classList.add("card-inspect-close-form");
+  const closeBtn = new FakeHTMLElement("BUTTON");
+  closeBtn.classList.add("card-inspect-close");
+  closeBtn.setAttribute("type", "submit");
+  closeBtn.setAttribute("aria-label", "Close");
+  closeForm.append(closeBtn);
+  dialog.append(closeForm);
+
+  const sheet = new FakeHTMLElement("DIV");
+  sheet.classList.add("card-inspect-sheet");
+  const art = put(nodes, new FakeHTMLImageElement("card-inspect-art"));
+  const proxy = put(nodes, new FakeHTMLElement("DIV", "card-inspect-proxy"));
+  const title = put(nodes, new FakeHTMLElement("P", "card-inspect-title"));
+  const caption = put(nodes, new FakeHTMLElement("P", "card-inspect-caption"));
+  const meta = put(nodes, new FakeHTMLElement("DIV", "card-inspect-meta"));
   const actions = put(nodes, new FakeHTMLElement("DIV", "card-inspect-actions"));
   actions.hidden = true;
   for (const action of ["play", "discard", "show"]) {
@@ -229,6 +284,9 @@ function installInspectDocument({ showModalThrows = false } = {}) {
   }
   const inspectError = put(nodes, new FakeHTMLElement("P", "card-inspect-error"));
   inspectError.hidden = true;
+  sheet.append(art, proxy, actions, meta, inspectError);
+  meta.append(title, caption);
+  dialog.append(sheet);
   const prev = put(nodes, new FakeHTMLElement("BUTTON", "card-inspect-prev"));
   prev.hidden = true;
   prev.dataset.inspectNav = "prev";
@@ -273,7 +331,7 @@ function installInspectDocument({ showModalThrows = false } = {}) {
   globalThis.HTMLDialogElement = FakeHTMLDialogElement;
   globalThis.document = document;
 
-  return { document, dialog, prev, next, actions, input, textarea, select, editable };
+  return { document, dialog, closeBtn, sheet, prev, next, actions, input, textarea, select, editable };
 }
 
 function makeTile(label) {
@@ -311,13 +369,22 @@ function dispatchKey(document, key, target) {
 }
 
 function clickEvent(target, clientX = 0, clientY = 0) {
+  let prevented = false;
   return {
     type: "click",
     target,
     clientX,
     clientY,
-    preventDefault() {},
+    preventDefault() {
+      prevented = true;
+    },
     stopPropagation() {},
+    wasPrevented() {
+      return prevented;
+    },
+    get defaultPrevented() {
+      return prevented;
+    },
   };
 }
 
@@ -326,6 +393,10 @@ function sizePhotoArt(art, { naturalWidth, naturalHeight, box }) {
   art.naturalHeight = naturalHeight;
   art.complete = true;
   art.boundingRect = box;
+  const sheet = art.parentNode;
+  if (sheet && typeof sheet.classList?.contains === "function" && sheet.classList.contains("card-inspect-sheet")) {
+    sheet.boundingRect = box;
+  }
 }
 
 function handSequence() {
@@ -514,6 +585,334 @@ describe("inspect overlay click-outside", () => {
 
     dialog.dispatchEvent(clickEvent(art, 150, 50));
     expect(dialog.open).toBe(true);
+  });
+});
+
+function wheelEvent(target, deltaY, clientX, clientY) {
+  let prevented = false;
+  return {
+    type: "wheel",
+    target,
+    deltaY,
+    clientX,
+    clientY,
+    button: 0,
+    preventDefault() {
+      prevented = true;
+    },
+    stopPropagation() {},
+    wasPrevented() {
+      return prevented;
+    },
+  };
+}
+
+function pointerEvent(type, target, clientX, clientY, extras = {}) {
+  return {
+    type,
+    target,
+    clientX,
+    clientY,
+    button: 0,
+    pointerId: 1,
+    preventDefault() {},
+    stopPropagation() {},
+    ...extras,
+  };
+}
+
+describe("inspect photo wheel zoom and pan", () => {
+  const photoBox = { left: 50, top: 40, width: 200, height: 200 };
+  const photo = { id: "host-image:m1:a1", name: "Image" };
+
+  function openSizedPhoto() {
+    const ctx = installInspectDocument();
+    const art = ctx.document.getElementById("card-inspect-art");
+    openCardInspect(photo, "/photo.png", makeTile("Image"));
+    sizePhotoArt(art, { naturalWidth: 400, naturalHeight: 100, box: photoBox });
+    return { ...ctx, art };
+  }
+
+  function zoomIn(art, steps = 9) {
+    for (let i = 0; i < steps; i += 1) {
+      art.dispatchEvent(wheelEvent(art, -100, 150, 140));
+    }
+  }
+
+  function panPhoto(
+    document,
+    dialog,
+    art,
+    from = { x: 150, y: 140 },
+    to = { x: 130, y: 130 },
+    leftoverTarget = dialog
+  ) {
+    dialog.dispatchEvent(pointerEvent("pointerdown", art, from.x, from.y));
+    document.dispatchEvent(pointerEvent("pointermove", art, to.x, to.y));
+    document.dispatchEvent(pointerEvent("pointermove", art, Number.NaN, 10));
+    document.dispatchEvent(pointerEvent("pointerup", art, to.x, to.y));
+    // Real browsers fire click after pointerup. Capture can retarget that
+    // leftover to the art (current) or the dialog (older path); both look
+    // like an outside click unless the overlay swallows them.
+    if (leftoverTarget) {
+      dialog.dispatchEvent(clickEvent(leftoverTarget, to.x, to.y));
+    }
+  }
+
+  test("wheel up zooms in toward the cursor and will not shrink below the fitted size", () => {
+    const { dialog, art } = openSizedPhoto();
+    expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+
+    const letterbox = wheelEvent(art, -100, 150, 50);
+    art.dispatchEvent(letterbox);
+    expect(letterbox.wasPrevented()).toBe(false);
+    expect(inspectZoomState().scale).toBe(1);
+
+    const zoomOut = wheelEvent(art, 120, 150, 140);
+    art.dispatchEvent(zoomOut);
+    expect(zoomOut.wasPrevented()).toBe(false);
+    expect(inspectZoomState().scale).toBe(1);
+    expect(dialog.classList.contains("is-zoomed")).toBe(false);
+
+    const zoomInEvent = wheelEvent(art, -100, 150, 140);
+    art.dispatchEvent(zoomInEvent);
+    expect(zoomInEvent.wasPrevented()).toBe(true);
+    expect(inspectZoomState().scale).toBeGreaterThan(1);
+    expect(inspectZoomState().scale).toBeLessThanOrEqual(4);
+    expect(dialog.classList.contains("is-zoomed")).toBe(true);
+    expect(dialog.style.getPropertyValue("--inspect-zoom")).toBe(String(inspectZoomState().scale));
+
+    for (let i = 0; i < 24; i += 1) {
+      art.dispatchEvent(wheelEvent(art, -100, 150, 140));
+    }
+    expect(inspectZoomState().scale).toBe(4);
+
+    const atCap = wheelEvent(art, -100, 150, 140);
+    art.dispatchEvent(atCap);
+    expect(atCap.wasPrevented()).toBe(false);
+    expect(inspectZoomState().scale).toBe(4);
+
+    const fromCap = wheelEvent(art, 100, 150, 140);
+    art.dispatchEvent(fromCap);
+    expect(fromCap.wasPrevented()).toBe(true);
+    expect(inspectZoomState().scale).toBeLessThan(4);
+    expect(inspectZoomState().scale).toBeGreaterThanOrEqual(1);
+  });
+
+  test("wheel-down at 1× does nothing, never goes below fitted, and does not steal scroll", () => {
+    const { dialog, art } = openSizedPhoto();
+    for (let i = 0; i < 8; i += 1) {
+      const event = wheelEvent(art, 100, 150, 140);
+      art.dispatchEvent(event);
+      expect(event.wasPrevented()).toBe(false);
+      expect(inspectZoomState().scale).toBe(1);
+    }
+    expect(dialog.classList.contains("is-zoomed")).toBe(false);
+
+    zoomIn(art);
+    expect(inspectZoomState().scale).toBeGreaterThan(1);
+    for (let i = 0; i < 40; i += 1) {
+      art.dispatchEvent(wheelEvent(art, 100, 150, 140));
+    }
+    expect(inspectZoomState().scale).toBe(1);
+  });
+
+  test("wheel on dialog chrome does not zoom or preventDefault", () => {
+    const { dialog, art } = openSizedPhoto();
+    const chrome = wheelEvent(dialog, -100, 10, 10);
+    dialog.dispatchEvent(chrome);
+    expect(chrome.wasPrevented()).toBe(false);
+    expect(inspectZoomState().scale).toBe(1);
+
+    zoomIn(art);
+    const overChromeWhileZoomed = wheelEvent(dialog, 100, 10, 10);
+    dialog.dispatchEvent(overChromeWhileZoomed);
+    expect(overChromeWhileZoomed.wasPrevented()).toBe(false);
+    expect(inspectZoomState().scale).toBeGreaterThan(1);
+  });
+
+  test("zoomed photos pan with the pointer; a pan does not close", () => {
+    const { document, dialog, art } = openSizedPhoto();
+    zoomIn(art);
+    expect(inspectZoomState().scale).toBeGreaterThan(1);
+    const before = inspectZoomState();
+
+    panPhoto(document, dialog, art);
+    expect(dialog.classList.contains("is-panning")).toBe(false);
+    expect(dialog.open).toBe(true);
+    expect(inspectZoomState().panX).not.toBe(before.panX);
+    expect(inspectZoomState().panY).not.toBe(before.panY);
+    expect(art.pointerCaptureId).toBeNull();
+  });
+
+  test("leftover pan-end click on the photo also does not close", () => {
+    const { document, dialog, art } = openSizedPhoto();
+    zoomIn(art);
+    panPhoto(document, dialog, art, { x: 150, y: 140 }, { x: 130, y: 130 }, art);
+    expect(dialog.open).toBe(true);
+    expect(inspectZoomState().scale).toBeGreaterThan(1);
+  });
+
+  test("releasing a pan does not close when the ending click targets the dialog", () => {
+    const { document, dialog, art } = openSizedPhoto();
+    zoomIn(art);
+    const from = { x: 150, y: 140 };
+    const to = { x: 130, y: 130 };
+
+    dialog.dispatchEvent(pointerEvent("pointerdown", art, from.x, from.y));
+    expect(art.pointerCaptureId).toBe(1);
+    expect(dialog.pointerCaptureId).toBeNull();
+    document.dispatchEvent(pointerEvent("pointermove", art, to.x, to.y));
+    art.dispatchEvent(pointerEvent("pointerup", art, to.x, to.y));
+    document.dispatchEvent(pointerEvent("pointerup", art, to.x, to.y));
+    expect(art.pointerCaptureId).toBeNull();
+    // Pan-ending compatibility click: browsers retarget this at the capture
+    // element. When that was the dialog, target === dialog and used to close.
+    dialog.dispatchEvent(clickEvent(dialog, to.x, to.y));
+    expect(dialog.open).toBe(true);
+    expect(dialog.classList.contains("is-panning")).toBe(false);
+  });
+
+  test("releasing a pan over the backdrop does not close; a later outside click does", () => {
+    const { document, dialog, art } = openSizedPhoto();
+    zoomIn(art);
+
+    dialog.dispatchEvent(pointerEvent("pointerdown", art, 150, 140));
+    expect(art.pointerCaptureId).toBe(1);
+    document.dispatchEvent(pointerEvent("pointermove", art, 10, 10));
+    art.dispatchEvent(pointerEvent("pointerup", art, 10, 10));
+    document.dispatchEvent(pointerEvent("pointerup", art, 10, 10));
+    dialog.dispatchEvent(clickEvent(dialog, 10, 10));
+    expect(dialog.open).toBe(true);
+
+    dialog.dispatchEvent(clickEvent(dialog, 10, 10));
+    expect(dialog.open).toBe(false);
+    expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+  });
+
+  test("X still closes after a pan", () => {
+    const { document, dialog, art, closeBtn } = openSizedPhoto();
+    zoomIn(art);
+    panPhoto(document, dialog, art);
+    expect(dialog.open).toBe(true);
+
+    dialog.dispatchEvent(clickEvent(closeBtn, 190, 20));
+    expect(dialog.open).toBe(false);
+    expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+  });
+
+  test("clicking outside after a pan closes without an intervening art click", () => {
+    const { document, dialog, art } = openSizedPhoto();
+    zoomIn(art);
+    panPhoto(document, dialog, art);
+    expect(dialog.open).toBe(true);
+
+    dialog.dispatchEvent(clickEvent(dialog, 10, 10));
+    expect(dialog.open).toBe(false);
+    expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+  });
+
+  test("nav still steps after a pan", () => {
+    const { document, dialog, next } = installInspectDocument();
+    const art = document.getElementById("card-inspect-art");
+    const photos = [
+      { card: { id: "host-image:m1:a1", name: "One" }, imageSrc: "/one.png", tile: makeTile("One") },
+      { card: { id: "host-image:m1:a2", name: "Two" }, imageSrc: "/two.png", tile: makeTile("Two") },
+    ];
+    openCardInspect(photos[0].card, photos[0].imageSrc, photos[0].tile, photos);
+    sizePhotoArt(art, { naturalWidth: 400, naturalHeight: 100, box: photoBox });
+    zoomIn(art);
+    panPhoto(document, dialog, art);
+    expect(dialog.open).toBe(true);
+
+    dialog.dispatchEvent(clickEvent(next, 230, 140));
+    expect(dialog.open).toBe(true);
+    expect(art.src).toBe("/two.png");
+    expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+  });
+
+  test("document pan listeners unbind on pointerup, pointercancel, lostpointercapture, and close", () => {
+    const { document, dialog, art } = openSizedPhoto();
+    zoomIn(art);
+    panPhoto(document, dialog, art);
+    const afterPan = inspectZoomState();
+    document.dispatchEvent(pointerEvent("pointermove", art, 10, 10));
+    expect(inspectZoomState()).toEqual(afterPan);
+
+    dialog.dispatchEvent(pointerEvent("pointerdown", art, 150, 140));
+    document.dispatchEvent(pointerEvent("pointermove", art, 140, 135));
+    expect(dialog.classList.contains("is-panning")).toBe(true);
+    document.dispatchEvent(pointerEvent("pointercancel", art, 140, 135));
+    expect(dialog.classList.contains("is-panning")).toBe(false);
+    const afterCancel = inspectZoomState();
+    document.dispatchEvent(pointerEvent("pointermove", art, 10, 10));
+    expect(inspectZoomState()).toEqual(afterCancel);
+
+    dialog.dispatchEvent(pointerEvent("pointerdown", art, 150, 140));
+    document.dispatchEvent(pointerEvent("pointermove", art, 140, 135));
+    expect(dialog.classList.contains("is-panning")).toBe(true);
+    art.dispatchEvent(pointerEvent("lostpointercapture", art, 140, 135));
+    expect(dialog.classList.contains("is-panning")).toBe(false);
+    const afterLostOnArt = inspectZoomState();
+    document.dispatchEvent(pointerEvent("pointermove", art, 10, 10));
+    expect(inspectZoomState()).toEqual(afterLostOnArt);
+
+    dialog.dispatchEvent(pointerEvent("pointerdown", art, 150, 140));
+    document.dispatchEvent(pointerEvent("pointermove", art, 140, 135));
+    expect(dialog.classList.contains("is-panning")).toBe(true);
+    dialog.dispatchEvent(pointerEvent("lostpointercapture", art, 140, 135));
+    expect(dialog.classList.contains("is-panning")).toBe(false);
+    const afterLost = inspectZoomState();
+    document.dispatchEvent(pointerEvent("pointermove", art, 10, 10));
+    expect(inspectZoomState()).toEqual(afterLost);
+
+    dialog.dispatchEvent(pointerEvent("pointerdown", art, 150, 140));
+    document.dispatchEvent(pointerEvent("pointermove", art, 140, 135));
+    expect(dialog.classList.contains("is-panning")).toBe(true);
+    closeCardInspect();
+    expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+    document.dispatchEvent(pointerEvent("pointermove", art, 10, 10));
+    expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+  });
+
+  test("pointercancel does not swallow a later outside click", () => {
+    const { document, dialog, art } = openSizedPhoto();
+    zoomIn(art);
+    dialog.dispatchEvent(pointerEvent("pointerdown", art, 150, 140));
+    document.dispatchEvent(pointerEvent("pointermove", art, 140, 135));
+    document.dispatchEvent(pointerEvent("pointercancel", art, 140, 135));
+    expect(dialog.open).toBe(true);
+    expect(dialog.classList.contains("is-panning")).toBe(false);
+
+    dialog.dispatchEvent(clickEvent(dialog, 10, 10));
+    expect(dialog.open).toBe(false);
+  });
+
+  test("card inspect does not zoom, and stepping photos resets zoom", () => {
+    const { document, dialog } = installInspectDocument();
+    const { copper, tiles } = handSequence();
+    const art = document.getElementById("card-inspect-art");
+    openCardInspect(copper, "/copper.png", tiles[0]);
+    sizePhotoArt(art, { naturalWidth: 400, naturalHeight: 100, box: photoBox });
+    const ignored = wheelEvent(art, -100, 150, 140);
+    art.dispatchEvent(ignored);
+    expect(ignored.wasPrevented()).toBe(false);
+    expect(inspectZoomState().scale).toBe(1);
+    expect(dialog.classList.contains("is-zoomed")).toBe(false);
+
+    const photos = [
+      { card: { id: "host-image:m1:a1", name: "One" }, imageSrc: "/one.png", tile: makeTile("One") },
+      { card: { id: "host-image:m1:a2", name: "Two" }, imageSrc: "/two.png", tile: makeTile("Two") },
+    ];
+    openCardInspect(photos[0].card, photos[0].imageSrc, photos[0].tile, photos);
+    sizePhotoArt(art, { naturalWidth: 400, naturalHeight: 100, box: photoBox });
+    art.dispatchEvent(wheelEvent(art, -100, 150, 140));
+    expect(inspectZoomState().scale).toBeGreaterThan(1);
+    const next = document.getElementById("card-inspect-next");
+    dialog.dispatchEvent(clickEvent(next, 230, 140));
+    expect(art.src).toBe("/two.png");
+    expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+    expect(dialog.classList.contains("is-zoomed")).toBe(false);
   });
 });
 
@@ -1041,4 +1440,206 @@ describe("inspect art fits a wide card image", () => {
     expect(Math.abs(result.artCenter - result.sheetCenter)).toBeLessThanOrEqual(8);
   });
 });
+
+const PHOTO_PAN_HARNESS_JS = `
+async function report(body) {
+  await fetch("/result", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+function box(el) {
+  const r = el.getBoundingClientRect();
+  return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+}
+function pointer(type, clientX, clientY) {
+  return new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    pointerId: 1,
+    pointerType: "mouse",
+    button: 0,
+    buttons: type === "pointerup" || type === "pointercancel" ? 0 : 1,
+    clientX,
+    clientY,
+  });
+}
+function clickAt(clientX, clientY) {
+  return new MouseEvent("click", { bubbles: true, cancelable: true, clientX, clientY });
+}
+try {
+  const { openCardInspect, inspectZoomState } = await import("/card-inspect.js");
+  const dialog = document.getElementById("card-inspect");
+  const art = document.getElementById("card-inspect-art");
+  const tile = document.getElementById("photo-tile");
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800">' +
+    '<rect width="800" height="800" fill="#c9a066"/>' +
+    "</svg>";
+  const src = "data:image/svg+xml," + encodeURIComponent(svg);
+  openCardInspect({ id: "host-image:m1:a1", name: "Image" }, src, tile);
+  if (typeof art.decode === "function") await art.decode();
+  else await new Promise((resolve) => { art.onload = resolve; if (art.complete) resolve(); });
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const artBox = box(art);
+  const cx = artBox.left + artBox.width / 2;
+  const cy = artBox.top + artBox.height / 2;
+  for (let i = 0; i < 12; i += 1) {
+    art.dispatchEvent(new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: -100,
+      clientX: cx,
+      clientY: cy,
+    }));
+  }
+  const zoomed = inspectZoomState();
+  art.dispatchEvent(pointer("pointerdown", cx, cy));
+  art.dispatchEvent(pointer("pointermove", cx + 40, cy + 50));
+  art.dispatchEvent(pointer("pointerup", cx + 40, cy + 50));
+  dialog.dispatchEvent(clickAt(cx + 40, cy + 50));
+  const openAfterPanClick = dialog.open;
+  const afterPan = inspectZoomState();
+  art.dispatchEvent(pointer("pointerdown", cx, cy));
+  art.dispatchEvent(pointer("pointermove", 8, 8));
+  art.dispatchEvent(pointer("pointerup", 8, 8));
+  dialog.dispatchEvent(clickAt(8, 8));
+  const openAfterBackdropRelease = dialog.open;
+  dialog.dispatchEvent(clickAt(8, 8));
+  const openAfterOutside = dialog.open;
+  await report({
+    zoomed,
+    afterPan,
+    openAfterPanClick,
+    openAfterBackdropRelease,
+    openAfterOutside,
+    isPhoto: dialog.classList.contains("is-photo"),
+    dialogOpen: dialog.open,
+  });
+} catch (error) {
+  await report({ error: String(error && error.stack ? error.stack : error) });
+}
+`;
+
+function inspectPhotoPanHarness(css, dialogHtml) {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      :root { --ink: #f4efe6; --panel-edge: #5a4c3a; --muted: #c8bba8; }
+      html, body { margin: 0; height: 100%; background: #0c0a08; }
+      ${css}
+    </style>
+  </head>
+  <body>
+    <article id="photo-tile" class="card-tile"><div class="card-face">Image</div></article>
+    ${dialogHtml}
+    <script type="module" src="/harness.js"></script>
+  </body>
+</html>`;
+}
+
+describe("inspect photo pan release in Chrome", () => {
+  const chrome = workingChromeBin();
+  let server;
+  let chromeProc;
+  let userDataDir;
+
+  afterEach(() => {
+    try {
+      chromeProc?.kill("SIGKILL");
+    } catch {}
+    chromeProc = null;
+    try {
+      server?.stop(true);
+    } catch {}
+    server = null;
+    if (userDataDir) {
+      fs.rmSync(userDataDir, { recursive: true, force: true });
+      userDataDir = null;
+    }
+  });
+
+  test.skipIf(!chrome)("QA: releasing a pan does not close; a later outside click does", async () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const html = fs.readFileSync(HTML_PATH, "utf8");
+    const dialogHtml = html.slice(
+      html.indexOf('<dialog id="card-inspect"'),
+      html.indexOf("</dialog>", html.indexOf('<dialog id="card-inspect"')) + "</dialog>".length
+    );
+    const built = await Bun.build({
+      entrypoints: [CARD_INSPECT_PATH],
+      target: "browser",
+      format: "esm",
+    });
+    expect(built.success).toBe(true);
+    const inspectJs = await built.outputs[0].text();
+
+    let resolveResult;
+    const resultPromise = new Promise((resolve) => {
+      resolveResult = resolve;
+    });
+
+    server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const url = new URL(req.url);
+        if (req.method === "POST" && url.pathname === "/result") {
+          resolveResult(await req.json());
+          return new Response("ok");
+        }
+        if (url.pathname === "/card-inspect.js") {
+          return new Response(inspectJs, {
+            headers: { "Content-Type": "text/javascript; charset=utf-8" },
+          });
+        }
+        if (url.pathname === "/harness.js") {
+          return new Response(PHOTO_PAN_HARNESS_JS, {
+            headers: { "Content-Type": "text/javascript; charset=utf-8" },
+          });
+        }
+        return new Response(inspectPhotoPanHarness(css, dialogHtml), {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      },
+    });
+
+    userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "inspect-pan-"));
+    chromeProc = spawn(
+      chrome,
+      [
+        "--headless=new",
+        "--disable-gpu",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--hide-scrollbars",
+        "--no-first-run",
+        "--window-size=900,900",
+        `--user-data-dir=${userDataDir}`,
+        String(server.url),
+      ],
+      { stdio: "ignore" }
+    );
+
+    const result = await Promise.race([
+      resultPromise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("chrome harness timed out")), 20_000)
+      ),
+    ]);
+    expect(result.error).toBeUndefined();
+    expect(result.isPhoto).toBe(true);
+    expect(result.zoomed.scale).toBeGreaterThan(1);
+    expect(result.zoomed.scale).toBeLessThanOrEqual(4);
+    expect(result.afterPan.panX).not.toBe(0);
+    expect(result.afterPan.panY).not.toBe(0);
+    expect(result.openAfterPanClick).toBe(true);
+    expect(result.openAfterBackdropRelease).toBe(true);
+    expect(result.openAfterOutside).toBe(false);
+  });
+});
+
 

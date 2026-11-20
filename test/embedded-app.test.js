@@ -489,6 +489,11 @@ describe("embedded HTTP origin", () => {
     expect(css).toMatch(
       /\.card-inspect-dialog\.is-photo \.card-inspect-art:not\(\[hidden\]\)\s*\{[^}]*width:\s*90vw[^}]*height:\s*90vh[^}]*max-width:\s*90vw[^}]*max-height:\s*90vh/
     );
+    expect(css).toContain("scale(var(--inspect-zoom, 1))");
+    expect(css).toContain("translate(var(--inspect-pan-x, 0px), var(--inspect-pan-y, 0px))");
+    expect(css).toContain(".card-inspect-dialog.is-photo.is-zoomed");
+    expect(css).toContain(".card-inspect-dialog.is-photo.is-panning");
+    expect(html).toMatch(/id="card-inspect-art"[^>]*draggable="false"/);
     expect(css).toMatch(
       /\.card-inspect-sheet\s*\{[^}]*width:\s*min\(44rem,\s*calc\(100vw - 1\.5rem\)\)/
     );
