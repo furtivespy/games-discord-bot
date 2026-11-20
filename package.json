@@ -6,6 +6,7 @@
   "main": "DiscordBot.js",
   "scripts": {
     "test": "bun test",
+    "test:chrome": "bun test test/embedded-card-stacking.test.js test/embedded-hover-zoom.test.js test/embedded-inspect-nav.test.js",
     "lint": "biome lint --diagnostic-level=error .",
     "lint:warnings": "biome lint --max-diagnostics=none --reporter=summary .",
     "verify": "bun run lint && bun test && bun run build:client",

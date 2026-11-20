@@ -1,45 +1,11 @@
 const { afterEach, describe, expect, test } = require("bun:test");
-const { spawn, spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { workingChromeBin } = require("./helpers/chrome.js");
 
 const STYLE_PATH = path.join(__dirname, "..", "embedded-client", "src", "style.css");
 const DRAG_PATH = path.join(__dirname, "..", "embedded-client", "src", "drag.ts");
-
-function chromeBin() {
-  const candidates = [
-    process.env.CHROME_PATH,
-    "google-chrome",
-    "google-chrome-stable",
-    "chromium",
-    "chromium-browser",
-  ].filter(Boolean);
-  for (const bin of candidates) {
-    const result = spawnSync("which", [bin], { encoding: "utf8" });
-    if (result.status === 0) return result.stdout.trim();
-  }
-  return "";
-}
-
-function workingChromeBin() {
-  // GitHub's ubuntu runner may resolve a chromium stub that never paints, so
-  // skip in CI. Locally, require `chrome --version` to succeed quickly.
-  if (process.env.CI) return "";
-  const bin = chromeBin();
-  if (!bin) return "";
-  try {
-    const version = spawnSync(bin, ["--version"], {
-      encoding: "utf8",
-      timeout: 2500,
-    });
-    if (version.status !== 0) return "";
-    const text = `${version.stdout || ""}${version.stderr || ""}`;
-    if (!/Chrom(e|ium)/i.test(text)) return "";
-    return bin;
-  } catch {
-    return "";
-  }
-}
 
 /**
  * Headless Chrome's --window-size is the outer window. Inner CSS viewport is
@@ -656,8 +622,25 @@ function rects(selector) {
   return [...document.querySelectorAll(selector)].map(rect);
 }
 
+async function settled() {
+  const table = document.getElementById("table");
+  const started = performance.now();
+  let last = "";
+  let stable = 0;
+  while (stable < 6 && performance.now() - started < 4000) {
+    await frame();
+    const now = window.innerWidth + "x" + window.innerHeight + ":" + table.getBoundingClientRect().height;
+    stable = now === last ? stable + 1 : 0;
+    last = now;
+  }
+}
+
 try {
-  await frame();
+  // headless Chrome can apply --window-size after the first frame. Wait until
+  // the viewport and table height hold still so geometry and viewport agree.
+  await settled();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
   const table = document.getElementById("table");
   const main = document.getElementById("table-main");
   const hand = document.querySelector(".hand-zone");
@@ -706,8 +689,8 @@ try {
   await frame();
   const zoomed = face.getBoundingClientRect();
   await report({
-    viewportWidth: window.innerWidth,
-    viewportHeight: window.innerHeight,
+    viewportWidth,
+    viewportHeight,
     tableHeight: tableBox.height,
     tableBottom: tableBox.bottom,
     tableTop: tableBox.top,
@@ -1008,6 +991,28 @@ describe("hand zone stays at the bottom of the table", () => {
   }
 
   function expectHandPinned(result, label) {
+    try {
+      assertHandPinned(result, label);
+    } catch (error) {
+      // Boolean flags hide the numbers behind them; show them on failure.
+      const metrics = {
+        handTop: result.handTop,
+        handBottom: result.handBottom,
+        viewportWidth: result.viewportWidth,
+        viewportHeight: result.viewportHeight,
+        tableTop: result.tableTop,
+        tableBottom: result.tableBottom,
+        tableHeight: result.tableHeight,
+        mainBottom: result.mainBottom,
+        gapBelowHand: result.gapBelowHand,
+        windowPad,
+      };
+      error.message = `${error.message}\n\nmetrics for ${label}: ${JSON.stringify(metrics)}`;
+      throw error;
+    }
+  }
+
+  function assertHandPinned(result, label) {
     expect({
       label,
       error: result.error,
