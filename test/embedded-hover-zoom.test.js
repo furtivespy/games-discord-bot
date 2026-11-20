@@ -1,8 +1,9 @@
 const { afterEach, describe, expect, test } = require("bun:test");
-const { spawn, spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { workingChromeBin } = require("./helpers/chrome.js");
 const {
   CARD_HOVER_LIFT_PX,
   CARD_HOVER_SCALE,
@@ -27,39 +28,6 @@ const {
 const STYLE_PATH = path.join(__dirname, "..", "embedded-client", "src", "style.css");
 const MAIN_PATH = path.join(__dirname, "..", "embedded-client", "src", "main.ts");
 const HOVER_ZOOM_PATH = path.join(__dirname, "..", "embedded-client", "src", "hoverZoom.ts");
-
-function chromeBin() {
-  const candidates = [
-    process.env.CHROME_PATH,
-    "google-chrome",
-    "google-chrome-stable",
-    "chromium",
-    "chromium-browser",
-  ].filter(Boolean);
-  for (const bin of candidates) {
-    const result = spawnSync("which", [bin], { encoding: "utf8" });
-    if (result.status === 0) return result.stdout.trim();
-  }
-  return "";
-}
-
-function workingChromeBin() {
-  if (process.env.CI) return "";
-  const bin = chromeBin();
-  if (!bin) return "";
-  try {
-    const version = spawnSync(bin, ["--version"], {
-      encoding: "utf8",
-      timeout: 2500,
-    });
-    if (version.status !== 0) return "";
-    const text = `${version.stdout || ""}${version.stderr || ""}`;
-    if (!/Chrom(e|ium)/i.test(text)) return "";
-    return bin;
-  } catch {
-    return "";
-  }
-}
 
 const REST = { width: 128, height: 179 };
 const CORNERS = ["top-left", "top-right", "bottom-left", "bottom-right"];

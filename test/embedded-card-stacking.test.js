@@ -1,45 +1,11 @@
 const { afterEach, describe, expect, test } = require("bun:test");
-const { spawn, spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { workingChromeBin } = require("./helpers/chrome.js");
 
 const STYLE_PATH = path.join(__dirname, "..", "embedded-client", "src", "style.css");
 const DRAG_PATH = path.join(__dirname, "..", "embedded-client", "src", "drag.ts");
-
-function chromeBin() {
-  const candidates = [
-    process.env.CHROME_PATH,
-    "google-chrome",
-    "google-chrome-stable",
-    "chromium",
-    "chromium-browser",
-  ].filter(Boolean);
-  for (const bin of candidates) {
-    const result = spawnSync("which", [bin], { encoding: "utf8" });
-    if (result.status === 0) return result.stdout.trim();
-  }
-  return "";
-}
-
-function workingChromeBin() {
-  // GitHub's ubuntu runner may resolve a chromium stub that never paints, so
-  // skip in CI. Locally, require `chrome --version` to succeed quickly.
-  if (process.env.CI) return "";
-  const bin = chromeBin();
-  if (!bin) return "";
-  try {
-    const version = spawnSync(bin, ["--version"], {
-      encoding: "utf8",
-      timeout: 2500,
-    });
-    if (version.status !== 0) return "";
-    const text = `${version.stdout || ""}${version.stderr || ""}`;
-    if (!/Chrom(e|ium)/i.test(text)) return "";
-    return bin;
-  } catch {
-    return "";
-  }
-}
 
 /**
  * Headless Chrome's --window-size is the outer window. Inner CSS viewport is

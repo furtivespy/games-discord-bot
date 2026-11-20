@@ -64,9 +64,50 @@ jobs:
           # No Discord token. Each test also mkdtemps GAMEBOT_DATA_DIR; this
           # only keeps any accidental store open out of the repo checkout.
           GAMEBOT_DATA_DIR: ${{ runner.temp }}/gamebot-ci
+          # The headless-Chrome QA tests run in the separate `browser` job.
+          SKIP_CHROME_TESTS: "1"
 
       - name: Build embedded client
         working-directory: embedded-client
         run: |
           bun install --frozen-lockfile
           bun run build
+
+  # Headless-Chrome layout tests (`bun run test:chrome`). Not a required check
+  # yet: promote it in the `protect master` ruleset once it has stayed green.
+  # REQUIRE_CHROME=1 makes a missing or non-painting Chrome fail the job
+  # instead of silently skipping every test.
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      # `canvas` is mocked by test/helpers/preload.js, so skip lifecycle scripts
+      # and the Cairo/Pango build the `test` job needs.
+      - name: Install dependencies
+        run: |
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          bun install --frozen-lockfile --ignore-scripts
+
+      - name: Set up Chrome
+        id: chrome
+        uses: browser-actions/setup-chrome@v2
+        with:
+          chrome-version: stable
+
+      - name: Run Chrome tests
+        run: |
+          "$CHROME_PATH" --version
+          bun run test:chrome
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+          REQUIRE_CHROME: "1"
+          GAMEBOT_DATA_DIR: ${{ runner.temp }}/gamebot-ci
