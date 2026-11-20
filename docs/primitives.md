@@ -41,7 +41,7 @@ The Discord Activity (visual mode): an Express server and a Vite client.
 
 - Code: `modules/embeddedApp.js` (server, `/health`), `embedded-client/` (client), `scripts/embedded-app-mock.js` (mock mode)
 - ADRs: [0003](adr/0003-agent-defaults-to-no.md)
-- Notes: `bun run control browse` screenshots the mock. Real Discord auth and the Activity iframe are not covered. Visual mutations persist before Discord posts; the channel pin and chat line are best-effort so a hung send cannot stall the next Deal/Draw (FUR-232).
+- Notes: `bun run control browse` screenshots the mock. Real Discord auth and the Activity iframe are not covered. Visual mutations persist before Discord posts; the channel pin and chat line are best-effort so a hung send cannot stall the next Deal/Draw (FUR-232). Empty-board host-image lookups cache Discord 429/5xx for 10s or Retry-After; a cached error still shows no photos (FUR-253).
 
 ## Release pipeline
 
@@ -57,4 +57,4 @@ Fake Discord interaction and client used by tests and `bun run control execute`.
 
 - Code: `test/helpers/harness.js`, `test/helpers/preload.js`, `scripts/control/`, `scripts/control-fixtures/`
 - ADRs: none
-- Notes: a fake, not Discord. See `.agents/skills/control-gamebot/SKILL.md` for what it cannot prove.
+- Notes: a fake, not Discord. See `.agents/skills/control-gamebot/SKILL.md` for what it cannot prove. Headless-Chrome layout tests skip only when `SKIP_CHROME_TESTS=1` (the required `test` job sets that); `bun run test:chrome` is the separate `browser` job (FUR-254).
