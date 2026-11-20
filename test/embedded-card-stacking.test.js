@@ -974,6 +974,28 @@ describe("hand zone stays at the bottom of the table", () => {
   }
 
   function expectHandPinned(result, label) {
+    try {
+      assertHandPinned(result, label);
+    } catch (error) {
+      // Boolean flags hide the numbers behind them; show them on failure.
+      const metrics = {
+        handTop: result.handTop,
+        handBottom: result.handBottom,
+        viewportWidth: result.viewportWidth,
+        viewportHeight: result.viewportHeight,
+        tableTop: result.tableTop,
+        tableBottom: result.tableBottom,
+        tableHeight: result.tableHeight,
+        mainBottom: result.mainBottom,
+        gapBelowHand: result.gapBelowHand,
+        windowPad,
+      };
+      error.message = `${error.message}\n\nmetrics for ${label}: ${JSON.stringify(metrics)}`;
+      throw error;
+    }
+  }
+
+  function assertHandPinned(result, label) {
     expect({
       label,
       error: result.error,
