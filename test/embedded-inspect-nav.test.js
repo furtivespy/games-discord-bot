@@ -36,6 +36,7 @@ class FakeElement {
     this.classSet = new Set();
     this.listeners = new Map();
     this.styleProps = {};
+    this.boundingRect = { left: 0, top: 0, width: 0, height: 0 };
     this.style = {
       setProperty: (name, value) => {
         this.styleProps[name] = String(value);
@@ -163,14 +164,32 @@ class FakeElement {
 
   releasePointerCapture() {}
 
+  getBoundingClientRect() {
+    const rect = this.boundingRect;
+    return {
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+      right: rect.left + rect.width,
+      bottom: rect.top + rect.height,
+    };
+  }
+
   addEventListener(type, fn) {
     const list = this.listeners.get(type) || [];
     list.push(fn);
     this.listeners.set(type, list);
   }
 
+  removeEventListener(type, fn) {
+    const list = (this.listeners.get(type) || []).filter((handler) => handler !== fn);
+    this.listeners.set(type, list);
+  }
+
   dispatchEvent(event) {
     for (const handler of this.listeners.get(event.type) || []) handler(event);
+    maybeCloseDialogFromClick(event);
     return true;
   }
 
@@ -193,19 +212,22 @@ class FakeHTMLImageElement extends FakeHTMLElement {
     this.naturalWidth = 0;
     this.naturalHeight = 0;
     this.complete = false;
-    this.boundingRect = { left: 0, top: 0, width: 0, height: 0 };
   }
+}
 
-  getBoundingClientRect() {
-    const rect = this.boundingRect;
-    return {
-      left: rect.left,
-      top: rect.top,
-      width: rect.width,
-      height: rect.height,
-      right: rect.left + rect.width,
-      bottom: rect.top + rect.height,
-    };
+function maybeCloseDialogFromClick(event) {
+  if (!event || event.type !== "click") return;
+  if (typeof event.wasPrevented === "function" && event.wasPrevented()) return;
+  if (event.defaultPrevented) return;
+  const target = event.target;
+  if (!target || typeof target.closest !== "function") return;
+  const button = target.closest(".card-inspect-close");
+  if (!button) return;
+  const form = button.closest("form");
+  if (!form || form.getAttribute("method") !== "dialog") return;
+  const dialog = form.closest("dialog") || form.parentNode;
+  if (dialog && typeof dialog.close === "function" && dialog.open) {
+    dialog.close();
   }
 }
 class FakeHTMLDialogElement extends FakeHTMLElement {
@@ -228,11 +250,23 @@ function installInspectDocument({ showModalThrows = false } = {}) {
       throw new Error("showModal unavailable");
     };
   }
-  put(nodes, new FakeHTMLImageElement("card-inspect-art"));
-  put(nodes, new FakeHTMLElement("DIV", "card-inspect-proxy"));
-  put(nodes, new FakeHTMLElement("P", "card-inspect-title"));
-  put(nodes, new FakeHTMLElement("P", "card-inspect-caption"));
-  put(nodes, new FakeHTMLElement("DIV", "card-inspect-meta"));
+  const closeForm = new FakeHTMLElement("FORM");
+  closeForm.setAttribute("method", "dialog");
+  closeForm.classList.add("card-inspect-close-form");
+  const closeBtn = new FakeHTMLElement("BUTTON");
+  closeBtn.classList.add("card-inspect-close");
+  closeBtn.setAttribute("type", "submit");
+  closeBtn.setAttribute("aria-label", "Close");
+  closeForm.append(closeBtn);
+  dialog.append(closeForm);
+
+  const sheet = new FakeHTMLElement("DIV");
+  sheet.classList.add("card-inspect-sheet");
+  const art = put(nodes, new FakeHTMLImageElement("card-inspect-art"));
+  const proxy = put(nodes, new FakeHTMLElement("DIV", "card-inspect-proxy"));
+  const title = put(nodes, new FakeHTMLElement("P", "card-inspect-title"));
+  const caption = put(nodes, new FakeHTMLElement("P", "card-inspect-caption"));
+  const meta = put(nodes, new FakeHTMLElement("DIV", "card-inspect-meta"));
   const actions = put(nodes, new FakeHTMLElement("DIV", "card-inspect-actions"));
   actions.hidden = true;
   for (const action of ["play", "discard", "show"]) {
@@ -244,6 +278,9 @@ function installInspectDocument({ showModalThrows = false } = {}) {
   }
   const inspectError = put(nodes, new FakeHTMLElement("P", "card-inspect-error"));
   inspectError.hidden = true;
+  sheet.append(art, proxy, actions, meta, inspectError);
+  meta.append(title, caption);
+  dialog.append(sheet);
   const prev = put(nodes, new FakeHTMLElement("BUTTON", "card-inspect-prev"));
   prev.hidden = true;
   prev.dataset.inspectNav = "prev";
@@ -288,7 +325,7 @@ function installInspectDocument({ showModalThrows = false } = {}) {
   globalThis.HTMLDialogElement = FakeHTMLDialogElement;
   globalThis.document = document;
 
-  return { document, dialog, prev, next, actions, input, textarea, select, editable };
+  return { document, dialog, closeBtn, sheet, prev, next, actions, input, textarea, select, editable };
 }
 
 function makeTile(label) {
@@ -326,13 +363,22 @@ function dispatchKey(document, key, target) {
 }
 
 function clickEvent(target, clientX = 0, clientY = 0) {
+  let prevented = false;
   return {
     type: "click",
     target,
     clientX,
     clientY,
-    preventDefault() {},
+    preventDefault() {
+      prevented = true;
+    },
     stopPropagation() {},
+    wasPrevented() {
+      return prevented;
+    },
+    get defaultPrevented() {
+      return prevented;
+    },
   };
 }
 
@@ -341,6 +387,10 @@ function sizePhotoArt(art, { naturalWidth, naturalHeight, box }) {
   art.naturalHeight = naturalHeight;
   art.complete = true;
   art.boundingRect = box;
+  const sheet = art.parentNode;
+  if (sheet && typeof sheet.classList?.contains === "function" && sheet.classList.contains("card-inspect-sheet")) {
+    sheet.boundingRect = box;
+  }
 }
 
 function handSequence() {
@@ -577,63 +627,180 @@ describe("inspect photo wheel zoom and pan", () => {
     return { ...ctx, art };
   }
 
-  test("wheel up zooms in toward the cursor and never zooms out", () => {
+  function zoomIn(art, steps = 9) {
+    for (let i = 0; i < steps; i += 1) {
+      art.dispatchEvent(wheelEvent(art, -100, 150, 140));
+    }
+  }
+
+  function panPhoto(document, dialog, art, from = { x: 150, y: 140 }, to = { x: 130, y: 130 }) {
+    dialog.dispatchEvent(pointerEvent("pointerdown", art, from.x, from.y));
+    document.dispatchEvent(pointerEvent("pointermove", art, to.x, to.y));
+    document.dispatchEvent(pointerEvent("pointermove", art, Number.NaN, 10));
+    document.dispatchEvent(pointerEvent("pointerup", art, to.x, to.y));
+  }
+
+  test("wheel up zooms in toward the cursor and will not shrink below the fitted size", () => {
     const { dialog, art } = openSizedPhoto();
     expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
 
     const letterbox = wheelEvent(art, -100, 150, 50);
-    dialog.dispatchEvent(letterbox);
+    art.dispatchEvent(letterbox);
     expect(letterbox.wasPrevented()).toBe(false);
     expect(inspectZoomState().scale).toBe(1);
 
     const zoomOut = wheelEvent(art, 120, 150, 140);
-    dialog.dispatchEvent(zoomOut);
-    expect(zoomOut.wasPrevented()).toBe(true);
+    art.dispatchEvent(zoomOut);
+    expect(zoomOut.wasPrevented()).toBe(false);
     expect(inspectZoomState().scale).toBe(1);
     expect(dialog.classList.contains("is-zoomed")).toBe(false);
 
-    const zoomIn = wheelEvent(art, -100, 150, 140);
-    dialog.dispatchEvent(zoomIn);
-    expect(zoomIn.wasPrevented()).toBe(true);
+    const zoomInEvent = wheelEvent(art, -100, 150, 140);
+    art.dispatchEvent(zoomInEvent);
+    expect(zoomInEvent.wasPrevented()).toBe(true);
     expect(inspectZoomState().scale).toBeGreaterThan(1);
     expect(inspectZoomState().scale).toBeLessThanOrEqual(4);
     expect(dialog.classList.contains("is-zoomed")).toBe(true);
     expect(dialog.style.getPropertyValue("--inspect-zoom")).toBe(String(inspectZoomState().scale));
 
     for (let i = 0; i < 24; i += 1) {
-      dialog.dispatchEvent(wheelEvent(art, -100, 150, 140));
+      art.dispatchEvent(wheelEvent(art, -100, 150, 140));
     }
     expect(inspectZoomState().scale).toBe(4);
 
-    const stillOut = wheelEvent(art, 100, 150, 140);
-    dialog.dispatchEvent(stillOut);
-    expect(stillOut.wasPrevented()).toBe(true);
+    const atCap = wheelEvent(art, -100, 150, 140);
+    art.dispatchEvent(atCap);
+    expect(atCap.wasPrevented()).toBe(false);
     expect(inspectZoomState().scale).toBe(4);
+
+    const fromCap = wheelEvent(art, 100, 150, 140);
+    art.dispatchEvent(fromCap);
+    expect(fromCap.wasPrevented()).toBe(true);
+    expect(inspectZoomState().scale).toBeLessThan(4);
+    expect(inspectZoomState().scale).toBeGreaterThanOrEqual(1);
   });
 
-  test("zoomed photos pan with the pointer; leftover pan click does not close; a later outside click does", () => {
+  test("wheel-down at 1× does nothing, never goes below fitted, and does not steal scroll", () => {
+    const { dialog, art } = openSizedPhoto();
+    for (let i = 0; i < 8; i += 1) {
+      const event = wheelEvent(art, 100, 150, 140);
+      art.dispatchEvent(event);
+      expect(event.wasPrevented()).toBe(false);
+      expect(inspectZoomState().scale).toBe(1);
+    }
+    expect(dialog.classList.contains("is-zoomed")).toBe(false);
+
+    zoomIn(art);
+    expect(inspectZoomState().scale).toBeGreaterThan(1);
+    for (let i = 0; i < 40; i += 1) {
+      art.dispatchEvent(wheelEvent(art, 100, 150, 140));
+    }
+    expect(inspectZoomState().scale).toBe(1);
+  });
+
+  test("wheel on dialog chrome does not zoom or preventDefault", () => {
+    const { dialog, art } = openSizedPhoto();
+    const chrome = wheelEvent(dialog, -100, 10, 10);
+    dialog.dispatchEvent(chrome);
+    expect(chrome.wasPrevented()).toBe(false);
+    expect(inspectZoomState().scale).toBe(1);
+
+    zoomIn(art);
+    const overChromeWhileZoomed = wheelEvent(dialog, 100, 10, 10);
+    dialog.dispatchEvent(overChromeWhileZoomed);
+    expect(overChromeWhileZoomed.wasPrevented()).toBe(false);
+    expect(inspectZoomState().scale).toBeGreaterThan(1);
+  });
+
+  test("zoomed photos pan with the pointer; a pan does not close", () => {
     const { document, dialog, art } = openSizedPhoto();
-    dialog.dispatchEvent(wheelEvent(art, -100, 150, 140));
-    for (let i = 0; i < 8; i += 1) dialog.dispatchEvent(wheelEvent(art, -100, 150, 140));
+    zoomIn(art);
     expect(inspectZoomState().scale).toBeGreaterThan(1);
     const before = inspectZoomState();
 
-    dialog.dispatchEvent(pointerEvent("pointerdown", art, 150, 140));
-    expect(dialog.classList.contains("is-panning")).toBe(true);
-    document.dispatchEvent(pointerEvent("pointermove", art, 130, 130));
-    document.dispatchEvent(pointerEvent("pointermove", art, Number.NaN, 10));
-    const panned = inspectZoomState();
-    expect(panned.panX).not.toBe(before.panX);
-    expect(panned.panY).not.toBe(before.panY);
-    document.dispatchEvent(pointerEvent("pointerup", art, 130, 130));
+    panPhoto(document, dialog, art);
     expect(dialog.classList.contains("is-panning")).toBe(false);
     expect(dialog.open).toBe(true);
+    expect(inspectZoomState().panX).not.toBe(before.panX);
+    expect(inspectZoomState().panY).not.toBe(before.panY);
 
-    dialog.dispatchEvent(clickEvent(dialog, 10, 10));
+    dialog.dispatchEvent(clickEvent(art, 130, 130));
+    expect(dialog.open).toBe(true);
+  });
+
+  test("X still closes after a pan", () => {
+    const { document, dialog, art, closeBtn } = openSizedPhoto();
+    zoomIn(art);
+    panPhoto(document, dialog, art);
+    expect(dialog.open).toBe(true);
+
+    dialog.dispatchEvent(clickEvent(closeBtn, 190, 20));
+    expect(dialog.open).toBe(false);
+    expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+  });
+
+  test("clicking outside after a pan closes without an intervening art click", () => {
+    const { document, dialog, art } = openSizedPhoto();
+    zoomIn(art);
+    panPhoto(document, dialog, art);
     expect(dialog.open).toBe(true);
 
     dialog.dispatchEvent(clickEvent(dialog, 10, 10));
     expect(dialog.open).toBe(false);
+    expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+  });
+
+  test("nav still steps after a pan", () => {
+    const { document, dialog, next } = installInspectDocument();
+    const art = document.getElementById("card-inspect-art");
+    const photos = [
+      { card: { id: "host-image:m1:a1", name: "One" }, imageSrc: "/one.png", tile: makeTile("One") },
+      { card: { id: "host-image:m1:a2", name: "Two" }, imageSrc: "/two.png", tile: makeTile("Two") },
+    ];
+    openCardInspect(photos[0].card, photos[0].imageSrc, photos[0].tile, photos);
+    sizePhotoArt(art, { naturalWidth: 400, naturalHeight: 100, box: photoBox });
+    zoomIn(art);
+    panPhoto(document, dialog, art);
+    expect(dialog.open).toBe(true);
+
+    dialog.dispatchEvent(clickEvent(next, 230, 140));
+    expect(dialog.open).toBe(true);
+    expect(art.src).toBe("/two.png");
+    expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+  });
+
+  test("document pan listeners unbind on pointerup, pointercancel, lostpointercapture, and close", () => {
+    const { document, dialog, art } = openSizedPhoto();
+    zoomIn(art);
+    panPhoto(document, dialog, art);
+    const afterPan = inspectZoomState();
+    document.dispatchEvent(pointerEvent("pointermove", art, 10, 10));
+    expect(inspectZoomState()).toEqual(afterPan);
+
+    dialog.dispatchEvent(pointerEvent("pointerdown", art, 150, 140));
+    document.dispatchEvent(pointerEvent("pointermove", art, 140, 135));
+    expect(dialog.classList.contains("is-panning")).toBe(true);
+    document.dispatchEvent(pointerEvent("pointercancel", art, 140, 135));
+    expect(dialog.classList.contains("is-panning")).toBe(false);
+    const afterCancel = inspectZoomState();
+    document.dispatchEvent(pointerEvent("pointermove", art, 10, 10));
+    expect(inspectZoomState()).toEqual(afterCancel);
+
+    dialog.dispatchEvent(pointerEvent("pointerdown", art, 150, 140));
+    document.dispatchEvent(pointerEvent("pointermove", art, 140, 135));
+    expect(dialog.classList.contains("is-panning")).toBe(true);
+    dialog.dispatchEvent(pointerEvent("lostpointercapture", art, 140, 135));
+    expect(dialog.classList.contains("is-panning")).toBe(false);
+    const afterLost = inspectZoomState();
+    document.dispatchEvent(pointerEvent("pointermove", art, 10, 10));
+    expect(inspectZoomState()).toEqual(afterLost);
+
+    dialog.dispatchEvent(pointerEvent("pointerdown", art, 150, 140));
+    document.dispatchEvent(pointerEvent("pointermove", art, 140, 135));
+    expect(dialog.classList.contains("is-panning")).toBe(true);
+    closeCardInspect();
+    expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+    document.dispatchEvent(pointerEvent("pointermove", art, 10, 10));
     expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
   });
 
@@ -644,7 +811,7 @@ describe("inspect photo wheel zoom and pan", () => {
     openCardInspect(copper, "/copper.png", tiles[0]);
     sizePhotoArt(art, { naturalWidth: 400, naturalHeight: 100, box: photoBox });
     const ignored = wheelEvent(art, -100, 150, 140);
-    dialog.dispatchEvent(ignored);
+    art.dispatchEvent(ignored);
     expect(ignored.wasPrevented()).toBe(false);
     expect(inspectZoomState().scale).toBe(1);
     expect(dialog.classList.contains("is-zoomed")).toBe(false);
@@ -655,7 +822,7 @@ describe("inspect photo wheel zoom and pan", () => {
     ];
     openCardInspect(photos[0].card, photos[0].imageSrc, photos[0].tile, photos);
     sizePhotoArt(art, { naturalWidth: 400, naturalHeight: 100, box: photoBox });
-    dialog.dispatchEvent(wheelEvent(art, -100, 150, 140));
+    art.dispatchEvent(wheelEvent(art, -100, 150, 140));
     expect(inspectZoomState().scale).toBeGreaterThan(1);
     const next = document.getElementById("card-inspect-next");
     dialog.dispatchEvent(clickEvent(next, 230, 140));

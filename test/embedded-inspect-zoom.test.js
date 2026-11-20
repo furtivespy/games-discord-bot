@@ -44,8 +44,6 @@ describe("inspect photo zoom math", () => {
     expect(clampInspectZoom(Number.NaN)).toBe(1);
     expect(inspectZoomFromWheel(1, 120)).toBe(1);
     expect(inspectZoomFromWheel(1, 0)).toBe(1);
-    expect(inspectZoomFromWheel(2, 100)).toBe(2);
-    expect(inspectZoomFromWheel(INSPECT_ZOOM_MAX, 400)).toBe(INSPECT_ZOOM_MAX);
     expect(inspectZoomFromWheel(1, -100)).toBeCloseTo(INSPECT_ZOOM_FACTOR, 8);
     expect(inspectWheelDeltaY({ deltaY: -100, deltaMode: 0 })).toBe(-100);
     expect(inspectWheelDeltaY({ deltaY: -3, deltaMode: 1 })).toBe(-48);
@@ -53,6 +51,20 @@ describe("inspect photo zoom math", () => {
     let scale = 1;
     for (let i = 0; i < 40; i += 1) scale = inspectZoomFromWheel(scale, -100);
     expect(scale).toBe(INSPECT_ZOOM_MAX);
+  });
+
+  test("wheel-down at 1× is a no-op and never goes below the fitted size", () => {
+    expect(inspectZoomFromWheel(1, 1)).toBe(INSPECT_ZOOM_MIN);
+    expect(inspectZoomFromWheel(1, 100)).toBe(INSPECT_ZOOM_MIN);
+    expect(inspectZoomFromWheel(1, 1e4)).toBe(INSPECT_ZOOM_MIN);
+    expect(inspectZoomFromWheel(1, Number.POSITIVE_INFINITY)).toBe(INSPECT_ZOOM_MIN);
+    expect(inspectZoomFromWheel(2, 100)).toBeLessThan(2);
+    expect(inspectZoomFromWheel(2, 100)).toBeGreaterThanOrEqual(INSPECT_ZOOM_MIN);
+    expect(inspectZoomFromWheel(INSPECT_ZOOM_MAX, 400)).toBeLessThan(INSPECT_ZOOM_MAX);
+    expect(inspectZoomFromWheel(INSPECT_ZOOM_MAX, 400)).toBeGreaterThanOrEqual(INSPECT_ZOOM_MIN);
+    let scale = INSPECT_ZOOM_MAX;
+    for (let i = 0; i < 40; i += 1) scale = inspectZoomFromWheel(scale, 100);
+    expect(scale).toBe(INSPECT_ZOOM_MIN);
   });
 
   test("zoom toward a cursor point keeps that point stable", () => {

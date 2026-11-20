@@ -22,3 +22,10 @@ that "improves" scope on its own produces behavior nobody asked for.
 
 - most PRs are small enough that the QA review reliably catches out-of-scope
   behavior without a rule.
+
+## Notes
+
+FUR-284 (“lets not allow zoom out”): the image never shrinks below its fitted
+(1×) size. Wheel-down from a zoomed state back to 1× is allowed so closing
+the overlay is not the only way to reset. Wheel-down at 1× is a no-op.
+Recorded on PR 222 so the design and the code match.

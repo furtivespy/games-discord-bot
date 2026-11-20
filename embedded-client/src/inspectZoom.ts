@@ -1,4 +1,8 @@
-/** Base (fitted) size. Wheel never goes below this, and never zooms out. */
+/**
+ * Fitted size. "Do not allow zoom out" means never shrink below this — not
+ * that wheel-down is forbidden. Wheel-down from a zoomed state may return
+ * to 1× so closing the overlay is not the only reset.
+ */
 export const INSPECT_ZOOM_MIN = 1;
 
 /** Cap so a helper chart stays readable without turning into noise. */
@@ -9,9 +13,6 @@ export const INSPECT_ZOOM_FACTOR = 1.12;
 
 /** Pointer travel before a photo drag counts as a pan, not a click. */
 export const INSPECT_PAN_SLOP_PX = 8;
-
-/** Ignore leftover outside-clicks from a pan for this long. */
-export const INSPECT_PAN_CLICK_GUARD_MS = 80;
 
 export const INSPECT_ZOOM_VAR = "--inspect-zoom";
 export const INSPECT_PAN_X_VAR = "--inspect-pan-x";
@@ -109,13 +110,13 @@ export function inspectWheelDeltaY(event: {
 }
 
 /**
- * Wheel up / pinch-out zooms in. FUR-284 does not allow zoom out: positive
- * delta is a no-op, and scale never drops. Close / next photo resets to 1×.
+ * Wheel up / pinch-out zooms in. Wheel-down from a zoomed state may return
+ * to the fitted size; wheel-down at 1× is a no-op and never goes below it.
  */
 export function inspectZoomFromWheel(scale: number, deltaY: number): number {
   const current = clampInspectZoom(scale);
-  if (!Number.isFinite(deltaY) || deltaY >= 0) return current;
-  const steps = Math.min(12, -deltaY / 100);
+  if (!Number.isFinite(deltaY) || deltaY === 0) return current;
+  const steps = Math.max(-6, Math.min(6, -deltaY / 100));
   return clampInspectZoom(current * INSPECT_ZOOM_FACTOR ** steps);
 }
 

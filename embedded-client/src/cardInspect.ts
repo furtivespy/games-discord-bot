@@ -1,6 +1,5 @@
 import {
   applyInspectZoomStyle,
-  INSPECT_PAN_CLICK_GUARD_MS,
   INSPECT_PAN_SLOP_PX,
   INSPECT_ZOOM_IDENTITY,
   inspectPanBy,
@@ -78,9 +77,11 @@ let inspectItems: InspectSequenceItem[] = [];
 let inspectIndex = 0;
 let inspectZoom: InspectZoomState = { ...INSPECT_ZOOM_IDENTITY };
 let inspectPanning = false;
+let inspectPanListening = false;
+let inspectPanPointerId: number | null = null;
 let inspectPanOrigin: { x: number; y: number } | null = null;
 let inspectPanLast: { x: number; y: number } | null = null;
-let inspectPanClickGuardUntil = 0;
+let inspectSuppressClick = false;
 let inspectCardActionHandler:
   | ((action: HandActionKind, card: InspectableCard) => void)
   | null = null;
@@ -280,13 +281,42 @@ export function inspectZoomState(): InspectZoomState {
   return { ...inspectZoom };
 }
 
+function stopInspectPanListeners() {
+  if (!inspectPanListening) return;
+  inspectPanListening = false;
+  document.removeEventListener("pointermove", onInspectPointerMove);
+  document.removeEventListener("pointerup", onInspectPointerUp);
+  document.removeEventListener("pointercancel", onInspectPointerUp);
+  dialogEl()?.removeEventListener?.("lostpointercapture", onInspectPointerUp);
+}
+
+function startInspectPanListeners() {
+  if (inspectPanListening) return;
+  inspectPanListening = true;
+  document.addEventListener("pointermove", onInspectPointerMove);
+  document.addEventListener("pointerup", onInspectPointerUp);
+  document.addEventListener("pointercancel", onInspectPointerUp);
+  dialogEl()?.addEventListener?.("lostpointercapture", onInspectPointerUp);
+}
+
 function resetInspectZoom() {
+  const pointerId = inspectPanPointerId;
+  const dialog = dialogEl();
+  stopInspectPanListeners();
   inspectPanning = false;
+  inspectPanPointerId = null;
   inspectPanOrigin = null;
   inspectPanLast = null;
-  inspectPanClickGuardUntil = 0;
+  inspectSuppressClick = false;
   inspectZoom = { ...INSPECT_ZOOM_IDENTITY };
-  applyInspectZoomStyle(dialogEl(), inspectZoom, false);
+  if (dialog && typeof dialog.releasePointerCapture === "function" && pointerId != null) {
+    try {
+      dialog.releasePointerCapture(pointerId);
+    } catch {
+      // already released or never captured
+    }
+  }
+  applyInspectZoomStyle(dialog, inspectZoom, false);
 }
 
 function resetInspectSession() {
@@ -456,29 +486,46 @@ function inspectUnzoomedPainted(art: HTMLImageElement | null): InspectBox | null
   return inspectContainedImageRect(layout, Number(art.naturalWidth), Number(art.naturalHeight));
 }
 
-function consumePanClickGuard(): boolean {
-  const guarded = Date.now() < inspectPanClickGuardUntil;
-  inspectPanClickGuardUntil = 0;
-  return guarded;
-}
-
 function commitInspectZoom(next: InspectZoomState, panning = inspectPanning) {
   inspectZoom = next;
   applyInspectZoomStyle(dialogEl(), inspectZoom, panning);
 }
 
-function endInspectPan() {
-  const moved = inspectPanning && inspectPanOrigin && inspectPanLast
-    ? Math.hypot(
-        inspectPanLast.x - inspectPanOrigin.x,
-        inspectPanLast.y - inspectPanOrigin.y
-      ) >= INSPECT_PAN_SLOP_PX
-    : false;
+function sameInspectPointer(event: PointerEvent | undefined): boolean {
+  if (!event || inspectPanPointerId == null || event.pointerId == null) return true;
+  return event.pointerId === inspectPanPointerId;
+}
+
+function endInspectPan(options?: { suppressClick?: boolean }) {
+  const allowSuppress = options?.suppressClick !== false;
+  const moved =
+    allowSuppress && inspectPanning && inspectPanOrigin && inspectPanLast
+      ? Math.hypot(
+          inspectPanLast.x - inspectPanOrigin.x,
+          inspectPanLast.y - inspectPanOrigin.y
+        ) >= INSPECT_PAN_SLOP_PX
+      : false;
+  const pointerId = inspectPanPointerId;
+  const dialog = dialogEl();
+  stopInspectPanListeners();
   inspectPanning = false;
+  inspectPanPointerId = null;
   inspectPanOrigin = null;
   inspectPanLast = null;
-  if (moved) inspectPanClickGuardUntil = Date.now() + INSPECT_PAN_CLICK_GUARD_MS;
-  applyInspectZoomStyle(dialogEl(), inspectZoom, false);
+  if (moved) {
+    inspectSuppressClick = true;
+    queueMicrotask(() => {
+      inspectSuppressClick = false;
+    });
+  }
+  if (dialog && typeof dialog.releasePointerCapture === "function" && pointerId != null) {
+    try {
+      dialog.releasePointerCapture(pointerId);
+    } catch {
+      // already released or never captured
+    }
+  }
+  applyInspectZoomStyle(dialog, inspectZoom, false);
 }
 
 function onInspectWheel(event: WheelEvent) {
@@ -493,21 +540,17 @@ function onInspectWheel(event: WheelEvent) {
   const y = Number(event.clientY);
   const visible = inspectVisiblePaintedRect(painted, layout, inspectZoom);
   if (!pointInInspectRect(x, y, visible)) return;
+  const nextScale = inspectZoomFromWheel(inspectZoom.scale, inspectWheelDeltaY(event));
+  if (nextScale === inspectZoom.scale) return;
   event.preventDefault();
   event.stopPropagation();
-  const nextScale = inspectZoomFromWheel(inspectZoom.scale, inspectWheelDeltaY(event));
   commitInspectZoom(
-    inspectZoomToward(
-      inspectZoom,
-      nextScale,
-      { x, y },
-      layout,
-      painted
-    )
+    inspectZoomToward(inspectZoom, nextScale, { x, y }, layout, painted)
   );
 }
 
 function onInspectPointerDown(event: PointerEvent) {
+  inspectSuppressClick = false;
   if (!inspectPhotoOpen()) return;
   if (event.button !== 0) return;
   const x = Number(event.clientX);
@@ -519,11 +562,12 @@ function onInspectPointerDown(event: PointerEvent) {
   if (!isInspectZoomed(inspectZoom)) return;
   if (isInspectOutsideClick(event, dialog, art, inspectZoom)) return;
   inspectPanning = true;
+  inspectPanPointerId = event.pointerId ?? null;
   inspectPanOrigin = { x, y };
   inspectPanLast = { x, y };
-  inspectPanClickGuardUntil = 0;
   applyInspectZoomStyle(dialog, inspectZoom, true);
   event.preventDefault();
+  startInspectPanListeners();
   if (typeof dialog.setPointerCapture === "function" && event.pointerId != null) {
     try {
       dialog.setPointerCapture(event.pointerId);
@@ -534,12 +578,12 @@ function onInspectPointerDown(event: PointerEvent) {
 }
 
 function onInspectPointerMove(event: PointerEvent) {
-  if (!inspectPanning) return;
+  if (!inspectPanning || !inspectPanLast) return;
+  if (!sameInspectPointer(event)) return;
   if (!inspectPhotoOpen()) {
-    endInspectPan();
+    endInspectPan({ suppressClick: false });
     return;
   }
-  if (!inspectPanLast) return;
   const x = Number(event.clientX);
   const y = Number(event.clientY);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return;
@@ -552,9 +596,65 @@ function onInspectPointerMove(event: PointerEvent) {
   event.preventDefault();
 }
 
-function onInspectPointerUp() {
-  if (!inspectPanning) return;
+function onInspectPointerUp(event?: PointerEvent) {
+  if (!sameInspectPointer(event)) return;
+  if (!inspectPanning) {
+    stopInspectPanListeners();
+    return;
+  }
   endInspectPan();
+}
+
+function onInspectClick(event: MouseEvent) {
+  const dialog = dialogEl();
+  if (!dialog) return;
+  const inspectArt = inspectArtEl();
+  const suppress = inspectSuppressClick;
+  inspectSuppressClick = false;
+  // Only the click that ends a pan on the photo itself is ignored. X, nav,
+  // and click-outside must still close/step on the next gesture.
+  if (suppress && event.target === inspectArt) return;
+  if (isInspectOutsideClick(event, dialog, inspectArt, inspectZoom)) {
+    closeCardInspect();
+    return;
+  }
+  const target = event.target;
+  const actionButton =
+    target instanceof Element ? target.closest("[data-card-action]") : null;
+  if (actionButton instanceof HTMLElement) {
+    const action = handCardActionFromDataset(actionButton.dataset.cardAction);
+    const item = inspectItems[inspectIndex];
+    if (
+      action &&
+      item &&
+      inspectHandActionsVisible(item, inspectView(item.card, item.imageSrc).layout)
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      inspectCardActionHandler?.(action, item.card);
+    }
+    return;
+  }
+  const button =
+    target instanceof Element ? target.closest("[data-inspect-nav]") : null;
+  if (!(button instanceof HTMLElement)) return;
+  const direction = inspectNavDirectionFromDataset(button.dataset.inspectNav);
+  if (!direction) return;
+  event.preventDefault();
+  event.stopPropagation();
+  stepInspect(direction);
+}
+
+function onInspectDialogClose() {
+  resetInspectSession();
+  setInspectActionError(null);
+}
+
+function onInspectKeydown(event: KeyboardEvent) {
+  const direction = inspectKeyCommand(event, inspectOverlayOpen());
+  if (!direction) return;
+  event.preventDefault();
+  stepInspect(direction);
 }
 
 function syncInspectNav() {
@@ -597,56 +697,11 @@ export function enableCardInspectDialog() {
   if (inspectBoundDocument === document) return;
   inspectBoundDocument = document;
   stampInspectActionButtons();
-  dialog.addEventListener("wheel", onInspectWheel, { passive: false });
+  inspectArtEl()?.addEventListener("wheel", onInspectWheel, { passive: false });
   dialog.addEventListener("pointerdown", onInspectPointerDown);
-  dialog.addEventListener("lostpointercapture", onInspectPointerUp);
-  document.addEventListener("pointermove", onInspectPointerMove);
-  document.addEventListener("pointerup", onInspectPointerUp);
-  document.addEventListener("pointercancel", onInspectPointerUp);
-  dialog.addEventListener("click", (event) => {
-    const guarded = consumePanClickGuard();
-    const target = event.target;
-    const inspectArt = inspectArtEl();
-    if (isInspectOutsideClick(event, dialog, inspectArt, inspectZoom)) {
-      if (guarded) return;
-      closeCardInspect();
-      return;
-    }
-    const actionButton =
-      target instanceof Element ? target.closest("[data-card-action]") : null;
-    if (actionButton instanceof HTMLElement) {
-      const action = handCardActionFromDataset(actionButton.dataset.cardAction);
-      const item = inspectItems[inspectIndex];
-      if (
-        action &&
-        item &&
-        inspectHandActionsVisible(item, inspectView(item.card, item.imageSrc).layout)
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        inspectCardActionHandler?.(action, item.card);
-      }
-      return;
-    }
-    const button =
-      target instanceof Element ? target.closest("[data-inspect-nav]") : null;
-    if (!(button instanceof HTMLElement)) return;
-    const direction = inspectNavDirectionFromDataset(button.dataset.inspectNav);
-    if (!direction) return;
-    event.preventDefault();
-    event.stopPropagation();
-    stepInspect(direction);
-  });
-  dialog.addEventListener("close", () => {
-    resetInspectSession();
-    setInspectActionError(null);
-  });
-  document.addEventListener("keydown", (event) => {
-    const direction = inspectKeyCommand(event, inspectOverlayOpen());
-    if (!direction) return;
-    event.preventDefault();
-    stepInspect(direction);
-  });
+  dialog.addEventListener("click", onInspectClick);
+  dialog.addEventListener("close", onInspectDialogClose);
+  document.addEventListener("keydown", onInspectKeydown);
 }
 
 function applyInspectLayout(dialog: HTMLElement, view: InspectView) {
