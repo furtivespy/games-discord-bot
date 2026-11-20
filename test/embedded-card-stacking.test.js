@@ -622,8 +622,25 @@ function rects(selector) {
   return [...document.querySelectorAll(selector)].map(rect);
 }
 
+async function settled() {
+  const table = document.getElementById("table");
+  const started = performance.now();
+  let last = "";
+  let stable = 0;
+  while (stable < 6 && performance.now() - started < 4000) {
+    await frame();
+    const now = window.innerWidth + "x" + window.innerHeight + ":" + table.getBoundingClientRect().height;
+    stable = now === last ? stable + 1 : 0;
+    last = now;
+  }
+}
+
 try {
-  await frame();
+  // headless Chrome can apply --window-size after the first frame. Wait until
+  // the viewport and table height hold still so geometry and viewport agree.
+  await settled();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
   const table = document.getElementById("table");
   const main = document.getElementById("table-main");
   const hand = document.querySelector(".hand-zone");
@@ -672,8 +689,8 @@ try {
   await frame();
   const zoomed = face.getBoundingClientRect();
   await report({
-    viewportWidth: window.innerWidth,
-    viewportHeight: window.innerHeight,
+    viewportWidth,
+    viewportHeight,
     tableHeight: tableBox.height,
     tableBottom: tableBox.bottom,
     tableTop: tableBox.top,
