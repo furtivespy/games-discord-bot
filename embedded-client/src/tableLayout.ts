@@ -2,6 +2,31 @@ export const MAX_VISIBLE_DECKS = 2;
 export const DEFAULT_CARD_BACK = "/card-back.svg";
 export const UNASSIGNED_TEAM_LABEL = "No team";
 
+/**
+ * Paint a pile face with a custom back, or DEFAULT_CARD_BACK when unset.
+ * A mapped URL is applied only after Image() loads it; 404s and non-images
+ * keep the default. Does not fetch at save time.
+ */
+export function applyPileBackImage(
+  el: { style: { backgroundImage: string } },
+  mappedSrc: string | null | undefined
+): void {
+  const fallback = `url("${DEFAULT_CARD_BACK}")`;
+  el.style.backgroundImage = fallback;
+  const src = mappedSrc || DEFAULT_CARD_BACK;
+  if (src === DEFAULT_CARD_BACK) return;
+  const ImageCtor = (globalThis as { Image?: new () => HTMLImageElement }).Image;
+  if (!ImageCtor) return;
+  const probe = new ImageCtor();
+  probe.onload = () => {
+    el.style.backgroundImage = `url("${src}")`;
+  };
+  probe.onerror = () => {
+    el.style.backgroundImage = fallback;
+  };
+  probe.src = src;
+}
+
 export type SnapshotDeck = {
   name?: string;
   remaining?: number | string;

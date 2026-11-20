@@ -622,6 +622,8 @@ describe("hover zoom clamp on a tile", () => {
       main.indexOf("function renderPileTile"),
       main.indexOf("function renderDeckTile")
     );
+    expect(pileFn).toContain("applyPileBackImage(face, mappedImageSrc(config, deck.backImageUrl))");
+    expect(pileFn).not.toContain("style.backgroundImage =");
     expect(pileFn).toContain('textContent = "Discard"');
     expect(pileFn).toContain("handCountLabel(deck.discard)");
     const titleAssign = pileFn.match(/tile\.title =[^\n]+/)?.[0] ?? "";
