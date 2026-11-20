@@ -287,6 +287,7 @@ function stopInspectPanListeners() {
   document.removeEventListener("pointermove", onInspectPointerMove);
   document.removeEventListener("pointerup", onInspectPointerUp);
   document.removeEventListener("pointercancel", onInspectPointerUp);
+  inspectArtEl()?.removeEventListener?.("lostpointercapture", onInspectPointerUp);
   dialogEl()?.removeEventListener?.("lostpointercapture", onInspectPointerUp);
 }
 
@@ -296,12 +297,22 @@ function startInspectPanListeners() {
   document.addEventListener("pointermove", onInspectPointerMove);
   document.addEventListener("pointerup", onInspectPointerUp);
   document.addEventListener("pointercancel", onInspectPointerUp);
+  inspectArtEl()?.addEventListener?.("lostpointercapture", onInspectPointerUp);
   dialogEl()?.addEventListener?.("lostpointercapture", onInspectPointerUp);
+}
+
+function releaseInspectPanCapture(pointerId: number | null) {
+  const node = inspectArtEl() ?? dialogEl();
+  if (!node || typeof node.releasePointerCapture !== "function" || pointerId == null) return;
+  try {
+    node.releasePointerCapture(pointerId);
+  } catch {
+    // already released or never captured
+  }
 }
 
 function resetInspectZoom() {
   const pointerId = inspectPanPointerId;
-  const dialog = dialogEl();
   stopInspectPanListeners();
   inspectPanning = false;
   inspectPanPointerId = null;
@@ -309,14 +320,8 @@ function resetInspectZoom() {
   inspectPanLast = null;
   inspectSuppressClick = false;
   inspectZoom = { ...INSPECT_ZOOM_IDENTITY };
-  if (dialog && typeof dialog.releasePointerCapture === "function" && pointerId != null) {
-    try {
-      dialog.releasePointerCapture(pointerId);
-    } catch {
-      // already released or never captured
-    }
-  }
-  applyInspectZoomStyle(dialog, inspectZoom, false);
+  releaseInspectPanCapture(pointerId);
+  applyInspectZoomStyle(dialogEl(), inspectZoom, false);
 }
 
 function resetInspectSession() {
@@ -512,19 +517,8 @@ function endInspectPan(options?: { suppressClick?: boolean }) {
   inspectPanPointerId = null;
   inspectPanOrigin = null;
   inspectPanLast = null;
-  if (moved) {
-    inspectSuppressClick = true;
-    queueMicrotask(() => {
-      inspectSuppressClick = false;
-    });
-  }
-  if (dialog && typeof dialog.releasePointerCapture === "function" && pointerId != null) {
-    try {
-      dialog.releasePointerCapture(pointerId);
-    } catch {
-      // already released or never captured
-    }
-  }
+  if (moved) inspectSuppressClick = true;
+  releaseInspectPanCapture(pointerId);
   applyInspectZoomStyle(dialog, inspectZoom, false);
 }
 
@@ -568,9 +562,9 @@ function onInspectPointerDown(event: PointerEvent) {
   applyInspectZoomStyle(dialog, inspectZoom, true);
   event.preventDefault();
   startInspectPanListeners();
-  if (typeof dialog.setPointerCapture === "function" && event.pointerId != null) {
+  if (typeof art.setPointerCapture === "function" && event.pointerId != null) {
     try {
-      dialog.setPointerCapture(event.pointerId);
+      art.setPointerCapture(event.pointerId);
     } catch {
       // Document pointerup / lostpointercapture still end the pan.
     }
@@ -611,9 +605,10 @@ function onInspectClick(event: MouseEvent) {
   const inspectArt = inspectArtEl();
   const suppress = inspectSuppressClick;
   inspectSuppressClick = false;
-  // Only the click that ends a pan on the photo itself is ignored. X, nav,
-  // and click-outside must still close/step on the next gesture.
-  if (suppress && event.target === inspectArt) return;
+  // The pan-ending click is often retargeted to the capture node (the photo,
+  // or the dialog if capture landed there). Swallow that leftover so a pan
+  // does not close. X and nav are neither target, so they still run.
+  if (suppress && (event.target === inspectArt || event.target === dialog)) return;
   if (isInspectOutsideClick(event, dialog, inspectArt, inspectZoom)) {
     closeCardInspect();
     return;

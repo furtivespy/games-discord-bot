@@ -633,11 +633,24 @@ describe("inspect photo wheel zoom and pan", () => {
     }
   }
 
-  function panPhoto(document, dialog, art, from = { x: 150, y: 140 }, to = { x: 130, y: 130 }) {
+  function panPhoto(
+    document,
+    dialog,
+    art,
+    from = { x: 150, y: 140 },
+    to = { x: 130, y: 130 },
+    leftoverTarget = dialog
+  ) {
     dialog.dispatchEvent(pointerEvent("pointerdown", art, from.x, from.y));
     document.dispatchEvent(pointerEvent("pointermove", art, to.x, to.y));
     document.dispatchEvent(pointerEvent("pointermove", art, Number.NaN, 10));
     document.dispatchEvent(pointerEvent("pointerup", art, to.x, to.y));
+    // Real browsers fire click after pointerup. Capture can retarget that
+    // leftover to the art (current) or the dialog (older path); both look
+    // like an outside click unless the overlay swallows them.
+    if (leftoverTarget) {
+      dialog.dispatchEvent(clickEvent(leftoverTarget, to.x, to.y));
+    }
   }
 
   test("wheel up zooms in toward the cursor and will not shrink below the fitted size", () => {
@@ -723,9 +736,14 @@ describe("inspect photo wheel zoom and pan", () => {
     expect(dialog.open).toBe(true);
     expect(inspectZoomState().panX).not.toBe(before.panX);
     expect(inspectZoomState().panY).not.toBe(before.panY);
+  });
 
-    dialog.dispatchEvent(clickEvent(art, 130, 130));
+  test("leftover pan-end click on the photo also does not close", () => {
+    const { document, dialog, art } = openSizedPhoto();
+    zoomIn(art);
+    panPhoto(document, dialog, art, { x: 150, y: 140 }, { x: 130, y: 130 }, art);
     expect(dialog.open).toBe(true);
+    expect(inspectZoomState().scale).toBeGreaterThan(1);
   });
 
   test("X still closes after a pan", () => {
@@ -785,6 +803,15 @@ describe("inspect photo wheel zoom and pan", () => {
     const afterCancel = inspectZoomState();
     document.dispatchEvent(pointerEvent("pointermove", art, 10, 10));
     expect(inspectZoomState()).toEqual(afterCancel);
+
+    dialog.dispatchEvent(pointerEvent("pointerdown", art, 150, 140));
+    document.dispatchEvent(pointerEvent("pointermove", art, 140, 135));
+    expect(dialog.classList.contains("is-panning")).toBe(true);
+    art.dispatchEvent(pointerEvent("lostpointercapture", art, 140, 135));
+    expect(dialog.classList.contains("is-panning")).toBe(false);
+    const afterLostOnArt = inspectZoomState();
+    document.dispatchEvent(pointerEvent("pointermove", art, 10, 10));
+    expect(inspectZoomState()).toEqual(afterLostOnArt);
 
     dialog.dispatchEvent(pointerEvent("pointerdown", art, 150, 140));
     document.dispatchEvent(pointerEvent("pointermove", art, 140, 135));
