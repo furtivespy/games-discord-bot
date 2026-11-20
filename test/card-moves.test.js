@@ -214,6 +214,105 @@ describe("cardMoves discardFromHand", () => {
   });
 });
 
+describe("cardMoves passFromHand", () => {
+  test("moves one card to the target player's hand and records history", () => {
+    const card = createCard({ id: "pass-1", name: "Copper", origin: "Main" });
+    const gameData = gameWithDeck({ draw: [], hand: [card] });
+    const result = CardMoves.passFromHand(gameData, {
+      player: gameData.players[0],
+      cardId: "pass-1",
+      targetUserId: "user-2",
+      actor,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.content).toBe("Alice passed 1 card(s) to Bob.");
+    expect(gameData.players[0].hands.main).toEqual([]);
+    expect(gameData.players[1].hands.main.map((item) => item.id)).toEqual(["pass-1"]);
+    expect(gameData.history.at(-1).summary).toBe("Alice passed 1 cards to Bob");
+    expect(gameData.history.at(-1).action).toEqual({ category: "card", type: "pass" });
+  });
+
+  test("moves several cards in one history record", () => {
+    const copper = createCard({ id: "pass-a", name: "Copper", origin: "Main" });
+    const estate = createCard({ id: "pass-b", name: "Estate", origin: "Main" });
+    const gameData = gameWithDeck({ draw: [], hand: [copper, estate] });
+    const result = CardMoves.passFromHand(gameData, {
+      player: gameData.players[0],
+      cardIds: ["pass-a", "pass-b"],
+      targetUserId: "user-2",
+      actor,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.cards.map((item) => item.id)).toEqual(["pass-a", "pass-b"]);
+    expect(gameData.players[0].hands.main).toEqual([]);
+    expect(gameData.players[1].hands.main.map((item) => item.id)).toEqual([
+      "pass-a",
+      "pass-b",
+    ]);
+    expect(gameData.history.at(-1).summary).toBe("Alice passed 2 cards to Bob");
+    expect(gameData.history.at(-1).details.cardCount).toBe(2);
+  });
+
+  test("passing to yourself or a missing seat is invalid_target", () => {
+    const card = createCard({ id: "keep", name: "Ace", origin: "Main" });
+    const gameData = gameWithDeck({ draw: [], hand: [card] });
+    expect(
+      CardMoves.passFromHand(gameData, {
+        player: gameData.players[0],
+        cardId: "keep",
+        targetUserId: "user-1",
+        actor,
+      })
+    ).toMatchObject({ ok: false, error: "invalid_target" });
+    expect(
+      CardMoves.passFromHand(gameData, {
+        player: gameData.players[0],
+        cardId: "keep",
+        targetUserId: "nobody",
+        actor,
+      })
+    ).toMatchObject({ ok: false, error: "invalid_target" });
+    expect(gameData.players[0].hands.main.map((item) => item.id)).toEqual(["keep"]);
+  });
+});
+
+describe("cardMoves returnFromHand", () => {
+  test("puts the card on top of the origin draw pile", () => {
+    const card = createCard({ id: "ret-1", name: "Village", origin: "Main" });
+    const stay = createCard({ id: "stay", name: "Ace", origin: "Main" });
+    const gameData = gameWithDeck({ draw: [stay], hand: [card] });
+    const result = CardMoves.returnFromHand(gameData, {
+      player: gameData.players[0],
+      cardId: "ret-1",
+      actor,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.content).toBe("Alice returned a card");
+    expect(gameData.players[0].hands.main).toEqual([]);
+    expect(gameData.decks[0].piles.draw.cards.map((item) => item.id)).toEqual(["ret-1", "stay"]);
+    expect(gameData.history.at(-1).summary).toBe("Alice returned a card to top of Main");
+    expect(gameData.history.at(-1).action).toEqual({ category: "card", type: "return" });
+  });
+
+  test("unknown origin restores the card at its original hand index", () => {
+    const first = createCard({ id: "keep-1", name: "Copper", origin: "Main" });
+    const orphan = createCard({ id: "orphan", name: "Ace", origin: "MissingDeck" });
+    const last = createCard({ id: "keep-2", name: "Estate", origin: "Main" });
+    const gameData = gameWithDeck({ draw: [], hand: [first, orphan, last] });
+    const result = CardMoves.returnFromHand(gameData, {
+      player: gameData.players[0],
+      cardId: "orphan",
+      actor,
+    });
+    expect(result).toMatchObject({ ok: false, error: "unknown_deck" });
+    expect(gameData.players[0].hands.main.map((item) => item.id)).toEqual([
+      "keep-1",
+      "orphan",
+      "keep-2",
+    ]);
+  });
+});
+
 describe("cardMoves showFromHand", () => {
   test("records a reveal and leaves the card in hand", () => {
     const ace = createCard({ id: "ace-1", name: "Ace", origin: "Main" });

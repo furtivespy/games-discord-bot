@@ -649,6 +649,8 @@ function createEmbeddedApp({
         deckName: parsed.deckName,
         count: parsed.count,
         cardId: parsed.cardId,
+        destination: parsed.destination,
+        targetUserId: parsed.targetUserId,
         scores: parsed.scores,
         requestId: parsed.requestId,
       });
@@ -728,6 +730,8 @@ function createEmbeddedApp({
             deckName: parsed.deckName,
             count: parsed.count,
             cardId: parsed.cardId,
+            destination: parsed.destination,
+            targetUserId: parsed.targetUserId,
             user,
             member: guard.member,
             guildId: requestedGuildId,

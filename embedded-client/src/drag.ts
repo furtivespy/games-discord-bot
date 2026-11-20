@@ -11,15 +11,16 @@ export type DropContext = {
 };
 
 /**
- * Drop-target hook for later tickets.
+ * Drop-target hook.
  *
  * `findDropTarget` identifies a target under the pointer. `onDropTarget` runs
  * that target's action and returns `true` to consume the drop (the card stays
  * with the target). Any other result, or no target, snaps the card back to
  * the slot and visual state it had before this drag.
  *
- * This ticket wires no targets, so every drop snaps back and game state is
- * unchanged.
+ * `onDragMove` runs after the pointer has traveled past CLICK_SLOP_PX so the
+ * table can paint drop-zone overlays. `onDragEnd` always runs when the drag
+ * finishes (drop, cancel, or the tile disconnects).
  */
 export type InspectContext = {
   cardId: string;
@@ -31,6 +32,8 @@ export type CardDropHooks = {
   onDropTarget?: (ctx: DropContext & { target: DropTarget }) => boolean | void;
   /** Pointerup with travel below CLICK_SLOP_PX. Dragging past that skips this. */
   onInspect?: (ctx: InspectContext) => void;
+  onDragMove?: (ctx: DropContext) => void;
+  onDragEnd?: (ctx: DropContext) => void;
 };
 
 /** Pointer travel below this is a click (inspect), not a drag. */
@@ -242,10 +245,8 @@ function pointerTravel(start: DropPoint, current: DropPoint): number {
  * Client-only drag. Positions live in the provided map and reset whenever the
  * caller replaces it (snapshot reload or a full page refresh).
  *
- * Dropping outside a drop target snaps the card back to its rest slot. Pass
- * `findDropTarget` / `onDropTarget` when a later ticket adds targets; a
- * consumed drop keeps the card where the target put it. No PATCH or game-state
- * changes happen here.
+ * Dropping outside a drop target snaps the card back to its rest slot. A
+ * consumed drop (`onDropTarget` returns true) keeps the card where it landed.
  */
 export function enableCardDrag(
   tile: HTMLElement,
@@ -306,6 +307,11 @@ export function enableCardDrag(
       if (pointer.pointerId !== pointerId) return;
       if (tile.isConnected === false) {
         detachDragListeners();
+        hooks?.onDragEnd?.({
+          cardId,
+          point: { x: pointer.clientX, y: pointer.clientY },
+          tile,
+        });
         return;
       }
       const point = { x: pointer.clientX, y: pointer.clientY };
@@ -313,16 +319,23 @@ export function enableCardDrag(
       const next = nextOffset(origin, start, point);
       positions.set(cardId, next);
       applyCardOffset(tile, next);
+      hooks?.onDragMove?.({ cardId, point, tile });
     }
     function up(ev: Event) {
       const pointer = ev as PointerEvent;
       if (pointer.pointerId !== pointerId) return;
       detachDragListeners();
+      const ctx: DropContext = {
+        cardId,
+        point: { x: pointer.clientX, y: pointer.clientY },
+        tile,
+      };
+      hooks?.onDragEnd?.(ctx);
       if (tile.isConnected === false) return;
 
       // pointerup can jump without a move event (OS coalescing). Measure
       // travel here too so a far-away up is a drag, not inspect.
-      if (!crossedClickSlop({ x: pointer.clientX, y: pointer.clientY })) {
+      if (!crossedClickSlop(ctx.point)) {
         tile.classList.remove("dragging");
         positions.set(cardId, copyOffset(rest));
         applyCardOffset(tile, rest);
@@ -332,11 +345,6 @@ export function enableCardDrag(
         return;
       }
 
-      const ctx: DropContext = {
-        cardId,
-        point: { x: pointer.clientX, y: pointer.clientY },
-        tile,
-      };
       if (dropWasConsumed(hooks, ctx)) {
         tile.classList.remove("dragging");
         const current = positions.get(cardId) || origin;

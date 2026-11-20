@@ -1,8 +1,8 @@
 const GameHelper = require('../../modules/GlobalGameHelper')
-const GameDB = require('../../db/anygame.js')
-const {find, findIndex } = require('lodash')
+const {find} = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
+const CardMoves = require('../../modules/gameLogic/cardMoves')
 const { StringSelectMenuBuilder, ActionRowBuilder, MessageFlags} = require('discord.js')
 
 class Pass {
@@ -64,30 +64,22 @@ class Pass {
             await interaction.editReply({ content: 'No cards selected', components: [] })
             return
         }
-        await interaction.editReply({ content: `Passing ${passedCards.length} card(s) to ${selectedPlayer.username}...`, components: [] })  
-        let passedCardsObjects = []
-        passedCards.forEach(crd => {
-            let card = find(player.hands.main, {id: crd})
-            if (!card) { return }
-            player.hands.main.splice(findIndex(player.hands.main, {id: crd}), 1)
-            targetPlayer.hands.main.push(card)
-            passedCardsObjects.push(card)
+        await interaction.editReply({ content: `Passing ${passedCards.length} card(s) to ${selectedPlayer.username}...`, components: [] })
+        const result = CardMoves.passFromHand(gameData, {
+            player,
+            cardIds: passedCards,
+            targetUserId: selectedPlayer.id,
+            actor: {
+                id: interaction.user.id,
+                username: interaction.user.username,
+                displayName: interaction.member?.displayName || interaction.user.username,
+            },
         })
-
-        try {
-            const actorDisplayName = interaction.member?.displayName || interaction.user.username
-            const targetDisplayName = interaction.guild.members.cache.get(selectedPlayer.id)?.displayName || selectedPlayer.username
-            GameHelper.recordMove(
-                gameData,
-                interaction.user,
-                GameDB.ACTION_CATEGORIES.CARD,
-                GameDB.ACTION_TYPES.PASS,
-                `${actorDisplayName} passed ${passedCardsObjects.length} cards to ${targetDisplayName}`,
-                { cardCount: passedCardsObjects.length, targetUserId: selectedPlayer.id }
-            )
-        } catch (error) {
-            console.warn('Failed to record card pass in history:', error)
+        if (!result.ok) {
+            await interaction.editReply({ content: result.content, components: [] })
+            return
         }
+        const passedCardsObjects = result.cards || (result.card ? [result.card] : [])
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData)
 

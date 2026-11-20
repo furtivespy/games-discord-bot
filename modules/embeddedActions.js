@@ -27,8 +27,18 @@ const {
   withGameDocumentLock,
 } = require("./gameDocumentLock");
 
-const HAND_ACTIONS = new Set(["play", "discard", "show"]);
-const VISUAL_ACTIONS = new Set(["deal", "draw", "scores", "play", "discard", "show"]);
+const HAND_ACTIONS = new Set(["play", "discard", "show", "pass", "return"]);
+const VISUAL_ACTIONS = new Set([
+  "deal",
+  "draw",
+  "scores",
+  "play",
+  "discard",
+  "show",
+  "pass",
+  "return",
+]);
+const PLAY_DESTINATIONS = new Set(["gameboard", "playarea"]);
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 const ACTION_IDEMPOTENCY_MAX = 500;
 /** Sequential SHOW of the same card (new requestIds) within this window reuse the first post. */
@@ -119,11 +129,32 @@ function parseVisualActionBody(body = {}) {
         message: ACTION_ERROR_MESSAGES.missing_card,
       };
     }
-    return {
+    const parsed = {
       action,
       cardId,
       requestId,
     };
+    if (action === "play") {
+      const destination = String(body.destination || "")
+        .trim()
+        .toLowerCase();
+      if (PLAY_DESTINATIONS.has(destination)) {
+        parsed.destination = destination;
+      }
+    }
+    if (action === "pass") {
+      const targetUserId =
+        typeof body.targetUserId === "string" ? body.targetUserId.trim() : "";
+      if (!targetUserId) {
+        return {
+          error: "missing_target",
+          status: 400,
+          message: ACTION_ERROR_MESSAGES.missing_target,
+        };
+      }
+      parsed.targetUserId = targetUserId;
+    }
+    return parsed;
   }
   const deckName = typeof body.deck === "string" ? body.deck.trim() : "";
   if (!deckName) {
@@ -372,7 +403,10 @@ async function postLatestVisualCardAction(args, { shouldSkipPin } = {}) {
   });
 }
 
-function applyVisualHandAction(gameData, { action, cardId, actor, userId }) {
+function applyVisualHandAction(
+  gameData,
+  { action, cardId, actor, userId, destination, targetUserId }
+) {
   const player = findPlayer(gameData, userId);
   if (!player) {
     return {
@@ -384,10 +418,14 @@ function applyVisualHandAction(gameData, { action, cardId, actor, userId }) {
   }
   const result =
     action === "play"
-      ? CardMoves.playFromHand(gameData, { player, cardId, actor })
+      ? CardMoves.playFromHand(gameData, { player, cardId, actor, destination })
       : action === "discard"
         ? CardMoves.discardFromHand(gameData, { player, cardId, actor })
-        : CardMoves.showFromHand(gameData, { player, cardId, actor });
+        : action === "pass"
+          ? CardMoves.passFromHand(gameData, { player, cardId, actor, targetUserId })
+          : action === "return"
+            ? CardMoves.returnFromHand(gameData, { player, cardId, actor })
+            : CardMoves.showFromHand(gameData, { player, cardId, actor });
   if (!result.ok) {
     const status = result.error === "not_a_player" ? 403 : 409;
     return {
@@ -405,9 +443,19 @@ function applyVisualHandAction(gameData, { action, cardId, actor, userId }) {
   };
 }
 
-function applyVisualCardAction(gameData, { action, deckName, count, cardId, actor, userId }) {
+function applyVisualCardAction(
+  gameData,
+  { action, deckName, count, cardId, actor, userId, destination, targetUserId }
+) {
   if (HAND_ACTIONS.has(action)) {
-    return applyVisualHandAction(gameData, { action, cardId, actor, userId });
+    return applyVisualHandAction(gameData, {
+      action,
+      cardId,
+      actor,
+      userId,
+      destination,
+      targetUserId,
+    });
   }
 
   const deckResult = GameHelper.resolveDeckOption(gameData, deckName);
@@ -624,6 +672,13 @@ async function enrichActorDisplayName(actor, { discordClient, guildId, userId })
   }
 }
 
+function visualHandIdempotencyDetail({ action, cardId, destination, targetUserId } = {}) {
+  const id = String(cardId || "");
+  if (action === "pass") return `${id}:${String(targetUserId || "").trim()}`;
+  if (action === "play" && destination) return `${id}:${destination}`;
+  return id;
+}
+
 /**
  * Per-process in-memory TTL map. A second instance still runs the same
  * requestId. The key includes action plus a per-action detail (deck:count for
@@ -746,6 +801,8 @@ async function runVisualCardAction({
   deckName,
   count,
   cardId,
+  destination,
+  targetUserId,
   user,
   member,
   guildId,
@@ -815,6 +872,8 @@ async function runVisualCardAction({
                   deckName,
                   count,
                   cardId,
+                  destination,
+                  targetUserId,
                   actor,
                   guildId: gid,
                   channelId: cid,
@@ -913,7 +972,12 @@ async function runVisualCardAction({
         idempotencyDetail != null
           ? String(idempotencyDetail)
           : cardId
-            ? String(cardId)
+            ? visualHandIdempotencyDetail({
+                action,
+                cardId,
+                destination,
+                targetUserId,
+              })
             : `${deckName}:${count}`,
     });
   }
@@ -925,6 +989,8 @@ async function runVisualCardActionOnce({
   deckName,
   count,
   cardId,
+  destination,
+  targetUserId,
   actor,
   guildId,
   channelId,
@@ -966,6 +1032,8 @@ async function runVisualCardActionOnce({
     deckName,
     count,
     cardId,
+    destination,
+    targetUserId,
     actor,
     userId,
   });

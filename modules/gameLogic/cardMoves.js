@@ -67,6 +67,17 @@ function findDeckByName(gameData, name) {
   return decks.find((deck) => deck?.name === name) || null;
 }
 
+function findPlayerByUserId(gameData, userId) {
+  const uid = String(userId || "");
+  if (!uid || !Array.isArray(gameData?.players)) return null;
+  return gameData.players.find((player) => String(player?.userId) === uid) || null;
+}
+
+function playerDisplayName(player, fallback = "Player") {
+  const name = typeof player?.name === "string" ? player.name.trim() : "";
+  return name || fallback;
+}
+
 function cardShortName(card) {
   try {
     return Formatter.cardShortName(card);
@@ -462,10 +473,171 @@ function showFromHand(gameData, { player, cardId, actor } = {}) {
   };
 }
 
+function passCardIds({ cardId, cardIds } = {}) {
+  if (Array.isArray(cardIds) && cardIds.length) {
+    return cardIds.map((id) => String(id || "").trim()).filter(Boolean);
+  }
+  const one = String(cardId || "").trim();
+  return one ? [one] : [];
+}
+
+/**
+ * `/cards hand pass`: move one or more cards from the player's hand to
+ * another seat. History is one record, matching the slash command.
+ */
+function passFromHand(gameData, { player, cardId, cardIds, targetUserId, actor } = {}) {
+  if (!player) {
+    return missingCardResult("Something is broken!?");
+  }
+  const targetId = String(targetUserId || "").trim();
+  if (!targetId) {
+    return {
+      ok: false,
+      error: "missing_target",
+      content: "Pick a player to pass to.",
+    };
+  }
+  if (String(player.userId) === targetId) {
+    return {
+      ok: false,
+      error: "invalid_target",
+      content: "The selected player is not in this game or is yourself.",
+    };
+  }
+  const targetPlayer = findPlayerByUserId(gameData, targetId);
+  if (!targetPlayer) {
+    return {
+      ok: false,
+      error: "invalid_target",
+      content: "The selected player is not in this game or is yourself.",
+    };
+  }
+  const ids = passCardIds({ cardId, cardIds });
+  const passed = [];
+  for (const id of ids) {
+    const taken = takeCardFromHand(player, id);
+    if (taken) passed.push(taken.card);
+  }
+  if (!passed.length) {
+    return missingCardResult("Something is broken!?");
+  }
+  const targetHand = mainHand(targetPlayer);
+  for (const card of passed) targetHand.push(card);
+
+  const displayName = actorDisplayName(actor);
+  const targetName = playerDisplayName(targetPlayer);
+  const count = passed.length;
+  try {
+    GameHelper.recordMove(
+      gameData,
+      recordActor(actor),
+      GameDB.ACTION_CATEGORIES.CARD,
+      GameDB.ACTION_TYPES.PASS,
+      `${displayName} passed ${count} cards to ${targetName}`,
+      { cardCount: count, targetUserId: targetId }
+    );
+  } catch (error) {
+    console.warn("Failed to record card pass in history:", error);
+  }
+
+  return {
+    ok: true,
+    error: null,
+    card: passed[0],
+    cards: passed,
+    content: `${displayName} passed ${count} card(s) to ${targetName}.`,
+  };
+}
+
+/**
+ * `/cards hand return`: move one card from the player's hand onto the origin
+ * deck's draw pile (or an optional pile).
+ */
+function returnFromHand(gameData, { player, cardId, destination, actor } = {}) {
+  if (!player) {
+    return {
+      ok: false,
+      error: "card_not_in_hand",
+      content: "Something is broken! You don't have that card.",
+    };
+  }
+  const taken = takeCardFromHand(player, cardId);
+  if (!taken) {
+    return {
+      ok: false,
+      error: "card_not_in_hand",
+      content: "Something is broken! You don't have that card.",
+    };
+  }
+  const { card, index } = taken;
+  const actualDestination =
+    typeof destination === "string" && destination.trim()
+      ? destination.trim()
+      : "deck";
+
+  let destinationName = "";
+  if (actualDestination === "deck") {
+    const deck = findDeckByName(gameData, card.origin);
+    if (!deck?.piles?.draw || !Array.isArray(deck.piles.draw.cards)) {
+      returnCardToHand(player, card, index);
+      return {
+        ok: false,
+        error: "unknown_deck",
+        content: "Unknown deck.",
+      };
+    }
+    deck.piles.draw.cards.unshift(card);
+    destinationName = `top of ${deck.name}`;
+  } else {
+    const pile = GameHelper.getGlobalPile(gameData, actualDestination);
+    if (!pile || !Array.isArray(pile.cards)) {
+      returnCardToHand(player, card, index);
+      return {
+        ok: false,
+        error: "destination_not_found",
+        content: "Pile not found!",
+      };
+    }
+    pile.cards.push(card);
+    destinationName = `top of ${pile.name}`;
+  }
+
+  const displayName = actorDisplayName(actor);
+  try {
+    GameHelper.recordMove(
+      gameData,
+      recordActor(actor),
+      GameDB.ACTION_CATEGORIES.CARD,
+      GameDB.ACTION_TYPES.RETURN,
+      `${displayName} returned a card to ${destinationName}`,
+      {
+        cardId: card.id,
+        destination: destinationName,
+        destinationType: actualDestination,
+      }
+    );
+  } catch (error) {
+    console.warn("Failed to record card return in history:", error);
+  }
+
+  return {
+    ok: true,
+    error: null,
+    card,
+    destinationName,
+    actualDestination,
+    content: `${displayName} returned a card${
+      actualDestination !== "deck" ? ` to ${destinationName}` : ""
+    }`,
+  };
+}
+
 module.exports = {
   dealMultiple,
   discardFromHand,
   drawMultiple,
+  passFromHand,
   playFromHand,
+  returnFromHand,
   showFromHand,
 };

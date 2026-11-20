@@ -385,6 +385,8 @@ describe("embedded HTTP origin", () => {
     expect(html).toContain("Hand");
     expect(html).toContain("Play Area");
     expect(html).toContain("Game Board");
+    expect(html).toContain('data-zone="play"');
+    expect(html).toContain("play-drop-zone");
     expect(html).toContain('id="side-panel"');
     expect(html).toContain('id="other-players"');
     expect(html).toContain('id="game-status"');
@@ -511,6 +513,9 @@ describe("embedded HTTP origin", () => {
     expect(css).toContain(".pile-stack.is-pair .discards-zone");
     expect(css).toContain("grid-row: 1 / span 2");
     expect(css).toContain('.board-row > [data-zone="play-area"]');
+    expect(css).toContain('.board-row > [data-zone="play"]');
+    expect(css).toContain("#card-drop-layer");
+    expect(css).toContain(".card-drop-zone.is-over");
     const narrow = css.slice(css.indexOf("@media (max-width: 820px)"));
     expect(narrow).toContain(".board-row > [data-zone=\"play-area\"]");
     expect(narrow).toContain(".board-row > .pile-stack");

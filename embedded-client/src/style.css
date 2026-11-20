@@ -395,6 +395,7 @@ body {
 }
 
 #table {
+  position: relative;
   box-sizing: border-box;
   min-width: 0;
   min-height: 0;
@@ -535,6 +536,7 @@ body {
 }
 
 .board-row {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-rows: auto auto;
@@ -560,6 +562,14 @@ body {
   grid-template-rows: subgrid;
 }
 
+/* Out of flow: hit-testing uses a strip just left of the piles, not this box. */
+.board-row > [data-zone="play"] {
+  position: absolute;
+  inset: 0;
+  grid-column: 1 / -1;
+  grid-row: 1 / span 2;
+}
+
 /* No z-index on .zone: a value other than auto makes the row a stacking
    context, so a later row (Play Area) paints over every earlier-row card
    once both rows have a moved tile. Tiles share #table's stacking instead. */
@@ -571,6 +581,17 @@ body {
   padding: 0.4rem 0.55rem 0.45rem;
   overflow: visible;
   min-height: 0;
+}
+
+/* Invisible until a drag paints #card-drop-layer over it. After .zone so
+   the felt panel styles do not win on specificity. */
+.zone.play-drop-zone {
+  background: transparent;
+  border-color: transparent;
+  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  pointer-events: none;
 }
 
 .pile-stack {
@@ -799,6 +820,58 @@ body {
   box-shadow: 0 22px 34px rgba(0, 0, 0, 0.5);
 }
 
+#card-drop-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 12;
+  animation: drop-layer-in 180ms ease-out;
+}
+
+@keyframes drop-layer-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.card-drop-zone {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 0.18rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 14px;
+  border: 1px solid var(--panel-edge);
+  background: color-mix(in srgb, var(--felt-deep) 92%, #000);
+  color: var(--ink);
+  text-align: center;
+  pointer-events: none;
+}
+
+.card-drop-zone.is-over {
+  border-color: var(--ink);
+  background: color-mix(in srgb, var(--felt-mid) 72%, var(--felt-deep));
+  box-shadow: var(--shadow);
+}
+
+.card-drop-label {
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.card-drop-detail {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
 .card-tile.snapping .card-face {
   transform: none;
   box-shadow: var(--shadow);
@@ -979,7 +1052,7 @@ body {
 
   /* Keep play area to the left of discard. Board spans the full row above
      so two piles plus play stay side-by-side instead of stacking play under
-     the deck window. */
+     the deck window. Default play overlays the board-row; it is not a row. */
   .board-row {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-rows: auto auto;

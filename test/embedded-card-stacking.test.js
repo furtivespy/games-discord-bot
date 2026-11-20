@@ -89,6 +89,7 @@ function stackingHarness(css) {
                 ${namedTile("board-3", "Estate")}
               </div>
             </section>
+            <section class="zone play-drop-zone" data-zone="play" aria-label="Play"></section>
             <div id="pile-stack" class="pile-stack is-single">
               <div class="pile-windows">
                 <section class="zone decks-zone" data-zone="decks">
@@ -552,6 +553,7 @@ function populatedTableHarness(css, { boardCount = 3, handCount = 5 } = {}) {
                 ${boardTiles}
               </div>
             </section>
+            <section class="zone play-drop-zone" data-zone="play" aria-label="Play"></section>
             <div id="pile-stack" class="pile-stack is-pair">
               <button type="button" class="deck-nav" aria-label="Previous decks">
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" /></svg>

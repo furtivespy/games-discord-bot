@@ -41,6 +41,7 @@ import {
   ACTION_COUNT_MAX,
   ACTION_COUNT_MIN,
   ACTION_ERROR_MESSAGES,
+  ACTION_IN_FLIGHT_NOTICE,
   CHANNEL_POST_FAILED_NOTICE,
   DEFAULT_ACTION_COUNT,
   GAME_CHANNEL_LINK_LABEL,
@@ -57,7 +58,19 @@ import {
   type HandActionKind,
 } from "./visualActions";
 import { submitHandCardAction as postHandCardAction } from "./submitHandCardAction";
-import { SNAP_BACK_DURATION_MS, enableCardDrag, type CardOffset } from "./drag";
+import {
+  SNAP_BACK_DURATION_MS,
+  enableCardDrag,
+  type CardDropHooks,
+  type CardOffset,
+} from "./drag";
+import {
+  collectDropZones,
+  dropZoneAtPoint,
+  hideDropLayer,
+  paintDropZones,
+  type DropZone,
+} from "./dropZones";
 import { enableHoverZoomClamp } from "./hoverZoom";
 import {
   closeCardInspect,
@@ -267,7 +280,10 @@ function setDeckActionsLocked(locked: boolean) {
 }
 
 function setTableVisible(visible: boolean) {
-  if (!visible) closeCardInspect();
+  if (!visible) {
+    closeCardInspect();
+    hideDropLayer(document);
+  }
   const table = document.getElementById("table");
   if (table) table.hidden = !visible;
   if (!visible) {
@@ -722,7 +738,51 @@ async function submitScoreEdits(scores: ScoreMap) {
   }
 }
 
-async function submitHandCardAction(kind: HandActionKind, card: InspectableCard) {
+async function submitDroppedHandAction(zone: DropZone, card: SnapshotCard) {
+  const action = zone.action;
+  await submitHandCardAction(action.kind, card, {
+    destination: action.kind === "play" ? action.destination : undefined,
+    targetUserId: action.kind === "pass" ? action.targetUserId : undefined,
+  });
+}
+
+function handCardDropHooks(card: SnapshotCard): Pick<
+  CardDropHooks,
+  "findDropTarget" | "onDropTarget" | "onDragMove" | "onDragEnd"
+> {
+  let dragZones: DropZone[] = [];
+  const zonesNow = () => (dragZones.length ? dragZones : collectDropZones(document));
+  return {
+    findDropTarget: (ctx) => {
+      const zone = dropZoneAtPoint(zonesNow(), ctx.point);
+      return zone ? { id: zone.id } : null;
+    },
+    onDropTarget: ({ target }) => {
+      if (actionInFlight) {
+        setActionNotice(ACTION_IN_FLIGHT_NOTICE);
+        return false;
+      }
+      const zone = zonesNow().find((item) => item.id === target.id);
+      if (!zone) return false;
+      void submitDroppedHandAction(zone, card);
+      return false;
+    },
+    onDragMove: (ctx) => {
+      dragZones = collectDropZones(document);
+      paintDropZones(document, dragZones, dropZoneAtPoint(dragZones, ctx.point)?.id ?? null);
+    },
+    onDragEnd: () => {
+      hideDropLayer(document);
+      dragZones = [];
+    },
+  };
+}
+
+async function submitHandCardAction(
+  kind: HandActionKind,
+  card: InspectableCard,
+  extras?: { destination?: "gameboard" | "playarea"; targetUserId?: string }
+) {
   await postHandCardAction(kind, card, {
     getSession: () => activeSession,
     isActionInFlight: () => actionInFlight,
@@ -733,6 +793,12 @@ async function submitHandCardAction(kind: HandActionKind, card: InspectableCard)
     closeInspectAfterFailedAction,
     closeCardInspect,
     flushDeferredSnapshot,
+    scheduleDeferredSnapshotFlush: (done) => {
+      window.setTimeout(() => {
+        flushDeferredSnapshot();
+        done?.();
+      }, SNAP_BACK_DURATION_MS + 60);
+    },
     applySnapshot: (config, payload) =>
       applySnapshot(config as EmbeddedConfig, payload as GameSnapshot),
     readFixture,
@@ -743,7 +809,7 @@ async function submitHandCardAction(kind: HandActionKind, card: InspectableCard)
     onSettled: () => {
       actionRequestId = null;
     },
-  });
+  }, extras);
 }
 
 function bindActionDialog() {
@@ -1014,13 +1080,14 @@ function renderCards(
     const handActions = containerId === "hand-cards";
     if (enableInspectNav) sequence.push({ card, imageSrc, tile, handActions });
     if (cardId) {
-      // No drop targets yet: enableCardDrag snaps back unless a later hook consumes the drop.
-      enableCardDrag(tile, cardId, positions, {
+      const hooks: CardDropHooks = {
         onInspect: () =>
           openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined, {
             handActions,
           }),
-      });
+      };
+      if (handActions) Object.assign(hooks, handCardDropHooks(card));
+      enableCardDrag(tile, cardId, positions, hooks);
     }
     container.append(tile);
   }

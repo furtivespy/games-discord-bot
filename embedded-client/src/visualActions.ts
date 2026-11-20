@@ -6,14 +6,18 @@ export const DEFAULT_ACTION_COUNT = shared.DEFAULT_ACTION_COUNT;
 export const GAME_CHANNEL_LINK_LABEL = "Open Discord channel";
 export const CHANNEL_POST_FAILED_NOTICE =
   "The table updated, but Discord didn't get the channel message.";
+export const ACTION_IN_FLIGHT_NOTICE = "Wait for that action to finish.";
 
 export type DeckActionKind = "deal" | "draw";
-export type HandActionKind = "play" | "discard" | "show";
+export type InspectHandActionKind = "play" | "discard" | "show";
+export type HandActionKind = InspectHandActionKind | "pass" | "return";
+export type PlayDestination = "gameboard" | "playarea";
 
 // Tooltips copy the slash command descriptions, not the destination option.
-// Visual PLAY/DISCARD use that command's default destination (no picker).
+// Inspect PLAY/DISCARD use that command's default destination (no picker).
+// Drag-to-play can send an explicit play destination or pass/return.
 export const HAND_CARD_ACTIONS: ReadonlyArray<{
-  id: HandActionKind;
+  id: InspectHandActionKind;
   label: string;
   tooltip: string;
 }> = [
@@ -156,7 +160,7 @@ export function visualActionBody(opts: {
 
 export function handCardActionFromDataset(
   value: string | null | undefined
-): HandActionKind | null {
+): InspectHandActionKind | null {
   return value === "play" || value === "discard" || value === "show" ? value : null;
 }
 
@@ -167,6 +171,8 @@ export function visualHandActionBody(opts: {
   guildId: string;
   requestId?: string | null;
   fixture?: string | null;
+  destination?: PlayDestination | null;
+  targetUserId?: string | null;
 }): Record<string, string> {
   const body: Record<string, string> = {
     action: opts.action,
@@ -178,6 +184,13 @@ export function visualHandActionBody(opts: {
   if (requestId) body.requestId = requestId;
   const fixture = String(opts.fixture || "").trim();
   if (fixture) body.fixture = fixture;
+  if (opts.action === "play" && (opts.destination === "gameboard" || opts.destination === "playarea")) {
+    body.destination = opts.destination;
+  }
+  if (opts.action === "pass") {
+    const targetUserId = String(opts.targetUserId || "").trim();
+    if (targetUserId) body.targetUserId = targetUserId;
+  }
   return body;
 }
 
