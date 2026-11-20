@@ -6,6 +6,7 @@ import {
   visualActionErrorMessage,
   visualHandActionBody,
   type HandActionKind,
+  type PlayDestination,
 } from "./visualActions";
 import { shouldApplySnapshot } from "./requestSeq";
 
@@ -24,6 +25,11 @@ export type HandCardActionSession = {
 
 export type HandCardActionCard = {
   id?: unknown;
+};
+
+export type HandCardActionExtras = {
+  destination?: PlayDestination;
+  targetUserId?: string;
 };
 
 export type SubmitHandCardActionHooks = {
@@ -62,7 +68,8 @@ function failHandAction(
 export async function submitHandCardAction(
   kind: HandActionKind,
   card: HandCardActionCard | null | undefined,
-  hooks: SubmitHandCardActionHooks
+  hooks: SubmitHandCardActionHooks,
+  extras: HandCardActionExtras = {}
 ): Promise<void> {
   const session = hooks.getSession();
   const cardId = typeof card?.id === "string" ? card.id.trim() : "";
@@ -107,6 +114,8 @@ export async function submitHandCardAction(
             guildId,
             requestId,
             fixture: session.config.mock ? hooks.readFixture?.() : undefined,
+            destination: extras.destination,
+            targetUserId: extras.targetUserId,
           })
         ),
       }

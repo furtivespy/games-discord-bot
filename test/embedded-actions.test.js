@@ -84,11 +84,45 @@ describe("parseVisualActionBody", () => {
     expect(parseVisualActionBody({ action: "shuffle", deck: "Main", count: 1 })).toEqual({
       error: "invalid_action",
       status: 400,
-      message: "Deal, Draw, Play, Discard, Show, and Edit Scores are the only visual actions.",
+      message: "Deal, Draw, Play, Discard, Show, Pass, Return, and Edit Scores are the only visual actions.",
     });
     expect(
       parseVisualActionBody({ action: "play", cardId: "hand-1", requestId: "req-play-1" })
     ).toEqual({ action: "play", cardId: "hand-1", requestId: "req-play-1" });
+    expect(
+      parseVisualActionBody({
+        action: "play",
+        cardId: "hand-1",
+        destination: "gameboard",
+      })
+    ).toEqual({
+      action: "play",
+      cardId: "hand-1",
+      requestId: null,
+      destination: "gameboard",
+    });
+    expect(
+      parseVisualActionBody({
+        action: "pass",
+        cardId: "hand-1",
+        targetUserId: " other-player ",
+      })
+    ).toEqual({
+      action: "pass",
+      cardId: "hand-1",
+      requestId: null,
+      targetUserId: "other-player",
+    });
+    expect(parseVisualActionBody({ action: "pass", cardId: "hand-1" })).toEqual({
+      error: "missing_target",
+      status: 400,
+      message: "Pick a player to pass to.",
+    });
+    expect(parseVisualActionBody({ action: "return", cardId: "hand-1" })).toEqual({
+      action: "return",
+      cardId: "hand-1",
+      requestId: null,
+    });
     expect(parseVisualActionBody({ action: "discard", cardId: "  hand-1  " })).toEqual({
       action: "discard",
       cardId: "hand-1",
@@ -211,6 +245,61 @@ describe("applyVisualCardAction", () => {
     expect(shown.content).toBe("Showing a card:");
     expect(showGame.players[0].hands.main.map((card) => card.id)).toEqual(["hand-1"]);
     expect(showGame.history.at(-1).summary).toBe("Will revealed Copper from hand");
+  });
+
+  test("play destination gameboard and playarea follow /cards hand play", () => {
+    const boardGame = gameWithDeck();
+    const toBoard = applyVisualCardAction(boardGame, {
+      action: "play",
+      cardId: "hand-1",
+      destination: "gameboard",
+      actor,
+      userId: actor.id,
+    });
+    expect(toBoard.ok).toBe(true);
+    expect(toBoard.content).toBe("Will has Played to Game Board:");
+    expect(boardGame.gameBoard.map((card) => card.id)).toEqual(["hand-1"]);
+    expect(boardGame.players[0].hands.main).toEqual([]);
+
+    const areaGame = gameWithDeck();
+    const toArea = applyVisualCardAction(areaGame, {
+      action: "play",
+      cardId: "hand-1",
+      destination: "playarea",
+      actor,
+      userId: actor.id,
+    });
+    expect(toArea.ok).toBe(true);
+    expect(areaGame.players[0].playArea.map((card) => card.id)).toEqual(["hand-1"]);
+  });
+
+  test("pass and return follow /cards hand pass and return", () => {
+    const passGame = gameWithDeck();
+    const passed = applyVisualCardAction(passGame, {
+      action: "pass",
+      cardId: "hand-1",
+      targetUserId: "other-player",
+      actor,
+      userId: actor.id,
+    });
+    expect(passed.ok).toBe(true);
+    expect(passed.revealCard).toBe(false);
+    expect(passed.content).toBe("Will passed 1 card(s) to Riley.");
+    expect(passGame.players[0].hands.main).toEqual([]);
+    expect(passGame.players[1].hands.main.map((card) => card.id)).toEqual(["hand-1"]);
+
+    const returnGame = gameWithDeck();
+    const returned = applyVisualCardAction(returnGame, {
+      action: "return",
+      cardId: "hand-1",
+      actor,
+      userId: actor.id,
+    });
+    expect(returned.ok).toBe(true);
+    expect(returned.revealCard).toBe(false);
+    expect(returned.content).toBe("Will returned a card");
+    expect(returnGame.players[0].hands.main).toEqual([]);
+    expect(returnGame.decks[0].piles.draw.cards[0].id).toBe("hand-1");
   });
 
   test("playToPlayArea sends the card to the play area instead of discard", () => {

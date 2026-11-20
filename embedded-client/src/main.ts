@@ -57,7 +57,19 @@ import {
   type HandActionKind,
 } from "./visualActions";
 import { submitHandCardAction as postHandCardAction } from "./submitHandCardAction";
-import { SNAP_BACK_DURATION_MS, enableCardDrag, type CardOffset } from "./drag";
+import {
+  SNAP_BACK_DURATION_MS,
+  enableCardDrag,
+  type CardDropHooks,
+  type CardOffset,
+} from "./drag";
+import {
+  collectDropZones,
+  dropZoneAtPoint,
+  hideDropLayer,
+  paintDropZones,
+  type DropZone,
+} from "./dropZones";
 import { enableHoverZoomClamp } from "./hoverZoom";
 import {
   closeCardInspect,
@@ -267,7 +279,10 @@ function setDeckActionsLocked(locked: boolean) {
 }
 
 function setTableVisible(visible: boolean) {
-  if (!visible) closeCardInspect();
+  if (!visible) {
+    closeCardInspect();
+    hideDropLayer(document);
+  }
   const table = document.getElementById("table");
   if (table) table.hidden = !visible;
   if (!visible) {
@@ -722,7 +737,53 @@ async function submitScoreEdits(scores: ScoreMap) {
   }
 }
 
-async function submitHandCardAction(kind: HandActionKind, card: InspectableCard) {
+async function submitDroppedHandAction(zone: DropZone, card: SnapshotCard) {
+  const action = zone.action;
+  if (action.kind === "play") {
+    await submitHandCardAction("play", card, { destination: action.destination });
+    return;
+  }
+  if (action.kind === "pass") {
+    await submitHandCardAction("pass", card, { targetUserId: action.targetUserId });
+    return;
+  }
+  if (action.kind === "return") {
+    await submitHandCardAction("return", card);
+    return;
+  }
+  await submitHandCardAction("discard", card);
+}
+
+function handCardDropHooks(card: SnapshotCard): Pick<
+  CardDropHooks,
+  "findDropTarget" | "onDropTarget" | "onDragMove" | "onDragEnd"
+> {
+  return {
+    findDropTarget: (ctx) => {
+      const zone = dropZoneAtPoint(collectDropZones(document), ctx.point);
+      return zone ? { id: zone.id } : null;
+    },
+    onDropTarget: ({ target }) => {
+      const zone = collectDropZones(document).find((item) => item.id === target.id);
+      if (!zone) return false;
+      void submitDroppedHandAction(zone, card);
+      return false;
+    },
+    onDragMove: (ctx) => {
+      const zones = collectDropZones(document);
+      paintDropZones(document, zones, dropZoneAtPoint(zones, ctx.point)?.id ?? null);
+    },
+    onDragEnd: () => {
+      hideDropLayer(document);
+    },
+  };
+}
+
+async function submitHandCardAction(
+  kind: HandActionKind,
+  card: InspectableCard,
+  extras?: { destination?: "gameboard" | "playarea"; targetUserId?: string }
+) {
   await postHandCardAction(kind, card, {
     getSession: () => activeSession,
     isActionInFlight: () => actionInFlight,
@@ -743,7 +804,7 @@ async function submitHandCardAction(kind: HandActionKind, card: InspectableCard)
     onSettled: () => {
       actionRequestId = null;
     },
-  });
+  }, extras);
 }
 
 function bindActionDialog() {
@@ -1014,13 +1075,14 @@ function renderCards(
     const handActions = containerId === "hand-cards";
     if (enableInspectNav) sequence.push({ card, imageSrc, tile, handActions });
     if (cardId) {
-      // No drop targets yet: enableCardDrag snaps back unless a later hook consumes the drop.
-      enableCardDrag(tile, cardId, positions, {
+      const hooks: CardDropHooks = {
         onInspect: () =>
           openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined, {
             handActions,
           }),
-      });
+      };
+      if (handActions) Object.assign(hooks, handCardDropHooks(card));
+      enableCardDrag(tile, cardId, positions, hooks);
     }
     container.append(tile);
   }

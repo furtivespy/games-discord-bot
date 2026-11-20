@@ -517,6 +517,8 @@ function createMockGameSession() {
     deckName,
     count,
     cardId,
+    destination,
+    targetUserId,
     scores,
     requestId,
   } = {}) {
@@ -554,6 +556,8 @@ function createMockGameSession() {
               deckName,
               count,
               cardId,
+              destination,
+              targetUserId,
               actor: mockActor(),
               userId: MOCK_USER.id,
             });

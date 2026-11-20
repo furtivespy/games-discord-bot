@@ -25,7 +25,7 @@ BoardGameGeek lookup by name, with autocomplete.
 
 Deck, hand, draft, pile, play area, game board and deck-builder actions for the channel's game.
 
-When `hiddenInfo` is `deck` or `all`, draw and discard counts of 0 or 1 stay visible; only 2+ become `?`, because empty vs one card is easy to see (FUR-274). `/cards hand play|discard|show` ack Discord before they persist, so a failed defer does not save; visual inspect PLAY / DISCARD / SHOW on your own hand cards reuse those same mutations (FUR-271).
+When `hiddenInfo` is `deck` or `all`, draw and discard counts of 0 or 1 stay visible; only 2+ become `?`, because empty vs one card is easy to see (FUR-274). `/cards hand play|discard|show` ack Discord before they persist, so a failed defer does not save; visual inspect PLAY / DISCARD / SHOW on your own hand cards reuse those same mutations (FUR-271). Dragging a hand card onto another player, the game board, your play area, the table, a deck, or discard runs pass, play (with destination), return, or discard (FUR-281).
 
 - Seed: an active game with at least one deck (`createDeck`) and players (`createPlayer`). Most subcommands read the deck named by the optional `deck` option and default to the only deck.
 - Reach: `scripts/control-fixtures/cards-draw.js` runs `/cards deck draw` then `/cards deck peek`. Hand actions such as `/cards hand play` need cards in the player's `hands.main`. Interactive pickers (select menus, buttons) show up as component rows in the output; clicking them is not simulated.
