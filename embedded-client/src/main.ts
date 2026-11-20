@@ -81,9 +81,9 @@ import { isPickerFixture, isSnapshotFixture } from "./mockFixtures";
 import { MockDiscordSDK } from "./mockSdk";
 import { asCardList, createSnapshotLoader, shouldApplySnapshot } from "./requestSeq";
 import {
+  applyPileBackImage,
   asRecordList,
   autoSelectGameId,
-  DEFAULT_CARD_BACK,
   deckActionsFor,
   deckCountLabel,
   deckNavDirectionFromDataset,
@@ -1131,10 +1131,6 @@ function renderDeckActions(deck: SnapshotDeck): HTMLDivElement {
   return actions;
 }
 
-function pileBackSrc(config: EmbeddedConfig, deck: SnapshotDeck): string {
-  return mappedImageSrc(config, deck.backImageUrl) || DEFAULT_CARD_BACK;
-}
-
 function renderPileTile(
   config: EmbeddedConfig,
   deck: SnapshotDeck,
@@ -1148,7 +1144,7 @@ function renderPileTile(
   tile.dataset.deckName = deckName;
   const face = document.createElement("div");
   face.className = discard ? "card-face deck-face discard-face" : "card-face deck-face";
-  face.style.backgroundImage = `url("${pileBackSrc(config, deck)}")`;
+  applyPileBackImage(face, mappedImageSrc(config, deck.backImageUrl));
   if (discard) {
     const overlay = document.createElement("div");
     overlay.className = "discard-overlay";

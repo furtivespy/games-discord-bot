@@ -97,6 +97,7 @@ const {
   isSnapshotFixture,
 } = require("../embedded-client/src/mockFixtures.ts");
 const {
+  applyPileBackImage,
   DEFAULT_CARD_BACK,
   UNASSIGNED_TEAM_LABEL,
   autoSelectGameId,
@@ -193,6 +194,9 @@ describe("embedded client handshake URLs", () => {
     expect(main).toContain("renderDeckTile");
     expect(main).toContain("renderDiscardTile");
     expect(main).toContain("function renderPileTile");
+    expect(main).toContain("applyPileBackImage");
+    expect(main).toContain("applyPileBackImage(face, mappedImageSrc(config, deck.backImageUrl))");
+    expect(main).not.toContain("function pileBackSrc");
     expect(main).toContain("tile.title = discard ? `${deckName} discard` : deckName");
     expect(main).not.toContain("bindPileLayout");
     expect(main).not.toContain("currentPileWindowSize");
@@ -425,6 +429,58 @@ describe("visual table layout helpers", () => {
         require("path").join(__dirname, "..", "embedded-client", "public", "card-back.svg")
       )
     ).toBe(true);
+  });
+
+  test("broken custom deck backs fall back to the default card back", () => {
+    const defaultUrl = `url("${DEFAULT_CARD_BACK}")`;
+    const custom = "/api/card-image?u=https://example.com/missing.png";
+    const customUrl = `url("${custom}")`;
+
+    class FakeImage {
+      constructor() {
+        this.onload = null;
+        this.onerror = null;
+        this._src = "";
+        this.boundOnerrorBeforeSrc = false;
+        FakeImage.instances.push(this);
+      }
+      get src() {
+        return this._src;
+      }
+      set src(value) {
+        this.boundOnerrorBeforeSrc = typeof this.onerror === "function";
+        this._src = value;
+      }
+    }
+    FakeImage.instances = [];
+
+    const unset = { style: { backgroundImage: "" } };
+    applyPileBackImage(unset, null);
+    expect(unset.style.backgroundImage).toBe(defaultUrl);
+    applyPileBackImage(unset, undefined);
+    expect(unset.style.backgroundImage).toBe(defaultUrl);
+    applyPileBackImage(unset, "");
+    expect(unset.style.backgroundImage).toBe(defaultUrl);
+    applyPileBackImage(unset, DEFAULT_CARD_BACK);
+    expect(unset.style.backgroundImage).toBe(defaultUrl);
+    expect(FakeImage.instances).toHaveLength(0);
+
+    const face = { style: { backgroundImage: "" } };
+    applyPileBackImage(face, custom, FakeImage);
+    expect(face.style.backgroundImage).toBe(customUrl);
+    expect(FakeImage.instances).toHaveLength(1);
+    const probe = FakeImage.instances[0];
+    expect(probe.src).toBe(custom);
+    expect(probe.boundOnerrorBeforeSrc).toBe(true);
+
+    probe.onerror();
+    expect(face.style.backgroundImage).toBe(defaultUrl);
+
+    const loaded = { style: { backgroundImage: "" } };
+    FakeImage.instances = [];
+    applyPileBackImage(loaded, custom, FakeImage);
+    FakeImage.instances[0].onload?.();
+    expect(loaded.style.backgroundImage).toBe(customUrl);
   });
 
   test("deck window retargets when the list shrinks while rotated", () => {
