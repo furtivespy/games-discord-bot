@@ -2,44 +2,27 @@ export const MAX_VISIBLE_DECKS = 2;
 export const DEFAULT_CARD_BACK = "/card-back.svg";
 export const UNASSIGNED_TEAM_LABEL = "No team";
 
-/** Probe used to detect a custom deck-back URL that 404s or is not an image. */
-export type ImageProbe = {
-  src: string;
-  onload: ((ev?: Event) => unknown) | null;
-  onerror: ((ev?: Event) => unknown) | null;
-};
-
-export type ImageProbeCtor = new () => ImageProbe;
-
-function cssBackgroundUrl(src: string): string {
-  return `url("${src}")`;
-}
-
-function defaultImageProbeCtor(): ImageProbeCtor {
-  const ctor = (globalThis as { Image?: ImageProbeCtor }).Image;
-  if (!ctor) {
-    throw new Error("Image is not available");
-  }
-  return ctor;
-}
-
 /**
  * Paint a pile face with a custom back, or DEFAULT_CARD_BACK when unset.
- * A mapped URL that fails to load (404, not an image) falls back the same way.
- * Does not fetch at save time; the browser's image load is the check.
+ * A mapped URL is applied only after Image() loads it; 404s and non-images
+ * keep the default. Does not fetch at save time.
  */
 export function applyPileBackImage(
   el: { style: { backgroundImage: string } },
-  mappedSrc: string | null | undefined,
-  ImageCtor?: ImageProbeCtor
+  mappedSrc: string | null | undefined
 ): void {
+  const fallback = `url("${DEFAULT_CARD_BACK}")`;
+  el.style.backgroundImage = fallback;
   const src = mappedSrc || DEFAULT_CARD_BACK;
-  el.style.backgroundImage = cssBackgroundUrl(src);
   if (src === DEFAULT_CARD_BACK) return;
-  const Ctor = ImageCtor ?? defaultImageProbeCtor();
-  const probe = new Ctor();
+  const ImageCtor = (globalThis as { Image?: new () => HTMLImageElement }).Image;
+  if (!ImageCtor) return;
+  const probe = new ImageCtor();
+  probe.onload = () => {
+    el.style.backgroundImage = `url("${src}")`;
+  };
   probe.onerror = () => {
-    el.style.backgroundImage = cssBackgroundUrl(DEFAULT_CARD_BACK);
+    el.style.backgroundImage = fallback;
   };
   probe.src = src;
 }

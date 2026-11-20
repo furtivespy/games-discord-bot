@@ -435,52 +435,65 @@ describe("visual table layout helpers", () => {
     const defaultUrl = `url("${DEFAULT_CARD_BACK}")`;
     const custom = "/api/card-image?u=https://example.com/missing.png";
     const customUrl = `url("${custom}")`;
+    const OriginalImage = globalThis.Image;
 
     class FakeImage {
       constructor() {
         this.onload = null;
         this.onerror = null;
         this._src = "";
-        this.boundOnerrorBeforeSrc = false;
+        this.boundHandlersBeforeSrc = false;
         FakeImage.instances.push(this);
       }
       get src() {
         return this._src;
       }
       set src(value) {
-        this.boundOnerrorBeforeSrc = typeof this.onerror === "function";
+        this.boundHandlersBeforeSrc =
+          typeof this.onload === "function" && typeof this.onerror === "function";
         this._src = value;
       }
     }
     FakeImage.instances = [];
+    globalThis.Image = FakeImage;
 
-    const unset = { style: { backgroundImage: "" } };
-    applyPileBackImage(unset, null);
-    expect(unset.style.backgroundImage).toBe(defaultUrl);
-    applyPileBackImage(unset, undefined);
-    expect(unset.style.backgroundImage).toBe(defaultUrl);
-    applyPileBackImage(unset, "");
-    expect(unset.style.backgroundImage).toBe(defaultUrl);
-    applyPileBackImage(unset, DEFAULT_CARD_BACK);
-    expect(unset.style.backgroundImage).toBe(defaultUrl);
-    expect(FakeImage.instances).toHaveLength(0);
+    try {
+      const unset = { style: { backgroundImage: "" } };
+      applyPileBackImage(unset, null);
+      expect(unset.style.backgroundImage).toBe(defaultUrl);
+      applyPileBackImage(unset, undefined);
+      expect(unset.style.backgroundImage).toBe(defaultUrl);
+      applyPileBackImage(unset, "");
+      expect(unset.style.backgroundImage).toBe(defaultUrl);
+      applyPileBackImage(unset, DEFAULT_CARD_BACK);
+      expect(unset.style.backgroundImage).toBe(defaultUrl);
+      expect(FakeImage.instances).toHaveLength(0);
 
-    const face = { style: { backgroundImage: "" } };
-    applyPileBackImage(face, custom, FakeImage);
-    expect(face.style.backgroundImage).toBe(customUrl);
-    expect(FakeImage.instances).toHaveLength(1);
-    const probe = FakeImage.instances[0];
-    expect(probe.src).toBe(custom);
-    expect(probe.boundOnerrorBeforeSrc).toBe(true);
+      const face = { style: { backgroundImage: "" } };
+      applyPileBackImage(face, custom);
+      expect(face.style.backgroundImage).toBe(defaultUrl);
+      expect(FakeImage.instances).toHaveLength(1);
+      const probe = FakeImage.instances[0];
+      expect(probe.src).toBe(custom);
+      expect(probe.boundHandlersBeforeSrc).toBe(true);
 
-    probe.onerror();
-    expect(face.style.backgroundImage).toBe(defaultUrl);
+      probe.onerror();
+      expect(face.style.backgroundImage).toBe(defaultUrl);
 
-    const loaded = { style: { backgroundImage: "" } };
-    FakeImage.instances = [];
-    applyPileBackImage(loaded, custom, FakeImage);
-    FakeImage.instances[0].onload?.();
-    expect(loaded.style.backgroundImage).toBe(customUrl);
+      const loaded = { style: { backgroundImage: "" } };
+      FakeImage.instances = [];
+      applyPileBackImage(loaded, custom);
+      expect(loaded.style.backgroundImage).toBe(defaultUrl);
+      FakeImage.instances[0].onload();
+      expect(loaded.style.backgroundImage).toBe(customUrl);
+
+      globalThis.Image = undefined;
+      const noCtor = { style: { backgroundImage: "" } };
+      applyPileBackImage(noCtor, custom);
+      expect(noCtor.style.backgroundImage).toBe(defaultUrl);
+    } finally {
+      globalThis.Image = OriginalImage;
+    }
   });
 
   test("deck window retargets when the list shrinks while rotated", () => {
