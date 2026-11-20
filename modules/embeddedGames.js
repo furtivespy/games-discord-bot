@@ -716,6 +716,8 @@ function accessDenied(error, status = 403) {
 const DISCORD_LOOKUP_TTL_MS = 45_000;
 const DISCORD_LOOKUP_CACHE_MAX = 256;
 const CHEAP_RETRY_AFTER_MS = 1_000;
+/** Short TTL for 429/5xx so a Visual version poll (2.5s) does not retry Discord every tick. */
+const DISCORD_ERROR_CACHE_TTL_MS = 10_000;
 
 function asPermissionBits(value) {
   try {
@@ -772,6 +774,7 @@ function sleep(ms) {
 function createDiscordLookupCache({
   ttlMs = DISCORD_LOOKUP_TTL_MS,
   maxSize = DISCORD_LOOKUP_CACHE_MAX,
+  now = () => Date.now(),
 } = {}) {
   const entries = new Map();
   const inflight = new Map();
@@ -779,22 +782,38 @@ function createDiscordLookupCache({
   function get(key) {
     const entry = entries.get(key);
     if (!entry) return undefined;
-    if (entry.expiresAt <= Date.now()) {
+    if (entry.expiresAt <= now()) {
       entries.delete(key);
       return undefined;
     }
     return entry.value;
   }
 
-  function set(key, value) {
+  function set(key, value, entryTtlMs = ttlMs) {
     if (entries.size >= maxSize && !entries.has(key)) {
       const oldest = entries.keys().next().value;
       if (oldest != null) entries.delete(oldest);
     }
-    entries.set(key, { value, expiresAt: Date.now() + ttlMs });
+    const ttl = Number.isFinite(entryTtlMs) && entryTtlMs > 0 ? entryTtlMs : ttlMs;
+    entries.set(key, { value, expiresAt: now() + ttl });
   }
 
   return { get, set, inflight, size: () => entries.size };
+}
+
+function discordLookupCacheTtlMs(result) {
+  if (result.status === 200 || result.status === 404) return undefined;
+  if (result.status === 429) {
+    const delayMs = retryAfterMs(result);
+    if (delayMs != null && delayMs > CHEAP_RETRY_AFTER_MS) return delayMs;
+    return DISCORD_ERROR_CACHE_TTL_MS;
+  }
+  if (result.status >= 500 && result.status <= 599) {
+    const delayMs = retryAfterMs(result);
+    if (delayMs != null && delayMs > 0) return delayMs;
+    return DISCORD_ERROR_CACHE_TTL_MS;
+  }
+  return null;
 }
 
 async function discordBotGet({
@@ -832,8 +851,9 @@ async function discordBotGet({
         result = await requestOnce();
       }
     }
-    if (cache && (result.status === 200 || result.status === 404)) {
-      cache.set(path, { status: result.status, body: result.body });
+    const cacheTtlMs = discordLookupCacheTtlMs(result);
+    if (cache && cacheTtlMs !== null) {
+      cache.set(path, { status: result.status, body: result.body }, cacheTtlMs);
     }
     return result;
   })();
@@ -1067,6 +1087,8 @@ async function resolveHostBoardImages(
         cache: hostImageCache,
         wait,
       });
+      // 200/404/429/5xx are cached in discordBotGet. 403 is host-image-only:
+      // missing Read Message History is sticky, unlike an access-guard 403.
       if (result.status === 403 && hostImageCache) {
         hostImageCache.set(path, { status: result.status, body: result.body });
       }
@@ -1205,6 +1227,7 @@ module.exports = {
   CHEAP_RETRY_AFTER_MS,
   DISCORD_API_BASE,
   DISCORD_EPOCH_MS,
+  DISCORD_ERROR_CACHE_TTL_MS,
   DISCORD_LOOKUP_TTL_MS,
   GAME_COLLECTION,
   HISTORY_KEEP_LIMIT,

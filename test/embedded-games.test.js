@@ -6,6 +6,7 @@ const GameStore = require("../db/gameStore");
 const GameDB = require("../db/anygame");
 const {
   DISCORD_API_BASE,
+  DISCORD_ERROR_CACHE_TTL_MS,
   GAME_COLLECTION,
   HISTORY_KEEP_LIMIT,
   createdAtMs,
@@ -845,6 +846,175 @@ describe("versionGameForUser", () => {
     expect(snapshot.status).toBe(200);
     expect(snapshot.body.gameBoard).toEqual(hostBoardImages);
     expect(urls).toHaveLength(1);
+  });
+
+  test("empty-board 403, 429, and 5xx are cached across a minute of version polls", async () => {
+    const VERSION_POLLS_PER_MINUTE = 24;
+    const game = {
+      isdeleted: false,
+      name: "No board",
+      players: [{ userId: "will", hands: { main: [] } }],
+      gameBoard: [],
+      history: [
+        {
+          timestamp: "2026-11-17T12:00:00.000Z",
+          actor: { userId: "host-1" },
+          action: {
+            category: GameDB.ACTION_CATEGORIES.GAME,
+            type: GameDB.ACTION_TYPES.CREATE,
+          },
+        },
+      ],
+    };
+    const ids = {
+      channelId: "thread-game",
+      guildId: "guild-a",
+      userId: "will",
+    };
+
+    async function pollAgainstDiscord({ status, retryAfter }) {
+      const cache = createDiscordLookupCache({
+        ttlMs: DISCORD_ERROR_CACHE_TTL_MS,
+      });
+      const urls = [];
+      const fetchImpl = async (url) => {
+        urls.push(String(url));
+        return {
+          status,
+          headers: {
+            get: (name) =>
+              name === "retry-after" && retryAfter != null ? String(retryAfter) : null,
+          },
+          json: async () =>
+            retryAfter != null ? { retry_after: retryAfter } : { message: "error" },
+        };
+      };
+      const opts = {
+        discordClient: { getGameDataV2: async () => game, token: "bot-token" },
+        fetchImpl,
+        hostImageCache: cache,
+        ...ids,
+      };
+      const first = await versionGameForUser(opts);
+      expect(first.status).toBe(200);
+      expect(first.body.version).toBe(snapshotVersion(game, ids));
+      for (let i = 1; i < VERSION_POLLS_PER_MINUTE; i++) {
+        const again = await versionGameForUser({
+          ...opts,
+          ifNoneMatch: formatEtag(first.body.version),
+        });
+        expect(again).toEqual({ status: 304, version: first.body.version });
+      }
+      expect(urls).toEqual([
+        `${DISCORD_API_BASE}/channels/thread-game/messages?limit=100`,
+      ]);
+      const snapshot = await snapshotGameForUser(opts);
+      expect(snapshot.status).toBe(200);
+      expect(snapshot.body.gameBoard).toEqual([]);
+      expect(urls).toHaveLength(1);
+    }
+
+    await pollAgainstDiscord({ status: 403 });
+    await pollAgainstDiscord({ status: 429, retryAfter: 5 });
+    await pollAgainstDiscord({ status: 429 });
+    await pollAgainstDiscord({ status: 500 });
+    await pollAgainstDiscord({ status: 503 });
+  });
+
+  test("honors Retry-After on a cached Discord 429 before refetching host images", async () => {
+    let nowMs = 1_000_000;
+    const cache = createDiscordLookupCache({
+      ttlMs: DISCORD_ERROR_CACHE_TTL_MS,
+      now: () => nowMs,
+    });
+    const urls = [];
+    const fetchImpl = async (url) => {
+      urls.push(String(url));
+      return {
+        status: 429,
+        headers: { get: (name) => (name === "retry-after" ? "5" : null) },
+        json: async () => ({ retry_after: 5 }),
+      };
+    };
+    const game = {
+      isdeleted: false,
+      name: "No board",
+      players: [{ userId: "will", hands: { main: [] } }],
+      gameBoard: [],
+      history: [
+        {
+          timestamp: "2026-11-17T12:00:00.000Z",
+          actor: { userId: "host-1" },
+          action: {
+            category: GameDB.ACTION_CATEGORIES.GAME,
+            type: GameDB.ACTION_TYPES.CREATE,
+          },
+        },
+      ],
+    };
+    const opts = {
+      discordClient: { getGameDataV2: async () => game, token: "bot-token" },
+      fetchImpl,
+      hostImageCache: cache,
+      channelId: "thread-game",
+      guildId: "guild-a",
+      userId: "will",
+    };
+    await versionGameForUser(opts);
+    expect(urls).toHaveLength(1);
+    nowMs += 4_999;
+    await versionGameForUser(opts);
+    expect(urls).toHaveLength(1);
+    nowMs += 1;
+    await versionGameForUser(opts);
+    expect(urls).toHaveLength(2);
+  });
+
+  test("cached Discord 5xx expires on the short error TTL, not the success TTL", async () => {
+    let nowMs = 0;
+    const cache = createDiscordLookupCache({
+      ttlMs: 60_000,
+      now: () => nowMs,
+    });
+    const urls = [];
+    const fetchImpl = async (url) => {
+      urls.push(String(url));
+      return { status: 500, json: async () => ({ message: "error" }) };
+    };
+    const opts = {
+      discordClient: {
+        getGameDataV2: async () => ({
+          isdeleted: false,
+          name: "No board",
+          players: [{ userId: "will", hands: { main: [] } }],
+          gameBoard: [],
+          history: [
+            {
+              timestamp: "2026-11-17T12:00:00.000Z",
+              actor: { userId: "host-1" },
+              action: {
+                category: GameDB.ACTION_CATEGORIES.GAME,
+                type: GameDB.ACTION_TYPES.CREATE,
+              },
+            },
+          ],
+        }),
+        token: "bot-token",
+      },
+      fetchImpl,
+      hostImageCache: cache,
+      channelId: "thread-game",
+      guildId: "guild-a",
+      userId: "will",
+    };
+    await versionGameForUser(opts);
+    expect(urls).toHaveLength(1);
+    nowMs += DISCORD_ERROR_CACHE_TTL_MS - 1;
+    await versionGameForUser(opts);
+    expect(urls).toHaveLength(1);
+    nowMs += 1;
+    await versionGameForUser(opts);
+    expect(urls).toHaveLength(2);
   });
 
   test("does not fetch channel messages when the card board is in use", async () => {
