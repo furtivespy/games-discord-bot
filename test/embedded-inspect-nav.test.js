@@ -8,6 +8,7 @@ const {
   closeCardInspect,
   closeInspectAfterFailedAction,
   inspectKeyCommand,
+  inspectZoomState,
   isInspectTypingTarget,
   openCardInspect,
   setInspectCardActionHandler,
@@ -34,6 +35,16 @@ class FakeElement {
     this.attributes = {};
     this.classSet = new Set();
     this.listeners = new Map();
+    this.styleProps = {};
+    this.style = {
+      setProperty: (name, value) => {
+        this.styleProps[name] = String(value);
+      },
+      getPropertyValue: (name) => this.styleProps[name] || "",
+      removeProperty: (name) => {
+        delete this.styleProps[name];
+      },
+    };
     this.classList = {
       add: (name) => this.classSet.add(name),
       remove: (name) => this.classSet.delete(name),
@@ -147,6 +158,10 @@ class FakeElement {
     copy.textContent = this.textContent;
     return copy;
   }
+
+  setPointerCapture() {}
+
+  releasePointerCapture() {}
 
   addEventListener(type, fn) {
     const list = this.listeners.get(type) || [];
@@ -514,6 +529,137 @@ describe("inspect overlay click-outside", () => {
 
     dialog.dispatchEvent(clickEvent(art, 150, 50));
     expect(dialog.open).toBe(true);
+  });
+});
+
+function wheelEvent(target, deltaY, clientX, clientY) {
+  let prevented = false;
+  return {
+    type: "wheel",
+    target,
+    deltaY,
+    clientX,
+    clientY,
+    button: 0,
+    preventDefault() {
+      prevented = true;
+    },
+    stopPropagation() {},
+    wasPrevented() {
+      return prevented;
+    },
+  };
+}
+
+function pointerEvent(type, target, clientX, clientY, extras = {}) {
+  return {
+    type,
+    target,
+    clientX,
+    clientY,
+    button: 0,
+    pointerId: 1,
+    preventDefault() {},
+    stopPropagation() {},
+    ...extras,
+  };
+}
+
+describe("inspect photo wheel zoom and pan", () => {
+  const photoBox = { left: 50, top: 40, width: 200, height: 200 };
+  const photo = { id: "host-image:m1:a1", name: "Image" };
+
+  function openSizedPhoto() {
+    const ctx = installInspectDocument();
+    const art = ctx.document.getElementById("card-inspect-art");
+    openCardInspect(photo, "/photo.png", makeTile("Image"));
+    sizePhotoArt(art, { naturalWidth: 400, naturalHeight: 100, box: photoBox });
+    return { ...ctx, art };
+  }
+
+  test("wheel up zooms in toward the cursor and will not shrink below the fitted size", () => {
+    const { dialog, art } = openSizedPhoto();
+    expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+
+    const zoomOut = wheelEvent(art, 120, 150, 140);
+    dialog.dispatchEvent(zoomOut);
+    expect(zoomOut.wasPrevented()).toBe(true);
+    expect(inspectZoomState().scale).toBe(1);
+    expect(dialog.classList.contains("is-zoomed")).toBe(false);
+
+    const zoomIn = wheelEvent(art, -100, 150, 140);
+    dialog.dispatchEvent(zoomIn);
+    expect(zoomIn.wasPrevented()).toBe(true);
+    expect(inspectZoomState().scale).toBeGreaterThan(1);
+    expect(inspectZoomState().scale).toBeLessThanOrEqual(4);
+    expect(dialog.classList.contains("is-zoomed")).toBe(true);
+    expect(dialog.style.getPropertyValue("--inspect-zoom")).toBe(String(inspectZoomState().scale));
+
+    for (let i = 0; i < 24; i += 1) {
+      dialog.dispatchEvent(wheelEvent(art, -100, 150, 140));
+    }
+    expect(inspectZoomState().scale).toBe(4);
+
+    dialog.dispatchEvent(wheelEvent(art, 100, 150, 140));
+    expect(inspectZoomState().scale).toBeLessThan(4);
+    expect(inspectZoomState().scale).toBeGreaterThanOrEqual(1);
+  });
+
+  test("zoomed photos pan with the pointer; a pan does not close; X and outside clicks still close", () => {
+    const { document, dialog, art } = openSizedPhoto();
+    dialog.dispatchEvent(wheelEvent(art, -100, 150, 140));
+    for (let i = 0; i < 8; i += 1) dialog.dispatchEvent(wheelEvent(art, -100, 150, 140));
+    expect(inspectZoomState().scale).toBeGreaterThan(1);
+    const before = inspectZoomState();
+
+    dialog.dispatchEvent(pointerEvent("pointerdown", art, 150, 140));
+    expect(dialog.classList.contains("is-panning")).toBe(true);
+    document.dispatchEvent(pointerEvent("pointermove", art, 130, 130));
+    const panned = inspectZoomState();
+    expect(panned.panX).not.toBe(before.panX);
+    expect(panned.panY).not.toBe(before.panY);
+    document.dispatchEvent(pointerEvent("pointerup", art, 130, 130));
+    expect(dialog.classList.contains("is-panning")).toBe(false);
+    expect(dialog.open).toBe(true);
+
+    dialog.dispatchEvent(clickEvent(art, 130, 130));
+    expect(dialog.open).toBe(true);
+
+    const closeBtn = new FakeHTMLElement("BUTTON");
+    closeBtn.classList.add("card-inspect-close");
+    dialog.dispatchEvent(clickEvent(closeBtn, 190, 20));
+    expect(dialog.open).toBe(true);
+
+    dialog.dispatchEvent(clickEvent(dialog, 10, 10));
+    expect(dialog.open).toBe(false);
+    expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+  });
+
+  test("card inspect does not zoom, and stepping photos resets zoom", () => {
+    const { document, dialog } = installInspectDocument();
+    const { copper, tiles } = handSequence();
+    const art = document.getElementById("card-inspect-art");
+    openCardInspect(copper, "/copper.png", tiles[0]);
+    sizePhotoArt(art, { naturalWidth: 400, naturalHeight: 100, box: photoBox });
+    const ignored = wheelEvent(art, -100, 150, 140);
+    dialog.dispatchEvent(ignored);
+    expect(ignored.wasPrevented()).toBe(false);
+    expect(inspectZoomState().scale).toBe(1);
+    expect(dialog.classList.contains("is-zoomed")).toBe(false);
+
+    const photos = [
+      { card: { id: "host-image:m1:a1", name: "One" }, imageSrc: "/one.png", tile: makeTile("One") },
+      { card: { id: "host-image:m1:a2", name: "Two" }, imageSrc: "/two.png", tile: makeTile("Two") },
+    ];
+    openCardInspect(photos[0].card, photos[0].imageSrc, photos[0].tile, photos);
+    sizePhotoArt(art, { naturalWidth: 400, naturalHeight: 100, box: photoBox });
+    dialog.dispatchEvent(wheelEvent(art, -100, 150, 140));
+    expect(inspectZoomState().scale).toBeGreaterThan(1);
+    const next = document.getElementById("card-inspect-next");
+    dialog.dispatchEvent(clickEvent(next, 230, 140));
+    expect(art.src).toBe("/two.png");
+    expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+    expect(dialog.classList.contains("is-zoomed")).toBe(false);
   });
 });
 

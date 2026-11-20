@@ -1153,6 +1153,21 @@ body {
   max-height: 90vh;
   border-radius: 0.4rem;
   box-shadow: none;
+  transform: translate(var(--inspect-pan-x, 0px), var(--inspect-pan-y, 0px))
+    scale(var(--inspect-zoom, 1));
+  transform-origin: center center;
+  cursor: zoom-in;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.card-inspect-dialog.is-photo.is-zoomed .card-inspect-art:not([hidden]) {
+  cursor: grab;
+}
+
+.card-inspect-dialog.is-photo.is-panning .card-inspect-art:not([hidden]) {
+  cursor: grabbing;
 }
 
 .card-inspect-proxy {

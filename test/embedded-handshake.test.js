@@ -1290,6 +1290,31 @@ describe("inspect photo letterbox click-outside", () => {
     );
     expect(isInspectOutsideClick(null, photoDialog, art)).toBe(false);
   });
+
+  test("zoomed painted pixels follow scale; dialog chrome still closes", () => {
+    const dialog = {
+      classList: { contains: (name) => name === INSPECT_PHOTO_CLASS },
+    };
+    const art = {
+      naturalWidth: 400,
+      naturalHeight: 100,
+      getBoundingClientRect: () => photoBox,
+    };
+    const zoom = { scale: 2, panX: 0, panY: 0 };
+    // Fitted strip is y=115..165. At 2× it covers y=90..190, so y=100 becomes image.
+    expect(isInspectOutsideClick({ target: art, clientX: 150, clientY: 100 }, dialog, art)).toBe(
+      true
+    );
+    expect(
+      isInspectOutsideClick({ target: art, clientX: 150, clientY: 100 }, dialog, art, zoom)
+    ).toBe(false);
+    expect(isInspectOutsideClick({ target: art, clientX: 150, clientY: 50 }, dialog, art, zoom)).toBe(
+      true
+    );
+    expect(isInspectOutsideClick({ target: dialog, clientX: 10, clientY: 10 }, dialog, art, zoom)).toBe(
+      true
+    );
+  });
 });
 
 describe("card inspect sequence navigation", () => {
