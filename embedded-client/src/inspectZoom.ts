@@ -1,4 +1,4 @@
-/** Base (fitted) size. Wheel cannot shrink below this. */
+/** Base (fitted) size. Wheel never goes below this, and never zooms out. */
 export const INSPECT_ZOOM_MIN = 1;
 
 /** Cap so a helper chart stays readable without turning into noise. */
@@ -9,6 +9,9 @@ export const INSPECT_ZOOM_FACTOR = 1.12;
 
 /** Pointer travel before a photo drag counts as a pan, not a click. */
 export const INSPECT_PAN_SLOP_PX = 8;
+
+/** Ignore leftover outside-clicks from a pan for this long. */
+export const INSPECT_PAN_CLICK_GUARD_MS = 80;
 
 export const INSPECT_ZOOM_VAR = "--inspect-zoom";
 export const INSPECT_PAN_X_VAR = "--inspect-pan-x";
@@ -92,11 +95,27 @@ export function clampInspectPan(
   };
 }
 
-/** Wheel up / pinch-out zooms in. Scale never drops below the fitted size. */
+/** Convert wheel deltaY to CSS pixels. LINE/PAGE modes are not pixels. */
+export function inspectWheelDeltaY(event: {
+  deltaY?: number;
+  deltaMode?: number;
+} | null | undefined): number {
+  const dy = Number(event?.deltaY);
+  if (!Number.isFinite(dy) || dy === 0) return 0;
+  const mode = Number(event?.deltaMode);
+  if (mode === 1) return dy * 16;
+  if (mode === 2) return dy * 100;
+  return dy;
+}
+
+/**
+ * Wheel up / pinch-out zooms in. FUR-284 does not allow zoom out: positive
+ * delta is a no-op, and scale never drops. Close / next photo resets to 1×.
+ */
 export function inspectZoomFromWheel(scale: number, deltaY: number): number {
   const current = clampInspectZoom(scale);
-  if (!Number.isFinite(deltaY) || deltaY === 0) return current;
-  const steps = Math.max(-6, Math.min(6, -deltaY / 100));
+  if (!Number.isFinite(deltaY) || deltaY >= 0) return current;
+  const steps = Math.min(12, -deltaY / 100);
   return clampInspectZoom(current * INSPECT_ZOOM_FACTOR ** steps);
 }
 
@@ -122,7 +141,7 @@ export function inspectPanBy(
  * cursor. `layout` is the untransformed object-fit box; `painted` is the
  * contained image inside it.
  */
-export function applyInspectZoom(
+export function inspectZoomToward(
   state: InspectZoomState,
   nextScale: number,
   pointer: InspectZoomPoint | null | undefined,
@@ -156,6 +175,28 @@ export function inspectZoomedPaintedRect(
   const top = origin.y + state.panY + (painted.top - origin.y) * state.scale;
   if (![left, top, width, height].every(Number.isFinite)) return null;
   return { left, top, width, height };
+}
+
+export function intersectInspectBox(
+  a: InspectZoomBox | null | undefined,
+  b: InspectZoomBox | null | undefined
+): InspectZoomBox | null {
+  if (!a || !b) return null;
+  const left = Math.max(a.left, b.left);
+  const top = Math.max(a.top, b.top);
+  const right = Math.min(a.left + a.width, b.left + b.width);
+  const bottom = Math.min(a.top + a.height, b.top + b.height);
+  if (!(right > left) || !(bottom > top)) return null;
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+/** Zoomed painted pixels that are still inside the layout clip (overflow:hidden). */
+export function inspectVisiblePaintedRect(
+  painted: InspectZoomBox | null | undefined,
+  layout: InspectZoomBox | null | undefined,
+  zoom: InspectZoomState | null | undefined
+): InspectZoomBox | null {
+  return intersectInspectBox(inspectZoomedPaintedRect(painted, layout, zoom), layout);
 }
 
 type ZoomStyleTarget = {

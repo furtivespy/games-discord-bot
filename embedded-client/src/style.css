@@ -1156,7 +1156,7 @@ body {
   transform: translate(var(--inspect-pan-x, 0px), var(--inspect-pan-y, 0px))
     scale(var(--inspect-zoom, 1));
   transform-origin: center center;
-  cursor: zoom-in;
+  cursor: default;
   touch-action: none;
   user-select: none;
   -webkit-user-drag: none;

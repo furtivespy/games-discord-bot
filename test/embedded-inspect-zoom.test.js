@@ -10,13 +10,15 @@ const {
   INSPECT_ZOOM_MIN,
   INSPECT_ZOOM_VAR,
   INSPECT_ZOOMED_CLASS,
-  applyInspectZoom,
   applyInspectZoomStyle,
   clampInspectPan,
   clampInspectZoom,
   inspectBoxCenter,
   inspectPanBy,
+  inspectVisiblePaintedRect,
+  inspectWheelDeltaY,
   inspectZoomFromWheel,
+  inspectZoomToward,
   inspectZoomedPaintedRect,
   isInspectZoomed,
   normalizeInspectZoom,
@@ -42,7 +44,12 @@ describe("inspect photo zoom math", () => {
     expect(clampInspectZoom(Number.NaN)).toBe(1);
     expect(inspectZoomFromWheel(1, 120)).toBe(1);
     expect(inspectZoomFromWheel(1, 0)).toBe(1);
+    expect(inspectZoomFromWheel(2, 100)).toBe(2);
+    expect(inspectZoomFromWheel(INSPECT_ZOOM_MAX, 400)).toBe(INSPECT_ZOOM_MAX);
     expect(inspectZoomFromWheel(1, -100)).toBeCloseTo(INSPECT_ZOOM_FACTOR, 8);
+    expect(inspectWheelDeltaY({ deltaY: -100, deltaMode: 0 })).toBe(-100);
+    expect(inspectWheelDeltaY({ deltaY: -3, deltaMode: 1 })).toBe(-48);
+    expect(inspectWheelDeltaY({ deltaY: -1, deltaMode: 2 })).toBe(-100);
     let scale = 1;
     for (let i = 0; i < 40; i += 1) scale = inspectZoomFromWheel(scale, -100);
     expect(scale).toBe(INSPECT_ZOOM_MAX);
@@ -52,7 +59,7 @@ describe("inspect photo zoom math", () => {
     expect(PAINTED).toEqual({ left: 50, top: 115, width: 200, height: 50 });
     const origin = inspectBoxCenter(LAYOUT);
     const pointer = { x: 120, y: 140 };
-    const zoomed = applyInspectZoom(
+    const zoomed = inspectZoomToward(
       INSPECT_ZOOM_IDENTITY,
       2,
       pointer,
@@ -88,6 +95,8 @@ describe("inspect photo zoom math", () => {
     expect(zoomed).toEqual({ left: -50, top: 90, width: 400, height: 100 });
     const panned = inspectZoomedPaintedRect(PAINTED, LAYOUT, { scale: 2, panX: 20, panY: -10 });
     expect(panned).toEqual({ left: -30, top: 80, width: 400, height: 100 });
+    const visible = inspectVisiblePaintedRect(PAINTED, LAYOUT, { scale: 2, panX: 0, panY: 0 });
+    expect(visible).toEqual({ left: 50, top: 90, width: 200, height: 100 });
   });
 
   test("style writes CSS vars only while zoomed", () => {

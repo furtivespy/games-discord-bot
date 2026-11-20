@@ -577,9 +577,14 @@ describe("inspect photo wheel zoom and pan", () => {
     return { ...ctx, art };
   }
 
-  test("wheel up zooms in toward the cursor and will not shrink below the fitted size", () => {
+  test("wheel up zooms in toward the cursor and never zooms out", () => {
     const { dialog, art } = openSizedPhoto();
     expect(inspectZoomState()).toEqual({ scale: 1, panX: 0, panY: 0 });
+
+    const letterbox = wheelEvent(art, -100, 150, 50);
+    dialog.dispatchEvent(letterbox);
+    expect(letterbox.wasPrevented()).toBe(false);
+    expect(inspectZoomState().scale).toBe(1);
 
     const zoomOut = wheelEvent(art, 120, 150, 140);
     dialog.dispatchEvent(zoomOut);
@@ -600,12 +605,13 @@ describe("inspect photo wheel zoom and pan", () => {
     }
     expect(inspectZoomState().scale).toBe(4);
 
-    dialog.dispatchEvent(wheelEvent(art, 100, 150, 140));
-    expect(inspectZoomState().scale).toBeLessThan(4);
-    expect(inspectZoomState().scale).toBeGreaterThanOrEqual(1);
+    const stillOut = wheelEvent(art, 100, 150, 140);
+    dialog.dispatchEvent(stillOut);
+    expect(stillOut.wasPrevented()).toBe(true);
+    expect(inspectZoomState().scale).toBe(4);
   });
 
-  test("zoomed photos pan with the pointer; a pan does not close; X and outside clicks still close", () => {
+  test("zoomed photos pan with the pointer; leftover pan click does not close; a later outside click does", () => {
     const { document, dialog, art } = openSizedPhoto();
     dialog.dispatchEvent(wheelEvent(art, -100, 150, 140));
     for (let i = 0; i < 8; i += 1) dialog.dispatchEvent(wheelEvent(art, -100, 150, 140));
@@ -615,6 +621,7 @@ describe("inspect photo wheel zoom and pan", () => {
     dialog.dispatchEvent(pointerEvent("pointerdown", art, 150, 140));
     expect(dialog.classList.contains("is-panning")).toBe(true);
     document.dispatchEvent(pointerEvent("pointermove", art, 130, 130));
+    document.dispatchEvent(pointerEvent("pointermove", art, Number.NaN, 10));
     const panned = inspectZoomState();
     expect(panned.panX).not.toBe(before.panX);
     expect(panned.panY).not.toBe(before.panY);
@@ -622,12 +629,7 @@ describe("inspect photo wheel zoom and pan", () => {
     expect(dialog.classList.contains("is-panning")).toBe(false);
     expect(dialog.open).toBe(true);
 
-    dialog.dispatchEvent(clickEvent(art, 130, 130));
-    expect(dialog.open).toBe(true);
-
-    const closeBtn = new FakeHTMLElement("BUTTON");
-    closeBtn.classList.add("card-inspect-close");
-    dialog.dispatchEvent(clickEvent(closeBtn, 190, 20));
+    dialog.dispatchEvent(clickEvent(dialog, 10, 10));
     expect(dialog.open).toBe(true);
 
     dialog.dispatchEvent(clickEvent(dialog, 10, 10));
