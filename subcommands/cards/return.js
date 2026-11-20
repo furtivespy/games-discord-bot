@@ -1,9 +1,9 @@
 const { MessageFlags } = require("discord.js");
-const GameDB = require('../../db/anygame.js')
 const GameHelper = require('../../modules/GlobalGameHelper')
 const { find, findIndex } = require('lodash')
 const Formatter = require('../../modules/GameFormatter')
 const GameStatusHelper = require('../../modules/GameStatusHelper')
+const CardMoves = require('../../modules/gameLogic/cardMoves')
 
 class Rturn {
     async execute(interaction, client) {
@@ -44,55 +44,31 @@ class Rturn {
             await interaction.editReply({ content: "Something is broken! You don't have that card."})
             return
         }
-        
-        let card = find(player.hands.main, {id: cardid})
-        player.hands.main.splice(findIndex(player.hands.main, {id: cardid}), 1)
-        
-        let destinationName = ''
 
-        // Handle different destinations
-        if (destination === 'deck') {
-            // Default to deck's draw pile
-            let deck = find(gameData.decks, {name: card.origin})
-            deck.piles.draw.cards.unshift(card)
-            destinationName = `top of ${deck.name}`
-        } else {
-            // Assume pile
-            const pile = GameHelper.getGlobalPile(gameData, destination)
-            if (!pile) {
-                // Return card to hand if pile not found
-                player.hands.main.push(card)
-                await interaction.editReply({ content: 'Pile not found!'})
-                return
-            }
-            // Return to top of pile
-            pile.cards.push(card)
-            destinationName = `top of ${pile.name}`
+        const result = CardMoves.returnFromHand(gameData, {
+            player,
+            cardId: cardid,
+            destination,
+            actor: {
+                id: interaction.user.id,
+                username: interaction.user.username,
+                displayName: interaction.member?.displayName || interaction.user.username,
+            },
+        })
+        if (!result.ok) {
+            await interaction.editReply({ content: result.content })
+            return
         }
 
-        try {
-            const actorDisplayName = interaction.member?.displayName || interaction.user.username
-            GameHelper.recordMove(
-                gameData,
-                interaction.user,
-                GameDB.ACTION_CATEGORIES.CARD,
-                GameDB.ACTION_TYPES.RETURN,
-                `${actorDisplayName} returned a card to ${destinationName}`,
-                { 
-                    cardId: card.id,
-                    destination: destinationName,
-                    destinationType: destination
-                }
-            )
-        } catch (error) {
-            console.warn('Failed to record card return in history:', error)
-        }
+        const card = result.card
+        const destinationName = result.destinationName
+        const actualDestination = result.actualDestination || destination
 
         await client.setGameDataV2(interaction.guildId, "game", interaction.channelId, gameData);
 
         const [, , handInfo] = await Promise.all([
             GameStatusHelper.sendPublicStatusUpdate(interaction, client, gameData, {
-                content: `${interaction.member.displayName} returned a card${destination !== 'deck' ? ' to ' + destinationName : ''}`
+                content: `${interaction.member.displayName} returned a card${actualDestination !== 'deck' ? ' to ' + destinationName : ''}`
             }),
             interaction.editReply({ content: `You returned ${Formatter.cardShortName(card)} to ${destinationName}.` }),
             Formatter.playerSecretHandAndImages(gameData, player)

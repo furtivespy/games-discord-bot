@@ -6,6 +6,7 @@ export const DEFAULT_ACTION_COUNT = shared.DEFAULT_ACTION_COUNT;
 export const GAME_CHANNEL_LINK_LABEL = "Open Discord channel";
 export const CHANNEL_POST_FAILED_NOTICE =
   "The table updated, but Discord didn't get the channel message.";
+export const ACTION_IN_FLIGHT_NOTICE = "Wait for that action to finish.";
 
 export type DeckActionKind = "deal" | "draw";
 export type InspectHandActionKind = "play" | "discard" | "show";

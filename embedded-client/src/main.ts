@@ -41,6 +41,7 @@ import {
   ACTION_COUNT_MAX,
   ACTION_COUNT_MIN,
   ACTION_ERROR_MESSAGES,
+  ACTION_IN_FLIGHT_NOTICE,
   CHANNEL_POST_FAILED_NOTICE,
   DEFAULT_ACTION_COUNT,
   GAME_CHANNEL_LINK_LABEL,
@@ -739,42 +740,40 @@ async function submitScoreEdits(scores: ScoreMap) {
 
 async function submitDroppedHandAction(zone: DropZone, card: SnapshotCard) {
   const action = zone.action;
-  if (action.kind === "play") {
-    await submitHandCardAction("play", card, { destination: action.destination });
-    return;
-  }
-  if (action.kind === "pass") {
-    await submitHandCardAction("pass", card, { targetUserId: action.targetUserId });
-    return;
-  }
-  if (action.kind === "return") {
-    await submitHandCardAction("return", card);
-    return;
-  }
-  await submitHandCardAction("discard", card);
+  await submitHandCardAction(action.kind, card, {
+    destination: action.kind === "play" ? action.destination : undefined,
+    targetUserId: action.kind === "pass" ? action.targetUserId : undefined,
+  });
 }
 
 function handCardDropHooks(card: SnapshotCard): Pick<
   CardDropHooks,
   "findDropTarget" | "onDropTarget" | "onDragMove" | "onDragEnd"
 > {
+  let dragZones: DropZone[] = [];
+  const zonesNow = () => (dragZones.length ? dragZones : collectDropZones(document));
   return {
     findDropTarget: (ctx) => {
-      const zone = dropZoneAtPoint(collectDropZones(document), ctx.point);
+      const zone = dropZoneAtPoint(zonesNow(), ctx.point);
       return zone ? { id: zone.id } : null;
     },
     onDropTarget: ({ target }) => {
-      const zone = collectDropZones(document).find((item) => item.id === target.id);
+      if (actionInFlight) {
+        setActionNotice(ACTION_IN_FLIGHT_NOTICE);
+        return false;
+      }
+      const zone = zonesNow().find((item) => item.id === target.id);
       if (!zone) return false;
       void submitDroppedHandAction(zone, card);
       return false;
     },
     onDragMove: (ctx) => {
-      const zones = collectDropZones(document);
-      paintDropZones(document, zones, dropZoneAtPoint(zones, ctx.point)?.id ?? null);
+      dragZones = collectDropZones(document);
+      paintDropZones(document, dragZones, dropZoneAtPoint(dragZones, ctx.point)?.id ?? null);
     },
     onDragEnd: () => {
       hideDropLayer(document);
+      dragZones = [];
     },
   };
 }
@@ -794,6 +793,12 @@ async function submitHandCardAction(
     closeInspectAfterFailedAction,
     closeCardInspect,
     flushDeferredSnapshot,
+    scheduleDeferredSnapshotFlush: (done) => {
+      window.setTimeout(() => {
+        flushDeferredSnapshot();
+        done?.();
+      }, SNAP_BACK_DURATION_MS + 60);
+    },
     applySnapshot: (config, payload) =>
       applySnapshot(config as EmbeddedConfig, payload as GameSnapshot),
     readFixture,

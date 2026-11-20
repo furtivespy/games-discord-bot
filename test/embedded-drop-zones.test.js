@@ -184,11 +184,13 @@ describe("hand-card drop zones", () => {
       ["pass:p2", "Pass", "pass"],
       ["return", "Return", "return"],
       ["discard", "Discard", "discard"],
+      ["play:default", "Play", "play"],
       ["play:gameboard", "Play", "play"],
       ["play:playarea", "Play", "play"],
-      ["play:default", "Play", "play"],
     ]);
     expect(zones.find((zone) => zone.id === "pass:p1").detail).toBe("Riley");
+    expect(zones.find((zone) => zone.id === "play:gameboard").detail).toBe("Game Board");
+    expect(zones.find((zone) => zone.id === "play:playarea").detail).toBe("Play Area");
     expect(zones.find((zone) => zone.id === "play:gameboard").action).toEqual({
       kind: "play",
       destination: "gameboard",
@@ -460,6 +462,37 @@ describe("drag action request bodies", () => {
       targetUserId: "p2",
     });
   });
+
+  test("submitHandCardAction tells the player when an action is already in flight", async () => {
+    const notices = [];
+    let posted = false;
+    await submitHandCardAction(
+      "discard",
+      { id: "hand-1" },
+      {
+        getSession: () => ({
+          config: { apiHost: "", mock: true, channelId: "t", guildId: "g" },
+          accessToken: "tok",
+          guildId: "g",
+        }),
+        isActionInFlight: () => true,
+        selectedChannelId: (id) => id,
+        setDeckActionsLocked: () => {},
+        setInspectActionError: () => {},
+        setActionNotice: (message) => notices.push(message),
+        closeInspectAfterFailedAction: () => {},
+        closeCardInspect: () => {},
+        flushDeferredSnapshot: () => {},
+        applySnapshot: () => {},
+        fetchImpl: async () => {
+          posted = true;
+          return { ok: true, text: async () => "{}" };
+        },
+      }
+    );
+    expect(posted).toBe(false);
+    expect(notices).toEqual(["Wait for that action to finish."]);
+  });
 });
 
 describe("drop-zone markup and styles", () => {
@@ -476,10 +509,10 @@ describe("drop-zone markup and styles", () => {
       /\.zone\.play-drop-zone\s*\{[^}]*background:\s*transparent/
     );
     expect(css).toMatch(
-      /\.board-row\s*>\s*\[data-zone="play"\]\s*\{[^}]*grid-column:\s*2/
+      /\.board-row\s*>\s*\[data-zone="play"\]\s*\{[^}]*position:\s*absolute/
     );
     expect(css).toMatch(
-      /\.board-row\s*>\s*\.pile-stack\s*\{[^}]*grid-column:\s*3/
+      /\.board-row\s*>\s*\.pile-stack\s*\{[^}]*grid-column:\s*2/
     );
     expect(css).not.toMatch(/#card-drop-layer[^{]*\{[^}]*pointer-events:\s*auto/);
   });

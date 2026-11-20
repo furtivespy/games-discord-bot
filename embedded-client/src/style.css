@@ -536,8 +536,9 @@ body {
 }
 
 .board-row {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 6.5rem auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   grid-template-rows: auto auto;
   column-gap: 0.85rem;
   row-gap: 0.45rem;
@@ -549,21 +550,24 @@ body {
   grid-row: 1;
 }
 
-.board-row > [data-zone="play"] {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-}
-
 .board-row > [data-zone="play-area"] {
   grid-column: 1;
   grid-row: 2;
 }
 
 .board-row > .pile-stack {
-  grid-column: 3;
+  grid-column: 2;
   grid-row: 1 / span 2;
   /* Subgrid so Decks shares the Game Board row and Discard shares Play Area. */
   grid-template-rows: subgrid;
+}
+
+/* Out of flow: hit-testing uses a strip just left of the piles, not this box. */
+.board-row > [data-zone="play"] {
+  position: absolute;
+  inset: 0;
+  grid-column: 1 / -1;
+  grid-row: 1 / span 2;
 }
 
 /* No z-index on .zone: a value other than auto makes the row a stacking
@@ -841,16 +845,16 @@ body {
   gap: 0.18rem;
   padding: 0.45rem 0.6rem;
   border-radius: 14px;
-  border: 1px solid rgba(243, 217, 140, 0.5);
-  background: rgba(10, 24, 20, 0.92);
-  color: #f3d98c;
+  border: 1px solid var(--panel-edge);
+  background: color-mix(in srgb, var(--felt-deep) 92%, #000);
+  color: var(--ink);
   text-align: center;
   pointer-events: none;
 }
 
 .card-drop-zone.is-over {
-  border-color: #f3d98c;
-  background: rgba(20, 48, 38, 0.96);
+  border-color: var(--ink);
+  background: color-mix(in srgb, var(--felt-mid) 72%, var(--felt-deep));
   box-shadow: var(--shadow);
 }
 
@@ -865,7 +869,7 @@ body {
   font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: #d9ecdf;
+  color: var(--muted);
 }
 
 .card-tile.snapping .card-face {
@@ -1048,10 +1052,10 @@ body {
 
   /* Keep play area to the left of discard. Board spans the full row above
      so two piles plus play stay side-by-side instead of stacking play under
-     the deck window. Default play is a short strip between those rows. */
+     the deck window. Default play overlays the board-row; it is not a row. */
   .board-row {
     grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto;
   }
 
   .board-row > [data-zone="board"] {
@@ -1059,20 +1063,14 @@ body {
     grid-row: 1;
   }
 
-  .board-row > [data-zone="play"] {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    min-height: 2.5rem;
-  }
-
   .board-row > [data-zone="play-area"] {
     grid-column: 1;
-    grid-row: 3;
+    grid-row: 2;
   }
 
   .board-row > .pile-stack {
     grid-column: 2;
-    grid-row: 3;
+    grid-row: 2;
     /* One parent row on the right; stack Decks over Discard inside it. */
     grid-template-rows: auto auto;
   }

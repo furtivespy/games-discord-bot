@@ -1,5 +1,6 @@
 import { actionRequestUrl } from "./handshake";
 import {
+  ACTION_IN_FLIGHT_NOTICE,
   CHANNEL_POST_FAILED_NOTICE,
   newActionRequestId,
   readVisualActionResponse,
@@ -42,10 +43,11 @@ export type SubmitHandCardActionHooks = {
   closeInspectAfterFailedAction: () => void;
   closeCardInspect: () => void;
   flushDeferredSnapshot: () => void;
+  scheduleDeferredSnapshotFlush?: (done?: () => void) => void;
   applySnapshot: (
     config: HandCardActionConfig,
     payload: Record<string, unknown>
-  ) => void;
+  ) => boolean | void;
   readFixture?: () => string;
   fetchImpl?: typeof fetch;
   requestId?: () => string;
@@ -79,7 +81,10 @@ export async function submitHandCardAction(
     hooks.flushDeferredSnapshot();
     return;
   }
-  if (hooks.isActionInFlight()) return;
+  if (hooks.isActionInFlight()) {
+    hooks.setActionNotice(ACTION_IN_FLIGHT_NOTICE);
+    return;
+  }
   const channelId = hooks.selectedChannelId(session.config.channelId);
   const guildId = session.guildId || session.config.guildId;
   const stillRequestedGame = () =>
@@ -91,6 +96,7 @@ export async function submitHandCardAction(
   const requestId = hooks.requestId ? hooks.requestId() : newActionRequestId();
   hooks.setDeckActionsLocked(true);
   hooks.setInspectActionError(null);
+  let holdLock = false;
   const fetchFn = hooks.fetchImpl || fetch;
   const protocol = hooks.locationProtocol
     ? hooks.locationProtocol()
@@ -134,14 +140,24 @@ export async function submitHandCardAction(
     }
     if (!stillRequestedGame()) return;
     hooks.closeCardInspect();
-    hooks.applySnapshot(session.config, result.payload);
+    const painted = hooks.applySnapshot(session.config, result.payload) !== false;
     hooks.setActionNotice(
       result.payload.channelPosted === false ? CHANNEL_POST_FAILED_NOTICE : null
     );
+    if (!painted && hooks.scheduleDeferredSnapshotFlush) {
+      holdLock = true;
+      hooks.scheduleDeferredSnapshotFlush(() => {
+        hooks.setDeckActionsLocked(false);
+        hooks.onSettled?.();
+      });
+      return;
+    }
   } catch {
     failHandAction(hooks, stillRequestedGame, visualActionErrorMessage("action_failed"));
   } finally {
-    hooks.setDeckActionsLocked(false);
-    hooks.onSettled?.();
+    if (!holdLock) {
+      hooks.setDeckActionsLocked(false);
+      hooks.onSettled?.();
+    }
   }
 }

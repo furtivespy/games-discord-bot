@@ -621,6 +621,79 @@ describe("runVisualCardAction", () => {
     expect(showClient.posted[0].content).toContain("Showing a card:");
   });
 
+  test("pass and return save, post, and return an updated snapshot", async () => {
+    const passClient = clientForGame(gameWithDeck());
+    const passed = await runVisualCardAction({
+      action: "pass",
+      cardId: "hand-1",
+      targetUserId: "other-player",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient: passClient.discordClient,
+    });
+    await drainLockedVisualActions();
+    expect(passed.status).toBe(200);
+    expect(passed.body.message).toBe("Will passed 1 card(s) to Riley.");
+    expect(passed.body.hand).toEqual([]);
+    expect(passClient.posted[0].content).toContain("Will passed 1 card(s) to Riley.");
+    const passSaved = passClient.store.get("guild-1:game:thread-game");
+    expect(passSaved.players[1].hands.main.map((card) => card.id)).toEqual(["hand-1"]);
+
+    const returnClient = clientForGame(gameWithDeck());
+    const returned = await runVisualCardAction({
+      action: "return",
+      cardId: "hand-1",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient: returnClient.discordClient,
+    });
+    await drainLockedVisualActions();
+    expect(returned.status).toBe(200);
+    expect(returned.body.message).toBe("Will returned a card");
+    expect(returned.body.hand).toEqual([]);
+    expect(returnClient.posted[0].content).toContain("Will returned a card");
+    const returnSaved = returnClient.store.get("guild-1:game:thread-game");
+    expect(returnSaved.decks[0].piles.draw.cards[0].id).toBe("hand-1");
+  });
+
+  test("a pass replay with the same requestId and a different target does not move the card", async () => {
+    const { store, discordClient } = clientForGame(gameWithDeck());
+    const cache = createActionIdempotencyCache();
+    const first = await runVisualCardAction({
+      action: "pass",
+      cardId: "hand-1",
+      targetUserId: "other-player",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+      requestId: "pass-request-01",
+      idempotency: cache,
+    });
+    const replay = await runVisualCardAction({
+      action: "pass",
+      cardId: "hand-1",
+      targetUserId: "nobody",
+      user: { id: "snowflake-user", username: "willsullivan", global_name: "Will" },
+      guildId: "guild-1",
+      channelId: "thread-game",
+      discordClient,
+      requestId: "pass-request-01",
+      idempotency: cache,
+    });
+    await drainLockedVisualActions();
+    expect(first.status).toBe(200);
+    // Different targetUserId is a different idempotency key, so this runs
+    // (and 409s because the card already left the hand) instead of returning
+    // the cached pass-to-Riley 200.
+    expect(replay.status).toBe(409);
+    expect(store.get("guild-1:game:thread-game").players[1].hands.main.map((card) => card.id)).toEqual(
+      ["hand-1"]
+    );
+  });
+
   test("a crafted cardId from another seat returns 409 and leaves that hand unchanged", async () => {
     const game = gameWithDeck();
     game.players[1].hands.main = [

@@ -672,6 +672,13 @@ async function enrichActorDisplayName(actor, { discordClient, guildId, userId })
   }
 }
 
+function visualHandIdempotencyDetail({ action, cardId, destination, targetUserId } = {}) {
+  const id = String(cardId || "");
+  if (action === "pass") return `${id}:${String(targetUserId || "").trim()}`;
+  if (action === "play" && destination) return `${id}:${destination}`;
+  return id;
+}
+
 /**
  * Per-process in-memory TTL map. A second instance still runs the same
  * requestId. The key includes action plus a per-action detail (deck:count for
@@ -965,7 +972,12 @@ async function runVisualCardAction({
         idempotencyDetail != null
           ? String(idempotencyDetail)
           : cardId
-            ? String(cardId)
+            ? visualHandIdempotencyDetail({
+                action,
+                cardId,
+                destination,
+                targetUserId,
+              })
             : `${deckName}:${count}`,
     });
   }

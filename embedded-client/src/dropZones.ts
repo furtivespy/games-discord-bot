@@ -1,8 +1,11 @@
 import type { DropPoint, DropTarget } from "./drag";
+import type { PlayDestination } from "./visualActions";
 
 export const DROP_LAYER_ID = "card-drop-layer";
+/** Default-play strip just left of the piles. About 6.5rem at 16px root. */
+export const DEFAULT_PLAY_STRIP_PX = 104;
 
-export type PlayDestination = "gameboard" | "playarea";
+export type { PlayDestination };
 
 export type DropAction =
   | { kind: "pass"; targetUserId: string }
@@ -116,9 +119,31 @@ function pushZone(
 }
 
 /**
- * Specific seats first, then piles, then the three play surfaces. Hit-testing
- * walks this order so a player chip or deck wins over the large default play
- * area if they ever overlap.
+ * Strip just left of the piles (existing felt, not a reserved grid track).
+ * Falls back to `[data-zone="play"]` when the table has no pile stack.
+ */
+export function centralPlayRect(root: ZoneRoot): ClientRect | null {
+  const row = asElement(queryOne(root, ".board-row") || queryOne(root, "#board-row"));
+  const piles = asElement(queryOne(root, ".pile-stack"));
+  const rowRect = clientRectOf(row);
+  const pileRect = clientRectOf(piles);
+  if (rowRect && pileRect) {
+    const available = pileRect.left - rowRect.left;
+    if (available > 8) {
+      const width = Math.min(DEFAULT_PLAY_STRIP_PX, Math.max(40, available * 0.35));
+      const left = pileRect.left - width;
+      if (width > 8) {
+        return { left, top: rowRect.top, width, height: rowRect.height };
+      }
+    }
+  }
+  return clientRectOf(asElement(queryOne(root, '[data-zone="play"]')));
+}
+
+/**
+ * Specific seats and piles first, then the default-play strip (so it can
+ * win over the stretched Game Board / Play Area on the right), then those
+ * play surfaces.
  */
 export function collectDropZones(root: ZoneRoot): DropZone[] {
   const zones: DropZone[] = [];
@@ -145,20 +170,26 @@ export function collectDropZones(root: ZoneRoot): DropZone[] {
     label: "Discard",
     action: { kind: "discard" },
   });
+  const defaultRect = centralPlayRect(root);
+  if (defaultRect) {
+    zones.push({
+      id: "play:default",
+      label: "Play",
+      rect: defaultRect,
+      action: { kind: "play" },
+    });
+  }
   pushZone(zones, queryOne(root, '[data-zone="board"]'), {
     id: "play:gameboard",
     label: "Play",
+    detail: "Game Board",
     action: { kind: "play", destination: "gameboard" },
   });
   pushZone(zones, queryOne(root, '[data-zone="play-area"]'), {
     id: "play:playarea",
     label: "Play",
+    detail: "Play Area",
     action: { kind: "play", destination: "playarea" },
-  });
-  pushZone(zones, queryOne(root, '[data-zone="play"]'), {
-    id: "play:default",
-    label: "Play",
-    action: { kind: "play" },
   });
   return zones;
 }

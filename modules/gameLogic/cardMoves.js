@@ -473,10 +473,19 @@ function showFromHand(gameData, { player, cardId, actor } = {}) {
   };
 }
 
+function passCardIds({ cardId, cardIds } = {}) {
+  if (Array.isArray(cardIds) && cardIds.length) {
+    return cardIds.map((id) => String(id || "").trim()).filter(Boolean);
+  }
+  const one = String(cardId || "").trim();
+  return one ? [one] : [];
+}
+
 /**
- * `/cards hand pass`: move one card from the player's hand to another seat.
+ * `/cards hand pass`: move one or more cards from the player's hand to
+ * another seat. History is one record, matching the slash command.
  */
-function passFromHand(gameData, { player, cardId, targetUserId, actor } = {}) {
+function passFromHand(gameData, { player, cardId, cardIds, targetUserId, actor } = {}) {
   if (!player) {
     return missingCardResult("Something is broken!?");
   }
@@ -503,22 +512,29 @@ function passFromHand(gameData, { player, cardId, targetUserId, actor } = {}) {
       content: "The selected player is not in this game or is yourself.",
     };
   }
-  const taken = takeCardFromHand(player, cardId);
-  if (!taken) {
+  const ids = passCardIds({ cardId, cardIds });
+  const passed = [];
+  for (const id of ids) {
+    const taken = takeCardFromHand(player, id);
+    if (taken) passed.push(taken.card);
+  }
+  if (!passed.length) {
     return missingCardResult("Something is broken!?");
   }
-  mainHand(targetPlayer).push(taken.card);
+  const targetHand = mainHand(targetPlayer);
+  for (const card of passed) targetHand.push(card);
 
   const displayName = actorDisplayName(actor);
   const targetName = playerDisplayName(targetPlayer);
+  const count = passed.length;
   try {
     GameHelper.recordMove(
       gameData,
       recordActor(actor),
       GameDB.ACTION_CATEGORIES.CARD,
       GameDB.ACTION_TYPES.PASS,
-      `${displayName} passed 1 cards to ${targetName}`,
-      { cardCount: 1, targetUserId: targetId }
+      `${displayName} passed ${count} cards to ${targetName}`,
+      { cardCount: count, targetUserId: targetId }
     );
   } catch (error) {
     console.warn("Failed to record card pass in history:", error);
@@ -527,8 +543,9 @@ function passFromHand(gameData, { player, cardId, targetUserId, actor } = {}) {
   return {
     ok: true,
     error: null,
-    card: taken.card,
-    content: `${displayName} passed 1 card(s) to ${targetName}.`,
+    card: passed[0],
+    cards: passed,
+    content: `${displayName} passed ${count} card(s) to ${targetName}.`,
   };
 }
 

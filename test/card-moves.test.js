@@ -232,6 +232,27 @@ describe("cardMoves passFromHand", () => {
     expect(gameData.history.at(-1).action).toEqual({ category: "card", type: "pass" });
   });
 
+  test("moves several cards in one history record", () => {
+    const copper = createCard({ id: "pass-a", name: "Copper", origin: "Main" });
+    const estate = createCard({ id: "pass-b", name: "Estate", origin: "Main" });
+    const gameData = gameWithDeck({ draw: [], hand: [copper, estate] });
+    const result = CardMoves.passFromHand(gameData, {
+      player: gameData.players[0],
+      cardIds: ["pass-a", "pass-b"],
+      targetUserId: "user-2",
+      actor,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.cards.map((item) => item.id)).toEqual(["pass-a", "pass-b"]);
+    expect(gameData.players[0].hands.main).toEqual([]);
+    expect(gameData.players[1].hands.main.map((item) => item.id)).toEqual([
+      "pass-a",
+      "pass-b",
+    ]);
+    expect(gameData.history.at(-1).summary).toBe("Alice passed 2 cards to Bob");
+    expect(gameData.history.at(-1).details.cardCount).toBe(2);
+  });
+
   test("passing to yourself or a missing seat is invalid_target", () => {
     const card = createCard({ id: "keep", name: "Ace", origin: "Main" });
     const gameData = gameWithDeck({ draw: [], hand: [card] });
