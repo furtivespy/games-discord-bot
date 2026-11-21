@@ -57,4 +57,4 @@ Fake Discord interaction and client used by tests and `bun run control execute`.
 
 - Code: `test/helpers/harness.js`, `test/helpers/preload.js`, `scripts/control/`, `scripts/control-fixtures/`
 - ADRs: none
-- Notes: a fake, not Discord. See `.agents/skills/control-gamebot/SKILL.md` for what it cannot prove. Headless-Chrome layout tests skip only when `SKIP_CHROME_TESTS=1` (the required `test` job sets that); `bun run test:chrome` is the separate `browser` job (FUR-254).
+- Notes: a fake, not Discord. See `.agents/skills/control-gamebot/SKILL.md` for what it cannot prove. Headless-Chrome layout tests skip only when `SKIP_CHROME_TESTS=1` (the required `test` job sets that); `bun run test:chrome` is the separate `browser` job (FUR-254). Bun's mock `getBoundingClientRect` does not follow CSS transforms, so snap-back reclamp that needs live geometry waits for the real CSS duration in Chrome rather than a synthetic `transitionend` (FUR-261).
