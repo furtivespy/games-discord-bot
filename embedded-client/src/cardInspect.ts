@@ -303,7 +303,7 @@ function armInspectSuppressClick() {
 }
 
 function inspectPanCaptureEl(): HTMLElement | null {
-  return inspectArtEl() ?? dialogEl();
+  return inspectArtEl();
 }
 
 function releaseInspectPanCapture(pointerId: number | null) {
@@ -325,7 +325,6 @@ function stopInspectPanListeners() {
   document.removeEventListener("pointerup", onInspectPointerUp);
   document.removeEventListener("pointercancel", onInspectPointerUp);
   inspectArtEl()?.removeEventListener("lostpointercapture", onInspectPointerUp);
-  dialogEl()?.removeEventListener("lostpointercapture", onInspectPointerUp);
 }
 
 function startInspectPanListeners() {
@@ -335,7 +334,6 @@ function startInspectPanListeners() {
   document.addEventListener("pointerup", onInspectPointerUp);
   document.addEventListener("pointercancel", onInspectPointerUp);
   inspectArtEl()?.addEventListener("lostpointercapture", onInspectPointerUp);
-  dialogEl()?.addEventListener("lostpointercapture", onInspectPointerUp);
 }
 
 function resetInspectZoom() {

@@ -77,10 +77,6 @@ export function changedScores(
   return next;
 }
 
-export function isScoreEditOpen(doc: Document | null | undefined): boolean {
-  return Boolean(doc?.querySelector?.(`.${SCORE_EDITING_CLASS}`));
-}
-
 export function clearScoreEditLock(doc: Document | null | undefined): void {
   doc
     ?.querySelector?.(`.${SCORE_EDITING_CLASS}`)
