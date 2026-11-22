@@ -880,6 +880,8 @@ describe("inspect photo wheel zoom and pan", () => {
     document.dispatchEvent(pointerEvent("pointermove", art, 140, 135));
     expect(dialog.classList.contains("is-panning")).toBe(true);
     dialog.dispatchEvent(pointerEvent("lostpointercapture", art, 140, 135));
+    expect(dialog.classList.contains("is-panning")).toBe(true);
+    art.dispatchEvent(pointerEvent("lostpointercapture", art, 140, 135));
     expect(dialog.classList.contains("is-panning")).toBe(false);
     const afterLost = inspectZoomState();
     document.dispatchEvent(pointerEvent("pointermove", art, 10, 10));
