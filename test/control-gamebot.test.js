@@ -161,8 +161,8 @@ describe("doctor", () => {
   });
 
   test("warns when Bun differs from the pin", () => {
-    expect(checkBunVersion({ packageManager: "bun@1.4.4" }, "1.3.14").status).toBe("warn");
-    expect(checkBunVersion({ packageManager: "bun@1.4.4" }, "1.4.4").status).toBe("ok");
+    expect(checkBunVersion({ packageManager: "bun@1.4.5" }, "1.3.14").status).toBe("warn");
+    expect(checkBunVersion({ packageManager: "bun@1.4.5" }, "1.4.5").status).toBe("ok");
     expect(checkBunVersion({}, "1.3.14").status).toBe("ok");
   });
 });

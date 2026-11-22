@@ -19,7 +19,7 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       - name: Install dependencies
         run: |
@@ -40,7 +40,7 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       # canvas is a production dependency; install Ubuntu build libs so
       # `bun install` can compile it if no prebuild exists. Command tests stub
@@ -87,7 +87,7 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
 
       # `canvas` is mocked by test/helpers/preload.js, so skip lifecycle scripts
       # and the Cairo/Pango build the `test` job needs.
