@@ -39,7 +39,7 @@ branch inside `ship-pr`** (any new commit makes QA's `Head` SHA stale).
    and `lint`), and set `headSha` to `headRefOid`.
 
    QA Department writes a PR block rather than a GitHub review, so add
-   `{"login": "cursor", "state": "COMMENTED"}` to `reviews` **only when all
+   `{"login": "qa-department", "state": "COMMENTED"}` to `reviews` **only when all
    four hold**: `Verdict: PASS`, `Depth` satisfies the diff/profile (never
    `skip` for runtime code or dependency bumps), `Head` equals the current
    `headRefOid`, and `For you to test` is `none`. If `Head` is stale or
