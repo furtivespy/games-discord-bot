@@ -1,13 +1,13 @@
 # Cleanup automations
 
-Scheduled [Cursor Automations](https://cursor.com/docs/cloud-agent/automations.md) that open small PRs from the backlog. Automations are configured in the Cursor UI (`cursor.com/automations`), so this file is the versioned source of truth: change the prompt here first, then paste it into the automation.
+Repo-local prompts and guardrails for the three scheduled cleanup sweeps: daily friction sweep, daily docs freshness check, and weekly legacy reaper. Scheduling, runner/harness selection (`t3-local` / `cursor-cloud`), effort-scaled review, `skip`/`smoke` QA, and `ship-pr` auto-merge live in `furtivespy/ai-tool-n-docs` (`docs/workflow/`).
 
-Three exist today: the daily friction sweep, the daily docs freshness check, and the weekly legacy reaper. Not set up, on purpose: test pruning (an agent deciding which of ~900 tests are redundant is the riskiest of the five), errors to issues (no error tracker is wired in), and an automation that runs ship-pr (merging stays manual until a few weeks of PRs look right).
+Not enabled on purpose: test pruning (an agent deciding which of ~900 tests are redundant is high risk) and errors-to-issues (no error tracker is wired in).
 
 ## Rules every automation follows
 
 - One PR per run, or none when there is nothing to do.
-- It opens PRs; it never merges, approves, or force-pushes. A person runs the `ship-pr` loop ([skill](../.agents/skills/ship-pr/SKILL.md)) on each PR. Merging stays manual for now.
+- It opens PRs; it never merges, approves, or force-pushes. Opened PRs flow through the central workflow (`docs/workflow/`): scaled code review, `skip`/`smoke` QA, and `ship-pr` auto-merge for low-risk PRs (high-risk PRs park for the owner).
 - It follows [AGENTS.md](../AGENTS.md), the [ADRs](adr/), and [merge-policy](merge-policy.md): default to "no" on the hesitate list, no change to data scope without a migration path, no behavior beyond the issue.
 - `bun run verify` passes before it opens the PR.
 - It does not edit: `.github/`, `Dockerfile`, `db/`, `scripts/migrate*`, `scripts/pr-risk.js`, `docs/adr/`, `docs/merge-policy.md`, `.agents/skills/ship-pr/`, `.cursor/`. The merge-gate files in that list are also high risk by path in [merge-policy](merge-policy.md), so a person merges them regardless.
@@ -18,18 +18,10 @@ The VM is prepared by [`.cursor/environment.json`](../.cursor/environment.json),
 
 Fixes open `friction` issues, highest priority first: up to three per run, in one PR with one commit per issue. How friction is filed and ranked: [friction-log skill](../.agents/skills/friction-log/SKILL.md).
 
-### Automation settings
+### Workflow profile & shipping
 
-| Setting | Value |
-| --- | --- |
-| Name | `Friction sweep` |
-| Trigger | Scheduled, daily (for example `0 13 * * *`, 8 AM Eastern) |
-| Repository | `furtivespy/games-discord-bot` (cron triggers default to no repository; select it) |
-| Run as | Me |
-| Tools | Pull request creation: on. Comment on pull request: on. Approvals: off. Computer use: off |
-| MCP | Linear (read and write issues and comments) |
-| Memories | Off. The agent reads issue text that other agents wrote |
-| Access | Private |
+- **Profile:** `maintenance` (review: Standards + Adversarial + Spec; QA: `smoke`, or `skip` if strictly non-runtime; `ship-pr` auto-merges `low` / `patch`, parks `high`).
+- A friction fix touching only code and tests is normally `low` or `medium` risk; a multi-issue PR takes the risk tier of its riskiest commit (split out any `high`-risk issue). Confirm the PR carries `patch` before merging.
 
 ### Prompt
 
@@ -69,37 +61,14 @@ Read first: AGENTS.md, docs/merge-policy.md, every file in docs/adr/, docs/clean
 Never put secrets, tokens, .env contents, or production Discord IDs in an issue, comment, or PR.
 ```
 
-### Set up and try it
-
-1. In Cursor settings, connect the Linear integration and add a Linear MCP server for your account.
-2. Confirm the Cursor GitHub app is installed on `furtivespy/games-discord-bot`.
-3. Create the automation with the settings above. Do not enable the schedule yet.
-4. File one to three small real friction issues by following the friction-log skill.
-5. Run the automation once by hand. Check that it picked them in priority order, made one commit per issue, ran `bun run verify`, opened one PR with the template filled in, and commented on each issue.
-6. Enable the schedule.
-
-### Shipping its PRs
-
-Run the `ship-pr` loop on each PR the sweep opens, as for any other PR. A friction fix touching only code and tests is normally low or medium risk. A PR that covers several issues takes the risk tier of its riskiest commit; if one issue is high risk, ask the sweep (or do it by hand) to split it out. Check that the PR has a `patch` label before merging.
-
-If a run fails before it opens a PR, look at the run in the Cursor automations page. A failing `install` step usually means `scripts/cloud-agent-install.sh` drifted from the CI workflow.
-
 ## Daily docs freshness
 
 Fixes the docs that recent commits made stale, and records decisions and notes from Linear issues that moved to Done or Canceled in the window, since those often hold reasoning that is not in the code. It does not rewrite style, add new docs, or delete anything. How the docs are organized: [AGENTS.md](../AGENTS.md).
 
-### Automation settings
+### Workflow profile & shipping
 
-| Setting | Value |
-| --- | --- |
-| Name | `Docs freshness` |
-| Trigger | Scheduled, daily (for example `30 13 * * *`, 30 minutes after the friction sweep) |
-| Repository | `furtivespy/games-discord-bot` |
-| Run as | Me |
-| Tools | Pull request creation: on. Comment on pull request: on. Approvals: off. Computer use: off |
-| MCP | Linear (read only: list issues, read issues and comments) |
-| Memories | Off. The agent reads issue text that other agents wrote |
-| Access | Private |
+- **Profile:** `docs` (review: Standards + Spec; QA: `skip` when strictly docs-only; `ship-pr` auto-merges `low` / `patch`).
+- Docs-only PRs are normally `low` risk. Handle any items listed under "Needs a decision" separately, confirm `patch` is set, and note that any PR touching a merge-gate file is `high` risk and parks for a human.
 
 ### Prompt
 
@@ -147,35 +116,16 @@ Read first: AGENTS.md, docs/merge-policy.md, every file in docs/adr/, and docs/c
 Never put secrets, tokens, .env contents, or production Discord IDs in a PR.
 ```
 
-### Set up and try it
-
-1. Create the automation with the settings above, including the Linear MCP server (read only is enough). Do not enable the schedule yet.
-2. Run it once by hand. If nothing merged and no issue moved to Done or Canceled in the last 24 hours it should stop without a PR; that is a correct result. To force a real check, run it right after merging a PR that added or changed a slash command or a script, or after closing an issue whose comments hold a real decision.
-3. Check that the PR (if any) fixes only things a recent commit made stale, records only decisions that are in the closed issues and not already in the code or docs (each naming its `FUR-<n>`), puts ADR-sized or gate-file items under "Needs a decision", passes `bun run verify`, and leaves the merge-gate files alone.
-4. Enable the schedule.
-
-### Shipping its PRs
-
-Docs-only PRs are normally low risk. If one lists items under "Needs a decision", handle those separately. Check that it has a `patch` label before merging. A PR that touches a merge-gate file is high risk by path and needs a human merge; the prompt tells the agent not to touch those files, so treat any such change as a bug in the prompt.
-
 ## Weekly legacy reaper
 
 Removes dead code and does the `Cleanup:` issues whose "Ready when" check holds. Deleting is easy to get wrong, so it is deliberately narrow.
 
 A `Cleanup:` issue comes from the Linear "Cleanup" template (label `cleanup`): **What to clean up**, **Why it is safe**, **Ready when**, **Door**. "Ready when" is a check anyone can run that is true exactly when the cleanup is safe to do now, for example "`rg legacyFoo` finds no callers outside `modules/legacyFoo.js`". If it holds, the reaper does the cleanup; if not, the issue waits.
 
-### Automation settings
+### Workflow profile & shipping
 
-| Setting | Value |
-| --- | --- |
-| Name | `Legacy reaper` |
-| Trigger | Scheduled, weekly (for example `0 14 * * 1`, Monday 9 AM Eastern) |
-| Repository | `furtivespy/games-discord-bot` |
-| Run as | Me |
-| Tools | Pull request creation: on. Comment on pull request: on. Approvals: off. Computer use: off |
-| MCP | Linear (read and write issues and comments) |
-| Memories | Off |
-| Access | Private |
+- **Profile:** `maintenance` (review: Standards + Adversarial + Spec if ticket linked; QA: `smoke`, or `skip` if strictly non-runtime; `ship-pr` auto-merges `low` / `patch`, parks `high`).
+- Removals are two-way (git history keeps them). Review the dynamic-load evidence in the PR body before merging, confirm `patch` is set, and park any PR touching a high-risk path in `scripts/pr-risk.js`.
 
 ### Prompt
 
@@ -207,14 +157,3 @@ Never remove: anything under slashcommands/, subcommands/, commands/, events/, b
 
 Never put secrets, tokens, .env contents, or production Discord IDs in an issue, comment, or PR.
 ```
-
-### Set up and try it
-
-1. File one or two real `Cleanup:` issues from the Linear template, with a "Ready when" that holds today. A small one is fine, for example removing one unused helper.
-2. Create the automation with the settings above. Do not enable the schedule yet.
-3. Run it once by hand. Check that it ran the "Ready when" command itself, removed only what the evidence supports, left the "Never remove" paths alone, and passed `bun run verify`.
-4. Enable the schedule.
-
-### Shipping its PRs
-
-Removals are two-way (git history keeps them), so a PR that passes `bun run verify` and touches no gate path is normally low risk. Read the evidence in the PR body before merging: the risk in deletion is a file that something loads dynamically. If the PR touches any path in `scripts/pr-risk.js`, it is high risk and a human merges. Check that it has a `patch` label before merging.
