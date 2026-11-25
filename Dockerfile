@@ -1,6 +1,6 @@
 # syntax = docker/dockerfile:1
 
-ARG BUN_VERSION=1.4.4
+ARG BUN_VERSION=1.4.5
 FROM oven/bun:${BUN_VERSION} AS base
 
 WORKDIR /app
