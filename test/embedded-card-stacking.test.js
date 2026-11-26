@@ -1020,24 +1020,28 @@ describe("hand zone stays at the bottom of the table", () => {
       error: result.error,
       tableOverflowY: result.tableOverflowY,
       mainOverflowY: result.overflowY,
-      handOnScreen: result.handTop >= 0 && result.handBottom <= result.viewportHeight + 1,
-      handAtTableBottom: result.handBottom <= result.tableBottom + 1,
-      gapOk: result.gapBelowHand >= 0 && result.gapBelowHand < 24,
+      handTopVisible: result.handTop >= 0 && result.handTop < result.viewportHeight,
+      handTuckedPastBottom: result.handBottom > result.tableBottom + 16,
     }).toEqual({
       label,
       error: undefined,
       tableOverflowY: "hidden",
       mainOverflowY: "auto",
-      handOnScreen: true,
-      handAtTableBottom: true,
-      gapOk: true,
+      handTopVisible: true,
+      handTuckedPastBottom: true,
     });
-    expect(result.handBottom).toBeGreaterThan(result.viewportHeight - 32);
     expect(result.handTop).toBeGreaterThan(result.tableTop);
     expect(result.handTop).toBeGreaterThanOrEqual(result.mainBottom - 1);
+    if (result.handCards.length) {
+      const card = result.handCards[0];
+      const visible = Math.min(card.bottom, result.tableBottom) - Math.max(card.top, 0);
+      const ratio = visible / card.height;
+      expect(ratio).toBeGreaterThan(0.55);
+      expect(ratio).toBeLessThan(0.88);
+    }
   }
 
-  test.skipIf(!chrome)("QA: hand sits on the table bottom with slack above it", async () => {
+  test.skipIf(!chrome)("QA: hand is tucked off the table bottom with slack above it", async () => {
     const css = fs.readFileSync(STYLE_PATH, "utf8");
     const result = await measureLayout(stackingHarness(css), {
       width: 1280,
@@ -1051,11 +1055,7 @@ describe("hand zone stays at the bottom of the table", () => {
     expect(result.tableHeight).toBeGreaterThan(result.viewportHeight - 2);
     expect(result.tableBottom).toBeLessThanOrEqual(result.viewportHeight + 1);
     expect(result.handBottom).toBeGreaterThan(result.playBottom);
-    expect(result.handBottom).toBeLessThanOrEqual(result.viewportHeight);
-    expect(result.handBottom).toBeGreaterThan(result.viewportHeight - 32);
-    expect(result.gapBelowHand).toBeGreaterThanOrEqual(0);
-    expect(result.gapBelowHand).toBeLessThan(24);
-    expect(result.spaceAboveHand).toBeGreaterThan(result.gapBelowHand);
+    expect(result.handBottom).toBeGreaterThan(result.tableBottom + 16);
     expect(result.spaceAboveHand).toBeGreaterThan(8);
     expect(result.mainOverflow).toBe(false);
     expectHandPinned(result, "1280x800-pin");
@@ -1140,7 +1140,7 @@ describe("hand zone stays at the bottom of the table", () => {
     }
   }, 30000);
 
-  test.skipIf(!chrome)("QA: 6 board and 7 hand at 1280x800 keep the hand on screen", async () => {
+  test.skipIf(!chrome)("QA: 6 board and 7 hand at 1280x800 keep the hand tucked on screen", async () => {
     const css = fs.readFileSync(STYLE_PATH, "utf8");
     const result = await measureLayout(
       populatedTableHarness(css, { boardCount: 6, handCount: 7 }),
@@ -1154,8 +1154,6 @@ describe("hand zone stays at the bottom of the table", () => {
     expectNoTileOverlap(result, "1280x800-dune");
     expectHandPinned(result, "1280x800-dune");
     expect(result.handFitsTable).toBe(true);
-    const visibleHandHeight = Math.min(result.handBottom, result.viewportHeight) - Math.max(result.handTop, 0);
-    expect(visibleHandHeight / (result.handBottom - result.handTop)).toBeGreaterThan(0.9);
   }, 30000);
 
   test.skipIf(!chrome)("QA: board matches decks height and play matches discard", async () => {

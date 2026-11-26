@@ -2,8 +2,6 @@ import type { DropPoint, DropTarget } from "./drag";
 import type { PlayDestination } from "./visualActions";
 
 export const DROP_LAYER_ID = "card-drop-layer";
-/** Default-play strip just left of the piles. About 6.5rem at 16px root. */
-export const DEFAULT_PLAY_STRIP_PX = 104;
 
 export type { PlayDestination };
 
@@ -118,8 +116,30 @@ function pushZone(
   zones.push({ ...target, rect });
 }
 
+function playColumnRightEdge(root: ZoneRoot, pileLeft: number): number {
+  let right = 0;
+  for (const selector of ['[data-zone="play-area"]', '[data-zone="board"]']) {
+    const rect = clientRectOf(asElement(queryOne(root, selector)));
+    if (!rect) continue;
+    const edge = rect.left + rect.width;
+    if (edge <= pileLeft + 1) right = Math.max(right, edge);
+  }
+  return right > 0 ? right : pileLeft;
+}
+
+function trimLeftOf(rect: ClientRect | null, limitLeft: number | null): ClientRect | null {
+  if (!rect) return null;
+  if (limitLeft == null) return rect;
+  if (rect.left < limitLeft && rect.left + rect.width > limitLeft) {
+    const width = limitLeft - rect.left;
+    return width > 0 ? { ...rect, width } : null;
+  }
+  return rect;
+}
+
 /**
- * Strip just left of the piles (existing felt, not a reserved grid track).
+ * Right half of the play column (left of the piles), giving default Play the
+ * same width as Game Board and Play Area while dragging.
  * Falls back to `[data-zone="play"]` when the table has no pile stack.
  */
 export function centralPlayRect(root: ZoneRoot): ClientRect | null {
@@ -128,22 +148,21 @@ export function centralPlayRect(root: ZoneRoot): ClientRect | null {
   const rowRect = clientRectOf(row);
   const pileRect = clientRectOf(piles);
   if (rowRect && pileRect) {
-    const available = pileRect.left - rowRect.left;
+    const spanRight = playColumnRightEdge(root, pileRect.left);
+    const available = spanRight - rowRect.left;
     if (available > 8) {
-      const width = Math.min(DEFAULT_PLAY_STRIP_PX, Math.max(40, available * 0.35));
-      const left = pileRect.left - width;
-      if (width > 8) {
-        return { left, top: rowRect.top, width, height: rowRect.height };
-      }
+      const width = available / 2;
+      const left = rowRect.left + width;
+      return { left, top: rowRect.top, width, height: rowRect.height };
     }
   }
   return clientRectOf(asElement(queryOne(root, '[data-zone="play"]')));
 }
 
 /**
- * Specific seats and piles first, then the default-play strip (so it can
- * win over the stretched Game Board / Play Area on the right), then those
- * play surfaces.
+ * Specific seats and piles first, then the default-play half-column, then
+ * Game Board and Play Area (trimmed to the left half so all three play zones
+ * share equal width without overlapping).
  */
 export function collectDropZones(root: ZoneRoot): DropZone[] {
   const zones: DropZone[] = [];
@@ -179,18 +198,32 @@ export function collectDropZones(root: ZoneRoot): DropZone[] {
       action: { kind: "play" },
     });
   }
-  pushZone(zones, queryOne(root, '[data-zone="board"]'), {
-    id: "play:gameboard",
-    label: "Play",
-    detail: "Game Board",
-    action: { kind: "play", destination: "gameboard" },
-  });
-  pushZone(zones, queryOne(root, '[data-zone="play-area"]'), {
-    id: "play:playarea",
-    label: "Play",
-    detail: "Play Area",
-    action: { kind: "play", destination: "playarea" },
-  });
+  const boardRect = trimLeftOf(
+    clientRectOf(asElement(queryOne(root, '[data-zone="board"]'))),
+    defaultRect?.left ?? null
+  );
+  if (boardRect) {
+    zones.push({
+      id: "play:gameboard",
+      label: "Play",
+      detail: "Game Board",
+      rect: boardRect,
+      action: { kind: "play", destination: "gameboard" },
+    });
+  }
+  const playAreaRect = trimLeftOf(
+    clientRectOf(asElement(queryOne(root, '[data-zone="play-area"]'))),
+    defaultRect?.left ?? null
+  );
+  if (playAreaRect) {
+    zones.push({
+      id: "play:playarea",
+      label: "Play",
+      detail: "Play Area",
+      rect: playAreaRect,
+      action: { kind: "play", destination: "playarea" },
+    });
+  }
   return zones;
 }
 

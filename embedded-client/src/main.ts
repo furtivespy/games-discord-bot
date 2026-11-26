@@ -14,7 +14,6 @@ import {
   SNAPSHOT_LOADING_MESSAGE,
   SNAPSHOT_STALE_MESSAGE,
   gamesRequestUrl,
-  helloGreeting,
   originLine,
   OUTSIDE_DISCORD_FALLBACK,
   snapshotRequestUrl,
@@ -216,11 +215,12 @@ function readFixture(): string {
   return String(raw).trim();
 }
 
-function setGreeting(text: string) {
+function setGreeting(text: string | null) {
   const el = document.getElementById("greeting");
-  if (el) {
-    el.textContent = text;
-  }
+  if (!el) return;
+  const value = typeof text === "string" ? text.trim() : "";
+  el.textContent = value;
+  el.hidden = !value;
 }
 
 function setConnected(connected: boolean) {
@@ -1656,7 +1656,7 @@ async function bootstrap() {
     setGreeting("Could not read your Discord name.");
     return;
   }
-  setGreeting(helloGreeting(displayName));
+  setGreeting(null);
   setOrigin(originLine(payload.origin_channel_name));
   setConnected(true);
   bindActionDialog();

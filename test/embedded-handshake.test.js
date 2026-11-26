@@ -8,7 +8,6 @@ const {
   SNAPSHOT_LOADING_MESSAGE,
   SNAPSHOT_STALE_MESSAGE,
   gamesRequestUrl,
-  helloGreeting,
   isDiscordProxyHost,
   originLine,
   OUTSIDE_DISCORD_FALLBACK,
@@ -143,9 +142,8 @@ describe("embedded client handshake URLs", () => {
     expect(firstNonEmptyName(null, undefined, "")).toBeNull();
   });
 
-  test("in-place hello has no origin line; bridge hello includes the channel name", () => {
+  test("in-place launch has no origin line; bridge launch includes the channel name", () => {
     expect(SNAPSHOT_STALE_MESSAGE).toContain("Reopen visual mode");
-    expect(helloGreeting("Will")).toBe("Hello, Will");
     expect(originLine(null)).toBeNull();
     expect(originLine("   ")).toBeNull();
     expect(originLine("Inis Friday")).toBe("from Inis Friday");
@@ -160,6 +158,8 @@ describe("embedded client handshake URLs", () => {
       "utf8"
     );
     expect(main).toContain("OUTSIDE_DISCORD_FALLBACK");
+    expect(main).toContain("setGreeting(null)");
+    expect(main).not.toContain("helloGreeting");
     expect(main).toContain("config.mock");
     expect(main).toContain("loadGames");
     expect(main).toContain("gamesRequestUrl");
