@@ -572,7 +572,7 @@ body {
   grid-template-rows: subgrid;
 }
 
-/* Out of flow: hit-testing uses a strip just left of the piles, not this box. */
+/* Out of flow: hit-testing uses the right half of the play column, not this box. */
 .board-row > [data-zone="play"] {
   position: absolute;
   inset: 0;

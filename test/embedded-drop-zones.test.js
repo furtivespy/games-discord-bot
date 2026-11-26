@@ -278,7 +278,7 @@ describe("hand-card drop zones", () => {
     expect(dropZoneAtPoint(zones, { x: 750, y: 400 }).id).toBe("play:default");
   });
 
-  test("narrow layout still splits the play column equally left of the pile stack", () => {
+  test("narrow layout keeps Game Board full-width and splits Play Area with default Play", () => {
     const root = new FakeNode("DIV", "table");
     const row = new FakeNode("SECTION", "board-row");
     row.classList.add("board-row");
@@ -298,9 +298,14 @@ describe("hand-card drop zones", () => {
     const gameboard = zones.find((item) => item.id === "play:gameboard");
     const playarea = zones.find((item) => item.id === "play:playarea");
 
-    expect(playDefault.rect).toEqual({ left: 237, top: 100, width: 225, height: 608 });
-    expect(gameboard.rect).toEqual({ left: 12, top: 100, width: 225, height: 200 });
+    expect(gameboard.rect).toEqual({ left: 12, top: 100, width: 796, height: 200 });
     expect(playarea.rect).toEqual({ left: 12, top: 308, width: 225, height: 200 });
+    expect(playDefault.rect).toEqual({ left: 237, top: 308, width: 225, height: 400 });
+
+    // Right side of Game Board above the pile stack stays a valid Game Board drop target.
+    expect(dropZoneAtPoint(zones, { x: 650, y: 180 }).id).toBe("play:gameboard");
+    expect(dropZoneAtPoint(zones, { x: 100, y: 400 }).id).toBe("play:playarea");
+    expect(dropZoneAtPoint(zones, { x: 350, y: 400 }).id).toBe("play:default");
   });
 });
 

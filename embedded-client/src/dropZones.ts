@@ -127,11 +127,14 @@ function playColumnRightEdge(root: ZoneRoot, pileLeft: number): number {
   return right > 0 ? right : pileLeft;
 }
 
-function trimLeftOf(rect: ClientRect | null, limitLeft: number | null): ClientRect | null {
+function trimLeftOf(rect: ClientRect | null, blocker: ClientRect | null): ClientRect | null {
   if (!rect) return null;
-  if (limitLeft == null) return rect;
-  if (rect.left < limitLeft && rect.left + rect.width > limitLeft) {
-    const width = limitLeft - rect.left;
+  if (!blocker) return rect;
+  const overlapsY =
+    rect.top < blocker.top + blocker.height && rect.top + rect.height > blocker.top;
+  if (!overlapsY) return rect;
+  if (rect.left < blocker.left && rect.left + rect.width > blocker.left) {
+    const width = blocker.left - rect.left;
     return width > 0 ? { ...rect, width } : null;
   }
   return rect;
@@ -139,7 +142,9 @@ function trimLeftOf(rect: ClientRect | null, limitLeft: number | null): ClientRe
 
 /**
  * Right half of the play column (left of the piles), giving default Play the
- * same width as Game Board and Play Area while dragging.
+ * same width as Game Board and Play Area while dragging. When Game Board spans
+ * the full row above the piles (narrow layout), default Play stays below it so
+ * Game Board remains a full-width drop target with no dead zone.
  * Falls back to `[data-zone="play"]` when the table has no pile stack.
  */
 export function centralPlayRect(root: ZoneRoot): ClientRect | null {
@@ -153,6 +158,18 @@ export function centralPlayRect(root: ZoneRoot): ClientRect | null {
     if (available > 8) {
       const width = available / 2;
       const left = rowRect.left + width;
+      const boardRect = clientRectOf(asElement(queryOne(root, '[data-zone="board"]')));
+      const boardSpansAbovePiles = Boolean(
+        boardRect && boardRect.left + boardRect.width > pileRect.left + 1
+      );
+      if (boardSpansAbovePiles) {
+        const playAreaRect = clientRectOf(asElement(queryOne(root, '[data-zone="play-area"]')));
+        const top = playAreaRect ? playAreaRect.top : pileRect.top;
+        const height = rowRect.top + rowRect.height - top;
+        if (height > 8) {
+          return { left, top, width, height };
+        }
+      }
       return { left, top: rowRect.top, width, height: rowRect.height };
     }
   }
@@ -161,8 +178,8 @@ export function centralPlayRect(root: ZoneRoot): ClientRect | null {
 
 /**
  * Specific seats and piles first, then the default-play half-column, then
- * Game Board and Play Area (trimmed to the left half so all three play zones
- * share equal width without overlapping).
+ * Game Board and Play Area (trimmed where they share vertical space with
+ * default Play so overlays do not overlap).
  */
 export function collectDropZones(root: ZoneRoot): DropZone[] {
   const zones: DropZone[] = [];
@@ -198,30 +215,37 @@ export function collectDropZones(root: ZoneRoot): DropZone[] {
       action: { kind: "play" },
     });
   }
-  const boardRect = trimLeftOf(
-    clientRectOf(asElement(queryOne(root, '[data-zone="board"]'))),
-    defaultRect?.left ?? null
-  );
-  if (boardRect) {
-    zones.push({
+  const surfaces: Array<{
+    selector: string;
+    id: string;
+    detail: string;
+    destination: PlayDestination;
+  }> = [
+    {
+      selector: '[data-zone="board"]',
       id: "play:gameboard",
-      label: "Play",
       detail: "Game Board",
-      rect: boardRect,
-      action: { kind: "play", destination: "gameboard" },
-    });
-  }
-  const playAreaRect = trimLeftOf(
-    clientRectOf(asElement(queryOne(root, '[data-zone="play-area"]'))),
-    defaultRect?.left ?? null
-  );
-  if (playAreaRect) {
-    zones.push({
+      destination: "gameboard",
+    },
+    {
+      selector: '[data-zone="play-area"]',
       id: "play:playarea",
-      label: "Play",
       detail: "Play Area",
-      rect: playAreaRect,
-      action: { kind: "play", destination: "playarea" },
+      destination: "playarea",
+    },
+  ];
+  for (const surface of surfaces) {
+    const rect = trimLeftOf(
+      clientRectOf(asElement(queryOne(root, surface.selector))),
+      defaultRect
+    );
+    if (!rect) continue;
+    zones.push({
+      id: surface.id,
+      label: "Play",
+      detail: surface.detail,
+      rect,
+      action: { kind: "play", destination: surface.destination },
     });
   }
   return zones;
