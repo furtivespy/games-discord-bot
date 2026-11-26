@@ -718,6 +718,8 @@ const DISCORD_LOOKUP_CACHE_MAX = 256;
 const CHEAP_RETRY_AFTER_MS = 1_000;
 /** Short TTL for 429/5xx so a Visual version poll (2.5s) does not retry Discord every tick. */
 const DISCORD_ERROR_CACHE_TTL_MS = 10_000;
+/** Cap on Retry-After cache TTL so long or hostile headers cannot stick lookups for hours. */
+const DISCORD_RETRY_AFTER_MAX_TTL_MS = 120_000;
 
 function asPermissionBits(value) {
   try {
@@ -805,12 +807,16 @@ function discordLookupCacheTtlMs(result) {
   if (result.status === 200 || result.status === 404) return undefined;
   if (result.status === 429) {
     const delayMs = retryAfterMs(result);
-    if (delayMs != null && delayMs > CHEAP_RETRY_AFTER_MS) return delayMs;
+    if (delayMs != null && delayMs > CHEAP_RETRY_AFTER_MS) {
+      return Math.min(delayMs, DISCORD_RETRY_AFTER_MAX_TTL_MS);
+    }
     return DISCORD_ERROR_CACHE_TTL_MS;
   }
   if (result.status >= 500 && result.status <= 599) {
     const delayMs = retryAfterMs(result);
-    if (delayMs != null && delayMs > 0) return delayMs;
+    if (delayMs != null && delayMs > 0) {
+      return Math.min(delayMs, DISCORD_RETRY_AFTER_MAX_TTL_MS);
+    }
     return DISCORD_ERROR_CACHE_TTL_MS;
   }
   return null;
@@ -1229,6 +1235,7 @@ module.exports = {
   DISCORD_EPOCH_MS,
   DISCORD_ERROR_CACHE_TTL_MS,
   DISCORD_LOOKUP_TTL_MS,
+  DISCORD_RETRY_AFTER_MAX_TTL_MS,
   GAME_COLLECTION,
   HISTORY_KEEP_LIMIT,
   STATUS_HISTORY_LIMIT,
