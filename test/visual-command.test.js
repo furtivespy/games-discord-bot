@@ -85,7 +85,11 @@ describe("/visual", () => {
       };
       await new Visual(harness.client).execute(harness.interaction);
       expect(launches).toEqual([]);
+      expect(harness.lastContent()).toBe(
+        "Discord can't open visual mode in forum posts or forum channels. Run `/visual` in a normal text channel."
+      );
       expect(harness.lastContent()).toBe(VisualLaunch.FORUM_BLOCKED_MESSAGE);
+      expect(harness.lastContent()).not.toMatch(/visual parent channel|not set up yet/i);
       expect(harness.calls.reply[0].flags).toBe(MessageFlags.Ephemeral);
     });
   });

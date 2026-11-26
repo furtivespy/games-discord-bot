@@ -18,8 +18,7 @@ const THREAD_TYPES = new Set(
 
 const FORUM_BLOCKED_MESSAGE =
   "Discord can't open visual mode in forum posts or forum channels. " +
-  "Run `/visual` in a normal text channel. " +
-  "A guild-configured visual parent channel is not set up yet.";
+  "Run `/visual` in a normal text channel.";
 
 const LAUNCH_FALLBACK_MESSAGE =
   "Could not open visual mode from this command. Use Discord's App Launcher and choose Game Bot (Launch) in this channel.";
