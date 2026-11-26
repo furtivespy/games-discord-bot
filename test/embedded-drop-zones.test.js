@@ -240,6 +240,73 @@ describe("hand-card drop zones", () => {
     hideDropLayer(doc);
     expect(doc.getElementById(DROP_LAYER_ID)).toBeNull();
   });
+
+  test("default Play takes half the play column with equal width to Game Board and Play Area", () => {
+    const root = new FakeNode("DIV", "table");
+    const row = new FakeNode("SECTION", "board-row");
+    row.classList.add("board-row");
+    row.boundingRect = { left: 320, top: 100, width: 940, height: 420 };
+    const piles = new FakeNode("DIV", "pile-stack");
+    piles.classList.add("pile-stack");
+    piles.boundingRect = { left: 934, top: 100, width: 326, height: 420 };
+    piles.append(
+      zone("decks", { left: 934, top: 100, width: 326, height: 206 }),
+      zone("discards", { left: 934, top: 314, width: 326, height: 206 })
+    );
+    row.append(
+      zone("board", { left: 320, top: 100, width: 600, height: 206 }),
+      zone("play", { left: 320, top: 100, width: 940, height: 420 }, "play-drop-zone"),
+      piles,
+      zone("play-area", { left: 320, top: 314, width: 600, height: 206 })
+    );
+    root.append(row);
+
+    const zones = collectDropZones(root);
+    const playDefault = zones.find((item) => item.id === "play:default");
+    const gameboard = zones.find((item) => item.id === "play:gameboard");
+    const playarea = zones.find((item) => item.id === "play:playarea");
+
+    expect(playDefault.rect).toEqual({ left: 620, top: 100, width: 300, height: 420 });
+    expect(gameboard.rect).toEqual({ left: 320, top: 100, width: 300, height: 206 });
+    expect(playarea.rect).toEqual({ left: 320, top: 314, width: 300, height: 206 });
+    expect(playDefault.rect.width).toBe(gameboard.rect.width);
+    expect(playDefault.rect.width).toBe(playarea.rect.width);
+
+    expect(dropZoneAtPoint(zones, { x: 450, y: 150 }).id).toBe("play:gameboard");
+    expect(dropZoneAtPoint(zones, { x: 450, y: 400 }).id).toBe("play:playarea");
+    expect(dropZoneAtPoint(zones, { x: 750, y: 150 }).id).toBe("play:default");
+    expect(dropZoneAtPoint(zones, { x: 750, y: 400 }).id).toBe("play:default");
+  });
+
+  test("narrow layout keeps Game Board full-width and splits Play Area with default Play", () => {
+    const root = new FakeNode("DIV", "table");
+    const row = new FakeNode("SECTION", "board-row");
+    row.classList.add("board-row");
+    row.boundingRect = { left: 12, top: 100, width: 796, height: 608 };
+    const piles = new FakeNode("DIV", "pile-stack");
+    piles.classList.add("pile-stack");
+    piles.boundingRect = { left: 476, top: 308, width: 332, height: 400 };
+    row.append(
+      zone("board", { left: 12, top: 100, width: 796, height: 200 }),
+      zone("play-area", { left: 12, top: 308, width: 450, height: 200 }),
+      piles
+    );
+    root.append(row);
+
+    const zones = collectDropZones(root);
+    const playDefault = zones.find((item) => item.id === "play:default");
+    const gameboard = zones.find((item) => item.id === "play:gameboard");
+    const playarea = zones.find((item) => item.id === "play:playarea");
+
+    expect(gameboard.rect).toEqual({ left: 12, top: 100, width: 796, height: 200 });
+    expect(playarea.rect).toEqual({ left: 12, top: 308, width: 225, height: 200 });
+    expect(playDefault.rect).toEqual({ left: 237, top: 308, width: 225, height: 400 });
+
+    // Right side of Game Board above the pile stack stays a valid Game Board drop target.
+    expect(dropZoneAtPoint(zones, { x: 650, y: 180 }).id).toBe("play:gameboard");
+    expect(dropZoneAtPoint(zones, { x: 100, y: 400 }).id).toBe("play:playarea");
+    expect(dropZoneAtPoint(zones, { x: 350, y: 400 }).id).toBe("play:default");
+  });
 });
 
 function createFakeTile() {

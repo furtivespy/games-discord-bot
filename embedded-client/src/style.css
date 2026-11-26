@@ -19,6 +19,7 @@
   --card-height: 11.174rem;
   --card-hover-scale: 1.48;
   --hand-overlap: 3.478rem;
+  --hand-tuck: 3.5rem;
 }
 
 html,
@@ -72,10 +73,8 @@ body {
   text-align: center;
 }
 
-#app.connected #greeting {
-  font-size: 1.15rem;
-  text-align: left;
-  color: #f3d98c;
+#greeting[hidden] {
+  display: none;
 }
 
 #origin {
@@ -428,6 +427,17 @@ body {
   flex: 0 0 auto;
 }
 
+/* Tuck resting hand cards partly below #table's bottom edge (clipped by
+   #table overflow: hidden with no scrollbar); hover-zoom clamps them back
+   fully onto the screen. */
+.hand-zone:has(.card-tile) {
+  margin-bottom: calc(-1 * var(--hand-tuck));
+  padding-bottom: 0;
+  border-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 #table[hidden] {
   display: none;
 }
@@ -562,7 +572,7 @@ body {
   grid-template-rows: subgrid;
 }
 
-/* Out of flow: hit-testing uses a strip just left of the piles, not this box. */
+/* Out of flow: hit-testing uses the right half of the play column, not this box. */
 .board-row > [data-zone="play"] {
   position: absolute;
   inset: 0;
@@ -719,6 +729,10 @@ body {
   gap: 0;
   padding: 0.45rem 1.2rem 0.2rem 0.25rem;
   overflow: visible;
+}
+
+.hand-zone:has(.card-tile) .hand-fan {
+  padding-bottom: 0;
 }
 
 .hand-fan .card-tile + .card-tile {

@@ -123,6 +123,16 @@ describe("hover zoom clamp math", () => {
     }
   });
 
+  test("a tucked hand card extending past the bottom edge clamps fully back onto the screen on hover", () => {
+    const rest = restBox({ left: 300, top: HAND_CLIP.bottom - REST.height + 48 });
+    const zoomed = hoverZoomRect(rest);
+    expect(zoomed.bottom).toBeGreaterThan(HAND_CLIP.bottom);
+    const shift = hoverShiftForRects(rest, HAND_CLIP);
+    expect(shift.y).toBeLessThan(0);
+    const moved = shiftedBox(zoomed, shift);
+    expect(containsBox(HAND_CLIP, moved)).toBe(true);
+  });
+
   test("an oversized zoom covers the clip with the least shift", () => {
     const rest = restBox({ left: 40, top: 40 });
     const clip = { left: 10, top: 20, right: 90, bottom: 100 };
