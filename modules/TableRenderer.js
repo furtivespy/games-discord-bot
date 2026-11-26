@@ -24,6 +24,7 @@ class TableRenderer {
       headerBackground: '#f0f0f0',
       headerTextAlign: 'center',
       titleFontSize: 24,
+      titleMinFontSize: 12,
       titleFontFamily: 'Open Sans',
       borderColor: '#aaa',
       borderWidth: 1,
@@ -56,6 +57,111 @@ class TableRenderer {
   }
 
   /**
+   * Resolve title font size, wrapped lines, and height so long titles fit
+   * within maxWidth without clipping at the card edges.
+   */
+  static resolveTitleLayout(ctx, titleOptions, maxWidth, padding = 10, defaults = {}) {
+    const rawText = titleOptions?.text;
+    const text = rawText == null ? '' : String(rawText).trim();
+    if (!text) {
+      return {
+        lines: [],
+        fontSize: 0,
+        fontFamily: '',
+        lineHeight: 0,
+        titleHeight: 0,
+      };
+    }
+
+    const fontFamily = titleOptions.fontFamily || defaults.titleFontFamily || 'Open Sans';
+    const maxFontSize = titleOptions.fontSize || defaults.titleFontSize || 24;
+    const requestedMin = titleOptions.minFontSize ?? defaults.titleMinFontSize ?? 12;
+    const minFontSize = Math.max(1, Math.min(maxFontSize, requestedMin));
+    const availableWidth = Math.max(1, maxWidth);
+
+    ctx.font = `${maxFontSize}px ${fontFamily}`;
+    const baseWidth = ctx.measureText(text).width;
+
+    let fontSize = maxFontSize;
+    if (baseWidth > availableWidth) {
+      fontSize = Math.max(
+        minFontSize,
+        Math.floor((maxFontSize * availableWidth) / baseWidth)
+      );
+
+      while (fontSize < maxFontSize) {
+        ctx.font = `${fontSize + 1}px ${fontFamily}`;
+        if (ctx.measureText(text).width <= availableWidth) {
+          fontSize += 1;
+        } else {
+          break;
+        }
+      }
+
+      ctx.font = `${fontSize}px ${fontFamily}`;
+      while (fontSize > minFontSize && ctx.measureText(text).width > availableWidth) {
+        fontSize -= 1;
+        ctx.font = `${fontSize}px ${fontFamily}`;
+      }
+    }
+
+    ctx.font = `${fontSize}px ${fontFamily}`;
+    let lines;
+    if (ctx.measureText(text).width <= availableWidth) {
+      lines = [text];
+    } else {
+      lines = [];
+      const words = text.split(/\s+/);
+      let currentLine = '';
+
+      const splitOversizedWord = (word) => {
+        let chunk = '';
+        for (const ch of word) {
+          const candidate = chunk + ch;
+          if (chunk && ctx.measureText(candidate).width > availableWidth) {
+            lines.push(chunk);
+            chunk = ch;
+          } else {
+            chunk = candidate;
+          }
+        }
+        return chunk;
+      };
+
+      for (const word of words) {
+        const candidate = currentLine ? `${currentLine} ${word}` : word;
+        if (ctx.measureText(candidate).width <= availableWidth) {
+          currentLine = candidate;
+        } else {
+          if (currentLine) {
+            lines.push(currentLine);
+            currentLine = '';
+          }
+          if (ctx.measureText(word).width <= availableWidth) {
+            currentLine = word;
+          } else {
+            currentLine = splitOversizedWord(word);
+          }
+        }
+      }
+      if (currentLine) {
+        lines.push(currentLine);
+      }
+    }
+
+    const lineHeight = lines.length === 1 ? fontSize : Math.ceil(fontSize * 1.3);
+    const titleHeight = (lines.length * lineHeight) + (padding * 2);
+
+    return {
+      lines,
+      fontSize,
+      fontFamily,
+      lineHeight,
+      titleHeight,
+    };
+  }
+
+  /**
    * Static method to calculate required table dimensions before creating canvas
    */
   static calculateRequiredDimensions(columns, data, options = {}) {
@@ -71,6 +177,8 @@ class TableRenderer {
       headerFontSize: options.header?.fontSize || 18,
       headerFontFamily: options.header?.fontFamily || options.fontFamily || 'Open Sans',
       titleFontSize: options.title?.fontSize || 24,
+      titleMinFontSize: options.title?.minFontSize ?? 12,
+      titleFontFamily: options.title?.fontFamily || options.fontFamily || 'Open Sans',
     };
     
     const padding = settings.padding;
@@ -118,7 +226,14 @@ class TableRenderer {
     // Calculate dimensions
     const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
     const tableMargin = 15; // Consistent margin around the table
-    const titleHeight = options.title?.text ? settings.titleFontSize + (padding * 2) : 0;
+    const titleLayout = TableRenderer.resolveTitleLayout(
+      tempCtx,
+      options.title,
+      tableWidth,
+      padding,
+      settings
+    );
+    const titleHeight = titleLayout.titleHeight;
     const headerHeight = settings.headerFontSize + (padding * 2);
     const rowHeight = settings.fontSize + (padding * 2);
     
@@ -308,7 +423,6 @@ class TableRenderer {
     
     // Calculate heights with proper padding
     const padding = this.settings.cell?.padding || this.settings.cellPadding;
-    const titleHeight = this.settings.title?.text ? (this.settings.title.fontSize || this.settings.titleFontSize) + (padding * 2) : 0;
     const headerHeight = (this.settings.header?.fontSize || this.settings.headerFontSize) + (padding * 2);
     const rowHeight = (this.settings.cell?.fontSize || this.settings.fontSize) + (padding * 2);
     
@@ -316,21 +430,36 @@ class TableRenderer {
     const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
     const tableMargin = 15; // Margin around the table (increased for visibility)
     const tableX = tableMargin; // Start position with left margin
+    const titleLayout = TableRenderer.resolveTitleLayout(
+      ctx,
+      this.settings.title,
+      tableWidth,
+      padding,
+      this.defaults
+    );
+    const titleHeight = titleLayout.titleHeight;
     
     let currentY = tableMargin; // Start with top margin
     let currentX = tableX;
     
     // Draw title if present
-    if (this.settings.title?.text) {
-      const titleFont = this.settings.title.fontFamily || this.settings.titleFontFamily;
-      const titleSize = this.settings.title.fontSize || this.settings.titleFontSize;
-      
+    if (titleLayout.lines.length > 0) {
       ctx.fillStyle = '#000000';
-      ctx.font = `${titleSize}px ${titleFont}`;
+      ctx.font = `${titleLayout.fontSize}px ${titleLayout.fontFamily}`;
       ctx.textAlign = 'center';
-      // Center title over the table
-      ctx.fillText(this.settings.title.text, tableX + tableWidth / 2, currentY + titleSize);
+      ctx.textBaseline = 'middle';
+
+      const totalTextHeight = titleLayout.lines.length * titleLayout.lineHeight;
+      const startY =
+        currentY + (titleHeight - totalTextHeight) / 2 + titleLayout.lineHeight / 2;
+      const centerX = tableX + tableWidth / 2;
+
+      titleLayout.lines.forEach((line, index) => {
+        ctx.fillText(line, centerX, startY + index * titleLayout.lineHeight);
+      });
+
       ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
       
       currentY += titleHeight;
     }
