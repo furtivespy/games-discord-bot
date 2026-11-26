@@ -33,6 +33,10 @@ class TableRenderer {
     
     // Merge options with defaults
     this.settings = { ...this.defaults, ...this.options };
+    // Preserve options.fontFamily as the title font fallback when titleFontFamily is not set
+    if (!this.options.titleFontFamily && this.options.fontFamily) {
+      this.settings.titleFontFamily = this.options.fontFamily;
+    }
     // Keep section-specific settings separate without polluting them with general defaults
     if (this.options.header) {
       this.settings.header = { ...this.options.header };
@@ -59,8 +63,15 @@ class TableRenderer {
   /**
    * Resolve title font size, wrapped lines, and height so long titles fit
    * within maxWidth without clipping at the card edges.
+   * Accepts either a full table options/settings object (with `.title`) or a
+   * title options object directly.
    */
-  static resolveTitleLayout(ctx, titleOptions, maxWidth, padding = 10, defaults = {}) {
+  static resolveTitleLayout(ctx, optionsOrTitle, maxWidth, padding = 10) {
+    const isTableOptions =
+      optionsOrTitle != null &&
+      typeof optionsOrTitle === 'object' &&
+      'title' in optionsOrTitle;
+    const titleOptions = isTableOptions ? optionsOrTitle.title : optionsOrTitle;
     const rawText = titleOptions?.text;
     const text = rawText == null ? '' : String(rawText).trim();
     if (!text) {
@@ -73,11 +84,33 @@ class TableRenderer {
       };
     }
 
-    const fontFamily = titleOptions.fontFamily || defaults.titleFontFamily || 'Open Sans';
-    const maxFontSize = titleOptions.fontSize || defaults.titleFontSize || 24;
-    const requestedMin = titleOptions.minFontSize ?? defaults.titleMinFontSize ?? 12;
+    const positiveFinite = (value) =>
+      typeof value === 'number' && Number.isFinite(value) && value > 0
+        ? value
+        : null;
+
+    const fontFamily =
+      titleOptions?.fontFamily ||
+      (isTableOptions
+        ? optionsOrTitle.titleFontFamily || optionsOrTitle.fontFamily
+        : null) ||
+      'Open Sans';
+    const maxFontSize =
+      positiveFinite(titleOptions?.fontSize) ??
+      (isTableOptions ? positiveFinite(optionsOrTitle.titleFontSize) : null) ??
+      24;
+    const requestedMin =
+      positiveFinite(titleOptions?.minFontSize) ??
+      (isTableOptions
+        ? positiveFinite(optionsOrTitle.titleMinFontSize)
+        : null) ??
+      12;
     const minFontSize = Math.max(1, Math.min(maxFontSize, requestedMin));
-    const availableWidth = Math.max(1, maxWidth);
+    const availableWidth = positiveFinite(maxWidth) ?? 1;
+    const safePadding =
+      typeof padding === 'number' && Number.isFinite(padding) && padding >= 0
+        ? padding
+        : 10;
 
     ctx.font = `${maxFontSize}px ${fontFamily}`;
     const baseWidth = ctx.measureText(text).width;
@@ -114,13 +147,21 @@ class TableRenderer {
       const words = text.split(/\s+/);
       let currentLine = '';
 
+      const graphemeSegmenter =
+        typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+          ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+          : null;
+
       const splitOversizedWord = (word) => {
+        const units = graphemeSegmenter
+          ? Array.from(graphemeSegmenter.segment(word), (s) => s.segment)
+          : Array.from(word);
         let chunk = '';
-        for (const ch of word) {
-          const candidate = chunk + ch;
+        for (const unit of units) {
+          const candidate = chunk + unit;
           if (chunk && ctx.measureText(candidate).width > availableWidth) {
             lines.push(chunk);
-            chunk = ch;
+            chunk = unit;
           } else {
             chunk = candidate;
           }
@@ -150,7 +191,7 @@ class TableRenderer {
     }
 
     const lineHeight = lines.length === 1 ? fontSize : Math.ceil(fontSize * 1.3);
-    const titleHeight = (lines.length * lineHeight) + (padding * 2);
+    const titleHeight = (lines.length * lineHeight) + (safePadding * 2);
 
     return {
       lines,
@@ -176,9 +217,6 @@ class TableRenderer {
       padding: options.cell?.padding || 10,
       headerFontSize: options.header?.fontSize || 18,
       headerFontFamily: options.header?.fontFamily || options.fontFamily || 'Open Sans',
-      titleFontSize: options.title?.fontSize || 24,
-      titleMinFontSize: options.title?.minFontSize ?? 12,
-      titleFontFamily: options.title?.fontFamily || options.fontFamily || 'Open Sans',
     };
     
     const padding = settings.padding;
@@ -228,10 +266,9 @@ class TableRenderer {
     const tableMargin = 15; // Consistent margin around the table
     const titleLayout = TableRenderer.resolveTitleLayout(
       tempCtx,
-      options.title,
+      options,
       tableWidth,
-      padding,
-      settings
+      padding
     );
     const titleHeight = titleLayout.titleHeight;
     const headerHeight = settings.headerFontSize + (padding * 2);
@@ -432,10 +469,9 @@ class TableRenderer {
     const tableX = tableMargin; // Start position with left margin
     const titleLayout = TableRenderer.resolveTitleLayout(
       ctx,
-      this.settings.title,
+      this.settings,
       tableWidth,
-      padding,
-      this.defaults
+      padding
     );
     const titleHeight = titleLayout.titleHeight;
     

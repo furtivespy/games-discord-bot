@@ -145,20 +145,121 @@ describe("TableRenderer.resolveTitleLayout", () => {
       TableRenderer.resolveTitleLayout(ctx, { text: "   " }, 300, 10).titleHeight
     ).toBe(0);
   });
+
+  test("guards non-finite or non-positive font sizes and maxWidth", () => {
+    const { ctx } = createFontAwareContext();
+    const layout = TableRenderer.resolveTitleLayout(
+      ctx,
+      { text: "Inis Status", fontSize: -5, minFontSize: Number.NaN },
+      Number.NaN,
+      -10
+    );
+
+    expect(Number.isFinite(layout.fontSize)).toBe(true);
+    expect(layout.fontSize).toBeGreaterThan(0);
+    expect(Number.isFinite(layout.titleHeight)).toBe(true);
+    expect(layout.titleHeight).toBeGreaterThan(0);
+    expect(layout.lines.length).toBeGreaterThan(0);
+  });
+
+  test("resolves identical title font defaults from table options and TableRenderer settings", () => {
+    const { ctx } = createFontAwareContext();
+    const options = {
+      fontFamily: "Courier New",
+      titleFontSize: 20,
+      title: { text: "Inis Status" },
+    };
+
+    const fromOptions = TableRenderer.resolveTitleLayout(ctx, options, 300, 10);
+    const renderer = new TableRenderer(createFontAwareContext().canvas, {
+      columns: [],
+      data: [],
+      options,
+    });
+    const fromSettings = TableRenderer.resolveTitleLayout(
+      ctx,
+      renderer.settings,
+      300,
+      10
+    );
+
+    expect(fromOptions).toEqual(fromSettings);
+    expect(fromOptions.fontFamily).toBe("Courier New");
+    expect(fromOptions.fontSize).toBe(20);
+  });
 });
 
-describe("TableRenderer.generateTable title rendering", () => {
-  test("draws shrunk title centered within the table width and above the header row", async () => {
+describe("TableRenderer.calculateRequiredDimensions and generateTable parity", () => {
+  const columns = [
+    { title: "Player" },
+    { title: "Score", options: { textAlign: "right" } },
+  ];
+  const data = [
+    [{ value: "(1) Alice" }, { value: "10" }],
+    [{ value: "Totals", fontWeight: "bold" }, { value: "" }],
+  ];
+
+  test("calculateRequiredDimensions expands canvasHeight for wrapped titles and matches generateTable", async () => {
+    const shortOptions = {
+      header: { fontSize: 18, fontWeight: "bold", background: "#f0f0f0" },
+      title: { text: "Inis Status", fontSize: 24 },
+      cell: { fontSize: 18, padding: 10 },
+      fontFamily: "Courier New",
+    };
+    const longOptions = {
+      ...shortOptions,
+      title: {
+        text: "Super Extremely Long Custom Board Game Title Name (Custom game) Status (Turn Order Reversed)",
+        fontSize: 24,
+      },
+    };
+
+    const shortDims = TableRenderer.calculateRequiredDimensions(
+      columns,
+      data,
+      shortOptions
+    );
+    const longDims = TableRenderer.calculateRequiredDimensions(
+      columns,
+      data,
+      longOptions
+    );
+
+    expect(longDims.canvasWidth).toBe(shortDims.canvasWidth);
+    expect(longDims.canvasHeight).toBeGreaterThan(shortDims.canvasHeight);
+
+    // Verify generateTable places the header at the exact titleHeight reserved by calculateRequiredDimensions
+    const { createCanvas } = require("canvas");
+    const canvas = createCanvas(longDims.canvasWidth, longDims.canvasHeight);
+    const ctx = canvas.getContext("2d");
+    let headerY = null;
+    const origFillRect = ctx.fillRect.bind(ctx);
+    ctx.fillRect = (x, y, width, height) => {
+      if (ctx.fillStyle === "#f0f0f0") headerY = y;
+      return origFillRect(x, y, width, height);
+    };
+
+    const renderer = new TableRenderer(canvas, {
+      columns,
+      data,
+      options: longOptions,
+    });
+    await renderer.generateTable();
+
+    const headerHeight = 18 + 20;
+    const rowHeight = 18 + 20;
+    const tableMargin = 15;
+    const expectedTitleHeight =
+      longDims.canvasHeight -
+      headerHeight -
+      rowHeight * data.length -
+      tableMargin * 2;
+    expect(headerY).toBe(tableMargin + expectedTitleHeight);
+  });
+
+  test("draws shrunk single-line title centered within the table width and above the header row", async () => {
     const { canvas, fillTextCalls, fillRectCalls } = createFontAwareContext();
     const title = "FUR-206 legacy-only (Custom game) Status";
-    const columns = [
-      { title: "Player" },
-      { title: "Score", options: { textAlign: "right" } },
-    ];
-    const data = [
-      [{ value: "(1) Alice" }, { value: "10" }],
-      [{ value: "Totals", fontWeight: "bold" }, { value: "" }],
-    ];
     const options = {
       header: { fontSize: 18, fontWeight: "bold", background: "#f0f0f0" },
       title: { text: title, fontSize: 24, fontFamily: "Open Sans" },
@@ -189,5 +290,42 @@ describe("TableRenderer.generateTable title rendering", () => {
     const headerRect = fillRectCalls.find((rect) => rect.fillStyle === "#f0f0f0");
     expect(headerRect).toBeDefined();
     expect(titleCall.y).toBeLessThan(headerRect.y);
+  });
+
+  test("draws multi-line wrapped title lines centered, ordered top-to-bottom, and above the header row", async () => {
+    const { canvas, fillTextCalls, fillRectCalls } = createFontAwareContext();
+    const title =
+      "Super Extremely Long Custom Board Game Title Name (Custom game) Status (Turn Order Reversed)";
+    const options = {
+      header: { fontSize: 18, fontWeight: "bold", background: "#f0f0f0" },
+      title: { text: title, fontSize: 24, fontFamily: "Open Sans" },
+      cell: { fontSize: 18, fontFamily: "Open Sans", padding: 10 },
+      fontFamily: "Open Sans",
+    };
+
+    const renderer = new TableRenderer(canvas, { columns, data, options });
+    await renderer.generateTable();
+
+    const headerRect = fillRectCalls.find((rect) => rect.fillStyle === "#f0f0f0");
+    expect(headerRect).toBeDefined();
+
+    const tableX = 15;
+    const tableWidth = 300;
+    const titleCalls = fillTextCalls.filter((call) => call.y < headerRect.y);
+    expect(titleCalls.length).toBeGreaterThan(1);
+    expect(titleCalls.map((call) => call.text).join(" ")).toBe(title);
+
+    for (let i = 0; i < titleCalls.length; i++) {
+      const call = titleCalls[i];
+      expect(call.x).toBe(tableX + tableWidth / 2);
+      expect(call.textAlign).toBe("center");
+      expect(call.width).toBeLessThanOrEqual(tableWidth);
+      expect(call.x - call.width / 2).toBeGreaterThanOrEqual(tableX);
+      expect(call.x + call.width / 2).toBeLessThanOrEqual(tableX + tableWidth);
+      expect(call.y).toBeLessThan(headerRect.y);
+      if (i > 0) {
+        expect(call.y).toBeGreaterThan(titleCalls[i - 1].y);
+      }
+    }
   });
 });
