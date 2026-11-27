@@ -7,6 +7,7 @@ const GameDB = require("../db/anygame");
 const {
   DISCORD_API_BASE,
   DISCORD_ERROR_CACHE_TTL_MS,
+  DISCORD_RETRY_AFTER_MAX_TTL_MS,
   GAME_COLLECTION,
   HISTORY_KEEP_LIMIT,
   createdAtMs,
@@ -1015,6 +1016,68 @@ describe("versionGameForUser", () => {
     nowMs += 1;
     await versionGameForUser(opts);
     expect(urls).toHaveLength(2);
+  });
+
+  test("caps long or hostile Retry-After TTL on cached 429 and 5xx lookups at 120s", async () => {
+    expect(DISCORD_RETRY_AFTER_MAX_TTL_MS).toBe(120_000);
+    const game = {
+      isdeleted: false,
+      name: "No board",
+      players: [{ userId: "will", hands: { main: [] } }],
+      gameBoard: [],
+      history: [
+        {
+          timestamp: "2026-11-17T12:00:00.000Z",
+          actor: { userId: "host-1" },
+          action: {
+            category: GameDB.ACTION_CATEGORIES.GAME,
+            type: GameDB.ACTION_TYPES.CREATE,
+          },
+        },
+      ],
+    };
+
+    for (const { status, retryAfter } of [
+      { status: 429, retryAfter: "3600" },
+      { status: 429, retryAfter: "1e6" },
+      { status: 503, retryAfter: "3600" },
+    ]) {
+      let nowMs = 1_000_000;
+      const cache = createDiscordLookupCache({
+        ttlMs: DISCORD_ERROR_CACHE_TTL_MS,
+        now: () => nowMs,
+      });
+      const urls = [];
+      const fetchImpl = async (url) => {
+        urls.push(String(url));
+        return {
+          status,
+          headers: {
+            get: (name) => (name === "retry-after" ? retryAfter : null),
+          },
+          json: async () => ({ retry_after: Number(retryAfter) }),
+        };
+      };
+      const opts = {
+        discordClient: { getGameDataV2: async () => game, token: "bot-token" },
+        fetchImpl,
+        hostImageCache: cache,
+        channelId: "thread-game",
+        guildId: "guild-a",
+        userId: "will",
+      };
+
+      await versionGameForUser(opts);
+      expect(urls).toHaveLength(1);
+
+      nowMs += DISCORD_RETRY_AFTER_MAX_TTL_MS - 1;
+      await versionGameForUser(opts);
+      expect(urls).toHaveLength(1);
+
+      nowMs += 1;
+      await versionGameForUser(opts);
+      expect(urls).toHaveLength(2);
+    }
   });
 
   test("does not fetch channel messages when the card board is in use", async () => {
@@ -2179,6 +2242,64 @@ describe("requiredDiscordAccessGuard", () => {
       body: { error: "try_again" },
     });
     expect(expensiveWaits).toEqual([]);
+  });
+
+  test("caps long Retry-After on cached access-guard 429 lookups at 120s", async () => {
+    let nowMs = 1_000_000;
+    const cache = createDiscordLookupCache({ ttlMs: 60_000, now: () => nowMs });
+    let memberHits = 0;
+    const fetchImpl = async (url) => {
+      if (String(url).includes("/members/")) {
+        memberHits += 1;
+        if (memberHits === 1) {
+          return {
+            status: 429,
+            headers: { get: (name) => (name === "retry-after" ? "3600" : null) },
+            json: async () => ({ retry_after: 3600 }),
+          };
+        }
+      }
+      return withDiscordAccess(
+        async () => {
+          throw new Error("unexpected");
+        },
+        {
+          guildId: "guild-d",
+          channelId: "table-4",
+          userId: "will",
+        }
+      )(url);
+    };
+    const opts = {
+      botToken: "bot-token",
+      guildId: "guild-d",
+      channelId: "table-4",
+      userId: "will",
+      fetchImpl,
+      lookupCache: cache,
+    };
+
+    const first = await requiredDiscordAccessGuard(opts);
+    expect(first).toEqual({
+      ok: false,
+      status: 403,
+      body: { error: "try_again" },
+    });
+    expect(memberHits).toBe(1);
+
+    nowMs += DISCORD_RETRY_AFTER_MAX_TTL_MS - 1;
+    const stillCached = await requiredDiscordAccessGuard(opts);
+    expect(stillCached).toEqual({
+      ok: false,
+      status: 403,
+      body: { error: "try_again" },
+    });
+    expect(memberHits).toBe(1);
+
+    nowMs += 1;
+    const recovered = await requiredDiscordAccessGuard(opts);
+    expect(recovered.ok).toBe(true);
+    expect(memberHits).toBe(2);
   });
 });
 
