@@ -89,7 +89,7 @@ class GameFormatter {
         border: { bottom: { color: '#000', width: 2 } },
       },
       title: {
-        text: `${GameIdentity.statusGameLabel(gameData)} Status ${gameData.reverseOrder ? "(Turn Order Reversed)" : ""}`,
+        text: `${GameIdentity.statusGameLabel(gameData)} Status${gameData.reverseOrder ? " (Turn Order Reversed)" : ""}`,
         fontSize: 24,
         fontFamily: 'Open Sans',
       },
