@@ -64,6 +64,7 @@ export const INSPECT_PREV_LABEL = "Previous card";
 export const INSPECT_NEXT_LABEL = "Next card";
 
 const DIALOG_ID = "card-inspect";
+const TABLE_MAIN_ID = "table-main";
 const ART_ID = "card-inspect-art";
 const PROXY_ID = "card-inspect-proxy";
 const TITLE_ID = "card-inspect-title";
@@ -354,11 +355,22 @@ function resetInspectZoom() {
   applyInspectZoomStyle(dialogEl(), inspectZoom, false);
 }
 
+function syncTableMainInert(inert: boolean) {
+  const main = document.getElementById(TABLE_MAIN_ID) as
+    | (HTMLElement & { inert?: boolean })
+    | null;
+  if (!main) return;
+  main.inert = inert;
+  if (inert) main.setAttribute("inert", "");
+  else main.removeAttribute("inert");
+}
+
 function resetInspectSession() {
   inspectItems = [];
   inspectIndex = 0;
   inspectDocked = false;
   dialogEl()?.classList.remove(INSPECT_BOARD_DOCKED_CLASS);
+  syncTableMainInert(false);
   resetInspectZoom();
   syncInspectNav();
 }
@@ -760,6 +772,7 @@ export function enableCardInspectDialog() {
 function applyInspectLayout(dialog: HTMLElement, view: InspectView, docked: boolean) {
   dialog.classList.toggle(INSPECT_PHOTO_CLASS, view.layout === "photo");
   dialog.classList.toggle(INSPECT_BOARD_DOCKED_CLASS, docked);
+  syncTableMainInert(docked);
   if (view.layout === "photo") {
     dialog.removeAttribute("aria-labelledby");
     dialog.setAttribute("aria-label", INSPECT_PHOTO_LABEL);
@@ -855,31 +868,29 @@ export function openCardInspect(
   const session = resolveInspectSession(card, imageSrc, tile, sequence, options);
   const wantDocked = Boolean(session.items[session.index]?.dockAboveHand);
   const switching = isInspectOpen(dialog) && inspectDocked !== wantDocked;
-  if (switching) {
-    inspectSwitching = true;
-    dialog.setAttribute("data-inspect-switching", "1");
-    try {
-      if (typeof dialog.close === "function" && dialog.open) {
-        dialog.close();
-      } else {
-        dialog.removeAttribute("open");
-      }
-      inspectItems = session.items;
-      inspectIndex = session.index;
-      inspectDocked = wantDocked;
-      setInspectActionError(null);
-      showInspectItem(inspectIndex);
-      openInspectDialogMode(dialog, wantDocked);
-    } finally {
-      inspectSwitching = false;
-      dialog.removeAttribute("data-inspect-switching");
-    }
+  const commit = () => {
+    inspectItems = session.items;
+    inspectIndex = session.index;
+    inspectDocked = wantDocked;
+    setInspectActionError(null);
+    showInspectItem(inspectIndex);
+    openInspectDialogMode(dialog, wantDocked);
+  };
+  if (!switching) {
+    commit();
     return;
   }
-  inspectItems = session.items;
-  inspectIndex = session.index;
-  inspectDocked = wantDocked;
-  setInspectActionError(null);
-  showInspectItem(inspectIndex);
-  openInspectDialogMode(dialog, wantDocked);
+  inspectSwitching = true;
+  dialog.setAttribute("data-inspect-switching", "1");
+  try {
+    if (typeof dialog.close === "function" && dialog.open) {
+      dialog.close();
+    } else {
+      dialog.removeAttribute("open");
+    }
+    commit();
+  } finally {
+    inspectSwitching = false;
+    dialog.removeAttribute("data-inspect-switching");
+  }
 }

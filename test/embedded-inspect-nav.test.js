@@ -1684,8 +1684,9 @@ describe("inspect photo pan release in Chrome", () => {
 });
 
 describe("board-docked inspect mode (FUR-297)", () => {
-  test("dockAboveHand opens non-modally via show(), closes on Escape and stage click, and guards modal switch", () => {
+  test("dockAboveHand opens non-modally via show(), marks #table-main inert, closes on Escape/stage click, and guards modal switch", () => {
     const { document, dialog, input, actions } = installInspectDocument();
+    const tableMain = put(document.nodes, new FakeHTMLElement("DIV", "table-main"));
     const stage = new FakeHTMLElement("DIV");
     stage.classList.add("card-inspect-stage");
     dialog.append(stage);
@@ -1711,6 +1712,8 @@ describe("board-docked inspect mode (FUR-297)", () => {
     expect(dialog.open).toBe(true);
     expect(dialog.classList.contains(INSPECT_BOARD_DOCKED_CLASS)).toBe(true);
     expect(isInspectBoardDocked()).toBe(true);
+    expect(tableMain.inert).toBe(true);
+    expect(tableMain.hasAttribute("inert")).toBe(true);
     expect(isSnapshotPollBlocked(document)).toBe(true);
 
     // Escape on an input does not close the docked board image.
@@ -1718,18 +1721,22 @@ describe("board-docked inspect mode (FUR-297)", () => {
     expect(ignoredEsc.wasPrevented()).toBe(false);
     expect(dialog.open).toBe(true);
 
-    // Escape outside typing targets closes the docked board image.
+    // Escape outside typing targets closes the docked board image and restores #table-main.
     const esc = dispatchKey(document, "Escape");
     expect(esc.wasPrevented()).toBe(true);
     expect(dialog.open).toBe(false);
     expect(dialog.classList.contains(INSPECT_BOARD_DOCKED_CLASS)).toBe(false);
     expect(isInspectBoardDocked()).toBe(false);
+    expect(tableMain.inert).toBe(false);
+    expect(tableMain.hasAttribute("inert")).toBe(false);
 
     // Re-open docked and verify clicking .card-inspect-stage closes it.
     openCardInspect(photo, "/map.png", makeTile("Board Map"), null, { dockAboveHand: true });
     expect(dialog.open).toBe(true);
+    expect(tableMain.inert).toBe(true);
     dialog.dispatchEvent(clickEvent(stage, 12, 12));
     expect(dialog.open).toBe(false);
+    expect(tableMain.inert).toBe(false);
 
     // Re-open docked, then switch to a modal hand card; snapshot polls must stay
     // blocked during the synchronous close-then-showModal transition.
@@ -1750,6 +1757,7 @@ describe("board-docked inspect mode (FUR-297)", () => {
     expect(dialog.open).toBe(true);
     expect(dialog.classList.contains(INSPECT_BOARD_DOCKED_CLASS)).toBe(false);
     expect(isInspectBoardDocked()).toBe(false);
+    expect(tableMain.inert).toBe(false);
     expect(actions.hidden).toBe(false);
 
     // closeDockedBoardInspect is a no-op while modal hand inspect is open.
@@ -1761,8 +1769,25 @@ describe("board-docked inspect mode (FUR-297)", () => {
     expect(showCalls).toBe(4);
     expect(dialog.open).toBe(true);
     expect(isInspectBoardDocked()).toBe(true);
+    expect(tableMain.inert).toBe(true);
+
+    // Saving side-panel score edits while docked closes the docked viewer before
+    // applySnapshot so the score-save snapshot is not deferred by dialog[open].
     closeDockedBoardInspect();
     expect(dialog.open).toBe(false);
+    expect(tableMain.inert).toBe(false);
+    expect(isSnapshotPollBlocked(document)).toBe(false);
+    const mainSrc = fs.readFileSync(
+      path.join(__dirname, "..", "embedded-client", "src", "main.ts"),
+      "utf8"
+    );
+    const submitScores = mainSrc.slice(
+      mainSrc.indexOf("async function submitScoreEdits"),
+      mainSrc.indexOf("async function submitDroppedHandAction")
+    );
+    expect(submitScores).toMatch(
+      /clearScoreEditLock\(document\);\s+closeDockedBoardInspect\(\);\s+applySnapshot\(session\.config,\s*payload\);/
+    );
   });
 });
 
@@ -1809,6 +1834,7 @@ try {
   const dialogZ = Number(getComputedStyle(dialog).zIndex);
   const mainPointerEvents = getComputedStyle(tableMain).pointerEvents;
   const mainZ = Number(getComputedStyle(tableMain).zIndex);
+  const mainInertWhileDocked = Boolean(tableMain.inert);
   const isModalWhileDocked = dialog.matches(":modal");
 
   const artBox = box(art);
@@ -1846,11 +1872,13 @@ try {
     dialogZ,
     mainPointerEvents,
     mainZ,
+    mainInertWhileDocked,
     isModalWhileDocked,
     zoomedScale,
     isModalAfterHandClick,
     dockedAfterHandClick,
     openAfterEscape: dialog.open,
+    mainInertAfterEscape: Boolean(tableMain.inert),
   });
 } catch (error) {
   await report({ error: String(error && error.stack ? error.stack : error) });
@@ -1995,10 +2023,12 @@ describe("board-docked inspect alongside hand in Chrome (FUR-297)", () => {
     expect(result.dialogZ).toBe(25);
     expect(result.mainPointerEvents).toBe("none");
     expect(result.mainZ).toBe(0);
+    expect(result.mainInertWhileDocked).toBe(true);
     expect(result.zoomedScale).toBeGreaterThan(1);
     expect(result.isModalAfterHandClick).toBe(true);
     expect(result.dockedAfterHandClick).toBe(false);
     expect(result.openAfterEscape).toBe(false);
+    expect(result.mainInertAfterEscape).toBe(false);
   });
 });
 

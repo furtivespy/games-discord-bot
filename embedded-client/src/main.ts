@@ -729,6 +729,7 @@ async function submitScoreEdits(scores: ScoreMap) {
     }
     if (!stillThisGame()) return;
     clearScoreEditLock(document);
+    closeDockedBoardInspect();
     applySnapshot(session.config, payload);
     setActionNotice(payload.channelPosted === false ? CHANNEL_POST_FAILED_NOTICE : null);
   } catch {
