@@ -1457,7 +1457,9 @@ describe("card inspect sequence navigation", () => {
       main.indexOf("function appendPlayerChip")
     );
     expect(renderCards).toContain("enableInspectNav = false");
-    expect(renderCards).toContain("if (enableInspectNav) sequence.push({ card, imageSrc, tile, handActions })");
+    expect(renderCards).toContain(
+      "if (enableInspectNav) sequence.push({ card, imageSrc, tile, handActions, dockAboveHand })"
+    );
     expect(renderCards).toContain(
       "openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined, {"
     );

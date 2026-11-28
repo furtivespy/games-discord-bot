@@ -409,6 +409,15 @@ body {
   isolation: isolate;
 }
 
+#table-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 #table-main {
   flex: 1 1 auto;
   min-width: 0;
@@ -1255,6 +1264,61 @@ body {
 
 .card-inspect-dialog.is-photo.is-panning .card-inspect-art:not([hidden]) {
   cursor: grabbing;
+}
+
+/* Non-modal board-image viewer docked inside #table-stage above .hand-zone.
+   z-index 25 sits above resting tiles (1) and below hovered hand tiles (30)
+   inside #table's shared stacking context, so hand cards hover-zoom cleanly
+   above the open board image. */
+.card-inspect-dialog.is-board-docked {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 14px;
+  background: rgba(6, 12, 10, 0.82);
+}
+
+.card-inspect-dialog.is-board-docked .card-inspect-stage {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.card-inspect-dialog.is-board-docked .card-inspect-sheet {
+  width: auto;
+  max-width: calc(100% - 1.5rem);
+  max-height: calc(100% - 1.5rem);
+}
+
+.card-inspect-dialog.is-board-docked.is-photo .card-inspect-sheet {
+  width: calc(100% - 1rem);
+  height: calc(100% - 1rem);
+  max-width: calc(100% - 1rem);
+  max-height: calc(100% - 1rem);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.card-inspect-dialog.is-board-docked.is-photo .card-inspect-art:not([hidden]) {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Keep hovered/moved tiles inside #table-main behind the docked viewer without
+   isolating #table-stage so .hand-zone hover-zoom (z-index 30) paints above it. */
+#table-stage:has(> .card-inspect-dialog.is-board-docked[open]) > #table-main {
+  isolation: isolate;
+  z-index: 0;
+  pointer-events: none;
 }
 
 .card-inspect-proxy {

@@ -5,10 +5,13 @@ const os = require("os");
 const path = require("path");
 const { workingChromeBin } = require("./helpers/chrome.js");
 const {
+  INSPECT_BOARD_DOCKED_CLASS,
   closeCardInspect,
+  closeDockedBoardInspect,
   closeInspectAfterFailedAction,
   inspectKeyCommand,
   inspectZoomState,
+  isInspectBoardDocked,
   isInspectTypingTarget,
   INSPECT_SUPPRESS_CLICK_MS,
   openCardInspect,
@@ -100,6 +103,9 @@ class FakeElement {
       if (part === "[data-card-action]") return Boolean(this.dataset.cardAction);
       if (part === "dialog[open]") {
         return this.tagName === "DIALOG" && (this.open || this.hasAttribute("open"));
+      }
+      if (part === "dialog[data-inspect-switching]") {
+        return this.tagName === "DIALOG" && this.hasAttribute("data-inspect-switching");
       }
       if (part.startsWith("#")) return this.id === part.slice(1);
       if (part.startsWith(".")) return this.classList.contains(part.slice(1));
@@ -1248,7 +1254,11 @@ describe("inspect nav arrows stay inside the sheet", () => {
     } catch {}
     server = null;
     if (userDataDir) {
-      fs.rmSync(userDataDir, { recursive: true, force: true });
+      try {
+        fs.rmSync(userDataDir, { recursive: true, force: true });
+      } catch {
+        // Windows Chrome may hold userDataDir briefly after SIGKILL
+      }
       userDataDir = null;
     }
   });
@@ -1391,7 +1401,11 @@ describe("inspect art fits a wide card image", () => {
     } catch {}
     server = null;
     if (userDataDir) {
-      fs.rmSync(userDataDir, { recursive: true, force: true });
+      try {
+        fs.rmSync(userDataDir, { recursive: true, force: true });
+      } catch {
+        // Windows Chrome may hold userDataDir briefly after SIGKILL
+      }
       userDataDir = null;
     }
   });
@@ -1580,7 +1594,11 @@ describe("inspect photo pan release in Chrome", () => {
     } catch {}
     server = null;
     if (userDataDir) {
-      fs.rmSync(userDataDir, { recursive: true, force: true });
+      try {
+        fs.rmSync(userDataDir, { recursive: true, force: true });
+      } catch {
+        // Windows Chrome may hold userDataDir briefly after SIGKILL
+      }
       userDataDir = null;
     }
   });
@@ -1662,6 +1680,378 @@ describe("inspect photo pan release in Chrome", () => {
     expect(result.openAfterPanClick).toBe(true);
     expect(result.openAfterBackdropRelease).toBe(true);
     expect(result.openAfterOutside).toBe(false);
+  });
+});
+
+describe("board-docked inspect mode (FUR-297)", () => {
+  test("dockAboveHand opens non-modally via show(), marks #table-main inert, closes on Escape/stage click, and guards modal switch", () => {
+    const { document, dialog, input, actions } = installInspectDocument();
+    const tableMain = put(document.nodes, new FakeHTMLElement("DIV", "table-main"));
+    const stage = new FakeHTMLElement("DIV");
+    stage.classList.add("card-inspect-stage");
+    dialog.append(stage);
+
+    let showCalls = 0;
+    let showModalCalls = 0;
+    dialog.show = () => {
+      showCalls += 1;
+      dialog.open = true;
+      dialog.setAttribute("open", "");
+    };
+    dialog.showModal = () => {
+      showModalCalls += 1;
+      dialog.open = true;
+      dialog.setAttribute("open", "");
+    };
+
+    const photo = { id: "host-image:m1:a1", name: "Board Map" };
+    openCardInspect(photo, "/map.png", makeTile("Board Map"), null, { dockAboveHand: true });
+
+    expect(showCalls).toBe(1);
+    expect(showModalCalls).toBe(0);
+    expect(dialog.open).toBe(true);
+    expect(dialog.classList.contains(INSPECT_BOARD_DOCKED_CLASS)).toBe(true);
+    expect(isInspectBoardDocked()).toBe(true);
+    expect(tableMain.inert).toBe(true);
+    expect(tableMain.hasAttribute("inert")).toBe(true);
+    expect(isSnapshotPollBlocked(document)).toBe(true);
+
+    // Escape on an input does not close the docked board image.
+    const ignoredEsc = dispatchKey(document, "Escape", input);
+    expect(ignoredEsc.wasPrevented()).toBe(false);
+    expect(dialog.open).toBe(true);
+
+    // Escape outside typing targets closes the docked board image and restores #table-main.
+    const esc = dispatchKey(document, "Escape");
+    expect(esc.wasPrevented()).toBe(true);
+    expect(dialog.open).toBe(false);
+    expect(dialog.classList.contains(INSPECT_BOARD_DOCKED_CLASS)).toBe(false);
+    expect(isInspectBoardDocked()).toBe(false);
+    expect(tableMain.inert).toBe(false);
+    expect(tableMain.hasAttribute("inert")).toBe(false);
+
+    // Re-open docked and verify clicking .card-inspect-stage closes it.
+    openCardInspect(photo, "/map.png", makeTile("Board Map"), null, { dockAboveHand: true });
+    expect(dialog.open).toBe(true);
+    expect(tableMain.inert).toBe(true);
+    dialog.dispatchEvent(clickEvent(stage, 12, 12));
+    expect(dialog.open).toBe(false);
+    expect(tableMain.inert).toBe(false);
+
+    // Re-open docked, then switch to a modal hand card; snapshot polls must stay
+    // blocked during the synchronous close-then-showModal transition.
+    openCardInspect(photo, "/map.png", makeTile("Board Map"), null, { dockAboveHand: true });
+    const blockedDuringClose = [];
+    dialog.addEventListener("close", () => {
+      blockedDuringClose.push(isSnapshotPollBlocked(document));
+    });
+    const { copper, sequence, tiles } = handSequence();
+    for (const item of sequence) item.handActions = true;
+    openCardInspect(copper, "/copper.png", tiles[0], sequence, {
+      handActions: true,
+      dockAboveHand: false,
+    });
+
+    expect(blockedDuringClose).toEqual([true]);
+    expect(showModalCalls).toBe(1);
+    expect(dialog.open).toBe(true);
+    expect(dialog.classList.contains(INSPECT_BOARD_DOCKED_CLASS)).toBe(false);
+    expect(isInspectBoardDocked()).toBe(false);
+    expect(tableMain.inert).toBe(false);
+    expect(actions.hidden).toBe(false);
+
+    // closeDockedBoardInspect is a no-op while modal hand inspect is open.
+    closeDockedBoardInspect();
+    expect(dialog.open).toBe(true);
+
+    // Switching back to docked closes modal and re-opens via show().
+    openCardInspect(photo, "/map.png", makeTile("Board Map"), null, { dockAboveHand: true });
+    expect(showCalls).toBe(4);
+    expect(dialog.open).toBe(true);
+    expect(isInspectBoardDocked()).toBe(true);
+    expect(tableMain.inert).toBe(true);
+
+    // Saving side-panel score edits while docked closes the docked viewer before
+    // applySnapshot so the score-save snapshot is not deferred by dialog[open].
+    closeDockedBoardInspect();
+    expect(dialog.open).toBe(false);
+    expect(tableMain.inert).toBe(false);
+    expect(isSnapshotPollBlocked(document)).toBe(false);
+    const mainSrc = fs.readFileSync(
+      path.join(__dirname, "..", "embedded-client", "src", "main.ts"),
+      "utf8"
+    );
+    const submitScores = mainSrc.slice(
+      mainSrc.indexOf("async function submitScoreEdits"),
+      mainSrc.indexOf("async function submitDroppedHandAction")
+    );
+    expect(submitScores).toMatch(
+      /clearScoreEditLock\(document\);\s+closeDockedBoardInspect\(\);\s+applySnapshot\(session\.config,\s*payload\);/
+    );
+  });
+});
+
+const BOARD_DOCKED_HARNESS_JS = `
+async function report(body) {
+  await fetch("/result", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+function box(el) {
+  const r = el.getBoundingClientRect();
+  return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+}
+try {
+  const { openCardInspect, inspectZoomState } = await import("/card-inspect.js");
+  const dialog = document.getElementById("card-inspect");
+  const art = document.getElementById("card-inspect-art");
+  const tableMain = document.getElementById("table-main");
+  const handZone = document.querySelector(".hand-zone");
+  const boardTile = document.getElementById("board-photo-tile");
+  const handTile = document.getElementById("hand-card-tile");
+  const makeSvg = (w, h, fill) =>
+    "data:image/svg+xml," +
+    encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
+      '<rect width="' + w + '" height="' + h + '" fill="' + fill + '"/>' +
+      "</svg>"
+    );
+  const sheet = dialog.querySelector(".card-inspect-sheet");
+  async function measureDockedPhoto(src) {
+    openCardInspect({ id: "host-image:m1:a1", name: "Board Map" }, src, boardTile, null, {
+      dockAboveHand: true,
+    });
+    if (typeof art.decode === "function") await art.decode();
+    else await new Promise((resolve) => { art.onload = resolve; if (art.complete) resolve(); });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    return { sheetBox: box(sheet), artBox: box(art) };
+  }
+
+  const portraitFit = await measureDockedPhoto(makeSvg(900, 1600, "#7c2d12"));
+  const squareFit = await measureDockedPhoto(makeSvg(1000, 1000, "#1d4ed8"));
+  const src = makeSvg(1200, 800, "#2d6a4f");
+  const landscapeFit = await measureDockedPhoto(src);
+
+  const dialogBox = box(dialog);
+  const handBox = box(handZone);
+  const handTileBox = box(handTile);
+  const handHitX = handTileBox.left + handTileBox.width / 2;
+  const handHitY = Math.min(handTileBox.top + 24, window.innerHeight - 10);
+  const hitAtHand = document.elementFromPoint(handHitX, handHitY);
+  const handHitIsInHand = Boolean(hitAtHand && hitAtHand.closest(".hand-zone"));
+  const dialogZ = Number(getComputedStyle(dialog).zIndex);
+  const mainPointerEvents = getComputedStyle(tableMain).pointerEvents;
+  const mainZ = Number(getComputedStyle(tableMain).zIndex);
+  const mainInertWhileDocked = Boolean(tableMain.inert);
+  const isModalWhileDocked = dialog.matches(":modal");
+
+  const artBox = landscapeFit.artBox;
+  art.dispatchEvent(new WheelEvent("wheel", {
+    bubbles: true,
+    cancelable: true,
+    deltaY: -100,
+    clientX: artBox.left + artBox.width / 2,
+    clientY: artBox.top + artBox.height / 2,
+  }));
+  const zoomedScale = inspectZoomState().scale;
+
+  // Clicking a hand card while docked transitions cleanly to modal inspect.
+  openCardInspect(
+    { id: "hand-1", name: "Ace of Spades" },
+    null,
+    handTile,
+    [{ card: { id: "hand-1", name: "Ace of Spades" }, imageSrc: null, tile: handTile, handActions: true }],
+    { handActions: true, dockAboveHand: false }
+  );
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const isModalAfterHandClick = dialog.matches(":modal");
+  const dockedAfterHandClick = dialog.classList.contains("is-board-docked");
+
+  // Re-open docked and close with Escape.
+  openCardInspect({ id: "host-image:m1:a1", name: "Board Map" }, src, boardTile, null, {
+    dockAboveHand: true,
+  });
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+
+  await report({
+    portraitFit,
+    squareFit,
+    landscapeFit,
+    dialogBox,
+    handBox,
+    handHitIsInHand,
+    dialogZ,
+    mainPointerEvents,
+    mainZ,
+    mainInertWhileDocked,
+    isModalWhileDocked,
+    zoomedScale,
+    isModalAfterHandClick,
+    dockedAfterHandClick,
+    openAfterEscape: dialog.open,
+    mainInertAfterEscape: Boolean(tableMain.inert),
+  });
+} catch (error) {
+  await report({ error: String(error && error.stack ? error.stack : error) });
+}
+`;
+
+function boardDockedHarness(css, dialogHtml) {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>${css}</style>
+  </head>
+  <body>
+    <div id="app" class="connected">
+      <aside id="side-panel"><p id="selected-channel">Test Game</p></aside>
+      <div id="table">
+        <div id="table-stage">
+          <div id="table-main">
+            <section id="board-row" class="row board-row">
+              <section class="zone" data-zone="board">
+                <h2>Game Board</h2>
+                <div class="cards board-spread" id="board-cards">
+                  <article id="board-photo-tile" class="card-tile"><div class="card-face">Board Map</div></article>
+                </div>
+              </section>
+            </section>
+          </div>
+          ${dialogHtml}
+        </div>
+        <section class="zone hand-zone" data-zone="hand">
+          <h2>Hand</h2>
+          <div class="cards hand-fan" id="hand-cards">
+            <article id="hand-card-tile" class="card-tile"><div class="card-face">Ace of Spades</div></article>
+          </div>
+        </section>
+      </div>
+    </div>
+    <script type="module" src="/harness.js"></script>
+  </body>
+</html>`;
+}
+
+describe("board-docked inspect alongside hand in Chrome (FUR-297)", () => {
+  const chrome = workingChromeBin();
+  let server;
+  let chromeProc;
+  let userDataDir;
+
+  afterEach(() => {
+    try {
+      chromeProc?.kill("SIGKILL");
+    } catch {}
+    chromeProc = null;
+    try {
+      server?.stop(true);
+    } catch {}
+    server = null;
+    if (userDataDir) {
+      try {
+        fs.rmSync(userDataDir, { recursive: true, force: true });
+      } catch {
+        // Windows Chrome may hold userDataDir briefly after SIGKILL
+      }
+      userDataDir = null;
+    }
+  });
+
+  test.skipIf(!chrome)("QA: board image docks above hand so hand remains visible, interactive, and hoverable", async () => {
+    const css = fs.readFileSync(STYLE_PATH, "utf8");
+    const html = fs.readFileSync(HTML_PATH, "utf8");
+    const dialogHtml = html.slice(
+      html.indexOf('<dialog id="card-inspect"'),
+      html.indexOf("</dialog>", html.indexOf('<dialog id="card-inspect"')) + "</dialog>".length
+    );
+    const built = await Bun.build({
+      entrypoints: [CARD_INSPECT_PATH],
+      target: "browser",
+      format: "esm",
+    });
+    expect(built.success).toBe(true);
+    const inspectJs = await built.outputs[0].text();
+
+    let resolveResult;
+    const resultPromise = new Promise((resolve) => {
+      resolveResult = resolve;
+    });
+
+    server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const url = new URL(req.url);
+        if (req.method === "POST" && url.pathname === "/result") {
+          resolveResult(await req.json());
+          return new Response("ok");
+        }
+        if (url.pathname === "/card-inspect.js") {
+          return new Response(inspectJs, {
+            headers: { "Content-Type": "text/javascript; charset=utf-8" },
+          });
+        }
+        if (url.pathname === "/harness.js") {
+          return new Response(BOARD_DOCKED_HARNESS_JS, {
+            headers: { "Content-Type": "text/javascript; charset=utf-8" },
+          });
+        }
+        return new Response(boardDockedHarness(css, dialogHtml), {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      },
+    });
+
+    userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "inspect-board-docked-"));
+    chromeProc = spawn(
+      chrome,
+      [
+        "--headless=new",
+        "--disable-gpu",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--hide-scrollbars",
+        "--no-first-run",
+        "--window-size=1280,720",
+        `--user-data-dir=${userDataDir}`,
+        String(server.url),
+      ],
+      { stdio: "ignore" }
+    );
+
+    const result = await Promise.race([
+      resultPromise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("chrome harness timed out")), 20_000)
+      ),
+    ]);
+    expect(result.error).toBeUndefined();
+    for (const fit of [result.portraitFit, result.squareFit, result.landscapeFit]) {
+      expect(fit.sheetBox.width).toBeGreaterThan(200);
+      expect(fit.sheetBox.height).toBeGreaterThan(200);
+      expect(fit.artBox.width).toBeLessThanOrEqual(fit.sheetBox.width + 1);
+      expect(fit.artBox.height).toBeLessThanOrEqual(fit.sheetBox.height + 1);
+      expect(fit.artBox.left).toBeGreaterThanOrEqual(fit.sheetBox.left - 1);
+      expect(fit.artBox.top).toBeGreaterThanOrEqual(fit.sheetBox.top - 1);
+      expect(fit.artBox.right).toBeLessThanOrEqual(fit.sheetBox.right + 1);
+      expect(fit.artBox.bottom).toBeLessThanOrEqual(fit.sheetBox.bottom + 1);
+    }
+    expect(result.isModalWhileDocked).toBe(false);
+    expect(result.dialogBox.height).toBeGreaterThan(250);
+    expect(result.dialogBox.bottom).toBeLessThanOrEqual(result.handBox.top + 1);
+    expect(result.handHitIsInHand).toBe(true);
+    expect(result.dialogZ).toBe(25);
+    expect(result.mainPointerEvents).toBe("none");
+    expect(result.mainZ).toBe(0);
+    expect(result.mainInertWhileDocked).toBe(true);
+    expect(result.zoomedScale).toBeGreaterThan(1);
+    expect(result.isModalAfterHandClick).toBe(true);
+    expect(result.dockedAfterHandClick).toBe(false);
+    expect(result.openAfterEscape).toBe(false);
+    expect(result.mainInertAfterEscape).toBe(false);
   });
 });
 

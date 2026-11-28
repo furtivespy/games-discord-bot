@@ -73,6 +73,7 @@ import {
 import { enableHoverZoomClamp } from "./hoverZoom";
 import {
   closeCardInspect,
+  closeDockedBoardInspect,
   closeInspectAfterFailedAction,
   enableCardInspectDialog,
   openCardInspect,
@@ -728,6 +729,7 @@ async function submitScoreEdits(scores: ScoreMap) {
     }
     if (!stillThisGame()) return;
     clearScoreEditLock(document);
+    closeDockedBoardInspect();
     applySnapshot(session.config, payload);
     setActionNotice(payload.channelPosted === false ? CHANNEL_POST_FAILED_NOTICE : null);
   } catch {
@@ -768,6 +770,7 @@ function handCardDropHooks(card: SnapshotCard): Pick<
       return false;
     },
     onDragMove: (ctx) => {
+      closeDockedBoardInspect();
       dragZones = collectDropZones(document);
       paintDropZones(document, dragZones, dropZoneAtPoint(dragZones, ctx.point)?.id ?? null);
     },
@@ -1078,12 +1081,14 @@ function renderCards(
     tile.append(renderCardFace(config, card));
     enableHoverZoomClamp(tile);
     const handActions = containerId === "hand-cards";
-    if (enableInspectNav) sequence.push({ card, imageSrc, tile, handActions });
+    const dockAboveHand = containerId === "board-cards";
+    if (enableInspectNav) sequence.push({ card, imageSrc, tile, handActions, dockAboveHand });
     if (cardId) {
       const hooks: CardDropHooks = {
         onInspect: () =>
           openCardInspect(card, imageSrc, tile, enableInspectNav ? sequence : undefined, {
             handActions,
+            dockAboveHand,
           }),
       };
       if (handActions) Object.assign(hooks, handCardDropHooks(card));

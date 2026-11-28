@@ -47,6 +47,7 @@ export type InspectSequenceItem = {
   imageSrc: string | null;
   tile: HTMLElement;
   handActions?: boolean;
+  dockAboveHand?: boolean;
 };
 
 export type InspectSession = {
@@ -57,11 +58,13 @@ export type InspectSession = {
 
 export const HOST_IMAGE_ID_PREFIX = "host-image:";
 export const INSPECT_PHOTO_CLASS = "is-photo";
+export const INSPECT_BOARD_DOCKED_CLASS = "is-board-docked";
 export const INSPECT_PHOTO_LABEL = "Enlarged photo";
 export const INSPECT_PREV_LABEL = "Previous card";
 export const INSPECT_NEXT_LABEL = "Next card";
 
 const DIALOG_ID = "card-inspect";
+const TABLE_MAIN_ID = "table-main";
 const ART_ID = "card-inspect-art";
 const PROXY_ID = "card-inspect-proxy";
 const TITLE_ID = "card-inspect-title";
@@ -78,6 +81,8 @@ export const INSPECT_SUPPRESS_CLICK_MS = 50;
 let inspectBoundDocument: Document | null = null;
 let inspectItems: InspectSequenceItem[] = [];
 let inspectIndex = 0;
+let inspectDocked = false;
+let inspectSwitching = false;
 let inspectZoom: InspectZoomState = { ...INSPECT_ZOOM_IDENTITY };
 let inspectPanning = false;
 let inspectPanListening = false;
@@ -251,12 +256,13 @@ export function resolveInspectSession(
   imageSrc: string | null,
   tile: HTMLElement,
   sequence?: InspectSequenceItem[] | null,
-  options?: { handActions?: boolean } | null
+  options?: { handActions?: boolean; dockAboveHand?: boolean } | null
 ): InspectSession {
   const list = Array.isArray(sequence) ? sequence.filter(Boolean) : [];
   const index = inspectSequenceIndex(list, tile);
   const handActions = Boolean(options?.handActions);
-  const fallback: InspectSequenceItem = { card, imageSrc, tile, handActions };
+  const dockAboveHand = Boolean(options?.dockAboveHand);
+  const fallback: InspectSequenceItem = { card, imageSrc, tile, handActions, dockAboveHand };
   const items = index >= 0 ? list : [fallback];
   const resolvedIndex = index >= 0 ? index : 0;
   return {
@@ -349,11 +355,32 @@ function resetInspectZoom() {
   applyInspectZoomStyle(dialogEl(), inspectZoom, false);
 }
 
+function syncTableMainInert(inert: boolean) {
+  const main = document.getElementById(TABLE_MAIN_ID) as
+    | (HTMLElement & { inert?: boolean })
+    | null;
+  if (!main) return;
+  main.inert = inert;
+  if (inert) main.setAttribute("inert", "");
+  else main.removeAttribute("inert");
+}
+
 function resetInspectSession() {
   inspectItems = [];
   inspectIndex = 0;
+  inspectDocked = false;
+  dialogEl()?.classList.remove(INSPECT_BOARD_DOCKED_CLASS);
+  syncTableMainInert(false);
   resetInspectZoom();
   syncInspectNav();
+}
+
+export function isInspectBoardDocked(): boolean {
+  return inspectDocked && isInspectOpen(dialogEl());
+}
+
+export function closeDockedBoardInspect() {
+  if (isInspectBoardDocked()) closeCardInspect();
 }
 
 export function closeCardInspect() {
@@ -495,6 +522,8 @@ export function isInspectOutsideClick(
 ): boolean {
   if (!event || !dialog) return false;
   if (event.target === dialog) return true;
+  const stage = dialog.querySelector?.(".card-inspect-stage");
+  if (stage && event.target === stage) return true;
   if (!dialog.classList?.contains?.(INSPECT_PHOTO_CLASS)) return false;
   if (!art || event.target !== art) return false;
   const painted = inspectArtPaintedRect(dialog, art, zoom ?? INSPECT_ZOOM_IDENTITY);
@@ -667,11 +696,26 @@ function onInspectClick(event: MouseEvent) {
 }
 
 function onInspectDialogClose() {
+  if (inspectSwitching) return;
   resetInspectSession();
   setInspectActionError(null);
 }
 
 function onInspectKeydown(event: KeyboardEvent) {
+  if (
+    inspectOverlayOpen() &&
+    inspectDocked &&
+    event.key === "Escape" &&
+    !event.altKey &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.shiftKey &&
+    !isInspectTypingTarget(event.target)
+  ) {
+    event.preventDefault();
+    closeCardInspect();
+    return;
+  }
   const direction = inspectKeyCommand(event, inspectOverlayOpen());
   if (!direction) return;
   event.preventDefault();
@@ -725,8 +769,10 @@ export function enableCardInspectDialog() {
   document.addEventListener("keydown", onInspectKeydown);
 }
 
-function applyInspectLayout(dialog: HTMLElement, view: InspectView) {
+function applyInspectLayout(dialog: HTMLElement, view: InspectView, docked: boolean) {
   dialog.classList.toggle(INSPECT_PHOTO_CLASS, view.layout === "photo");
+  dialog.classList.toggle(INSPECT_BOARD_DOCKED_CLASS, docked);
+  syncTableMainInert(docked);
   if (view.layout === "photo") {
     dialog.removeAttribute("aria-labelledby");
     dialog.setAttribute("aria-label", INSPECT_PHOTO_LABEL);
@@ -739,7 +785,8 @@ function applyInspectLayout(dialog: HTMLElement, view: InspectView) {
 function fillInspectDom(
   card: InspectableCard,
   imageSrc: string | null,
-  face: HTMLElement | null
+  face: HTMLElement | null,
+  docked: boolean
 ) {
   const dialog = dialogEl();
   const art = document.getElementById(ART_ID);
@@ -748,7 +795,7 @@ function fillInspectDom(
   const caption = document.getElementById(CAPTION_ID);
   const meta = document.getElementById(META_ID);
   const view = inspectView(card, imageSrc);
-  if (dialog) applyInspectLayout(dialog, view);
+  if (dialog) applyInspectLayout(dialog, view, docked);
   if (title) {
     title.hidden = !view.showTitle;
     title.textContent = view.title;
@@ -784,8 +831,28 @@ function showInspectItem(index: number) {
   inspectIndex = index;
   resetInspectZoom();
   const face = item.tile?.querySelector?.(".card-face");
-  fillInspectDom(item.card, item.imageSrc, face instanceof HTMLElement ? face : null);
+  fillInspectDom(
+    item.card,
+    item.imageSrc,
+    face instanceof HTMLElement ? face : null,
+    Boolean(item.dockAboveHand)
+  );
   syncInspectNav();
+}
+
+function openInspectDialogMode(dialog: HTMLDialogElement, docked: boolean) {
+  try {
+    if (!dialog.open) {
+      if (docked) {
+        if (typeof dialog.show === "function") dialog.show();
+        else dialog.setAttribute("open", "");
+      } else {
+        dialog.showModal();
+      }
+    }
+  } catch {
+    dialog.setAttribute("open", "");
+  }
 }
 
 export function openCardInspect(
@@ -793,19 +860,37 @@ export function openCardInspect(
   imageSrc: string | null,
   tile: HTMLElement,
   sequence?: InspectSequenceItem[] | null,
-  options?: { handActions?: boolean } | null
+  options?: { handActions?: boolean; dockAboveHand?: boolean } | null
 ) {
   enableCardInspectDialog();
   const dialog = dialogEl();
   if (!dialog) return;
   const session = resolveInspectSession(card, imageSrc, tile, sequence, options);
-  inspectItems = session.items;
-  inspectIndex = session.index;
-  setInspectActionError(null);
-  showInspectItem(inspectIndex);
+  const wantDocked = Boolean(session.items[session.index]?.dockAboveHand);
+  const switching = isInspectOpen(dialog) && inspectDocked !== wantDocked;
+  const commit = () => {
+    inspectItems = session.items;
+    inspectIndex = session.index;
+    inspectDocked = wantDocked;
+    setInspectActionError(null);
+    showInspectItem(inspectIndex);
+    openInspectDialogMode(dialog, wantDocked);
+  };
+  if (!switching) {
+    commit();
+    return;
+  }
+  inspectSwitching = true;
+  dialog.setAttribute("data-inspect-switching", "1");
   try {
-    if (!dialog.open) dialog.showModal();
-  } catch {
-    dialog.setAttribute("open", "");
+    if (typeof dialog.close === "function" && dialog.open) {
+      dialog.close();
+    } else {
+      dialog.removeAttribute("open");
+    }
+    commit();
+  } finally {
+    inspectSwitching = false;
+    dialog.removeAttribute("data-inspect-switching");
   }
 }

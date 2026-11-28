@@ -28,24 +28,95 @@
         <section id="game-status" hidden></section>
       </aside>
       <div id="table" hidden>
-        <div id="table-main">
-          <section id="other-players" class="row players-row" hidden>
-            <h2>Players</h2>
-            <div id="other-players-list" class="players-rail"></div>
-          </section>
-          <section id="board-row" class="row board-row">
-            <section class="zone" data-zone="board">
-              <h2>Game Board</h2>
-              <div class="cards board-spread" id="board-cards"></div>
+        <div id="table-stage">
+          <div id="table-main">
+            <section id="other-players" class="row players-row" hidden>
+              <h2>Players</h2>
+              <div id="other-players-list" class="players-rail"></div>
             </section>
-            <section class="zone play-drop-zone" data-zone="play" aria-hidden="true"></section>
-            <div id="pile-stack" class="pile-stack is-single">
+            <section id="board-row" class="row board-row">
+              <section class="zone" data-zone="board">
+                <h2>Game Board</h2>
+                <div class="cards board-spread" id="board-cards"></div>
+              </section>
+              <section class="zone play-drop-zone" data-zone="play" aria-hidden="true"></section>
+              <div id="pile-stack" class="pile-stack is-single">
+                <button
+                  type="button"
+                  id="deck-nav-prev"
+                  class="deck-nav"
+                  data-deck-nav="prev"
+                  aria-label="Previous decks"
+                  hidden
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path
+                      d="M15 6l-6 6 6 6"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.25"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+                <div class="pile-windows">
+                  <section class="zone decks-zone" data-zone="decks">
+                    <h2>Decks</h2>
+                    <div id="decks" class="decks"></div>
+                  </section>
+                  <section class="zone discards-zone" data-zone="discards">
+                    <h2>Discard</h2>
+                    <div id="discards" class="decks"></div>
+                  </section>
+                </div>
+                <button
+                  type="button"
+                  id="deck-nav-next"
+                  class="deck-nav"
+                  data-deck-nav="next"
+                  aria-label="Next decks"
+                  hidden
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path
+                      d="M9 6l6 6-6 6"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.25"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+              <section class="zone" data-zone="play-area">
+                <h2>Play Area</h2>
+                <div class="cards board-spread" id="play-area-cards"></div>
+              </section>
+            </section>
+          </div>
+          <dialog id="card-inspect" class="card-inspect-dialog" aria-labelledby="card-inspect-title">
+            <form method="dialog" class="card-inspect-close-form">
+              <button type="submit" class="card-inspect-close" aria-label="Close">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path
+                    d="M6 6l12 12M18 6L6 18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.25"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </button>
+            </form>
+            <div class="card-inspect-stage">
               <button
                 type="button"
-                id="deck-nav-prev"
-                class="deck-nav"
-                data-deck-nav="prev"
-                aria-label="Previous decks"
+                id="card-inspect-prev"
+                class="card-inspect-nav"
+                data-inspect-nav="prev"
+                aria-label="Previous card"
                 hidden
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -59,22 +130,12 @@
                   />
                 </svg>
               </button>
-              <div class="pile-windows">
-                <section class="zone decks-zone" data-zone="decks">
-                  <h2>Decks</h2>
-                  <div id="decks" class="decks"></div>
-                </section>
-                <section class="zone discards-zone" data-zone="discards">
-                  <h2>Discard</h2>
-                  <div id="discards" class="decks"></div>
-                </section>
-              </div>
               <button
                 type="button"
-                id="deck-nav-next"
-                class="deck-nav"
-                data-deck-nav="next"
-                aria-label="Next decks"
+                id="card-inspect-next"
+                class="card-inspect-nav"
+                data-inspect-nav="next"
+                aria-label="Next card"
                 hidden
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -88,12 +149,22 @@
                   />
                 </svg>
               </button>
+              <div class="card-inspect-sheet">
+                <img id="card-inspect-art" class="card-inspect-art" alt="" hidden draggable="false" />
+                <div id="card-inspect-proxy" class="card-inspect-proxy" hidden></div>
+                <div id="card-inspect-actions" class="card-inspect-actions" hidden>
+                  <button type="button" class="card-inspect-action" data-card-action="play" title="Play a card from your hand.">PLAY</button>
+                  <button type="button" class="card-inspect-action" data-card-action="discard" title="discard a card (not shown to everyone)">DISCARD</button>
+                  <button type="button" class="card-inspect-action" data-card-action="show" title="Show a card from your hand to other players. The card stays in your hand.">SHOW</button>
+                </div>
+                <div id="card-inspect-meta" class="card-inspect-caption">
+                  <p id="card-inspect-title" class="card-inspect-title"></p>
+                  <p id="card-inspect-caption" class="card-inspect-description" hidden></p>
+                </div>
+                <p id="card-inspect-error" class="card-inspect-error" hidden></p>
+              </div>
             </div>
-            <section class="zone" data-zone="play-area">
-              <h2>Play Area</h2>
-              <div class="cards board-spread" id="play-area-cards"></div>
-            </section>
-          </section>
+          </dialog>
         </div>
         <section class="zone hand-zone" data-zone="hand">
           <h2>Hand</h2>
@@ -120,75 +191,6 @@
           <button type="button" id="action-cancel">Cancel</button>
         </div>
       </form>
-    </dialog>
-    <dialog id="card-inspect" class="card-inspect-dialog" aria-labelledby="card-inspect-title">
-      <form method="dialog" class="card-inspect-close-form">
-        <button type="submit" class="card-inspect-close" aria-label="Close">
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-              d="M6 6l12 12M18 6L6 18"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.25"
-              stroke-linecap="round"
-            />
-          </svg>
-        </button>
-      </form>
-      <div class="card-inspect-stage">
-        <button
-          type="button"
-          id="card-inspect-prev"
-          class="card-inspect-nav"
-          data-inspect-nav="prev"
-          aria-label="Previous card"
-          hidden
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-              d="M15 6l-6 6 6 6"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.25"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </button>
-        <button
-          type="button"
-          id="card-inspect-next"
-          class="card-inspect-nav"
-          data-inspect-nav="next"
-          aria-label="Next card"
-          hidden
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-              d="M9 6l6 6-6 6"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.25"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </button>
-        <div class="card-inspect-sheet">
-          <img id="card-inspect-art" class="card-inspect-art" alt="" hidden draggable="false" />
-          <div id="card-inspect-proxy" class="card-inspect-proxy" hidden></div>
-          <div id="card-inspect-actions" class="card-inspect-actions" hidden>
-            <button type="button" class="card-inspect-action" data-card-action="play" title="Play a card from your hand.">PLAY</button>
-            <button type="button" class="card-inspect-action" data-card-action="discard" title="discard a card (not shown to everyone)">DISCARD</button>
-            <button type="button" class="card-inspect-action" data-card-action="show" title="Show a card from your hand to other players. The card stays in your hand.">SHOW</button>
-          </div>
-          <div id="card-inspect-meta" class="card-inspect-caption">
-            <p id="card-inspect-title" class="card-inspect-title"></p>
-            <p id="card-inspect-caption" class="card-inspect-description" hidden></p>
-          </div>
-          <p id="card-inspect-error" class="card-inspect-error" hidden></p>
-        </div>
-      </div>
     </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
