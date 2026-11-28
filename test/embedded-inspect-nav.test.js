@@ -1811,18 +1811,28 @@ try {
   const handZone = document.querySelector(".hand-zone");
   const boardTile = document.getElementById("board-photo-tile");
   const handTile = document.getElementById("hand-card-tile");
-  const svg =
-    '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800">' +
-    '<rect width="1200" height="800" fill="#2d6a4f"/>' +
-    "</svg>";
-  const src = "data:image/svg+xml," + encodeURIComponent(svg);
+  const makeSvg = (w, h, fill) =>
+    "data:image/svg+xml," +
+    encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
+      '<rect width="' + w + '" height="' + h + '" fill="' + fill + '"/>' +
+      "</svg>"
+    );
+  const sheet = dialog.querySelector(".card-inspect-sheet");
+  async function measureDockedPhoto(src) {
+    openCardInspect({ id: "host-image:m1:a1", name: "Board Map" }, src, boardTile, null, {
+      dockAboveHand: true,
+    });
+    if (typeof art.decode === "function") await art.decode();
+    else await new Promise((resolve) => { art.onload = resolve; if (art.complete) resolve(); });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    return { sheetBox: box(sheet), artBox: box(art) };
+  }
 
-  openCardInspect({ id: "host-image:m1:a1", name: "Board Map" }, src, boardTile, null, {
-    dockAboveHand: true,
-  });
-  if (typeof art.decode === "function") await art.decode();
-  else await new Promise((resolve) => { art.onload = resolve; if (art.complete) resolve(); });
-  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const portraitFit = await measureDockedPhoto(makeSvg(900, 1600, "#7c2d12"));
+  const squareFit = await measureDockedPhoto(makeSvg(1000, 1000, "#1d4ed8"));
+  const src = makeSvg(1200, 800, "#2d6a4f");
+  const landscapeFit = await measureDockedPhoto(src);
 
   const dialogBox = box(dialog);
   const handBox = box(handZone);
@@ -1837,7 +1847,7 @@ try {
   const mainInertWhileDocked = Boolean(tableMain.inert);
   const isModalWhileDocked = dialog.matches(":modal");
 
-  const artBox = box(art);
+  const artBox = landscapeFit.artBox;
   art.dispatchEvent(new WheelEvent("wheel", {
     bubbles: true,
     cancelable: true,
@@ -1866,6 +1876,9 @@ try {
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
 
   await report({
+    portraitFit,
+    squareFit,
+    landscapeFit,
     dialogBox,
     handBox,
     handHitIsInHand,
@@ -2016,6 +2029,16 @@ describe("board-docked inspect alongside hand in Chrome (FUR-297)", () => {
       ),
     ]);
     expect(result.error).toBeUndefined();
+    for (const fit of [result.portraitFit, result.squareFit, result.landscapeFit]) {
+      expect(fit.sheetBox.width).toBeGreaterThan(200);
+      expect(fit.sheetBox.height).toBeGreaterThan(200);
+      expect(fit.artBox.width).toBeLessThanOrEqual(fit.sheetBox.width + 1);
+      expect(fit.artBox.height).toBeLessThanOrEqual(fit.sheetBox.height + 1);
+      expect(fit.artBox.left).toBeGreaterThanOrEqual(fit.sheetBox.left - 1);
+      expect(fit.artBox.top).toBeGreaterThanOrEqual(fit.sheetBox.top - 1);
+      expect(fit.artBox.right).toBeLessThanOrEqual(fit.sheetBox.right + 1);
+      expect(fit.artBox.bottom).toBeLessThanOrEqual(fit.sheetBox.bottom + 1);
+    }
     expect(result.isModalWhileDocked).toBe(false);
     expect(result.dialogBox.height).toBeGreaterThan(250);
     expect(result.dialogBox.bottom).toBeLessThanOrEqual(result.handBox.top + 1);
